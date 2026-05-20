@@ -1,5 +1,7 @@
 # opening_strength_fit Runbook
 
+日常实验闭环：检查环境和 ClickHouse 数据，做极小本地 smoke，提交 K8s 训练，拉回 metrics/predictions，回测，分析，归档。
+
 ## 1. 环境准备
 
 ```bash
@@ -8,6 +10,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
 ```
+
+日常进入项目：
 
 ```bash
 cd /home/hefu/projects/opening_strength_fit
@@ -18,21 +22,25 @@ set -a
 set +a
 ```
 
+只读预检：
+
 ```bash
 python scripts/audit_experiments.py
 python scripts/check_workflow_coverage.py
 ```
 
+预检用于发现 config、Job YAML、metrics/backtest 和文档索引是否不同步。
+
 ## 2. 数据检查
 
-ClickHouse 表：
+查看 ClickHouse `stock.tick` 源表规模、schema 和字段说明。窗口检查通过时只显示 `PASS`，只有异常时才展开原因：
 
 ```bash
 python scripts/probe_clickhouse_data.py
 python scripts/probe_clickhouse_data.py --schema --field-notes
 ```
 
-实验窗口：
+检查目标实验窗口的原始 tick 覆盖。这个命令只读 ClickHouse 聚合信息，不会把全年原始 tick 或 labeled dataset 拉到本地：
 
 ```bash
 python scripts/probe_clickhouse_data.py \
@@ -43,7 +51,7 @@ python scripts/probe_clickhouse_data.py \
   --year-layout
 ```
 
-单票小窗口：
+检查单票小窗口的 tick schema、X/label 对齐和标签覆盖。`inspect_dataset.py` 会从 ClickHouse 抓少量真实 tick，在本地临时计算 feature/label；这一步只用于确认代码链路，不用于准备正式训练集。若原始 09:15 quote 有 ask/bid 非正，`tick_dataset_check.rows` 会显示成 `正常行+异常行 (raw quote ask/bid<=0)`；决策样本是否可交易看 `sample_quality_checks`：
 
 ```bash
 python scripts/inspect_dataset.py \
@@ -54,14 +62,14 @@ python scripts/inspect_dataset.py \
   --label-preview-rows 3
 ```
 
-保存小样本：
+需要留小样本用于后续本地 smoke 时，在同一命令后加：
 
 ```bash
 --output output/local/inspect_smoke/000925_SZ_2021-09-22_2021-09-23.parquet \
 --labeled-output output/local/inspect_smoke/000925_SZ_2021-09-22_2021-09-23_labeled.parquet
 ```
 
-多股票横截面：
+多股票横截面小样本可以在同一个命令里传多只股票，确认 `cross_section` 评估链路能跑通：
 
 ```bash
 python scripts/inspect_dataset.py \
@@ -73,9 +81,9 @@ python scripts/inspect_dataset.py \
   --labeled-output output/local/inspect_smoke/multi_symbol_2021-09-22_2021-09-23_labeled.parquet
 ```
 
-不要在本地为一年或多月窗口运行 `prepare_research_dataset.py`。正式长窗口训练用 `[data].source = "clickhouse"` 的 K8s Job。
+默认不要在本地为一年或多月窗口运行 `prepare_research_dataset.py`。ClickHouse 里是原始 tick，feature/label 需要 Python 计算，长窗口本地准备会很慢且占空间。正式长窗口训练直接用 `[data].source = "clickhouse"` 的 K8s Job；长窗口 label audit / rule baseline 也应放到集群或专门的小结果 Job，只把 CSV/metrics 拉回本地。
 
-小样本 audit / rule：
+如果只是临时调试 `audit_labels.py` 或 `run_rule_baselines.py` 的输出格式，可以只对上面的小 labeled parquet 跑：
 
 ```bash
 python scripts/audit_labels.py \
@@ -88,13 +96,15 @@ python scripts/run_rule_baselines.py \
   --output-dir output/local/rule_baselines_multi_symbol_smoke
 ```
 
-小样本结果不作研究结论。
+小样本 audit/rule 只能检查程序链路和字段口径，不能当作研究结论。研究结论以 K8s 长窗口输出的 metrics、prediction 和后续回测为准。
 
 ## 3. 本地 Smoke
 
-本地只跑小样本 smoke。不要本地准备全年或多月 opening labeled dataset。
+本地只跑真实数据的小样本 smoke，用 full config 加输入、split、feature 和输出目录覆盖。不要在本地准备全年或多月 opening labeled dataset。
 
 ### 3.1 单票代码 Smoke
+
+单票 smoke 只确认 ClickHouse 抓取、feature/label 计算、训练、预测和指标写出能跑通：
 
 ```bash
 python scripts/inspect_dataset.py \
@@ -115,6 +125,8 @@ python scripts/run_experiment.py \
   --output-dir output/local/ridge_opening_1y_next_month_000925_2d_smoke
 ```
 
+查看 smoke metrics：
+
 ```bash
 python scripts/summarize_opening_results.py \
   --input-dir output/local/ridge_opening_1y_next_month_000925_2d_smoke
@@ -126,9 +138,13 @@ python scripts/evaluate_predictions.py \
   --selection-mode symbol_day
 ```
 
-单票 smoke 看 `symbol_day`；`cross_section` 看多股票 smoke 或 K8s 实验。
+单票 smoke 只有一只股票，不能验证 `cross_section` 排序；这里看
+`symbol_day` 指标，只确认同一只股票当天多个开盘决策点之间的择时链路。
+`cross_section` 要到 3.2 的多股票小样本 smoke 或正式 K8s 实验里看。
 
 ### 3.2 多股票横截面 Smoke
+
+多股票 smoke 用几只股票、两天数据确认 `cross_section` 评估链路。它不是正式研究集，只检查同一时刻股票间排序的代码路径：
 
 ```bash
 python scripts/inspect_dataset.py \
@@ -148,6 +164,8 @@ python scripts/run_experiment.py \
   --output-dir output/local/ridge_opening_1y_next_month_multi_symbol_smoke
 ```
 
+查看横截面 smoke：
+
 ```bash
 python scripts/summarize_opening_results.py \
   --input-dir output/local/ridge_opening_1y_next_month_multi_symbol_smoke
@@ -160,21 +178,21 @@ python scripts/evaluate_predictions.py \
   --top-n 2
 ```
 
-小样本横截面指标不作研究结论。
+小样本横截面 smoke 的股票太少、日期太少，`group_rank_ic_mean`、bucket 和 top-score 只用于确认程序不报错，不用于判断模型是否有效。
 
 ### 3.3 正式研究口径
 
-正式 one-year / full-window opening 实验走 K8s。只拉回 `metrics_by_year.csv`、`metrics_by_month.csv`、`predictions.parquet` 或回测所需结果。
+正式 one-year / full-window opening 实验不要在本地准备 labeled dataset。使用 K8s Job 直接读 ClickHouse 原始 tick，在集群内计算 feature/label、训练和评估，然后只拉回 `metrics_by_year.csv`、`metrics_by_month.csv`、`predictions.parquet` 或回测所需结果。
 
 ## 4. 新建实验
 
-Config 模板：
+复制最接近的 config：
 
 ```text
 ridge: experiments/runs/ridge_opening_full.toml
 ```
 
-必改：
+至少修改：
 
 ```text
 [run].id
@@ -194,14 +212,14 @@ ridge: experiments/runs/ridge_opening_full.toml
 
 - `run.id` 必须等于 config 文件名。
 - `status` 提交前写 `queued` 或 `running`，拉回 metrics 并确认后写 `completed`。
-- 集群训练用 `[data].source = "clickhouse"`。
+- 集群训练默认用 `[data].source = "clickhouse"`，通过 ClickHouse 读取训练窗口原始 tick，只把结果写到 PVC。
 - 本地 smoke 可传 `--input` 或设置 `[data].tick_path` 使用小的 prepared parquet/cache。
 - `[output].k8s_dir` 必须在 `/mnt/output/opening_strength_fit/` 下，且一个实验一个目录。
 - `evaluation.selection_mode` 第一版用 `cross_section`。
 
 ## 5. Build 镜像
 
-Build：
+修改训练代码、config 或依赖后：
 
 ```text
 改代码/config -> build 新 TAG -> push -> render Job YAML -> 确认 image -> apply
@@ -213,7 +231,7 @@ docker build -t registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TA
 docker push registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG}
 ```
 
-换 `TAG` 后重新 render Job YAML。
+换了 `TAG` 后必须重新 render Job YAML。
 
 ## 6. 生成 Job YAML
 
@@ -258,7 +276,7 @@ hfcli kubectl get jobs,pods -n bizewu -o wide
 hfcli kubectl logs -f job/opening-strength-ridge-opening-full -n bizewu
 ```
 
-sharded reader：
+sharded 实验完成后，用 reader Job 合并 monthly/yearly metrics 和 predictions：
 
 ```bash
 hfcli kubectl delete job opening-strength-read-ridge-opening-full-sharded --ignore-not-found -n bizewu
@@ -277,26 +295,32 @@ hfcli kubectl wait --for=condition=complete job/opening-strength-read-ridge-open
 
 ## 8. 拉回 Metrics
 
+重复传 `--config` 可一次拉一个或多个实验：
+
 ```bash
 python scripts/pull_k8s_metrics.py \
   --config experiments/runs/ridge_opening_full.toml
 ```
 
-输出：
+拉回文件写到：
 
 ```text
 output/k8s/metrics/<run_id>_metrics_by_year.csv
 ```
 
-归档到 `experiments/results/metrics/`。
+`output/k8s/metrics/` 是本地原始产物；`experiments/results/metrics/` 是收尾时归档的轻量证据。
 
 ## 9. 拉回 Predictions 和回测
+
+拉回预测并合并：
 
 ```bash
 python scripts/fetch_k8s_predictions.py \
   --config experiments/runs/ridge_opening_full.toml \
   --output-dir output/backtest/ridge_opening_full
 ```
+
+调用回测 API。tick-level 预测会先按 `date x symbol` 聚合，默认取开盘窗口内最大预测分：
 
 ```bash
 python scripts/run_backtest_api.py \
@@ -305,6 +329,8 @@ python scripts/run_backtest_api.py \
   --aggregate max \
   --tar I500
 ```
+
+画单个 run 曲线：
 
 ```bash
 python scripts/plot_backtest_curves.py \
@@ -323,9 +349,13 @@ python scripts/summarize_opening_results.py \
   --metrics-csv output/k8s/metrics/ridge_opening_full_metrics_by_year.csv
 ```
 
+比较已归档 full-window 实验：
+
 ```bash
 python scripts/compare_opening_results.py
 ```
+
+指定实验：
 
 ```bash
 python scripts/compare_opening_results.py \
@@ -342,9 +372,11 @@ model_test_r2
 top_score_mean_return
 ```
 
-`ic_mode`: `cross_section`
+当前主配置的 `ic_mode` 是 `cross_section`。
 
 ## 11. 分析 Backtest
+
+默认比较 full-window 回测：
 
 ```bash
 python scripts/compare_backtest_runs.py
@@ -362,7 +394,7 @@ solve_rate_mean
 
 ## 12. 收尾：记录和审计
 
-完成条件：训练完成、reader 合并完成、metrics 拉回、需要的 predictions/backtest/分析完成、config `status=completed`。
+一轮实验包括：训练完成、reader 合并完成、metrics 拉回、需要的 predictions/backtest/分析完成，并且相关 config 的 `status` 已更新为 `completed`。
 
 ```bash
 python scripts/record_experiment.py \
