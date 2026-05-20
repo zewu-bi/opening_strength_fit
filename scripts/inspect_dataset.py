@@ -52,14 +52,15 @@ LABELED_PREVIEW_COLUMNS = (
     "decision_time",
     "timestamp",
     "status",
-    "bid_price_1",
-    "bid_volume_1",
     "ask_price_1",
-    "ask_volume_1",
+    "spread_bps",
+    "depth_imbalance_10",
+    "turnover_diff_30t",
+    "return_10t",
+    "preopen_turnover",
     "buy_price",
     "sell_vwap",
     "label",
-    "valid_label",
 )
 
 
@@ -92,6 +93,10 @@ def _status(ok: bool, *, warn: bool = False) -> str:
 
 def _check(status: str, detail: str) -> str:
     return f"{status}: {detail}"
+
+
+def _compact_pass(check: str) -> str:
+    return "PASS" if check.startswith("PASS:") else check
 
 
 def _clock(series: pd.Series) -> pd.Series:
@@ -193,22 +198,21 @@ def _opening_window_check(
     requested_dates: list[str],
 ) -> str:
     if ticks.empty or "date" not in ticks.columns:
-        return _check("FAIL", "no source rows")
+        return _check("FAIL", "no rows")
     dates_with_rows = set(ticks["date"].astype(str).unique())
     missing = sorted(set(requested_dates) - dates_with_rows)
     by_date = ticks.groupby("date")["timestamp"].agg(["size", "min", "max"])
-    thin_dates = [
-        str(date)
-        for date, row in by_date.iterrows()
-        if int(row["size"]) <= 0
-    ]
-    status = _status(not missing and not thin_dates)
-    ranges = ", ".join(
-        f"{date}:{int(row['size']):,} rows "
-        f"{row['min'].strftime('%H:%M:%S')}->{row['max'].strftime('%H:%M:%S')}"
-        for date, row in by_date.iterrows()
+    status = _status(not missing)
+    row_min = int(by_date["size"].min()) if len(by_date) else 0
+    row_max = int(by_date["size"].max()) if len(by_date) else 0
+    time_min = by_date["min"].min().strftime("%H:%M:%S") if len(by_date) else ""
+    time_max = by_date["max"].max().strftime("%H:%M:%S") if len(by_date) else ""
+    detail = (
+        f"{len(dates_with_rows)}/{len(requested_dates)} dates; "
+        f"rows/day={row_min:,}-{row_max:,}; window={time_min}->{time_max}"
     )
-    detail = f"dates={len(dates_with_rows)}, missing={missing or '<none>'}; {ranges}"
+    if missing:
+        detail += f"; missing={missing}"
     return _check(status, detail)
 
 
@@ -232,10 +236,11 @@ def _symbol_filter_check(
     source_bad = [symbol for symbol in source_symbols if not pattern.fullmatch(symbol)]
     labeled_bad = [symbol for symbol in labeled_symbols if not pattern.fullmatch(symbol)]
     status = _status(not labeled_bad, warn=bool(source_bad))
+    if not source_bad and not labeled_bad:
+        return _check(status, f"{len(labeled_symbols)} labeled symbols match A-share regex")
     return _check(
         status,
-        "regex="
-        f"{regex}; source_bad={source_bad[:5] or '<none>'}; "
+        f"source_bad={source_bad[:5] or '<none>'}; "
         f"labeled_bad={labeled_bad[:5] or '<none>'}",
     )
 
@@ -256,10 +261,11 @@ def _cumulative_check(ticks: pd.DataFrame) -> str:
     volume_decreases = int((volume_diff < 0).sum())
     turnover_decreases = int((turnover_diff < -1e-7).sum())
     status = _status(volume_decreases == 0 and turnover_decreases == 0)
+    if volume_decreases == 0 and turnover_decreases == 0:
+        return _check(status, "Volume/Turnover monotonic per date x symbol")
     return _check(
         status,
-        f"volume_decrease_rows={volume_decreases:,}; "
-        f"turnover_decrease_rows={turnover_decreases:,}",
+        f"volume_decreases={volume_decreases:,}; turnover_decreases={turnover_decreases:,}",
     )
 
 
@@ -285,11 +291,12 @@ def _timestamp_order_check(ticks: pd.DataFrame) -> str:
         and offset_backwards == 0
         and offset_mismatch == 0
     )
+    if timestamp_backwards == 0 and offset_backwards == 0 and offset_mismatch == 0:
+        return _check(status, "timestamp sorted and equals TradingDay + ExchTimeOffsetUs")
     return _check(
         status,
         f"timestamp_backwards={timestamp_backwards:,}; "
-        f"exchange_offset_backwards={offset_backwards:,}; "
-        f"timestamp_offset_mismatch={offset_mismatch:,}",
+        f"offset_backwards={offset_backwards:,}; offset_mismatch={offset_mismatch:,}",
     )
 
 
@@ -322,14 +329,14 @@ def _ask1_execution_check(
         and spread_ok.all()
         and buy_price_ok
     )
+    if ok:
+        return _check("PASS", f"{decision_rows:,} decision rows use ask1 as buy_price")
     return _check(
         _status(ok),
-        f"decision_rows={decision_rows:,}; "
-        f"tradable_status_rows={int(tradable.sum()):,}; "
-        f"ask1_positive={int(ask_price_ok.sum()):,}; "
-        f"ask_volume1_positive={int(ask_volume_ok.sum()):,}; "
+        f"rows={decision_rows:,}; status_ok={int(tradable.sum()):,}; "
+        f"ask1_ok={int(ask_price_ok.sum()):,}; askvol1_ok={int(ask_volume_ok.sum()):,}; "
         f"spread_ok={int(spread_ok.sum()):,}; "
-        f"buy_price_equals_ask1={buy_price_ok}",
+        f"buy_price_eq_ask1={buy_price_ok}",
     )
 
 
@@ -364,6 +371,11 @@ def _decision_point_check(
     time_clock = _clock(labeled["timestamp"])
     in_window = time_clock.ge("09:30:00") & time_clock.le("09:40:00")
     ok = bool(status_ok.all() and decision_ok.all() and lag_ok.all() and in_window.all())
+    if ok:
+        return _check(
+            "PASS",
+            f"{len(labeled):,} rows; max_lag={max_observed_lag}; statuses={sorted(allowed)}",
+        )
     return _check(
         _status(ok),
         f"rows={len(labeled):,}; status_ok={int(status_ok.sum()):,}; "
@@ -389,27 +401,35 @@ def print_quality_checks(
     print_mapping(
         "source_quality_checks",
         {
-            "opening_window_daily_data": _opening_window_check(ticks, requested_dates),
-            "symbol_filter": _symbol_filter_check(
-                ticks=ticks,
-                labeled=labeled,
-                config=config,
+            "opening_window_daily_data": _compact_pass(
+                _opening_window_check(ticks, requested_dates)
             ),
-            "volume_turnover_cumulative": _cumulative_check(ticks),
-            "timestamp_exchange_order": _timestamp_order_check(ticks),
+            "symbol_filter": _compact_pass(
+                _symbol_filter_check(
+                    ticks=ticks,
+                    labeled=labeled,
+                    config=config,
+                )
+            ),
+            "volume_turnover_cumulative": _compact_pass(_cumulative_check(ticks)),
+            "timestamp_exchange_order": _compact_pass(_timestamp_order_check(ticks)),
         },
     )
     print_mapping(
         "sample_quality_checks",
         {
-            "ask1_executable_buy_price": _ask1_execution_check(
-                labeled,
-                tradable_statuses,
+            "ask1_executable_buy_price": _compact_pass(
+                _ask1_execution_check(
+                    labeled,
+                    tradable_statuses,
+                )
             ),
-            "decision_points_tradable": _decision_point_check(
-                labeled,
-                config,
-                tradable_statuses,
+            "decision_points_tradable": _compact_pass(
+                _decision_point_check(
+                    labeled,
+                    config,
+                    tradable_statuses,
+                )
             ),
         },
     )
@@ -423,12 +443,7 @@ def print_dataset_checks(
     tick_summary = dataset_summary(ticks)
     labeled_summary = dataset_summary(labeled)
     features = feature_columns(labeled)
-    ask1_positive = (
-        int((ticks["ask_price_1"] > 0).sum()) if "ask_price_1" in ticks.columns else 0
-    )
-    bid1_positive = (
-        int((ticks["bid_price_1"] > 0).sum()) if "bid_price_1" in ticks.columns else 0
-    )
+    quote_anomalies = quote_anomaly_count(ticks)
     valid_labels = int(labeled.get("valid_label", labeled["label"].notna()).sum())
     label_rows = len(labeled)
     label_nan_rate = (
@@ -449,15 +464,13 @@ def print_dataset_checks(
     print_mapping(
         "tick_dataset_check",
         {
-            "rows": f"{len(ticks):,}",
+            "rows": format_tick_rows(len(ticks), quote_anomalies),
             "columns": len(ticks.columns),
             "date_range": f"{tick_summary.get('date_min')} -> {tick_summary.get('date_max')}",
             "dates": tick_summary.get("n_dates"),
             "symbols": tick_summary.get("n_symbols"),
             "time_range": f"{tick_summary.get('time_min')} -> {tick_summary.get('time_max')}",
             "depth_levels": available_depth_levels(ticks),
-            "ask1_positive_rows": f"{ask1_positive:,}/{len(ticks):,}",
-            "bid1_positive_rows": f"{bid1_positive:,}/{len(ticks):,}",
         },
     )
     print_mapping(
@@ -479,7 +492,27 @@ def print_dataset_checks(
 
 
 def _preview_columns(frame: pd.DataFrame, columns: tuple[str, ...]) -> pd.DataFrame:
-    return frame.loc[:, [column for column in columns if column in frame.columns]]
+    return frame.loc[:, [column for column in columns if column in frame.columns]].replace(
+        [np.inf, -np.inf],
+        np.nan,
+    )
+
+
+def quote_anomaly_count(ticks: pd.DataFrame) -> int:
+    required = {"ask_price_1", "bid_price_1"}
+    if ticks.empty or not required.issubset(ticks.columns):
+        return 0
+    ask1 = pd.to_numeric(ticks["ask_price_1"], errors="coerce")
+    bid1 = pd.to_numeric(ticks["bid_price_1"], errors="coerce")
+    anomaly = ask1.isna() | bid1.isna() | ask1.le(0) | bid1.le(0)
+    return int(anomaly.sum())
+
+
+def format_tick_rows(rows: int, quote_anomalies: int) -> str:
+    if quote_anomalies <= 0:
+        return f"{rows:,}"
+    normal_rows = max(rows - quote_anomalies, 0)
+    return f"{normal_rows:,}+{quote_anomalies:,} (raw quote ask/bid<=0)"
 
 
 def main() -> None:
@@ -520,7 +553,7 @@ def main() -> None:
     parser.add_argument(
         "--label-preview-rows",
         type=int,
-        default=0,
+        default=5,
         help="Print this many labeled rows. Use 0 to skip.",
     )
     parser.add_argument(

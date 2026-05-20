@@ -75,6 +75,12 @@ def offset_to_time(offset_us) -> str:
     return str(pd.Timestamp("2000-01-01") + pd.to_timedelta(int(offset_us), unit="us"))[-8:]
 
 
+def format_date(value) -> str:
+    if value is None or pd.isna(value):
+        return ""
+    return str(pd.Timestamp(value).date())
+
+
 def dtype_summary(dtype_counts: Counter[str]) -> str:
     if len(dtype_counts) == 1:
         dtype, count = next(iter(dtype_counts.items()))
@@ -320,10 +326,12 @@ def print_dataset_overview(
     print(f"  columns: {len(schema):,}")
     print(f"  trading_days: {int(summary.get('trading_days') or 0):,}")
     print(f"  symbols: {int(summary.get('symbols') or 0):,}")
-    print(f"  date_min: {summary.get('date_min', '')}")
-    print(f"  date_max: {summary.get('date_max', '')}")
-    print(f"  time_min: {summary.get('time_min', '')}")
-    print(f"  time_max: {summary.get('time_max', '')}")
+    print(
+        "  date_range: "
+        f"{format_date(summary.get('date_min'))} -> "
+        f"{format_date(summary.get('date_max'))}"
+    )
+    print(f"  time_range: {summary.get('time_min', '')} -> {summary.get('time_max', '')}")
     print("  row_grain: TradingDay x Symbol x ExchTimeOffsetUs")
     if "positive_ask1_rows" in summary:
         print(f"  positive_ask1_rows: {int(summary.get('positive_ask1_rows') or 0):,}")
@@ -354,6 +362,10 @@ def _status(ok: bool, *, warn: bool = False) -> str:
     if ok:
         return "PASS"
     return "WARN" if warn else "FAIL"
+
+
+def _compact_pass(check: str) -> str:
+    return "PASS" if check.startswith("PASS:") else check
 
 
 def print_source_quality_checks(
@@ -433,17 +445,20 @@ def print_source_quality_checks(
         "Volume/Turnover fields are present; monotonic cumulative check is done "
         "per symbol in inspect_dataset.py",
     )
-    print_mapping("source_quality_checks", checks)
+    print_mapping(
+        "source_quality_checks",
+        {name: _compact_pass(check) for name, check in checks.items()},
+    )
 
 
 def print_date_layout(frame: pd.DataFrame) -> None:
-    print("  date_layout:")
+    print("  row_layout:")
     if frame.empty:
         print("    <empty>")
         return
     for _, row in frame.iterrows():
         print(
-            f"    {row['date']}: "
+            f"    {format_date(row['date'])}: "
             f"rows={int(row['rows']):,}, "
             f"symbols={int(row['symbols']):,}, "
             f"time_min={row['time_min']}, "
@@ -462,8 +477,8 @@ def print_year_layout(frame: pd.DataFrame) -> None:
             f"rows={int(row['rows']):,}, "
             f"trading_days={int(row['trading_days']):,}, "
             f"symbols={int(row['symbols']):,}, "
-            f"date_min={row['date_min']}, "
-            f"date_max={row['date_max']}"
+            f"date_min={format_date(row['date_min'])}, "
+            f"date_max={format_date(row['date_max'])}"
         )
 
 
@@ -477,8 +492,8 @@ def print_symbol_layout(frame: pd.DataFrame) -> None:
             f"    {row['symbol']}: "
             f"rows={int(row['rows']):,}, "
             f"trading_days={int(row['trading_days']):,}, "
-            f"date_min={row['date_min']}, "
-            f"date_max={row['date_max']}, "
+            f"date_min={format_date(row['date_min'])}, "
+            f"date_max={format_date(row['date_max'])}, "
             f"time_min={row['time_min']}, "
             f"time_max={row['time_max']}"
         )

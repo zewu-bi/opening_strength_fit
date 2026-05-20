@@ -33,7 +33,9 @@ python scripts/check_workflow_coverage.py
 
 ## 2. 数据检查
 
-查看 ClickHouse `stock.tick` 源表规模、schema 和字段说明：
+查看 ClickHouse `stock.tick` 源表规模、schema 和字段说明。`probe_clickhouse_data.py`
+按 `xy-fit` 的 probe 风格输出：连接状态、行列规模、日期/时间范围和可选 layout；
+窗口检查通过时只显示 `PASS`，只有异常时才展开原因：
 
 ```bash
 python scripts/probe_clickhouse_data.py
@@ -46,12 +48,15 @@ python scripts/probe_clickhouse_data.py --schema --field-notes
 python scripts/probe_clickhouse_data.py \
   --start-date 2021-01-01 \
   --end-date 2022-01-31 \
-  --start-time 09:15:00 \
-  --end-time 09:45:00 \
-  --a-share-only
+  --opening-window \
+  --a-share-only \
+  --year-layout
 ```
 
-检查单票小窗口的 tick schema、X/label 对齐和标签覆盖。`inspect_dataset.py` 会从 ClickHouse 抓少量真实 tick，在本地临时计算 feature/label；这一步只用于确认代码链路，不用于准备正式训练集：
+检查单票小窗口的 tick schema、X/label 对齐和标签覆盖。`inspect_dataset.py`
+会从 ClickHouse 抓少量真实 tick，在本地临时计算 feature/label；这一步只用于确认代码链路，不用于准备正式训练集。输出里的 `source_quality_checks`
+和 `sample_quality_checks` 通过时只显示 `PASS`；若原始 09:15 quote 有 ask/bid 非正，`tick_dataset_check.rows`
+会显示成 `正常行+异常行 (raw quote ask/bid<=0)`，决策样本是否可交易另看 `sample_quality_checks`：
 
 ```bash
 python scripts/inspect_dataset.py \
