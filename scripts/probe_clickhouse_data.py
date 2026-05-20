@@ -21,6 +21,7 @@ from opening_strength_fit.clickhouse_ticks import (
     normalize_clickhouse_ticks,
     validate_table_name,
 )
+from opening_strength_fit.reports import print_mapping
 from opening_strength_fit.schema import available_depth_levels
 from opening_strength_fit.universe import DEFAULT_A_SHARE_SYMBOL_REGEX
 
@@ -44,6 +45,7 @@ CORE_COLUMNS = (
     "LocalTimeStamp",
 )
 DEPTH_RE = re.compile(r"^(Ask|Bid)(Price|Volume|Count)(\d+)$")
+DEFAULT_TRADABLE_STATUSES = ("T0", "20", "TRADE")
 
 
 def load_env_file(path: str | Path) -> None:
@@ -132,6 +134,13 @@ def query_params(args: argparse.Namespace) -> dict:
     }
 
 
+def _query_params_with_statuses(args: argparse.Namespace) -> dict:
+    return {
+        **query_params(args),
+        "tradable_statuses": list(DEFAULT_TRADABLE_STATUSES),
+    }
+
+
 def query_dataset_summary(client, table: str, args: argparse.Namespace) -> dict:
     table = validate_table_name(table)
     health_columns = ""
@@ -162,6 +171,33 @@ where {where_clause(args)}""",
     out["time_min"] = offset_to_time(out.get("offset_min"))
     out["time_max"] = offset_to_time(out.get("offset_max"))
     return out
+
+
+def query_source_health(client, table: str, args: argparse.Namespace) -> dict:
+    table = validate_table_name(table)
+    symbol_mismatch = ""
+    if args.symbol_regex:
+        symbol_mismatch = """,
+    countIf(not match(Symbol, {symbol_regex:String})) as symbol_mismatch_rows"""
+    frame = client.query_df(
+        f"""select
+    count() as rows,
+    countIf(Status in {{tradable_statuses:Array(String)}}) as tradable_rows,
+    countIf(AskPrice1 > 0) as positive_ask1_rows,
+    countIf(AskVolume1 > 0) as positive_ask_volume1_rows,
+    countIf(BidPrice1 > 0) as positive_bid1_rows,
+    countIf(AskPrice1 > 0 and BidPrice1 > 0 and AskPrice1 < BidPrice1) as crossed_book_rows,
+    countIf(
+        Status in {{tradable_statuses:Array(String)}}
+        and AskPrice1 > 0
+        and AskVolume1 > 0
+        and (BidPrice1 <= 0 or AskPrice1 >= BidPrice1)
+    ) as tradable_buyable_ask1_rows{symbol_mismatch}
+from {table}
+where {where_clause(args)}""",
+        parameters=_query_params_with_statuses(args),
+    )
+    return frame.iloc[0].to_dict() if not frame.empty else {"rows": 0}
 
 
 def query_date_layout(client, table: str, args: argparse.Namespace) -> pd.DataFrame:
@@ -308,6 +344,96 @@ def print_dataset_overview(
             f"count={len(normalized_preview.columns):,}, "
             f"depth_levels={available_depth_levels(normalized_preview)}"
         )
+
+
+def _check(status: str, detail: str) -> str:
+    return f"{status}: {detail}"
+
+
+def _status(ok: bool, *, warn: bool = False) -> str:
+    if ok:
+        return "PASS"
+    return "WARN" if warn else "FAIL"
+
+
+def print_source_quality_checks(
+    *,
+    schema: pd.DataFrame,
+    date_layout: pd.DataFrame,
+    health: dict,
+    args: argparse.Namespace,
+) -> None:
+    schema_names = {name for name, _dtype in schema_fields(schema)}
+    checks: dict[str, str] = {}
+
+    if date_layout.empty:
+        checks["opening_window_daily_data"] = _check("FAIL", "no dates with rows")
+    else:
+        expected_start = (
+            offset_to_time(args.start_offset_us) if args.start_offset_us is not None else ""
+        )
+        expected_end = (
+            offset_to_time(args.end_offset_us) if args.end_offset_us is not None else ""
+        )
+        thin_dates = [
+            str(row["date"])
+            for _, row in date_layout.iterrows()
+            if int(row["rows"]) <= 0
+        ]
+        status = _status(not thin_dates)
+        coverage = ", ".join(
+            f"{row['date']}:{int(row['rows']):,} rows "
+            f"{row['time_min']}->{row['time_max']}"
+            for _, row in date_layout.head(8).iterrows()
+        )
+        if len(date_layout) > 8:
+            coverage += f", ... +{len(date_layout) - 8} dates"
+        checks["opening_window_daily_data"] = _check(
+            status,
+            f"expected_window={expected_start or '<all>'}->{expected_end or '<all>'}; "
+            f"trading_days_with_rows={len(date_layout)}; {coverage}",
+        )
+
+    if args.symbol_regex:
+        mismatch_rows = int(health.get("symbol_mismatch_rows") or 0)
+        checks["symbol_filter"] = _check(
+            _status(mismatch_rows == 0),
+            f"regex={args.symbol_regex}; mismatch_rows={mismatch_rows:,}",
+        )
+    else:
+        checks["symbol_filter"] = _check("SKIP", "no symbol_regex supplied")
+
+    rows = int(health.get("rows") or 0)
+    tradable_rows = int(health.get("tradable_rows") or 0)
+    buyable_rows = int(health.get("tradable_buyable_ask1_rows") or 0)
+    positive_ask1 = int(health.get("positive_ask1_rows") or 0)
+    positive_ask_volume = int(health.get("positive_ask_volume1_rows") or 0)
+    crossed_book = int(health.get("crossed_book_rows") or 0)
+    checks["ask1_executable_buy_price"] = _check(
+        _status(
+            rows > 0
+            and tradable_rows > 0
+            and buyable_rows == tradable_rows
+            and crossed_book == 0,
+            warn=buyable_rows > 0,
+        ),
+        f"rows={rows:,}; tradable_rows={tradable_rows:,}; "
+        f"tradable_buyable_ask1_rows={buyable_rows:,}; "
+        f"ask1_positive_rows={positive_ask1:,}; "
+        f"ask_volume1_positive_rows={positive_ask_volume:,}; "
+        f"crossed_book_rows={crossed_book:,}",
+    )
+    checks["timestamp_exchange_time"] = _check(
+        _status("TradingDay" in schema_names and "ExchTimeOffsetUs" in schema_names),
+        "timestamp is derived from TradingDay + ExchTimeOffsetUs; "
+        "ClickHouse reads order by Symbol, ExchTimeOffsetUs",
+    )
+    checks["volume_turnover_cumulative"] = _check(
+        _status("Volume" in schema_names and "Turnover" in schema_names),
+        "Volume/Turnover fields are present; monotonic cumulative check is done "
+        "per symbol in inspect_dataset.py",
+    )
+    print_mapping("source_quality_checks", checks)
 
 
 def print_date_layout(frame: pd.DataFrame) -> None:
@@ -474,6 +600,16 @@ def main() -> None:
         action="store_true",
         help="Also scan ask/bid positivity and volume/turnover ranges.",
     )
+    parser.add_argument(
+        "--column-layout",
+        action="store_true",
+        help="Print schema dtype/depth layout details.",
+    )
+    parser.add_argument(
+        "--no-quality-check",
+        action="store_true",
+        help="Skip source quality judgements for opening-window probes.",
+    )
     parser.add_argument("--schema", action="store_true")
     parser.add_argument("--field-notes", action="store_true")
     parser.add_argument("--env-file", default=".env")
@@ -532,8 +668,18 @@ def main() -> None:
     )
     schema = describe_table(client, args.table)
     summary = query_dataset_summary(client, args.table, args)
+    run_quality_check = (
+        not args.no_quality_check
+        and args.start_offset_us is not None
+        and args.end_offset_us is not None
+    )
     year_layout = query_year_layout(client, args.table, args) if args.year_layout else pd.DataFrame()
-    date_layout = query_date_layout(client, args.table, args) if args.date_layout else pd.DataFrame()
+    date_layout = (
+        query_date_layout(client, args.table, args)
+        if args.date_layout or run_quality_check
+        else pd.DataFrame()
+    )
+    health = query_source_health(client, args.table, args) if run_quality_check else {}
     symbol_layout = (
         query_symbol_layout(client, args.table, args)
         if args.top_symbols and args.top_symbols > 0
@@ -548,13 +694,21 @@ def main() -> None:
         preview=preview,
         args=args,
     )
+    if run_quality_check:
+        print_source_quality_checks(
+            schema=schema,
+            date_layout=date_layout,
+            health=health,
+            args=args,
+        )
     if args.year_layout:
         print_year_layout(year_layout)
     if args.date_layout:
         print_date_layout(date_layout)
     if args.top_symbols and args.top_symbols > 0:
         print_symbol_layout(symbol_layout)
-    print_column_layout(schema, preview)
+    if args.column_layout:
+        print_column_layout(schema, preview)
     print_preview(preview)
 
     if args.field_notes:
