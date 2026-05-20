@@ -1,0 +1,106 @@
+[run]
+id = "ridge_opening_full"
+description = "Full opening-strength Ridge baseline; use CLI overrides for local smoke subsets."
+status = "queued"
+
+[data]
+# Cluster training reads ClickHouse directly. Local smoke runs can still pass
+# --input or set tick_path to use a prepared parquet/cache.
+source = "clickhouse"
+tick_path = ""
+input_kind = "auto"
+feature_limit = 0
+
+[clickhouse]
+host = "ch.db.prod.highfortfunds.com"
+port = 8123
+table = "stock.tick"
+# 09:15-09:45 keeps auction features and covers 09:40 labels through 09:42.
+start_offset_us = 33300000000
+end_offset_us = 35100000000
+
+[universe]
+enabled = true
+symbol_regex = "^(?:(?:00|30)\\d{4}\\.SZ|(?:60|68)\\d{4}\\.SH)$"
+# Later, point this to a formal stock pool after ST/suspend/limit/liquidity filters.
+symbols_file = ""
+
+[sample]
+start_time = "09:30:00"
+end_time = "09:40:00"
+mode = "decision_points"
+# Whole-minute trading decision points across the full 10-minute opening window.
+decision_times = [
+  "09:30:00",
+  "09:31:00",
+  "09:32:00",
+  "09:33:00",
+  "09:34:00",
+  "09:35:00",
+  "09:36:00",
+  "09:37:00",
+  "09:38:00",
+  "09:39:00",
+  "09:40:00",
+]
+decision_max_lag_seconds = 5
+
+[labels]
+buy_price_col = "ask_price_1"
+volume_col = "volume"
+turnover_col = "turnover"
+hold_seconds = 60
+sell_window_seconds = 60
+volume_unit_multiplier = 1.0
+fee_bps = 0.0
+# Set this when ticks are sparse and you do not want to align too far forward.
+# max_future_gap_seconds = 5
+
+[features]
+include_preopen = true
+
+[filters]
+# Continuous auction/tradable sample statuses. Preopen rows are still used for features.
+tradable_statuses = ["T0", "20", "TRADE"]
+
+[window]
+mode = "rolling_monthly"
+train_months = 12
+test_start_month = "2022-01"
+test_end_month = "2024-12"
+# For annual smoke/shards, pass --rolling-annual or set mode = "rolling_annual".
+train_start_year = 2019
+test_start_year = 2020
+test_end_year = 2024
+train_fraction = 0.8
+
+[model]
+name = "ridge"
+alpha = 1.0
+
+[evaluation]
+score_bins = 10
+# symbol_day = top ticks per stock/day; cross_section = top stocks per decision point.
+bucket_mode = "cross_section"
+selection_mode = "cross_section"
+ic_mode = "cross_section"
+top_n = 20
+
+[output]
+local_dir = "output/local/ridge_opening_full"
+k8s_dir = "/mnt/output/opening_strength_fit/ridge_opening_full"
+
+[k8s]
+namespace = "bizewu"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+# Optional: set to a Kubernetes secret containing CLICKHOUSE_USER/PASSWORD
+# if the cluster runtime does not inject those environment variables already.
+clickhouse_secret = "opening-strength-clickhouse"
+
+[k8s.resources]
+cpu_request = "4"
+cpu_limit = "8"
+memory_request = "16Gi"
+memory_limit = "32Gi"

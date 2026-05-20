@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: opening-strength-ridge-opening-full
+  namespace: bizewu
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      volumes:
+        - name: opening-strength-output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+      containers:
+        - name: opening-strength-fit
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:latest
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          command:
+            - python
+            - scripts/run_experiment.py
+            - --config
+            - experiments/runs/ridge_opening_full.toml
+            - --output-dir
+            - /mnt/output/opening_strength_fit/ridge_opening_full
+          volumeMounts:
+            - name: opening-strength-output
+              mountPath: /mnt/output
+          resources:
+            requests:
+              cpu: "4"
+              memory: 16Gi
+            limits:
+              cpu: "8"
+              memory: 32Gi

@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: opening-strength-ridge-opening-full-sharded
+  namespace: bizewu
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      volumes:
+        - name: opening-strength-output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+      containers:
+        - name: opening-strength-fit
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:latest
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          command:
+            - /bin/bash
+            - -lc
+            - |
+              set -euo pipefail
+              ROOT=/mnt/output/opening_strength_fit/ridge_opening_full
+              mkdir -p "${ROOT}"
+
+              for MONTH in 2022-01 2022-02 2022-03 2022-04 2022-05 2022-06 2022-07 2022-08 2022-09 2022-10 2022-11 2022-12 2023-01 2023-02 2023-03 2023-04 2023-05 2023-06 2023-07 2023-08 2023-09 2023-10 2023-11 2023-12 2024-01 2024-02 2024-03 2024-04 2024-05 2024-06 2024-07 2024-08 2024-09 2024-10 2024-11 2024-12; do
+                OUT="${ROOT}/month_${MONTH}"
+                if [ -f "${OUT}/metrics_by_year.csv" ]; then
+                  echo "month ${MONTH}: metrics already exist, skipping ${OUT}"
+                  continue
+                fi
+
+                echo
+                echo "running ridge_opening_full shard month=${MONTH}"
+                echo "output_dir=${OUT}"
+
+                python scripts/run_experiment.py \
+                  --config experiments/runs/ridge_opening_full.toml \
+                  --rolling-monthly \
+                  --train-months 12 \
+                  --test-start-month "${MONTH}" \
+                  --test-end-month "${MONTH}" \
+                  --output-dir "${OUT}"
+              done
+          volumeMounts:
+            - name: opening-strength-output
+              mountPath: /mnt/output
+          resources:
+            requests:
+              cpu: "4"
+              memory: 16Gi
+            limits:
+              cpu: "8"
+              memory: 32Gi

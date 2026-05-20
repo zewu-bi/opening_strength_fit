@@ -1,0 +1,8 @@
+numpy
+pandas
+pyarrow
+scikit-learn
+tqdm
+matplotlib
+clickhouse-connect
+requests
