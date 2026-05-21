@@ -19,9 +19,64 @@ def load_config(path: Path) -> dict:
 
 def training_script(config: dict) -> str:
     model_name = str(get(config, "model", "name", "ridge")).strip().lower()
-    if model_name in {"ridge", "gbm", "hist_gbm", "hist_gradient_boosting"}:
+    if model_name in {
+        "ridge",
+        "gbm",
+        "hist_gbm",
+        "hist_gradient_boosting",
+        "lightgbm",
+        "lgbm",
+    }:
         return "scripts/run_experiment.py"
     raise SystemExit(f"Unsupported model.name for k8s rendering: {model_name}")
+
+
+def _gpu_count(resources: dict) -> str:
+    gpu_limit = str(resources.get("gpu_limit", resources.get("nvidia_gpu", "0")) or "0")
+    if gpu_limit in {"", "0", "0.0", "none", "None"}:
+        return ""
+    return gpu_limit
+
+
+def _gpu_resource_line(resources: dict, indent: int = 14) -> str:
+    gpu_count = _gpu_count(resources)
+    if not gpu_count:
+        return ""
+    return f"{' ' * indent}nvidia.com/gpu: \"{gpu_count}\"\n"
+
+
+def _node_selector_yaml(config: dict, indent: int = 14) -> str:
+    node_selector = config.get("k8s", {}).get("node_selector", {})
+    if not node_selector:
+        return ""
+    lines = [f"{' ' * indent}nodeSelector:"]
+    for key, value in sorted(node_selector.items()):
+        lines.append(f"{' ' * (indent + 2)}{key}: \"{value}\"")
+    return "\n".join(lines) + "\n"
+
+
+def _gpu_tolerations_yaml(resources: dict, indent: int = 14) -> str:
+    if not _gpu_count(resources):
+        return ""
+    return textwrap.indent(
+        textwrap.dedent(
+            """\
+            tolerations:
+              - key: has_gpu
+                operator: Equal
+                value: "true"
+                effect: NoSchedule
+            """
+        ),
+        " " * indent,
+    )
+
+
+def _scheduler_yaml(config: dict, resources: dict, indent: int = 14) -> str:
+    return _node_selector_yaml(config, indent=indent) + _gpu_tolerations_yaml(
+        resources,
+        indent=indent,
+    )
 
 
 def _year_from_config(config: dict, key: str) -> int:
@@ -82,6 +137,8 @@ def render_training_job(config_path: Path, config: dict, image: str) -> str:
     cpu_limit = resources.get("cpu_limit", "8")
     memory_request = resources.get("memory_request", "16Gi")
     memory_limit = resources.get("memory_limit", "32Gi")
+    gpu_resource_line = _gpu_resource_line(resources, indent=22)
+    scheduler_yaml = _scheduler_yaml(config, resources, indent=14)
     script = training_script(config)
     env_from = _clickhouse_env_from(config, indent=18)
 
@@ -104,6 +161,7 @@ def render_training_job(config_path: Path, config: dict, image: str) -> str:
                 - name: opening-strength-output
                   persistentVolumeClaim:
                     claimName: {pvc}
+{scheduler_yaml.rstrip()}
               containers:
                 - name: opening-strength-fit
                   image: {image}
@@ -123,9 +181,11 @@ def render_training_job(config_path: Path, config: dict, image: str) -> str:
                     requests:
                       cpu: "{cpu_request}"
                       memory: {memory_request}
+{gpu_resource_line.rstrip()}
                     limits:
                       cpu: "{cpu_limit}"
                       memory: {memory_limit}
+{gpu_resource_line.rstrip()}
         """
     )
 
@@ -198,6 +258,8 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
     cpu_limit = resources.get("cpu_limit", "8")
     memory_request = resources.get("memory_request", "16Gi")
     memory_limit = resources.get("memory_limit", "32Gi")
+    gpu_resource_line = _gpu_resource_line(resources, indent=26)
+    scheduler_yaml = _scheduler_yaml(config, resources, indent=18)
     script = training_script(config)
     env_from = _clickhouse_env_from(config, indent=18)
     if _window_mode(config) == "rolling_monthly":
@@ -223,6 +285,7 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
                     - name: opening-strength-output
                       persistentVolumeClaim:
                         claimName: {pvc}
+{scheduler_yaml.rstrip()}
                   containers:
                     - name: opening-strength-fit
                       image: {image}
@@ -262,9 +325,11 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
                         requests:
                           cpu: "{cpu_request}"
                           memory: {memory_request}
+{gpu_resource_line.rstrip()}
                         limits:
                           cpu: "{cpu_limit}"
                           memory: {memory_limit}
+{gpu_resource_line.rstrip()}
             """
         )
     test_start_year = _year_from_config(config, "test_start_date")
@@ -290,6 +355,7 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
                 - name: opening-strength-output
                   persistentVolumeClaim:
                     claimName: {pvc}
+{_scheduler_yaml(config, resources, indent=14).rstrip()}
               containers:
                 - name: opening-strength-fit
                   image: {image}
@@ -327,9 +393,11 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
                     requests:
                       cpu: "{cpu_request}"
                       memory: {memory_request}
+{_gpu_resource_line(resources, indent=22).rstrip()}
                     limits:
                       cpu: "{cpu_limit}"
                       memory: {memory_limit}
+{_gpu_resource_line(resources, indent=22).rstrip()}
         """
     )
 

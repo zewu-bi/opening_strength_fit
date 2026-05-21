@@ -1,0 +1,136 @@
+[run]
+id = "lgbm_opening_1y_next_month_strong_delay1"
+description = "One-year train, next-month test LightGBM on opening-strength candidate rows with shared labeled feature cache and entry_tick_delay=1."
+status = "queued"
+
+[data]
+source = "clickhouse"
+tick_path = ""
+input_kind = "auto"
+feature_limit = 0
+
+[cache]
+enabled = true
+read = true
+write = true
+labeled_path = "/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay1_labeled.parquet"
+lock_timeout_seconds = 21600
+
+[clickhouse]
+host = "ch.db.prod.highfortfunds.com"
+port = 8123
+table = "stock.tick"
+# 09:15-09:45 keeps auction features and covers 09:40 labels through 09:42.
+start_offset_us = 33300000000
+end_offset_us = 35100000000
+
+[universe]
+enabled = true
+symbol_regex = "^(?:(?:00|30)\\d{4}\\.SZ|(?:60|68)\\d{4}\\.SH)$"
+symbols_file = ""
+
+[sample]
+start_time = "09:30:00"
+end_time = "09:40:00"
+mode = "decision_points"
+decision_times = [
+  "09:30:00",
+  "09:31:00",
+  "09:32:00",
+  "09:33:00",
+  "09:34:00",
+  "09:35:00",
+  "09:36:00",
+  "09:37:00",
+  "09:38:00",
+  "09:39:00",
+  "09:40:00",
+]
+decision_max_lag_seconds = 5
+
+[labels]
+buy_price_col = "ask_price_1"
+volume_col = "volume"
+turnover_col = "turnover"
+hold_seconds = 60
+sell_window_seconds = 60
+volume_unit_multiplier = 1.0
+fee_bps = 0.0
+entry_tick_delay = 1
+
+[features]
+include_preopen = true
+
+[filters]
+tradable_statuses = ["T0", "20", "TRADE"]
+
+[candidate_filter]
+enabled = true
+# Rank filters are evaluated cross-sectionally at each date x decision point.
+rank_group_cols = ["date", "decision_target_timestamp"]
+
+[candidate_filter.min]
+preopen_turnover = 1.0
+volume_diff_10t = 1.0
+turnover_diff_10t = 1.0
+return_10t = 0.0
+spread_bps = 0.0
+
+[candidate_filter.max]
+spread_bps = 100.0
+
+[candidate_filter.rank_min]
+preopen_turnover = 0.70
+turnover_diff_30t = 0.50
+
+[window]
+mode = "chronological"
+train_start_date = "2021-01-01"
+test_start_date = "2022-01-01"
+test_end_date = "2022-01-31"
+train_fraction = 0.8
+
+[model]
+name = "lightgbm"
+device_type = "gpu"
+n_estimators = 400
+learning_rate = 0.03
+num_leaves = 63
+max_bin = 63
+gpu_use_dp = false
+max_depth = -1
+min_child_samples = 200
+subsample = 0.9
+colsample_bytree = 0.9
+reg_alpha = 0.0
+reg_lambda = 1.0
+random_state = 7
+n_jobs = 16
+
+[evaluation]
+score_bins = 10
+bucket_mode = "cross_section"
+selection_mode = "cross_section"
+ic_mode = "cross_section"
+top_n = 20
+
+[output]
+local_dir = "output/local/lgbm_opening_1y_next_month_strong_delay1"
+k8s_dir = "/mnt/output/opening_strength_fit/lgbm_opening_1y_next_month_strong_delay1"
+
+[k8s]
+namespace = "bizewu"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+clickhouse_secret = "opening-strength-clickhouse"
+
+[k8s.node_selector]
+mem_per_gpu_tier = "high"
+
+[k8s.resources]
+cpu_request = "8"
+cpu_limit = "16"
+memory_request = "32Gi"
+memory_limit = "64Gi"
+gpu_limit = "1"

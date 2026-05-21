@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import time
 
 import numpy as np
 import pandas as pd
@@ -28,10 +29,11 @@ from opening_strength_fit.evaluation import (
     summarize_trades,
     top_score_trades,
 )
-from opening_strength_fit.io import write_frame
+from opening_strength_fit.io import read_frame, write_frame
 from opening_strength_fit.model import (
     evaluate_prediction_frame,
     fit_gbm_frame,
+    fit_lightgbm_frame,
     fit_ridge_frame,
     predict_frame,
 )
@@ -324,7 +326,12 @@ def _feature_limit(args: argparse.Namespace, config: dict) -> int | None:
     return raw if raw and raw > 0 else None
 
 
-def build_labeled_frame_from_config(ticks: pd.DataFrame, config: dict) -> pd.DataFrame:
+def build_labeled_frame_from_config(
+    ticks: pd.DataFrame,
+    config: dict,
+    *,
+    apply_candidate_filter: bool = True,
+) -> pd.DataFrame:
     volume_unit_multiplier = _float_config(
         config,
         "labels",
@@ -389,7 +396,9 @@ def build_labeled_frame_from_config(ticks: pd.DataFrame, config: dict) -> pd.Dat
             None if max_decision_lag in (None, "") else int(max_decision_lag)
         ),
     )
-    return _apply_candidate_filter_from_config(labeled, config)
+    if apply_candidate_filter:
+        return _apply_candidate_filter_from_config(labeled, config)
+    return labeled
 
 
 def _input_kind(args: argparse.Namespace, config: dict) -> str:
@@ -546,7 +555,61 @@ def _clickhouse_setting(
     return config_value(config, "clickhouse", config_key, default)
 
 
-def _load_clickhouse_labeled_frame(
+def _cache_path(config: dict) -> Path | None:
+    raw = config_value(
+        config,
+        "cache",
+        "labeled_path",
+        config_value(config, "cache", "path", ""),
+    )
+    if raw in (None, ""):
+        return None
+    return Path(str(raw))
+
+
+def _cache_bool(config: dict, key: str, default: bool) -> bool:
+    return _bool_config(config, "cache", key, default)
+
+
+def _cache_timeout_seconds(config: dict) -> int:
+    return _int_config(config, "cache", "lock_timeout_seconds", 21_600)
+
+
+def _load_labeled_cache(path: Path) -> pd.DataFrame:
+    labeled = read_frame(path)
+    return ensure_timestamp_columns(standardize_columns(labeled))
+
+
+def _write_labeled_cache(labeled: pd.DataFrame, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    suffix = "".join(path.suffixes) or ".parquet"
+    tmp_path = path.with_name(f".{path.name}.{os.getpid()}.tmp{suffix}")
+    write_frame(labeled, tmp_path)
+    os.replace(tmp_path, path)
+
+
+def _acquire_cache_lock(lock_path: Path, timeout_seconds: int) -> bool:
+    start = time.monotonic()
+    while True:
+        try:
+            lock_path.mkdir(parents=True)
+            return True
+        except FileExistsError:
+            if (time.monotonic() - start) >= float(timeout_seconds):
+                return False
+            if lock_path.with_suffix(lock_path.suffix + ".done").exists():
+                return False
+            time.sleep(15)
+
+
+def _release_cache_lock(lock_path: Path) -> None:
+    try:
+        lock_path.rmdir()
+    except FileNotFoundError:
+        return
+
+
+def _build_clickhouse_labeled_frame(
     args: argparse.Namespace,
     config: dict,
 ) -> pd.DataFrame:
@@ -669,7 +732,11 @@ def _load_clickhouse_labeled_frame(
             print(f"skip empty ClickHouse day: {trading_day}")
             continue
         ticks = normalize_clickhouse_ticks(ticks)
-        labeled = build_labeled_frame_from_config(ticks, config)
+        labeled = build_labeled_frame_from_config(
+            ticks,
+            config,
+            apply_candidate_filter=False,
+        )
         if labeled.empty:
             print(f"skip empty labeled day: {trading_day}")
             continue
@@ -682,6 +749,67 @@ def _load_clickhouse_labeled_frame(
             "symbol universe, and sample/label settings."
         )
     return pd.concat(labeled_parts, ignore_index=True)
+
+
+def _load_clickhouse_labeled_frame(
+    args: argparse.Namespace,
+    config: dict,
+) -> pd.DataFrame:
+    cache_enabled = _cache_bool(config, "enabled", False)
+    cache_path = _cache_path(config) if cache_enabled else None
+    cache_read = _cache_bool(config, "read", True)
+    cache_write = _cache_bool(config, "write", True)
+
+    if cache_path and cache_read and cache_path.exists():
+        print_mapping("labeled_cache", {"action": "read", "path": str(cache_path)})
+        return _apply_candidate_filter_from_config(_load_labeled_cache(cache_path), config)
+
+    if not cache_path or not cache_write:
+        return _apply_candidate_filter_from_config(
+            _build_clickhouse_labeled_frame(args, config),
+            config,
+        )
+
+    lock_path = Path(f"{cache_path}.lock")
+    timeout_seconds = _cache_timeout_seconds(config)
+    acquired = _acquire_cache_lock(lock_path, timeout_seconds)
+    if not acquired:
+        if cache_read and cache_path.exists():
+            print_mapping(
+                "labeled_cache",
+                {"action": "read_after_wait", "path": str(cache_path)},
+            )
+            return _apply_candidate_filter_from_config(
+                _load_labeled_cache(cache_path),
+                config,
+            )
+        raise SystemExit(
+            f"timed out waiting for labeled cache lock: {lock_path}; "
+            "cache file was not created"
+        )
+
+    try:
+        if cache_read and cache_path.exists():
+            print_mapping(
+                "labeled_cache",
+                {"action": "read_after_lock", "path": str(cache_path)},
+            )
+            base_labeled = _load_labeled_cache(cache_path)
+        else:
+            base_labeled = _build_clickhouse_labeled_frame(args, config)
+            _write_labeled_cache(base_labeled, cache_path)
+            print_mapping(
+                "labeled_cache",
+                {
+                    "action": "write",
+                    "path": str(cache_path),
+                    **dataset_summary(base_labeled),
+                },
+            )
+    finally:
+        _release_cache_lock(lock_path)
+
+    return _apply_candidate_filter_from_config(base_labeled, config)
 
 
 def _test_year_from_args(args: argparse.Namespace, config: dict, key: str) -> int | None:
@@ -800,7 +928,28 @@ def _fit_prediction_model(
             ),
             random_state=_int_config(config, "model", "random_state", 7),
         )
-    raise SystemExit(f"unsupported model.name={model_name!r}; expected ridge or gbm")
+    if model_name in {"lightgbm", "lgbm"}:
+        return fit_lightgbm_frame(
+            train,
+            feature_limit=feature_limit,
+            n_estimators=_int_config(config, "model", "n_estimators", 300),
+            learning_rate=_float_config(config, "model", "learning_rate", 0.03),
+            num_leaves=_int_config(config, "model", "num_leaves", 63),
+            max_depth=_int_config(config, "model", "max_depth", -1),
+            min_child_samples=_int_config(config, "model", "min_child_samples", 200),
+            subsample=_float_config(config, "model", "subsample", 1.0),
+            colsample_bytree=_float_config(config, "model", "colsample_bytree", 1.0),
+            reg_alpha=_float_config(config, "model", "reg_alpha", 0.0),
+            reg_lambda=_float_config(config, "model", "reg_lambda", 0.0),
+            random_state=_int_config(config, "model", "random_state", 7),
+            n_jobs=_int_config(config, "model", "n_jobs", -1),
+            device_type=_str_config(config, "model", "device_type", "cpu"),
+            max_bin=_optional_int_config(config, "model", "max_bin", None),
+            gpu_use_dp=_bool_config(config, "model", "gpu_use_dp", False),
+        )
+    raise SystemExit(
+        f"unsupported model.name={model_name!r}; expected ridge, gbm, or lightgbm"
+    )
 
 
 def _model_json(config: dict, alpha: float) -> dict[str, object]:
@@ -820,6 +969,24 @@ def _model_json(config: dict, alpha: float) -> dict[str, object]:
                 0.0,
             ),
             "random_state": _int_config(config, "model", "random_state", 7),
+        }
+    if model_name in {"lightgbm", "lgbm"}:
+        return {
+            "name": "lightgbm",
+            "device_type": _str_config(config, "model", "device_type", "cpu"),
+            "n_estimators": _int_config(config, "model", "n_estimators", 300),
+            "learning_rate": _float_config(config, "model", "learning_rate", 0.03),
+            "num_leaves": _int_config(config, "model", "num_leaves", 63),
+            "max_depth": _int_config(config, "model", "max_depth", -1),
+            "min_child_samples": _int_config(config, "model", "min_child_samples", 200),
+            "subsample": _float_config(config, "model", "subsample", 1.0),
+            "colsample_bytree": _float_config(config, "model", "colsample_bytree", 1.0),
+            "reg_alpha": _float_config(config, "model", "reg_alpha", 0.0),
+            "reg_lambda": _float_config(config, "model", "reg_lambda", 0.0),
+            "random_state": _int_config(config, "model", "random_state", 7),
+            "n_jobs": _int_config(config, "model", "n_jobs", -1),
+            "max_bin": _optional_int_config(config, "model", "max_bin", None),
+            "gpu_use_dp": _bool_config(config, "model", "gpu_use_dp", False),
         }
     return {"name": model_name}
 

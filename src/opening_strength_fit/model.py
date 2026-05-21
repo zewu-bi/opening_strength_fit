@@ -196,6 +196,85 @@ def fit_gbm_frame(
     )
 
 
+def fit_lightgbm_frame(
+    train: pd.DataFrame,
+    *,
+    feature_limit: int | None = None,
+    n_estimators: int = 300,
+    learning_rate: float = 0.03,
+    num_leaves: int = 63,
+    max_depth: int = -1,
+    min_child_samples: int = 200,
+    subsample: float = 1.0,
+    colsample_bytree: float = 1.0,
+    reg_alpha: float = 0.0,
+    reg_lambda: float = 0.0,
+    random_state: int = 7,
+    n_jobs: int = -1,
+    device_type: str = "cpu",
+    max_bin: int | None = None,
+    gpu_use_dp: bool = False,
+) -> tuple[RidgePredictionModel, dict[str, int]]:
+    try:
+        from lightgbm import LGBMRegressor
+    except ImportError as exc:
+        raise SystemExit(
+            "model.name='lightgbm' requires the lightgbm package. "
+            "Install requirements.txt or rebuild the training image."
+        ) from exc
+
+    features = feature_columns(train, feature_limit)
+    if not features:
+        raise SystemExit("no numeric feature columns found")
+
+    x, y = _clean_xy(train, features)
+    lightgbm_params = {
+        "objective": "regression",
+        "n_estimators": int(n_estimators),
+        "learning_rate": float(learning_rate),
+        "num_leaves": int(num_leaves),
+        "max_depth": int(max_depth),
+        "min_child_samples": int(min_child_samples),
+        "subsample": float(subsample),
+        "colsample_bytree": float(colsample_bytree),
+        "reg_alpha": float(reg_alpha),
+        "reg_lambda": float(reg_lambda),
+        "random_state": int(random_state),
+        "n_jobs": int(n_jobs),
+        "verbosity": -1,
+    }
+    device_type = str(device_type or "cpu").strip().lower()
+    if device_type not in {"", "auto"}:
+        lightgbm_params["device_type"] = device_type
+    if max_bin is not None and int(max_bin) > 0:
+        lightgbm_params["max_bin"] = int(max_bin)
+    if device_type in {"gpu", "cuda"}:
+        lightgbm_params["gpu_use_dp"] = bool(gpu_use_dp)
+
+    pipeline = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="constant", fill_value=0.0)),
+            ("lightgbm", LGBMRegressor(**lightgbm_params)),
+        ]
+    )
+    pipeline.fit(x, y)
+    stats = {
+        "rows": len(x),
+        "dates": int(train.loc[x.index, "date"].nunique()),
+        "symbols": int(train.loc[x.index, "symbol"].nunique()),
+        "features": len(features),
+    }
+    return (
+        RidgePredictionModel(
+            features=features,
+            alpha=float("nan"),
+            pipeline=pipeline,
+            model_name=f"lightgbm_{device_type or 'cpu'}",
+        ),
+        stats,
+    )
+
+
 def predict_frame(model: RidgePredictionModel, frame: pd.DataFrame) -> pd.DataFrame:
     missing = set(model.features) - set(frame.columns)
     if missing:

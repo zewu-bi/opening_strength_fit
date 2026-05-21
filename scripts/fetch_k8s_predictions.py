@@ -130,7 +130,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--output-dir",
-        default="output/backtest/gbm_opening_1y_next_month",
+        default="output/predictions/gbm_opening_1y_next_month",
         help="Local output directory for raw parquet files, combined predictions, and traces.",
     )
     args = parser.parse_args()

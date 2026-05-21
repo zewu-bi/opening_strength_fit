@@ -2,6 +2,7 @@ numpy
 pandas
 pyarrow
 scikit-learn
+lightgbm
 tqdm
 matplotlib
 clickhouse-connect

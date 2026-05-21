@@ -8,7 +8,7 @@
 
 样本粒度是 `trading day x symbol x opening timestamp`。模型既可以研究单股票开盘阶段的短周期强弱变化，也可以在同一 decision point 下进行多股票横截面排序。
 
-注意：A 股 T+1 下，当前 60s label 不是最终可交易收益，而是 short-horizon proxy label，用于发现 opening microstructure 中是否存在具有 longer-horizon persistence 的高频信号。真实选股价值需要后续接日频/T+1 label 再验证。
+注意：A 股 T+1 下，当前 60s label 不是最终可交易收益，而是 short-horizon proxy label。当前阶段先完成 short-horizon alpha discovery：确认 opening predictor 对 60s proxy label 是否有稳定横截面排序力，并量化延迟、成本和执行约束下的衰减。真实选股价值与 T+1 label 属于后续阶段，不是当前工作重点。
 
 ---
 
@@ -18,21 +18,39 @@
 
 1. 数据 probe：确认 ClickHouse `stock.tick`、A 股过滤和开盘窗口覆盖正常。
 2. 构建 labeled research dataset：按 `date x symbol x timestamp` 计算 short-horizon label，只保留当前及过去可见的 X。
-3. Ridge / GBM baseline：用多组数值特征拟合 label，做 out-of-sample 测试；后续活跃研究主线收敛到 GBM / GBM strong。
+3. Ridge / GBM baseline：用多组数值特征拟合 label，做 out-of-sample 测试；后续活跃研究主线切到 LightGBM，并用 labeled feature cache 降低重复 ClickHouse/feature 构造成本。
 4. 简单 replay：测试阶段只用 model prediction 决策，用事后 label 做 gross replay；该 replay 仅用于观察信号方向性与稳定性，不代表真实可交易的 T+1 策略收益。
+
+当前阶段不接日频组合回测，也不把 tick-level opening score 聚合成日频组合结果。
 
 ---
 
-## 后续研究路线
+## 研究路线
 
-1. **Short-horizon alpha discovery**
-   继续使用当前高频 proxy label，验证开盘短周期横截面 alpha 是否稳定，并观察 `entry_tick_delay`、fee、容量与成交约束下的衰减。
+### 当前阶段：Short-horizon alpha discovery
 
-2. **Alpha horizon decay / extension**
-   构造 30s、60s、5min、close、next open、next close 等 label，研究 opening predictor 的 alpha decay curve 与 horizon persistence。
+继续使用当前 60s proxy label，把开盘短周期信号发现闭环做扎实。当前阶段的核心问题不是“能不能直接实盘交易”，而是：
 
-3. **Daily alpha feature / overlay**
-   如果高频 predictor 存在 longer-horizon persistence，将 `09:30-09:40` 的 score 聚合成 stock-day feature，例如 `opening_strength_score`、`opening_score_mean/max`、`top_rank_count` 等，再接入日频模型或 portfolio optimizer。
+- opening predictor 对 `date x decision_target_timestamp` 横截面是否有稳定排序力；
+- `entry_tick_delay = 1/2` 后，IC、bucket 单调性、Top/Bottom label spread 和 TopN label mean 衰减多少；
+- 普通 universe 与 opening-strength candidate 分支，哪个更稳；
+- fee、slippage、交易状态、spread、容量、参与率、同股每日最多一次等执行约束下，short-horizon replay 是否仍支持信号方向性；
+- labeled feature cache 与 LightGBM GPU 流程是否足够稳定，能支持后续批量实验。
+
+当前阶段的完成标准：
+
+- delay1/delay2 的 LightGBM 普通 universe 与 strong candidate 四个主线实验完成并归档；
+- 主要结论基于 IC、rank IC IR、score bucket、Top/Bottom spread、TopN label mean/win rate 和约束后 replay diagnostics；
+- compounded return 只作为 proxy replay 的诊断输出，不作为主结论或策略收益表达；
+- 明确哪些约束属于训练 label/feature 口径，哪些只属于 replay/执行口径。
+
+### 暂缓阶段：Alpha horizon extension
+
+只有当 short-horizon alpha discovery 的结论足够稳定，才构造 30s、60s、5min、close、next open、next close 等 label，研究 opening predictor 的 alpha decay curve 与 horizon persistence。这个阶段暂不作为当前任务展开。
+
+### 暂缓阶段：Daily alpha feature / overlay
+
+只有当 horizon extension 证明 signal 在 T+1/next-open 等可交易口径下仍保留排序力，才考虑把 `09:30-09:40` 的 score 聚合成 stock-day feature，例如 `opening_strength_score`、`opening_score_mean/max`、`top_rank_count` 等，再接入日频模型或 portfolio optimizer。
 
 ---
 
@@ -113,14 +131,14 @@ label = sell_vwap / buy_price - 1 - fee_bps / 10000
 - `volume` 为累计成交量，单位为股；
 - `turnover` 为累计成交额，单位为元。
 
-已归档 baseline 使用无成交延迟旧口径；后续新实验默认：
+已归档 baseline 使用无成交延迟旧口径；后续新实验按 delay 分支比较：
 
 ```text
 fee_bps = 0
-entry_tick_delay = 1
+entry_tick_delay = 1 / 2
 ```
 
-做结果比较时，旧归档的 `entry_tick_delay = 0` 和后续的 `entry_tick_delay = 1` 需要分开看。
+做结果比较时，旧归档的 `entry_tick_delay = 0` 和后续的 `entry_tick_delay = 1/2` 需要分开看。
 
 ---
 
@@ -154,7 +172,8 @@ X 只能使用 decision point 当时及此前可见的信息。
 - Ridge regression
 - sklearn GBM
 
-后续主线继续使用普通 GBM 和 opening-strength candidate 过滤后的 GBM strong。
+后续主线使用 LightGBM 普通 universe 与 opening-strength candidate 过滤分支，并按 `entry_tick_delay = 1/2` 比较延迟衰减。
+LightGBM 代码支持 CPU/GPU 参数；当前正式任务在 research 集群申请单卡 GPU，并优先调度到 `mem_per_gpu_tier = high` 的 A100/H100 节点。
 
 训练阶段使用 X 拟合 label；测试阶段仅使用 X 生成 `prediction`，再用事后 label 做评估。
 

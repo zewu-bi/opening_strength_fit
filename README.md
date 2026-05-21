@@ -7,19 +7,19 @@ ClickHouse `stock.tick` 或本地 tick parquet 读取集合竞价与开盘盘口
 future return proxy，并检验模型分数是否有稳定的横截面排序价值。
 
 它当前解决的是高频信号发现闭环，不是完整实盘策略。A 股 T+1 约束下，当前 60 秒 label
-只能作为 opening microstructure 的 proxy label；如果该信号稳定，后续还需要接
-close、next open、next close 等 longer-horizon label，验证能否沉淀成日频选股或组合特征。
+只能作为 opening microstructure 的 proxy label；当前阶段先完成 short-horizon alpha
+discovery，close、next open、next close 等 longer-horizon label 暂缓到后续阶段。
 
 ```text
 ClickHouse stock.tick / local tick parquet
 -> schema 标准化 + A 股 universe 过滤
 -> 集合竞价、盘口、成交、动量特征
--> short-horizon tradable label
+-> short-horizon proxy label
 -> 09:30-09:40 整分钟 decision point 抽样
 -> 可选 opening-strength candidate filter
--> Ridge / sklearn GBM rolling training
+-> Ridge / sklearn GBM / LightGBM rolling training
 -> predictions + IC / bucket / TopN metrics
--> 日频 sanity-check 回测 + 开盘短周期 TopN 回测
+-> 开盘短周期 TopN replay
 -> 轻量实验记录归档到 experiments/results/
 ```
 
@@ -32,10 +32,11 @@ ClickHouse stock.tick / local tick parquet
 
 - 数据 probe：检查 `stock.tick` schema、A 股过滤、开盘窗口覆盖和字段口径。
 - labeled research dataset：用真实 tick 构造 feature/label 表，只保留当前及过去可见的 X。
-- Ridge / GBM baseline：按 config 做 chronological 或 rolling train/test。
+- Ridge / GBM / LightGBM baseline：按 config 做 chronological 或 rolling train/test。
+- labeled feature cache：长窗口 ClickHouse 数据先缓存成 base labeled parquet，再让普通/strong 分支复用。
 - 评估：`cross_section` / `symbol_day` IC、score bucket、TopN label replay。
-- 回测：把 tick prediction 转成日频 score 做 sanity check；另外做更贴近 label 的开盘短周期 TopN replay。
-- 实验审计：配置、K8s Job、metrics、backtest 轻量结果均可复查。
+- 开盘短周期 replay：直接在 tick predictions 上按开盘 decision point 选 TopN，用 label 回放方向性。
+- 实验审计：配置、K8s Job、metrics 和 opening replay 轻量结果均可复查。
 
 ## 文档分工
 
@@ -54,7 +55,7 @@ ClickHouse stock.tick / local tick parquet
 ├── scripts/                       数据检查、训练、K8s、评估、回测、归档命令
 ├── experiments/runs/              每个实验一个 TOML，run.id 必须等于文件名
 ├── experiments/jobs/              已渲染的 Kubernetes Job YAML
-├── experiments/results/           可提交的轻量 metrics/backtest 证据
+├── experiments/results/           可提交的轻量 metrics/replay 证据
 ├── docs/project_brief.md          研究目标、数据、label、评估口径
 ├── docs/project_map.md            逐文件职责索引
 ├── docs/runbook.md                日常实验操作手册
@@ -103,7 +104,7 @@ Status
 ## Label 和特征
 
 当前 label 是“当前 tick 决策、延迟 N 个 tick 成交、持有 60 秒、再用后续 60 秒 VWAP 退出”的
-short-horizon proxy。当前配置默认 `entry_tick_delay = 1`、`fee_bps = 0`：
+short-horizon proxy。当前主线分别跑 `entry_tick_delay = 1/2`、`fee_bps = 0`：
 
 ```text
 decision_t = 当前样本 tick
@@ -154,7 +155,8 @@ X 特征只允许使用 decision point 当时及此前可见的信息。当前�
 模型：
 
 - Ridge regression：`SimpleImputer -> StandardScaler -> Ridge`。
-- GBM：`SimpleImputer -> HistGradientBoostingRegressor`。
+- sklearn GBM：`SimpleImputer -> HistGradientBoostingRegressor`。
+- LightGBM：`SimpleImputer -> LGBMRegressor`，支持 `device_type = "cpu"` / `"gpu"`；当前主线在 research 集群用单卡 A100/H100 GPU 跑。
 
 评估 group mode：
 
@@ -236,6 +238,8 @@ python scripts/run_experiment.py \
   --output-dir output/local/gbm_opening_1y_next_month_multi_symbol_smoke
 ```
 
+本地训练 smoke 仍用 CPU config；GPU 是否可用通过镜像 smoke 和 research 集群 Job 验证。
+
 查看 smoke 结果：
 
 ```bash
@@ -248,54 +252,58 @@ python scripts/evaluate_predictions.py \
 
 不要在本地为一年或多月窗口准备完整 labeled dataset。正式长窗口实验应通过
 `[data].source = "clickhouse"` 的 K8s Job 在集群内读取原始 tick、构造 feature/label、训练和评估，
-本地只拉回 metrics、predictions 和轻量回测结果。
+本地只拉回 metrics、predictions 和轻量 opening replay 结果。
 
 ## K8s 实验闭环
 
 常规长窗口实验流程：
 
 ```bash
-TAG=opening-strength-fit-$(date +%Y%m%d)-v1
-docker build -t registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG} .
+TAG=opening-strength-fit-$(date +%Y%m%d)-lgbm-gpu-v1
+docker build --build-arg CACHE_BUST=${TAG} -t registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG} .
 docker push registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG}
 
 python scripts/render_k8s_job.py \
-  --config experiments/runs/gbm_opening_1y_next_month.toml \
+  --config experiments/runs/lgbm_opening_1y_next_month_delay1.toml \
   --image registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG}
 
-hfcli kubectl delete job opening-strength-gbm-opening-1y-next-month --ignore-not-found -n bizewu
-hfcli kubectl apply -f experiments/jobs/gbm_opening_1y_next_month_job.yaml
-hfcli kubectl logs -f job/opening-strength-gbm-opening-1y-next-month -n bizewu
+rg -n "nodeSelector|tolerations|nvidia.com/gpu|image:" experiments/jobs/lgbm_opening_1y_next_month_delay1_job.yaml
+hfcli kubectl --cluster research delete job opening-strength-lgbm-opening-1y-next-month-delay1 --ignore-not-found -n bizewu
+hfcli kubectl --cluster research apply -f experiments/jobs/lgbm_opening_1y_next_month_delay1_job.yaml
+hfcli kubectl --cluster research logs -f job/opening-strength-lgbm-opening-1y-next-month-delay1 -n bizewu
 ```
 
 reader、拉回和归档：
 
 ```bash
-hfcli kubectl delete job opening-strength-read-gbm-opening-1y-next-month --ignore-not-found -n bizewu
-hfcli kubectl apply -f experiments/jobs/gbm_opening_1y_next_month_reader_job.yaml
-hfcli kubectl wait --for=condition=complete job/opening-strength-read-gbm-opening-1y-next-month -n bizewu --timeout=300s
+hfcli kubectl --cluster research delete job opening-strength-read-lgbm-opening-1y-next-month-delay1 --ignore-not-found -n bizewu
+hfcli kubectl --cluster research apply -f experiments/jobs/lgbm_opening_1y_next_month_delay1_reader_job.yaml
+hfcli kubectl --cluster research wait --for=condition=complete job/opening-strength-read-lgbm-opening-1y-next-month-delay1 -n bizewu --timeout=300s
 
 python scripts/pull_k8s_metrics.py \
-  --config experiments/runs/gbm_opening_1y_next_month.toml
+  --config experiments/runs/lgbm_opening_1y_next_month_delay1.toml
 
 python scripts/fetch_k8s_predictions.py \
-  --config experiments/runs/gbm_opening_1y_next_month.toml \
-  --output-dir output/backtest/gbm_opening_1y_next_month
+  --config experiments/runs/lgbm_opening_1y_next_month_delay1.toml \
+  --output-dir output/predictions/lgbm_opening_1y_next_month_delay1
 
 python scripts/record_experiment.py \
-  --config experiments/runs/gbm_opening_1y_next_month.toml
+  --config experiments/runs/lgbm_opening_1y_next_month_delay1.toml
 
 python scripts/audit_experiments.py
 python scripts/check_workflow_coverage.py
 ```
 
-## 回测和结果分析
+LightGBM GPU 任务需要 `[model].device_type = "gpu"`、`[k8s.resources].gpu_limit = "1"`，
+并通过 `[k8s.node_selector].mem_per_gpu_tier = "high"` 优先落到 research 集群的单卡友好节点。
+
+## 结果分析
 
 单个实验 metrics：
 
 ```bash
 python scripts/summarize_opening_results.py \
-  --metrics-csv output/k8s/metrics/gbm_opening_1y_next_month_metrics_by_year.csv
+  --metrics-csv output/k8s/metrics/lgbm_opening_1y_next_month_delay1_metrics_by_year.csv
 ```
 
 多实验 metrics 对比：
@@ -304,28 +312,18 @@ python scripts/summarize_opening_results.py \
 python scripts/compare_opening_results.py
 ```
 
-日频 API sanity check 会把 tick-level prediction 聚合为 `date x symbol` score matrix：
-
-```bash
-python scripts/run_backtest_api.py \
-  --predictions output/backtest/gbm_opening_1y_next_month/predictions_all.parquet \
-  --output-dir output/backtest/gbm_opening_1y_next_month \
-  --aggregate max \
-  --tar I500
-```
-
 更贴近当前 label 的开盘短周期回测直接在 tick predictions 上运行。默认每天本金从 1.0 开始，
 在 `09:30/09:32/09:34/09:36/09:38` 五个非重叠两分钟 cycle 上，按 prediction 选 Top20、
 等权满仓买入，用 label 均值复利滚动：
 
 ```bash
 python scripts/run_opening_intraday_backtest.py \
-  --run gbm=output/backtest/gbm_opening_1y_next_month/predictions_all.parquet \
-  --run gbm_strong=output/backtest/gbm_opening_1y_next_month_strong/predictions_all.parquet \
+  --run lgbm_delay1=output/predictions/lgbm_opening_1y_next_month_delay1/predictions_all.parquet \
+  --run lgbm_strong_delay1=output/predictions/lgbm_opening_1y_next_month_strong_delay1/predictions_all.parquet \
   --fee-bps 5 \
   --slippage-bps 5 \
   --max-symbol-trades-per-day 1 \
-  --output-dir output/reports/opening_intraday_top20_1y_next_month_constrained
+  --output-dir output/reports/opening_intraday_top20_lgbm_delay1_constrained
 ```
 
 新预测产物会额外带上 `status`、`entry_status`、`spread_bps`、`turnover_diff_30t` 等上下文列；
@@ -339,12 +337,12 @@ python scripts/run_opening_intraday_backtest.py \
 ## 当前实验状态
 
 已有归档覆盖 Ridge/GBM、普通 universe/strong candidate、小窗 smoke 和 1y next-month。
-后续活跃研究线收敛到 `gbm_opening_1y_next_month` 与
-`gbm_opening_1y_next_month_strong` 两条 GBM 分支。
+后续活跃研究线切到 LightGBM，并按 `entry_tick_delay = 1/2` 比较延迟衰减。
+普通 universe 与 strong candidate 分支共享同一个 delay 对应的 base labeled feature cache。
 截至 `2026-05-21` 的实验索引与口径说明见 [docs/experiment_log.md](docs/experiment_log.md)。
 
 归档的 2021 训练、2022-01 测试结果显示，修正到
-`date x decision_target_timestamp` 的横截面口径后，普通 GBM 暂时最强：
+`date x decision_target_timestamp` 的横截面口径后，旧 sklearn GBM 暂时最强：
 
 | run | decision rank IC | rank IC IR | Top20 mean bps | Top20 win rate |
 | --- | ---: | ---: | ---: | ---: |
@@ -353,13 +351,13 @@ python scripts/run_opening_intraday_backtest.py \
 | `ridge_opening_1y_next_month_strong` | 0.1156 | 1.5987 | +9.63 | 51.2% |
 | `ridge_opening_1y_next_month` | 0.0799 | 1.4788 | +18.96 | 54.4% |
 
-日频 I500 sanity-check 回测为负，主要说明 tick-level 开盘信号被压成日频 score 后口径不匹配。
-与 label 更一致的开盘短周期 Top20 replay 在 2022-01 单月上为正，普通 GBM 的
+与 label 一致的开盘短周期 Top20 replay 在 2022-01 单月上为正，旧普通 GBM 的
 mean cycle return 约 `+42.21 bps`、19 个测试日均为正。这个结果只能说明短周期方向性值得继续验证，
-下一步先在 GBM / GBM strong 上补成本、滑点、容量、同股重复交易和成交状态约束。
+当前已提交 LightGBM GPU + labeled cache 的 delay1/delay2 四个任务，后续主要比较 IC、bucket 单调性、
+Top/Bottom spread 和延迟衰减；opening replay 只作为 proxy 压力测试，不作为 A 股 T+1 可交易回测。
 
-注意：已归档结果使用无成交延迟口径（`entry_tick_delay = 0`）。当前 config 已统一为
-`entry_tick_delay = 1`，后续新跑结果不要和旧归档直接横向混比。
+注意：已归档结果使用无成交延迟口径（`entry_tick_delay = 0`）。当前 config 按
+`entry_tick_delay = 1/2` 分支比较，后续新跑结果不要和旧归档直接横向混比。
 
 ## 开发约定
 

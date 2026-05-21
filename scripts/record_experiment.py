@@ -10,12 +10,6 @@ from opening_strength_fit.config import load_toml, run_id
 
 
 METRICS_SUFFIX = "_metrics_by_year.csv"
-BACKTEST_RECORDS = (
-    ("backtest_summary.json", "backtest_summary"),
-    ("backtest_trace.json", "backtest_trace"),
-    ("fetch_trace.json", "fetch_trace"),
-    ("curve_summary.json", "curve_summary"),
-)
 
 
 @dataclass(frozen=True)
@@ -38,13 +32,11 @@ def collect_run_statuses(runs_dir: Path) -> dict[str, RunStatus]:
     return statuses
 
 
-def discover_run_ids(metrics_source: Path, backtest_source: Path) -> list[str]:
+def discover_run_ids(metrics_source: Path) -> list[str]:
     run_ids = {
         path.name.removesuffix(METRICS_SUFFIX)
         for path in metrics_source.glob(f"*{METRICS_SUFFIX}")
     }
-    if backtest_source.exists():
-        run_ids.update(path.name for path in backtest_source.iterdir() if path.is_dir())
     return sorted(run_ids)
 
 
@@ -60,7 +52,6 @@ def record_run(
     run_id_value: str,
     *,
     metrics_source: Path,
-    backtest_source: Path,
     records_dir: Path,
 ) -> tuple[list[Path], list[str]]:
     written: list[Path] = []
@@ -73,23 +64,14 @@ def record_run(
     else:
         warnings.append(f"{run_id_value}: metrics not found at {metrics_path}")
 
-    run_backtest_dir = backtest_source / run_id_value
-    for source_name, record_name in BACKTEST_RECORDS:
-        copied = copy_record(
-            run_backtest_dir / source_name,
-            records_dir / "backtests" / f"{run_id_value}_{record_name}.json",
-        )
-        if copied:
-            written.append(copied)
-
     return written, warnings
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Copy lightweight metrics and backtest summaries from ignored output/ "
-            "folders into tracked experiment records."
+            "Copy lightweight metrics from ignored output/ folders into tracked "
+            "experiment records."
         )
     )
     parser.add_argument(
@@ -105,7 +87,6 @@ def main() -> None:
         help="Run id to record. May be repeated.",
     )
     parser.add_argument("--metrics-source", default="output/k8s/metrics")
-    parser.add_argument("--backtest-source", default="output/backtest")
     parser.add_argument("--records-dir", default="experiments/results")
     parser.add_argument("--runs-dir", default="experiments/runs")
     parser.add_argument(
@@ -116,7 +97,6 @@ def main() -> None:
     args = parser.parse_args()
 
     metrics_source = Path(args.metrics_source)
-    backtest_source = Path(args.backtest_source)
     records_dir = Path(args.records_dir)
     run_statuses = collect_run_statuses(Path(args.runs_dir))
 
@@ -124,7 +104,7 @@ def main() -> None:
     if args.config:
         run_ids.extend(run_id_from_config(path) for path in args.config)
     if not run_ids:
-        run_ids = discover_run_ids(metrics_source, backtest_source)
+        run_ids = discover_run_ids(metrics_source)
     run_ids = sorted(dict.fromkeys(run_ids))
 
     if not run_ids:
@@ -136,7 +116,6 @@ def main() -> None:
         written, warnings = record_run(
             run_id_value,
             metrics_source=metrics_source,
-            backtest_source=backtest_source,
             records_dir=records_dir,
         )
         all_warnings.extend(warnings)

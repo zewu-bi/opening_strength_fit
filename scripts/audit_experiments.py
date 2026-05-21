@@ -80,25 +80,6 @@ def collect_metrics(metrics_dir: Path) -> set[str]:
     }
 
 
-def collect_backtests(backtest_dir: Path) -> set[str]:
-    summary_records = {
-        path.name.removesuffix("_backtest_summary.json")
-        for path in backtest_dir.glob("*_backtest_summary.json")
-    }
-    if summary_records:
-        return summary_records
-
-    runs = set()
-    for path in backtest_dir.iterdir() if backtest_dir.exists() else []:
-        if not path.is_dir():
-            continue
-        if (path / "predictions_all.parquet").exists() or (
-            path / "backtest_summary.json"
-        ).exists():
-            runs.add(path.name)
-    return runs
-
-
 def has_training_job(kinds: set[str]) -> bool:
     return bool({"training", "sharded_training"} & kinds)
 
@@ -122,7 +103,6 @@ def print_table(records: list[dict[str, str]]) -> None:
         "selection",
         "jobs",
         "metrics",
-        "backtest",
         "pvc_dir",
     ]
     widths = {
@@ -138,23 +118,16 @@ def print_table(records: list[dict[str, str]]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Audit local experiment config/job/metrics/backtest alignment."
+        description="Audit local experiment config/job/metrics alignment."
     )
     parser.add_argument("--runs-dir", default="experiments/runs")
     parser.add_argument("--jobs-dir", default="experiments/jobs")
     parser.add_argument("--metrics-dir", default="experiments/results/metrics")
-    parser.add_argument("--backtest-dir", default="experiments/results/backtests")
-    parser.add_argument(
-        "--require-backtest",
-        action="store_true",
-        help="Require completed runs to have backtest records.",
-    )
     args = parser.parse_args()
 
     runs = collect_runs(Path(args.runs_dir))
     jobs = collect_jobs(Path(args.jobs_dir))
     metrics = collect_metrics(Path(args.metrics_dir))
-    backtests = collect_backtests(Path(args.backtest_dir))
 
     records = []
     errors = []
@@ -167,7 +140,6 @@ def main() -> None:
         job_kinds = jobs.get(run_id, set())
         has_jobs = has_training_job(job_kinds) and has_reader_job(job_kinds)
         has_metrics = run_id in metrics
-        has_backtest = run_id in backtests
         is_running = record.status in ACTIVE_STATUSES
         is_completed = record.status == COMPLETED_STATUS
         if not has_jobs:
@@ -189,13 +161,6 @@ def main() -> None:
         if not has_metrics and is_completed:
             errors.append(f"{run_id}: missing metrics csv")
 
-        if args.require_backtest and not has_backtest and is_completed:
-            errors.append(f"{run_id}: missing backtest output")
-        if has_backtest and not is_completed:
-            warnings.append(
-                f"{run_id}: backtest records exist but status={record.status!r}; update status to completed if the run is final"
-            )
-
         records.append(
             {
                 "run_id": run_id,
@@ -204,7 +169,6 @@ def main() -> None:
                 "selection": record.selection_mode,
                 "jobs": ",".join(sorted(job_kinds)) if job_kinds else "missing",
                 "metrics": format_bool(has_metrics),
-                "backtest": format_bool(has_backtest),
                 "pvc_dir": record.pvc_dir,
             }
         )
@@ -213,8 +177,6 @@ def main() -> None:
         errors.append(f"{run_id}: job yaml has no matching run config")
     for run_id in sorted(metrics - set(runs)):
         errors.append(f"{run_id}: metrics csv has no matching run config")
-    for run_id in sorted(backtests - set(runs)):
-        errors.append(f"{run_id}: backtest output has no matching run config")
 
     print("experiment_alignment:")
     print_table(records)

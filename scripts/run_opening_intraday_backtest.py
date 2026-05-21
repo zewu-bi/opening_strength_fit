@@ -16,10 +16,10 @@ import _bootstrap  # noqa: F401
 
 
 DEFAULT_RUNS = (
-    ("gbm", "output/backtest/gbm_opening_1y_next_month/predictions_all.parquet"),
+    ("gbm", "output/predictions/gbm_opening_1y_next_month/predictions_all.parquet"),
     (
         "gbm_strong",
-        "output/backtest/gbm_opening_1y_next_month_strong/predictions_all.parquet",
+        "output/predictions/gbm_opening_1y_next_month_strong/predictions_all.parquet",
     ),
 )
 DEFAULT_ENTRY_TIMES = ("09:30:00", "09:32:00", "09:34:00", "09:36:00", "09:38:00")
