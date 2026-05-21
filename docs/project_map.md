@@ -1,10 +1,10 @@
 # Project Map
 
-这份地图用于快速定位文件职责。项目和 `xy_fit` 保持同一层工作流：可复用逻辑放在 `src/opening_strength_fit/`，命令入口放在 `scripts/`，实验事实放在 `experiments/`。
+这份地图用于快速定位逐文件职责。README 只保留项目入口和高层结构；更细的模块、脚本和实验目录索引放在这里。项目和 `xy_fit` 保持同一层工作流：可复用逻辑放在 `src/opening_strength_fit/`，命令入口放在 `scripts/`，实验事实放在 `experiments/`。
 
 ## 根目录
 
-- `README.md`: 项目目标、结构、快速开始、实验记录和当前基线。
+- `README.md`: 项目目标、高层结构、快速开始、实验记录和当前基线。
 - `requirements.txt`: Python 运行依赖。
 - `Dockerfile`: 训练镜像定义，工作目录为 `/app/opening_strength_fit`。
 - `.env.example`: 本地 tick path 和 ClickHouse 凭证示例。
@@ -37,7 +37,7 @@
 
 - `_bootstrap.py`: 让 `python scripts/<name>.py` 可以 import `src/opening_strength_fit`。
 - `audit_experiments.py`: 检查 run config、Job YAML、metrics 归档和 backtest 归档是否一致。
-- `check_workflow_coverage.py`: 检查 runbook、项目地图、脚本、模块和 run config 的覆盖关系。
+- `check_workflow_coverage.py`: 检查 README、runbook、项目地图、脚本、模块和 run config 的覆盖关系。
 - `probe_clickhouse_data.py`: 连接 ClickHouse，查看源表 schema、字段说明、A 股过滤后的开盘窗口样本。
 - `prepare_research_dataset.py`: 按交易日读取 ClickHouse 或 raw parquet，过滤 A 股 universe，生成分区 labeled research dataset。
 - `inspect_dataset.py`: 从 ClickHouse 或已有 parquet 构建本地样本，检查 tick schema、label 覆盖和训练特征口径。

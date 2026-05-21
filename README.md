@@ -37,6 +37,15 @@ ClickHouse stock.tick / local tick parquet
 - 回测：把 tick prediction 转成日频 score 做 sanity check；另外做更贴近 label 的开盘短周期 TopN replay。
 - 实验审计：配置、K8s Job、metrics、backtest 轻量结果均可复查。
 
+## 文档分工
+
+- `README.md`: 项目入口，给人或 Codex 快速理解研究目标、高层结构、常用命令、实验状态和开发约定。
+- `docs/project_brief.md`: 研究大纲，说明问题定义、baseline 范围、数据、label、特征和评估口径。
+- `docs/project_map.md`: 逐文件职责索引，用于快速定位模块、脚本和实验目录。
+- `docs/runbook.md`: 执行手册，按日常实验顺序写清楚环境检查、本地 smoke、K8s、拉回、回测和归档步骤。
+- `docs/experiment_log.md`: 实验事实和阶段性结论，记录已跑 run、口径变更、关键结果和下一步判断。
+- `experiments/results/README.md`: 说明可提交轻量证据目录，不承载研究叙事。
+
 ## 项目结构
 
 ```text
@@ -47,7 +56,7 @@ ClickHouse stock.tick / local tick parquet
 ├── experiments/jobs/              已渲染的 Kubernetes Job YAML
 ├── experiments/results/           可提交的轻量 metrics/backtest 证据
 ├── docs/project_brief.md          研究目标、数据、label、评估口径
-├── docs/project_map.md            文件职责地图
+├── docs/project_map.md            逐文件职责索引
 ├── docs/runbook.md                日常实验操作手册
 ├── docs/experiment_log.md         已跑实验和阶段性结论
 ├── output/                        本地运行产物，默认不进 git
@@ -55,39 +64,7 @@ ClickHouse stock.tick / local tick parquet
 └── requirements.txt               Python 依赖
 ```
 
-核心模块职责：
-
-- `schema.py`: 标准列名、盘口层级、开盘/竞价时间窗口、ClickHouse 字段别名和时间过滤。
-- `clickhouse_ticks.py`: ClickHouse `stock.tick` 连接、查询、表名校验、字段说明和标准化。
-- `universe.py`: A 股 symbol 正则过滤和可选股票池文件读取。
-- `features.py`: 盘口 spread/depth/imbalance、成交增量/VWAP、短 tick 动量、集合竞价聚合特征。
-- `labels.py`: 延迟成交、未来 VWAP 退出、`valid_label` 和交易状态约束。
-- `sampling.py`: `09:30-09:40` 整分钟 decision point 抽样，允许实际 tick 在目标时刻后小幅滞后。
-- `dataset.py`: tick -> feature -> label -> sample 的主构造函数。
-- `candidates.py`: 只基于当前及过去特征的开盘强势候选池过滤。
-- `model.py`: Ridge、HistGradientBoostingRegressor、特征列筛选、预测和 IC metrics。
-- `evaluation.py`: group mode、score bucket、TopN 交易选择和摘要。
-- `rolling.py`: chronological、annual rolling、monthly rolling 日期切分。
-- `training.py`: 统一训练编排，支持 ClickHouse 或 parquet/cache，写出 predictions、metrics 和 bucket 结果。
-- `k8s.py`: K8s run spec、临时 reader pod、manifest job name 和 kubectl helper。
-- `backtest.py`, `reports.py`, `label_audit.py`, `rules.py`: 回测摘要、报告打印、label 审计和规则 baseline。
-
-主要脚本：
-
-- `scripts/probe_clickhouse_data.py`: 只读检查 ClickHouse schema、字段、日期/股票覆盖和开盘窗口样本。
-- `scripts/inspect_dataset.py`: 抓小窗口 tick，检查标准化、feature/label、decision point 和可交易性。
-- `scripts/prepare_research_dataset.py`: 按日生成分区 labeled research dataset，适合小窗口或专门离线任务。
-- `scripts/audit_labels.py`: 统计 label 有效性、fee 后分布、年份/月/分钟段覆盖。
-- `scripts/run_rule_baselines.py`: 不训练模型的动量、成交速度、盘口不平衡、spread 规则分数 baseline。
-- `scripts/run_experiment.py`: 按 TOML 运行训练、预测和评估。
-- `scripts/evaluate_predictions.py`: 对已有 prediction parquet/csv 重算 IC、bucket 和 TopN 摘要。
-- `scripts/render_k8s_job.py`: 渲染 training Job、reader Job，支持 sharded monthly 任务。
-- `scripts/pull_k8s_metrics.py`, `scripts/fetch_k8s_predictions.py`: 从 PVC 拉回 metrics 和 predictions。
-- `scripts/run_backtest_api.py`: 将 tick prediction 聚合成 date-symbol score matrix，调用日频回测 API。
-- `scripts/run_opening_intraday_backtest.py`: 对 tick predictions 做开盘短周期 TopN replay。
-- `scripts/compare_opening_results.py`, `scripts/compare_backtest_runs.py`: 对比多组 metrics/backtest。
-- `scripts/record_experiment.py`, `scripts/audit_experiments.py`: 归档轻量证据并审计实验闭环。
-- `scripts/check_workflow_coverage.py`: 检查 runbook、地图、脚本、模块和 run config 是否互相覆盖。
+目录级结构放在 README；逐文件职责和脚本索引见 [docs/project_map.md](docs/project_map.md)。
 
 ## 数据口径
 
@@ -384,5 +361,5 @@ mean cycle return 约 `+42.21 bps`、19 个测试日均为正。这个结果只�
 - 大体积 predictions、模型文件、图表和临时输出放在 `output/`，不要提交。
 - 可提交证据放在 `experiments/results/metrics/` 和 `experiments/results/backtests/`。
 - 提交前运行 `python scripts/audit_experiments.py` 和 `python scripts/check_workflow_coverage.py`。
-- 详细操作步骤以 [docs/runbook.md](docs/runbook.md) 为准；文件职责以
+- 详细操作步骤以 [docs/runbook.md](docs/runbook.md) 为准；逐文件职责以
   [docs/project_map.md](docs/project_map.md) 为准。
