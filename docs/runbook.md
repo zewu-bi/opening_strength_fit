@@ -303,6 +303,9 @@ python scripts/fetch_k8s_predictions.py \
 默认每天本金从 1.0 开始，在 `09:30/09:32/09:34/09:36/09:38` 五个非重叠两分钟 cycle 上按预测分选
 Top20；`--max-symbol-trades-per-day 1` 会阻止同一股票在同一天被重复选中，没选满的资金留作现金。
 
+当前先不要为 fee 立刻重训。fee/slippage 对固定入选交易是确定性收益扣减，应先在 replay 中统一压测；
+只有要训练 net label、成本改变样本有效性，或策略定义变成“扣费后排序器”时，才另开 fee 训练分支。
+
 ```bash
 python scripts/run_opening_intraday_backtest.py \
   --run lgbm_delay1=output/predictions/lgbm_opening_1y_next_month_delay1/predictions_all.parquet \
@@ -335,6 +338,70 @@ python scripts/run_opening_intraday_backtest.py \
 
 旧归档 predictions 没有 `status`、`spread_bps`、`turnover_diff_30t` 等上下文列；这些文件只能用于
 成本、滑点和同股重复交易的复算。
+
+LightGBM delay1/delay2 四个 prediction 都拉回后，优先跑标准 replay 网格：
+
+```bash
+python scripts/run_lgbm_delay_replays.py
+```
+
+默认读取：
+
+```text
+output/predictions/lgbm_opening_1y_next_month_delay1/predictions_all.parquet
+output/predictions/lgbm_opening_1y_next_month_strong_delay1/predictions_all.parquet
+output/predictions/lgbm_opening_1y_next_month_delay2/predictions_all.parquet
+output/predictions/lgbm_opening_1y_next_month_strong_delay2/predictions_all.parquet
+```
+
+默认场景：
+
+| scenario | 约束 |
+| --- | --- |
+| `proxy_top20` | 无额外成本；Top20；同股每日最多一次。 |
+| `cost_10bps` | `fee_bps=5`、`slippage_bps=5`。 |
+| `tradable_cost` | 成本 + `status/entry_status in T0,20,TRADE` + decision/entry lag 不超过 5 秒。 |
+| `liquidity_cost` | tradable + `spread_bps <= 100` + 一档买卖量正数 + 涨停距离至少 5 bps。 |
+| `capacity_10m_5pct` | liquidity + 每 cycle 1000 万资金、单票目标金额不超过 `turnover_diff_30t` 的 5%、最低可见容量 10 万。 |
+| `strict_10m_2pct` | 更严的压力测试：15 bps 成本、`spread_bps <= 50`、涨停距离 10 bps、最低可见容量 20 万、参与率 2%。 |
+
+输出：
+
+```text
+output/reports/opening_intraday_lgbm_delay_replays/scenario_summary.csv
+output/reports/opening_intraday_lgbm_delay_replays/<delay>/<scenario>/intraday_summary.csv
+output/reports/opening_intraday_lgbm_delay_replays/<delay>/<scenario>/intraday_cycles.csv
+output/reports/opening_intraday_lgbm_delay_replays/<delay>/<scenario>/intraday_selected_trades.csv
+```
+
+如果只想预览任务而不读取 parquet：
+
+```bash
+python scripts/run_lgbm_delay_replays.py --dry-run
+```
+
+如果某些 optional 字段还没进 prediction，例如 `ask1_to_limit_up_bps`，默认会 warning 并跳过对应约束；
+确认字段都齐以后可以改成严格模式：
+
+```bash
+python scripts/run_lgbm_delay_replays.py --missing-constraint error
+```
+
+真实约束检查表：
+
+| 约束 | 字段/参数 | 是否需要重训 |
+| --- | --- | --- |
+| 成交延迟 | `[labels].entry_tick_delay` | 需要，当前 delay1/delay2 已单独训练。 |
+| fee/slippage | `--fee-bps` / `--slippage-bps` | 通常不需要，先 replay。 |
+| 交易状态 | `status` / `entry_status` / `--tradable-status` | 固定部署硬过滤可重训；压力测试先 replay。 |
+| tick 新鲜度 | `decision_lag_seconds` / `entry_lag_seconds` | 不需要，replay。 |
+| spread | `spread_bps` / `--max-spread-bps` | strong candidate 可进样本域；执行压测先 replay。 |
+| 涨停距离 | `ask1_to_limit_up_bps` / `--min-limit-up-room-bps` | 不需要，除非定义固定交易池。 |
+| 一档挂量 | `ask_volume_1` / `bid_volume_1` | 不需要，replay。 |
+| 容量/参与率 | `turnover_diff_30t` / `--max-participation-rate` | 不需要，replay。 |
+| TopN/单票/现金 | `--top-n` / `--max-symbol-weight` | 不需要，replay。 |
+| 同股重复/冷却 | `--max-symbol-trades-per-day` / `--symbol-cooldown-minutes` | 不需要，replay。 |
+| T+1 | close/next-open/next-close label | 需要新的 horizon label，不是当前 60s replay 能解决。 |
 
 ## 10. 分析 Metrics
 

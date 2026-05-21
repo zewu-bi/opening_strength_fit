@@ -51,6 +51,7 @@
 - `pull_k8s_metrics.py`: 从 K8s PVC 拉回 `metrics_by_year.csv`。
 - `fetch_k8s_predictions.py`: 从 K8s PVC 拉回 `predictions.parquet` / `predictions_all.parquet`。
 - `run_opening_intraday_backtest.py`: 对 tick predictions 做开盘短周期 TopN 回测，支持成本、滑点、容量、状态、spread 和同股重复交易约束。
+- `run_lgbm_delay_replays.py`: 在拉回 LightGBM delay1/delay2 predictions 后，一键跑标准 constrained replay 场景网格并汇总 `scenario_summary.csv`。
 - `record_experiment.py`: 把 `output/` 里的轻量 metrics 证据归档到 `experiments/results/`。
 
 ## `experiments/`

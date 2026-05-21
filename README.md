@@ -124,6 +124,8 @@ label = sell_vwap / buy_price - 1 - fee_bps / 10000
 
 训练/replay 边界：改变 label 或样本域的口径进训练；只改变执行、成本、容量或选股后的约束先放 replay。
 当前先跑 delay1/delay2，fee/slippage/spread/容量/状态/同股一次等约束用同一批 predictions 压测。
+fee 和滑点对固定入选交易是确定性 haircut，当前不需要为 fee 立刻重训；只有当研究目标变成
+net label 排序、成本改变样本有效性，或 fee/slippage 与成交容量一起改变训练样本域时，才另开训练分支。
 
 X 特征只允许使用 decision point 当时及此前可见的信息。当前重点包括：
 
@@ -187,6 +189,23 @@ metrics_by_month.csv / metrics_by_month.parquet  # monthly rolling 时生成
 - `model_test_r2`: 模型对 label 的 out-of-sample 拟合度。
 - `top_score_mean_return` / `top_score_win_rate`: 每个 group 只按 prediction 选 TopN 后的 label replay。
 - `score_buckets.csv`: 观察收益是否随模型分数单调变化。
+
+## Replay 约束
+
+开盘短周期 replay 只用于压力测试当前 proxy signal，不代表 A 股 T+1 可交易收益。当前真实约束按以下边界处理：
+
+| 约束 | 处理方式 |
+| --- | --- |
+| `entry_tick_delay` | 改变 entry price 和 label，进训练配置，当前跑 delay1/delay2。 |
+| fee / slippage | 不改变 prediction 排序，先在 replay 用 `--fee-bps` / `--slippage-bps` 扣减。 |
+| 交易状态 | 训练用 `[filters].tradable_statuses` 控制 label 有效性；replay 再检查 `status` / `entry_status`。 |
+| decision/entry lag | replay 用 `--max-decision-lag-seconds` / `--max-entry-lag-seconds` 控制 tick 新鲜度。 |
+| spread / 一档深度 | replay 用 `--max-spread-bps`、`--min-ask-volume-1`、`--min-bid-volume-1`。 |
+| 涨停距离 | 若 prediction 有 `ask1_to_limit_up_bps`，replay 用 `--min-limit-up-room-bps`。 |
+| 容量/参与率 | replay 用 `turnover_diff_30t` 等可见 notional proxy、`--capital-per-cycle` 和 `--max-participation-rate`。 |
+| TopN/现金/单票 | replay 控制 `--top-n`、`--max-symbol-weight`，未选满资金留现金。 |
+| 同股重复/冷却 | replay 控制 `--max-symbol-trades-per-day`、`--symbol-cooldown-minutes`。 |
+| T+1 | 当前 60s label 只是 microstructure proxy；真实选股要接 close/next open/next close 等 longer-horizon label。 |
 
 ## 快速开始
 
@@ -333,6 +352,29 @@ python scripts/run_opening_intraday_backtest.py \
 有这些列后可以继续加 `--tradable-status`、`--max-spread-bps`、`--min-capacity-notional`
 和 `--max-participation-rate` 做更严格的成交约束。旧归档 prediction 文件没有这些上下文列，
 只能复算成本和同股重复交易约束。
+
+LightGBM delay1/delay2 predictions 全部拉回后，可以直接跑标准 replay 网格：
+
+```bash
+python scripts/run_lgbm_delay_replays.py
+```
+
+默认会对 delay1/delay2 的普通与 strong predictions 跑：
+
+```text
+proxy_top20
+cost_10bps
+tradable_cost
+liquidity_cost
+capacity_10m_5pct
+strict_10m_2pct
+```
+
+总表写到：
+
+```text
+output/reports/opening_intraday_lgbm_delay_replays/scenario_summary.csv
+```
 
 `output/` 保存本地 parquet、模型对象、图表和临时报告，默认不提交；
 `experiments/results/` 保存 `record_experiment.py` 归档后的轻量 CSV/JSON 证据，适合审计和汇报。

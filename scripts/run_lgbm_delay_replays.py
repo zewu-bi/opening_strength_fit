@@ -1,0 +1,377 @@
+from __future__ import annotations
+
+import argparse
+from dataclasses import asdict, dataclass
+import json
+from pathlib import Path
+
+import pandas as pd
+
+import _bootstrap  # noqa: F401
+from run_opening_intraday_backtest import (
+    DEFAULT_ENTRY_TIMES,
+    build_summary,
+    normalize_time,
+    parse_status_values,
+    plot_contact_sheet,
+    plot_daily_curves,
+    run_backtest,
+)
+
+
+DEFAULT_DELAYS = ("delay1", "delay2")
+RUN_ID_TEMPLATE = "lgbm_opening_1y_next_month{strong_suffix}_{delay}"
+
+
+@dataclass(frozen=True)
+class ReplayScenario:
+    name: str
+    description: str
+    fee_bps: float = 0.0
+    slippage_bps: float = 0.0
+    tradable_statuses: tuple[str, ...] = ()
+    require_entry_status: bool = False
+    max_decision_lag_seconds: float | None = None
+    max_entry_lag_seconds: float | None = None
+    max_spread_bps: float | None = None
+    min_limit_up_room_bps: float | None = None
+    min_ask_volume_1: float | None = None
+    min_bid_volume_1: float | None = None
+    min_capacity_notional: float = 0.0
+    max_participation_rate: float = 0.0
+    max_symbol_trades_per_day: int = 1
+    symbol_cooldown_minutes: int = 0
+    max_symbol_weight: float = 0.0
+
+
+SCENARIOS: dict[str, ReplayScenario] = {
+    "proxy_top20": ReplayScenario(
+        name="proxy_top20",
+        description="No extra cost; Top20 replay with at most one selection per symbol per day.",
+    ),
+    "cost_10bps": ReplayScenario(
+        name="cost_10bps",
+        description="Adds 5 bps fee and 5 bps slippage.",
+        fee_bps=5.0,
+        slippage_bps=5.0,
+    ),
+    "tradable_cost": ReplayScenario(
+        name="tradable_cost",
+        description="Cost plus continuous-trading status and fresh decision/entry ticks.",
+        fee_bps=5.0,
+        slippage_bps=5.0,
+        tradable_statuses=("T0", "20", "TRADE"),
+        require_entry_status=True,
+        max_decision_lag_seconds=5.0,
+        max_entry_lag_seconds=5.0,
+    ),
+    "liquidity_cost": ReplayScenario(
+        name="liquidity_cost",
+        description="Tradable-cost scenario plus spread, one-level depth, and limit-up room checks.",
+        fee_bps=5.0,
+        slippage_bps=5.0,
+        tradable_statuses=("T0", "20", "TRADE"),
+        require_entry_status=True,
+        max_decision_lag_seconds=5.0,
+        max_entry_lag_seconds=5.0,
+        max_spread_bps=100.0,
+        min_limit_up_room_bps=5.0,
+        min_ask_volume_1=1.0,
+        min_bid_volume_1=1.0,
+    ),
+    "capacity_10m_5pct": ReplayScenario(
+        name="capacity_10m_5pct",
+        description="Liquidity-cost scenario plus 10mm CNY/cycle and 5% participation cap.",
+        fee_bps=5.0,
+        slippage_bps=5.0,
+        tradable_statuses=("T0", "20", "TRADE"),
+        require_entry_status=True,
+        max_decision_lag_seconds=5.0,
+        max_entry_lag_seconds=5.0,
+        max_spread_bps=100.0,
+        min_limit_up_room_bps=5.0,
+        min_ask_volume_1=1.0,
+        min_bid_volume_1=1.0,
+        min_capacity_notional=100_000.0,
+        max_participation_rate=0.05,
+    ),
+    "strict_10m_2pct": ReplayScenario(
+        name="strict_10m_2pct",
+        description="Stricter spread and participation stress for a 10mm CNY/cycle book.",
+        fee_bps=5.0,
+        slippage_bps=10.0,
+        tradable_statuses=("T0", "20", "TRADE"),
+        require_entry_status=True,
+        max_decision_lag_seconds=5.0,
+        max_entry_lag_seconds=5.0,
+        max_spread_bps=50.0,
+        min_limit_up_room_bps=10.0,
+        min_ask_volume_1=1.0,
+        min_bid_volume_1=1.0,
+        min_capacity_notional=200_000.0,
+        max_participation_rate=0.02,
+    ),
+}
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run the standard constrained replay grid for LightGBM delay1/delay2 "
+            "prediction files after they are fetched from the k8s PVC."
+        )
+    )
+    parser.add_argument(
+        "--prediction-root",
+        default="output/predictions",
+        help="Directory containing <run_id>/predictions_all.parquet.",
+    )
+    parser.add_argument(
+        "--output-root",
+        default="output/reports/opening_intraday_lgbm_delay_replays",
+        help="Root directory for per-scenario replay outputs.",
+    )
+    parser.add_argument(
+        "--delay",
+        action="append",
+        choices=DEFAULT_DELAYS,
+        help="Delay branch to replay. Defaults to delay1 and delay2.",
+    )
+    parser.add_argument(
+        "--scenario",
+        action="append",
+        choices=tuple(SCENARIOS),
+        help="Scenario to run. Defaults to all standard scenarios.",
+    )
+    parser.add_argument("--top-n", type=int, default=20)
+    parser.add_argument(
+        "--entry-time",
+        action="append",
+        dest="entry_times",
+        help="Entry decision time. Defaults to 09:30/32/34/36/38.",
+    )
+    parser.add_argument("--cycle-minutes", type=int, default=2)
+    parser.add_argument(
+        "--capital-per-cycle",
+        type=float,
+        default=10_000_000.0,
+        help="CNY capital used by participation-rate scenarios.",
+    )
+    parser.add_argument(
+        "--capacity-notional-col",
+        default="turnover_diff_30t",
+        help="Visible notional proxy column used by capacity scenarios.",
+    )
+    parser.add_argument(
+        "--capacity-volume-col",
+        default="",
+        help="Fallback visible volume capacity column.",
+    )
+    parser.add_argument("--capacity-price-col", default="ask_price_1")
+    parser.add_argument(
+        "--missing-constraint",
+        choices=["error", "warn", "ignore"],
+        default="warn",
+        help=(
+            "Use warn by default because some optional columns, such as limit-up room, "
+            "depend on upstream fields being available in the prediction parquet."
+        ),
+    )
+    parser.add_argument(
+        "--allow-missing",
+        action="store_true",
+        help="Skip missing prediction files instead of failing.",
+    )
+    parser.add_argument(
+        "--skip-plots",
+        action="store_true",
+        help="Write CSV/JSON only, without daily curve PNGs.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print planned runs and scenarios without reading prediction files.",
+    )
+    return parser.parse_args()
+
+
+def run_id_for(delay: str, *, strong: bool) -> str:
+    return RUN_ID_TEMPLATE.format(
+        delay=delay,
+        strong_suffix="_strong" if strong else "",
+    )
+
+
+def prediction_runs(prediction_root: Path, delay: str) -> list[tuple[str, Path]]:
+    runs = []
+    for label, strong in ((f"lgbm_{delay}", False), (f"lgbm_strong_{delay}", True)):
+        run_id = run_id_for(delay, strong=strong)
+        runs.append((label, prediction_root / run_id / "predictions_all.parquet"))
+    return runs
+
+
+def missing_prediction_paths(runs: list[tuple[str, Path]]) -> list[Path]:
+    return [path for _, path in runs if not path.exists()]
+
+
+def write_trace(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def replay_scenario(
+    *,
+    delay: str,
+    scenario: ReplayScenario,
+    runs: list[tuple[str, Path]],
+    output_dir: Path,
+    args: argparse.Namespace,
+    entry_times: list[str],
+) -> pd.DataFrame:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    cycles, selected = run_backtest(
+        runs,
+        entry_times=entry_times,
+        cycle_minutes=args.cycle_minutes,
+        top_n=args.top_n,
+        fee_bps=scenario.fee_bps,
+        slippage_bps=scenario.slippage_bps,
+        tradable_statuses=parse_status_values(list(scenario.tradable_statuses)),
+        require_entry_status=scenario.require_entry_status,
+        max_decision_lag_seconds=scenario.max_decision_lag_seconds,
+        max_entry_lag_seconds=scenario.max_entry_lag_seconds,
+        max_spread_bps=scenario.max_spread_bps,
+        min_limit_up_room_bps=scenario.min_limit_up_room_bps,
+        min_ask_volume_1=scenario.min_ask_volume_1,
+        min_bid_volume_1=scenario.min_bid_volume_1,
+        capacity_notional_col=args.capacity_notional_col,
+        capacity_volume_col=args.capacity_volume_col,
+        capacity_price_col=args.capacity_price_col,
+        min_capacity_notional=scenario.min_capacity_notional,
+        max_participation_rate=scenario.max_participation_rate,
+        capital_per_cycle=args.capital_per_cycle,
+        max_symbol_trades_per_day=scenario.max_symbol_trades_per_day,
+        symbol_cooldown_minutes=scenario.symbol_cooldown_minutes,
+        max_symbol_weight=scenario.max_symbol_weight,
+        missing_policy=args.missing_constraint,
+        score_col="prediction",
+        label_col="label",
+    )
+    daily, summary = build_summary(cycles)
+    cycles.to_csv(output_dir / "intraday_cycles.csv", index=False)
+    selected.to_csv(output_dir / "intraday_selected_trades.csv", index=False)
+    daily.to_csv(output_dir / "intraday_daily_summary.csv", index=False)
+    summary.to_csv(output_dir / "intraday_summary.csv", index=False)
+
+    if not args.skip_plots:
+        plot_daily_curves(
+            cycles,
+            output_dir=output_dir,
+            entry_times=entry_times,
+            cycle_minutes=args.cycle_minutes,
+        )
+        plot_contact_sheet(cycles, output_dir / "daily_curves_contact_sheet.png")
+
+    write_trace(
+        output_dir / "intraday_trace.json",
+        {
+            "delay": delay,
+            "scenario": asdict(scenario),
+            "runs": [{"label": label, "path": str(path)} for label, path in runs],
+            "top_n": args.top_n,
+            "entry_times": entry_times,
+            "cycle_minutes": args.cycle_minutes,
+            "capital_per_cycle": args.capital_per_cycle,
+            "capacity_notional_col": args.capacity_notional_col,
+            "capacity_volume_col": args.capacity_volume_col,
+            "capacity_price_col": args.capacity_price_col,
+            "missing_constraint": args.missing_constraint,
+            "skip_plots": args.skip_plots,
+        },
+    )
+    summary.insert(0, "scenario", scenario.name)
+    summary.insert(0, "delay", delay)
+    summary.insert(2, "scenario_description", scenario.description)
+    return summary
+
+
+def main() -> None:
+    args = parse_args()
+    prediction_root = Path(args.prediction_root)
+    output_root = Path(args.output_root)
+    delays = args.delay or list(DEFAULT_DELAYS)
+    scenario_names = args.scenario or list(SCENARIOS)
+    entry_times = [normalize_time(value) for value in (args.entry_times or DEFAULT_ENTRY_TIMES)]
+
+    plan = []
+    for delay in delays:
+        runs = prediction_runs(prediction_root, delay)
+        for scenario_name in scenario_names:
+            plan.append(
+                {
+                    "delay": delay,
+                    "scenario": scenario_name,
+                    "runs": [{"label": label, "path": str(path)} for label, path in runs],
+                    "output_dir": str(output_root / delay / scenario_name),
+                }
+            )
+
+    if args.dry_run:
+        print(json.dumps({"replay_plan": plan}, indent=2))
+        return
+
+    summaries = []
+    skipped = []
+    for delay in delays:
+        runs = prediction_runs(prediction_root, delay)
+        missing = missing_prediction_paths(runs)
+        if missing:
+            message = f"{delay}: missing prediction files: {', '.join(str(path) for path in missing)}"
+            if args.allow_missing:
+                print(f"skip_warning: {message}")
+                skipped.append({"delay": delay, "missing": [str(path) for path in missing]})
+                continue
+            raise SystemExit(message)
+
+        for scenario_name in scenario_names:
+            scenario = SCENARIOS[scenario_name]
+            output_dir = output_root / delay / scenario.name
+            print(f"running_replay: delay={delay} scenario={scenario.name}")
+            summaries.append(
+                replay_scenario(
+                    delay=delay,
+                    scenario=scenario,
+                    runs=runs,
+                    output_dir=output_dir,
+                    args=args,
+                    entry_times=entry_times,
+                )
+            )
+
+    output_root.mkdir(parents=True, exist_ok=True)
+    if summaries:
+        combined = pd.concat(summaries, ignore_index=True)
+        combined.to_csv(output_root / "scenario_summary.csv", index=False)
+        print("\nreplay_scenario_summary:")
+        print(combined.to_string(index=False, float_format="{:.6f}".format))
+
+    write_trace(
+        output_root / "scenario_trace.json",
+        {
+            "prediction_root": str(prediction_root),
+            "output_root": str(output_root),
+            "delays": list(delays),
+            "scenarios": [asdict(SCENARIOS[name]) for name in scenario_names],
+            "entry_times": entry_times,
+            "top_n": args.top_n,
+            "cycle_minutes": args.cycle_minutes,
+            "capital_per_cycle": args.capital_per_cycle,
+            "missing_constraint": args.missing_constraint,
+            "skipped": skipped,
+        },
+    )
+    print(f"\nwrote replay grid: {output_root}")
+
+
+if __name__ == "__main__":
+    main()
