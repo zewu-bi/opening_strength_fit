@@ -100,6 +100,12 @@ def build_training_parser(description: str) -> argparse.ArgumentParser:
     parser.add_argument("--feature-limit", type=int, default=None)
     parser.add_argument("--alpha", type=float, default=None)
     parser.add_argument(
+        "--top-n",
+        type=int,
+        default=None,
+        help="Override [evaluation].top_n for top-score summaries.",
+    )
+    parser.add_argument(
         "--clickhouse-host",
         default=None,
         help="ClickHouse host override. Defaults to CLICKHOUSE_HOST or config.",
@@ -735,7 +741,7 @@ def _resolved_window_mode(args: argparse.Namespace, config: dict) -> str:
     return window_mode
 
 
-def _evaluation_settings(config: dict) -> dict[str, object]:
+def _evaluation_settings(config: dict, args: argparse.Namespace) -> dict[str, object]:
     bucket_mode = _str_config(config, "evaluation", "bucket_mode", "daily")
     selection_mode = _str_config(config, "evaluation", "selection_mode", "symbol_day")
     ic_mode = _str_config(config, "evaluation", "ic_mode", bucket_mode)
@@ -749,7 +755,11 @@ def _evaluation_settings(config: dict) -> dict[str, object]:
         "selection_group_cols": format_group_cols(selection_group_cols),
         "ic_mode": ic_mode,
         "ic_group_cols": format_group_cols(ic_group_cols),
-        "top_n": _int_config(config, "evaluation", "top_n", 20),
+        "top_n": (
+            args.top_n
+            if args.top_n is not None
+            else _int_config(config, "evaluation", "top_n", 20)
+        ),
         "score_bins": _int_config(config, "evaluation", "score_bins", 5),
         "_bucket_group_cols": bucket_group_cols,
         "_selection_group_cols": selection_group_cols,
@@ -982,7 +992,7 @@ def train_from_args(args: argparse.Namespace) -> None:
         if args.alpha is not None
         else _float_config(config, "model", "alpha", 1.0)
     )
-    evaluation_settings = _evaluation_settings(config)
+    evaluation_settings = _evaluation_settings(config, args)
     splits = _date_splits(labeled, args, config)
     print_mapping(
         "split_plan",

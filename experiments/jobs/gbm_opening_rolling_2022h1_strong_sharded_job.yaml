@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: opening-strength-ridge-opening-full-sharded
+  name: opening-strength-gbm-opening-rolling-2022h1-strong-sharded
   namespace: bizewu
 spec:
   backoffLimit: 0
@@ -17,18 +17,21 @@ spec:
             claimName: bizewu-private-data
       containers:
         - name: opening-strength-fit
-          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:latest
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260520-overnight-v1
           imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: opening-strength-clickhouse
           workingDir: /app/opening_strength_fit
           command:
             - /bin/bash
             - -lc
             - |
               set -euo pipefail
-              ROOT=/mnt/output/opening_strength_fit/ridge_opening_full
+              ROOT=/mnt/output/opening_strength_fit/gbm_opening_rolling_2022h1_strong
               mkdir -p "${ROOT}"
 
-              for MONTH in 2022-01 2022-02 2022-03 2022-04 2022-05 2022-06 2022-07 2022-08 2022-09 2022-10 2022-11 2022-12 2023-01 2023-02 2023-03 2023-04 2023-05 2023-06 2023-07 2023-08 2023-09 2023-10 2023-11 2023-12 2024-01 2024-02 2024-03 2024-04 2024-05 2024-06 2024-07 2024-08 2024-09 2024-10 2024-11 2024-12; do
+              for MONTH in 2022-02 2022-03 2022-04 2022-05 2022-06; do
                 OUT="${ROOT}/month_${MONTH}"
                 if [ -f "${OUT}/metrics_by_year.csv" ]; then
                   echo "month ${MONTH}: metrics already exist, skipping ${OUT}"
@@ -36,11 +39,11 @@ spec:
                 fi
 
                 echo
-                echo "running ridge_opening_full shard month=${MONTH}"
+                echo "running gbm_opening_rolling_2022h1_strong shard month=${MONTH}"
                 echo "output_dir=${OUT}"
 
                 python scripts/run_experiment.py \
-                  --config experiments/runs/ridge_opening_full.toml \
+                  --config experiments/runs/gbm_opening_rolling_2022h1_strong.toml \
                   --rolling-monthly \
                   --train-months 12 \
                   --test-start-month "${MONTH}" \
@@ -52,8 +55,8 @@ spec:
               mountPath: /mnt/output
           resources:
             requests:
-              cpu: "4"
-              memory: 16Gi
-            limits:
               cpu: "8"
               memory: 32Gi
+            limits:
+              cpu: "16"
+              memory: 64Gi

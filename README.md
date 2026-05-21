@@ -75,7 +75,7 @@ python scripts/probe_clickhouse_data.py
 
 ```bash
 python scripts/prepare_research_dataset.py \
-  --config experiments/runs/ridge_opening_full.toml \
+  --config experiments/runs/gbm_opening_1y_next_month.toml \
   --start-date 2021-09-01 \
   --end-date 2021-09-30 \
   --output-root output/local/opening_labeled
@@ -86,7 +86,7 @@ python scripts/audit_labels.py \
 
 python scripts/run_rule_baselines.py \
   --input output/local/opening_labeled \
-  --config experiments/runs/ridge_opening_full.toml \
+  --config experiments/runs/gbm_opening_1y_next_month.toml \
   --output-dir output/local/rule_baselines_2021_09
 ```
 
@@ -96,27 +96,27 @@ python scripts/run_rule_baselines.py \
 python scripts/inspect_dataset.py \
   --symbol 000925.SZ \
   --date 2021-09-22 2021-09-23 \
-  --config experiments/runs/ridge_opening_full.toml \
-  --output output/local/inspect_smoke/000925_SZ_2021-09-22_2021-09-23.parquet
+  --config experiments/runs/gbm_opening_1y_next_month.toml \
+  --labeled-output output/local/inspect_smoke/000925_SZ_2021-09-22_2021-09-23_labeled.parquet
 
 python scripts/run_experiment.py \
-  --config experiments/runs/ridge_opening_full.toml \
+  --config experiments/runs/gbm_opening_1y_next_month.toml \
   --input output/local/inspect_smoke/000925_SZ_2021-09-22_2021-09-23_labeled.parquet \
   --input-kind labeled \
   --split-mode chronological \
   --test-start-date 2021-09-23 \
   --test-end-date 2021-09-23 \
   --feature-limit 80 \
-  --output-dir output/local/ridge_opening_full_000925_2d_smoke
+  --output-dir output/local/gbm_opening_1y_next_month_000925_2d_smoke
 ```
 
 查看结果：
 
 ```bash
 python scripts/summarize_opening_results.py \
-  --input-dir output/local/ridge_opening_full_000925_2d_smoke
+  --input-dir output/local/gbm_opening_1y_next_month_000925_2d_smoke
 python scripts/evaluate_predictions.py \
-  --input output/local/ridge_opening_full_000925_2d_smoke/predictions.parquet
+  --input output/local/gbm_opening_1y_next_month_000925_2d_smoke/predictions.parquet
 ```
 
 所有 smoke 和实验都使用真实 ClickHouse tick 或由真实 tick 生成的 parquet。
@@ -139,7 +139,7 @@ python scripts/evaluate_predictions.py \
 
 ## 当前基线
 
-当前主配置是 `ridge_opening_full`，状态为 `queued`，集群训练默认直接从 ClickHouse 读取所需日期窗口；本地 smoke 可用小 parquet/cache。第一版口径先做 A 股 universe 过滤、`09:30-09:40` 整分钟决策点、规则分数 baseline、`cross_section` / `symbol_day` IC、score bucket/top-score 分析，以及 12 个月训练到 1 个月测试的 rolling Ridge baseline。label 采用：
+当前默认配置是 `gbm_opening_1y_next_month`。集群训练从 ClickHouse 读取所需日期窗口；本地 smoke 可用小 parquet/cache。第一版口径先做 A 股 universe 过滤、`09:30-09:40` 整分钟决策点、规则分数 baseline、`cross_section` / `symbol_day` IC、score bucket/top-score 分析，以及 12 个月训练到 1 个月测试的 rolling baseline。label 采用：
 
 ```text
 buy_price = current ask1

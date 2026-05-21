@@ -18,22 +18,22 @@ def main() -> None:
     )
     parser.add_argument(
         "--input-dir",
-        default="output/backtest/ridge_opening_full",
+        default="output/backtest/gbm_opening_1y_next_month",
         help="Directory that contains alpha.csv and profit.csv.",
     )
     parser.add_argument(
         "--output",
-        default="output/backtest/ridge_opening_full/cumulative_curves.png",
+        default="output/backtest/gbm_opening_1y_next_month/cumulative_curves.png",
         help="PNG path for the generated figure.",
     )
     parser.add_argument(
         "--summary",
-        default="output/backtest/ridge_opening_full/curve_summary.json",
+        default="output/backtest/gbm_opening_1y_next_month/curve_summary.json",
         help="JSON path for the plotted curve summary.",
     )
     parser.add_argument(
         "--baseline-output",
-        default="output/backtest/ridge_opening_full/profit_vs_baseline.png",
+        default="output/backtest/gbm_opening_1y_next_month/profit_vs_baseline.png",
         help="PNG path for the cumulative model-vs-baseline figure.",
     )
     parser.add_argument(

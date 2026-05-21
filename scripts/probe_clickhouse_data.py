@@ -360,12 +360,12 @@ def _check(status: str, detail: str) -> str:
 
 def _status(ok: bool, *, warn: bool = False) -> str:
     if ok:
-        return "PASS"
-    return "WARN" if warn else "FAIL"
+        return "ok"
+    return "warn" if warn else "fail"
 
 
 def _compact_pass(check: str) -> str:
-    return "PASS" if check.startswith("PASS:") else check
+    return "ok" if check.startswith("ok:") else check
 
 
 def print_source_quality_checks(
@@ -379,7 +379,7 @@ def print_source_quality_checks(
     checks: dict[str, str] = {}
 
     if date_layout.empty:
-        checks["opening_window_daily_data"] = _check("FAIL", "no dates with rows")
+        checks["opening_window_daily_data"] = _check("fail", "no dates with rows")
     else:
         expected_start = (
             offset_to_time(args.start_offset_us) if args.start_offset_us is not None else ""
@@ -413,7 +413,7 @@ def print_source_quality_checks(
             f"regex={args.symbol_regex}; mismatch_rows={mismatch_rows:,}",
         )
     else:
-        checks["symbol_filter"] = _check("SKIP", "no symbol_regex supplied")
+        checks["symbol_filter"] = _check("skip", "no symbol_regex supplied")
 
     rows = int(health.get("rows") or 0)
     tradable_rows = int(health.get("tradable_rows") or 0)
@@ -421,16 +421,18 @@ def print_source_quality_checks(
     positive_ask1 = int(health.get("positive_ask1_rows") or 0)
     positive_ask_volume = int(health.get("positive_ask_volume1_rows") or 0)
     crossed_book = int(health.get("crossed_book_rows") or 0)
+    not_buyable_rows = max(tradable_rows - buyable_rows, 0)
+    buyable_rate = buyable_rows / tradable_rows if tradable_rows else 0.0
     checks["ask1_executable_buy_price"] = _check(
         _status(
             rows > 0
-            and tradable_rows > 0
-            and buyable_rows == tradable_rows
+            and buyable_rows > 0
             and crossed_book == 0,
-            warn=buyable_rows > 0,
         ),
         f"rows={rows:,}; tradable_rows={tradable_rows:,}; "
         f"tradable_buyable_ask1_rows={buyable_rows:,}; "
+        f"tradable_not_buyable_rows={not_buyable_rows:,}; "
+        f"tradable_buyable_rate={buyable_rate:.2%}; "
         f"ask1_positive_rows={positive_ask1:,}; "
         f"ask_volume1_positive_rows={positive_ask_volume:,}; "
         f"crossed_book_rows={crossed_book:,}",

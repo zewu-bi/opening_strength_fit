@@ -9,7 +9,10 @@ from opening_strength_fit.k8s import manifest_job_name, run_command
 
 
 DEFAULT_RUNS = (
-    ("ridge_opening_full", "/mnt/output/opening_strength_fit/ridge_opening_full"),
+    (
+        "gbm_opening_1y_next_month",
+        "/mnt/output/opening_strength_fit/gbm_opening_1y_next_month",
+    ),
 )
 
 

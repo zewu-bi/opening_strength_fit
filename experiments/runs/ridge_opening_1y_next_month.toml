@@ -1,7 +1,7 @@
 [run]
 id = "ridge_opening_1y_next_month"
 description = "One-year train, next-month test opening-strength Ridge baseline."
-status = "running"
+status = "completed"
 
 [data]
 source = "clickhouse"
@@ -88,5 +88,5 @@ clickhouse_secret = "opening-strength-clickhouse"
 [k8s.resources]
 cpu_request = "8"
 cpu_limit = "16"
-memory_request = "32Gi"
-memory_limit = "64Gi"
+memory_request = "96Gi"
+memory_limit = "128Gi"

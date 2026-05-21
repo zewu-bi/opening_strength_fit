@@ -91,7 +91,7 @@ def main() -> None:
             "Prepare a filtered, labeled opening research dataset partitioned by date."
         )
     )
-    parser.add_argument("--config", default="experiments/runs/ridge_opening_full.toml")
+    parser.add_argument("--config", default="experiments/runs/gbm_opening_1y_next_month.toml")
     parser.add_argument("--input", default="", help="Optional raw tick parquet/csv root.")
     parser.add_argument("--output-root", required=True)
     parser.add_argument("--date", nargs="*", default=None)

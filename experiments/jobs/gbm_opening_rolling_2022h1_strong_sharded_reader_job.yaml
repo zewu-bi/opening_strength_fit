@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: opening-strength-read-ridge-opening-full-sharded
+  name: opening-strength-read-gbm-opening-rolling-2022h1-strong-sharded
   namespace: bizewu
 spec:
   backoffLimit: 0
@@ -17,7 +17,7 @@ spec:
             claimName: bizewu-private-data
       containers:
         - name: reader
-          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:latest
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260520-overnight-v1
           imagePullPolicy: Always
           workingDir: /app/opening_strength_fit
           command:
@@ -25,13 +25,13 @@ spec:
             - -lc
             - |
               set -euo pipefail
-              ROOT=/mnt/output/opening_strength_fit/ridge_opening_full
+              ROOT=/mnt/output/opening_strength_fit/gbm_opening_rolling_2022h1_strong
               python - <<'PY'
               from pathlib import Path
               import pandas as pd
               from opening_strength_fit.training import _metrics_by_year_from_windows
 
-              root = Path("/mnt/output/opening_strength_fit/ridge_opening_full")
+              root = Path("/mnt/output/opening_strength_fit/gbm_opening_rolling_2022h1_strong")
               metric_frames = []
               prediction_frames = []
               missing_metrics = []

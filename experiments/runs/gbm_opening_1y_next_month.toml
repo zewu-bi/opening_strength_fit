@@ -1,7 +1,7 @@
 [run]
 id = "gbm_opening_1y_next_month"
 description = "One-year train, next-month test opening-strength sklearn GBM baseline."
-status = "running"
+status = "completed"
 
 [data]
 source = "clickhouse"

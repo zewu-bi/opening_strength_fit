@@ -17,7 +17,7 @@ spec:
             claimName: bizewu-private-data
       containers:
         - name: opening-strength-fit
-          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260520-043756
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260520-overnight-v1
           imagePullPolicy: Always
           envFrom:
             - secretRef:
@@ -36,7 +36,7 @@ spec:
           resources:
             requests:
               cpu: "8"
-              memory: 32Gi
+              memory: 96Gi
             limits:
               cpu: "16"
-              memory: 64Gi
+              memory: 128Gi

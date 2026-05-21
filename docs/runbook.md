@@ -33,14 +33,14 @@ python scripts/check_workflow_coverage.py
 
 ## 2. 数据检查
 
-查看 ClickHouse `stock.tick` 源表规模、schema 和字段说明。窗口检查通过时只显示 `PASS`，只有异常时才展开原因：
+先看 ClickHouse `stock.tick` 是否可读、schema 是否符合预期：
 
 ```bash
 python scripts/probe_clickhouse_data.py
 python scripts/probe_clickhouse_data.py --schema --field-notes
 ```
 
-检查目标实验窗口的原始 tick 覆盖。这个命令只读 ClickHouse 聚合信息，不会把全年原始 tick 或 labeled dataset 拉到本地：
+再看目标实验窗口的数据覆盖。这个命令只读聚合信息，不拉原始 tick：
 
 ```bash
 python scripts/probe_clickhouse_data.py \
@@ -51,31 +51,13 @@ python scripts/probe_clickhouse_data.py \
   --year-layout
 ```
 
-检查单票小窗口的 tick schema、X/label 对齐和标签覆盖。`inspect_dataset.py` 会从 ClickHouse 抓少量真实 tick，在本地临时计算 feature/label；这一步只用于确认代码链路，不用于准备正式训练集。若原始 09:15 quote 有 ask/bid 非正，`tick_dataset_check.rows` 会显示成 `正常行+异常行 (raw quote ask/bid<=0)`；决策样本是否可交易看 `sample_quality_checks`：
-
-```bash
-python scripts/inspect_dataset.py \
-  --symbol 000925.SZ \
-  --date 2021-09-22 2021-09-23 \
-  --config experiments/runs/ridge_opening_1y_next_month.toml \
-  --preview-rows 3 \
-  --label-preview-rows 3
-```
-
-需要留小样本用于后续本地 smoke 时，在同一命令后加：
-
-```bash
---output output/local/inspect_smoke/000925_SZ_2021-09-22_2021-09-23.parquet \
---labeled-output output/local/inspect_smoke/000925_SZ_2021-09-22_2021-09-23_labeled.parquet
-```
-
-多股票横截面小样本可以在同一个命令里传多只股票，确认 `cross_section` 评估链路能跑通：
+最后用多股票小窗口检查 tick 标准化、feature/label 构造、label 分布、决策点可交易性和横截面分组。只检查时不用保存；要跑本地 smoke 时加 `--labeled-output`：
 
 ```bash
 python scripts/inspect_dataset.py \
   --symbol 000001.SZ 000925.SZ 600519.SH 601318.SH 300750.SZ \
   --date 2021-09-22 2021-09-23 \
-  --config experiments/runs/ridge_opening_1y_next_month.toml \
+  --config experiments/runs/gbm_opening_1y_next_month.toml \
   --preview-rows 3 \
   --label-preview-rows 3 \
   --labeled-output output/local/inspect_smoke/multi_symbol_2021-09-22_2021-09-23_labeled.parquet
@@ -83,104 +65,35 @@ python scripts/inspect_dataset.py \
 
 默认不要在本地为一年或多月窗口运行 `prepare_research_dataset.py`。ClickHouse 里是原始 tick，feature/label 需要 Python 计算，长窗口本地准备会很慢且占空间。正式长窗口训练直接用 `[data].source = "clickhouse"` 的 K8s Job；长窗口 label audit / rule baseline 也应放到集群或专门的小结果 Job，只把 CSV/metrics 拉回本地。
 
-如果只是临时调试 `audit_labels.py` 或 `run_rule_baselines.py` 的输出格式，可以只对上面的小 labeled parquet 跑：
-
-```bash
-python scripts/audit_labels.py \
-  --input output/local/inspect_smoke/multi_symbol_2021-09-22_2021-09-23_labeled.parquet \
-  --output output/local/inspect_smoke/multi_symbol_label_audit.csv
-
-python scripts/run_rule_baselines.py \
-  --input output/local/inspect_smoke/multi_symbol_2021-09-22_2021-09-23_labeled.parquet \
-  --config experiments/runs/ridge_opening_1y_next_month.toml \
-  --output-dir output/local/rule_baselines_multi_symbol_smoke
-```
-
-小样本 audit/rule 只能检查程序链路和字段口径，不能当作研究结论。研究结论以 K8s 长窗口输出的 metrics、prediction 和后续回测为准。
-
 ## 3. 本地 Smoke
 
-本地只跑真实数据的小样本 smoke，用 full config 加输入、split、feature 和输出目录覆盖。不要在本地准备全年或多月 opening labeled dataset。
+本地 smoke 使用第 2 节保存的 multi-symbol labeled parquet，只确认训练、预测、评估和结果落盘能跑通。小样本结果不作研究结论。
 
-### 3.1 单票代码 Smoke
-
-单票 smoke 只确认 ClickHouse 抓取、feature/label 计算、训练、预测和指标写出能跑通：
+训练 smoke：
 
 ```bash
-python scripts/inspect_dataset.py \
-  --symbol 000925.SZ \
-  --date 2021-09-22 2021-09-23 \
-  --config experiments/runs/ridge_opening_1y_next_month.toml \
-  --output output/local/inspect_smoke/000925_SZ_2021-09-22_2021-09-23.parquet \
-  --labeled-output output/local/inspect_smoke/000925_SZ_2021-09-22_2021-09-23_labeled.parquet
-
 python scripts/run_experiment.py \
-  --config experiments/runs/ridge_opening_1y_next_month.toml \
-  --input output/local/inspect_smoke/000925_SZ_2021-09-22_2021-09-23_labeled.parquet \
+  --config experiments/runs/gbm_opening_1y_next_month.toml \
+  --input output/local/inspect_smoke/multi_symbol_2021-09-22_2021-09-23_labeled.parquet \
   --input-kind labeled \
   --split-mode chronological \
   --test-start-date 2021-09-23 \
   --test-end-date 2021-09-23 \
   --feature-limit 80 \
-  --output-dir output/local/ridge_opening_1y_next_month_000925_2d_smoke
+  --top-n 2 \
+  --output-dir output/local/gbm_opening_1y_next_month_multi_symbol_smoke
 ```
+
+`run_experiment.py` 会训练模型、生成 `predictions.parquet`、写出 `metrics_by_year.csv`，并按 config 中的 evaluation 设置评估一次。这里用 `--top-n 2` 覆盖 config 的 `top_n=20`，避免 smoke 中每个横截面只有 5 个 symbol 时 top-score 变成全选。
 
 查看 smoke metrics：
 
 ```bash
 python scripts/summarize_opening_results.py \
-  --input-dir output/local/ridge_opening_1y_next_month_000925_2d_smoke
-
-python scripts/evaluate_predictions.py \
-  --input output/local/ridge_opening_1y_next_month_000925_2d_smoke/predictions.parquet \
-  --bucket-mode symbol_day \
-  --ic-mode symbol_day \
-  --selection-mode symbol_day
+  --input-dir output/local/gbm_opening_1y_next_month_multi_symbol_smoke
 ```
 
-单票 smoke 只有一只股票，不能验证 `cross_section` 排序；这里看
-`symbol_day` 指标，只确认同一只股票当天多个开盘决策点之间的择时链路。
-`cross_section` 要到 3.2 的多股票小样本 smoke 或正式 K8s 实验里看。
-
-### 3.2 多股票横截面 Smoke
-
-多股票 smoke 用几只股票、两天数据确认 `cross_section` 评估链路。它不是正式研究集，只检查同一时刻股票间排序的代码路径：
-
-```bash
-python scripts/inspect_dataset.py \
-  --symbol 000001.SZ 000925.SZ 600519.SH 601318.SH 300750.SZ \
-  --date 2021-09-22 2021-09-23 \
-  --config experiments/runs/ridge_opening_1y_next_month.toml \
-  --labeled-output output/local/inspect_smoke/multi_symbol_2021-09-22_2021-09-23_labeled.parquet
-
-python scripts/run_experiment.py \
-  --config experiments/runs/ridge_opening_1y_next_month.toml \
-  --input output/local/inspect_smoke/multi_symbol_2021-09-22_2021-09-23_labeled.parquet \
-  --input-kind labeled \
-  --split-mode chronological \
-  --test-start-date 2021-09-23 \
-  --test-end-date 2021-09-23 \
-  --feature-limit 80 \
-  --output-dir output/local/ridge_opening_1y_next_month_multi_symbol_smoke
-```
-
-查看横截面 smoke：
-
-```bash
-python scripts/summarize_opening_results.py \
-  --input-dir output/local/ridge_opening_1y_next_month_multi_symbol_smoke
-
-python scripts/evaluate_predictions.py \
-  --input output/local/ridge_opening_1y_next_month_multi_symbol_smoke/predictions.parquet \
-  --bucket-mode cross_section \
-  --ic-mode cross_section \
-  --selection-mode cross_section \
-  --top-n 2
-```
-
-小样本横截面 smoke 的股票太少、日期太少，`group_rank_ic_mean`、bucket 和 top-score 只用于确认程序不报错，不用于判断模型是否有效。
-
-### 3.3 正式研究口径
+`summarize_opening_results.py` 只读取 `metrics_by_year.csv` 做摘要，不重算预测；本地 smoke 和后续集群拉回的年度 metrics 都用这一条查看。
 
 正式 one-year / full-window opening 实验不要在本地准备 labeled dataset。使用 K8s Job 直接读 ClickHouse 原始 tick，在集群内计算 feature/label、训练和评估，然后只拉回 `metrics_by_year.csv`、`metrics_by_month.csv`、`predictions.parquet` 或回测所需结果。
 
@@ -189,7 +102,8 @@ python scripts/evaluate_predictions.py \
 复制最接近的 config：
 
 ```text
-ridge: experiments/runs/ridge_opening_full.toml
+gbm: experiments/runs/gbm_opening_1y_next_month.toml
+ridge: experiments/runs/ridge_opening_1y_next_month.toml
 ```
 
 至少修改：
@@ -239,16 +153,7 @@ docker push registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG}
 
 ```bash
 python scripts/render_k8s_job.py \
-  --config experiments/runs/ridge_opening_full.toml \
-  --image registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG}
-```
-
-full-window sharded Job：
-
-```bash
-python scripts/render_k8s_job.py \
-  --config experiments/runs/ridge_opening_full.toml \
-  --sharded \
+  --config experiments/runs/gbm_opening_1y_next_month.toml \
   --image registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG}
 ```
 
@@ -257,31 +162,29 @@ python scripts/render_k8s_job.py \
 ```text
 experiments/jobs/<run_id>_job.yaml
 experiments/jobs/<run_id>_reader_job.yaml
-experiments/jobs/<run_id>_sharded_job.yaml
-experiments/jobs/<run_id>_sharded_reader_job.yaml
 ```
 
 确认镜像：
 
 ```bash
-rg -n "image:" experiments/jobs/ridge_opening_full_job.yaml
+rg -n "image:" experiments/jobs/gbm_opening_1y_next_month_job.yaml
 ```
 
 ## 7. 提交和查看 Job
 
 ```bash
-hfcli kubectl delete job opening-strength-ridge-opening-full --ignore-not-found -n bizewu
-hfcli kubectl apply -f experiments/jobs/ridge_opening_full_job.yaml
+hfcli kubectl delete job opening-strength-gbm-opening-1y-next-month --ignore-not-found -n bizewu
+hfcli kubectl apply -f experiments/jobs/gbm_opening_1y_next_month_job.yaml
 hfcli kubectl get jobs,pods -n bizewu -o wide
-hfcli kubectl logs -f job/opening-strength-ridge-opening-full -n bizewu
+hfcli kubectl logs -f job/opening-strength-gbm-opening-1y-next-month -n bizewu
 ```
 
-sharded 实验完成后，用 reader Job 合并 monthly/yearly metrics 和 predictions：
+reader Job：
 
 ```bash
-hfcli kubectl delete job opening-strength-read-ridge-opening-full-sharded --ignore-not-found -n bizewu
-hfcli kubectl apply -f experiments/jobs/ridge_opening_full_sharded_reader_job.yaml
-hfcli kubectl wait --for=condition=complete job/opening-strength-read-ridge-opening-full-sharded -n bizewu --timeout=300s
+hfcli kubectl delete job opening-strength-read-gbm-opening-1y-next-month --ignore-not-found -n bizewu
+hfcli kubectl apply -f experiments/jobs/gbm_opening_1y_next_month_reader_job.yaml
+hfcli kubectl wait --for=condition=complete job/opening-strength-read-gbm-opening-1y-next-month -n bizewu --timeout=300s
 ```
 
 排查要点：
@@ -299,7 +202,7 @@ hfcli kubectl wait --for=condition=complete job/opening-strength-read-ridge-open
 
 ```bash
 python scripts/pull_k8s_metrics.py \
-  --config experiments/runs/ridge_opening_full.toml
+  --config experiments/runs/gbm_opening_1y_next_month.toml
 ```
 
 拉回文件写到：
@@ -316,16 +219,16 @@ output/k8s/metrics/<run_id>_metrics_by_year.csv
 
 ```bash
 python scripts/fetch_k8s_predictions.py \
-  --config experiments/runs/ridge_opening_full.toml \
-  --output-dir output/backtest/ridge_opening_full
+  --config experiments/runs/gbm_opening_1y_next_month.toml \
+  --output-dir output/backtest/gbm_opening_1y_next_month
 ```
 
 调用回测 API。tick-level 预测会先按 `date x symbol` 聚合，默认取开盘窗口内最大预测分：
 
 ```bash
 python scripts/run_backtest_api.py \
-  --predictions output/backtest/ridge_opening_full/predictions_all.parquet \
-  --output-dir output/backtest/ridge_opening_full \
+  --predictions output/backtest/gbm_opening_1y_next_month/predictions_all.parquet \
+  --output-dir output/backtest/gbm_opening_1y_next_month \
   --aggregate max \
   --tar I500
 ```
@@ -334,10 +237,10 @@ python scripts/run_backtest_api.py \
 
 ```bash
 python scripts/plot_backtest_curves.py \
-  --input-dir output/backtest/ridge_opening_full \
-  --output output/backtest/ridge_opening_full/cumulative_curves.png \
-  --summary output/backtest/ridge_opening_full/curve_summary.json \
-  --baseline-output output/backtest/ridge_opening_full/profit_vs_baseline.png
+  --input-dir output/backtest/gbm_opening_1y_next_month \
+  --output output/backtest/gbm_opening_1y_next_month/cumulative_curves.png \
+  --summary output/backtest/gbm_opening_1y_next_month/curve_summary.json \
+  --baseline-output output/backtest/gbm_opening_1y_next_month/profit_vs_baseline.png
 ```
 
 ## 10. 分析 Metrics
@@ -346,7 +249,7 @@ python scripts/plot_backtest_curves.py \
 
 ```bash
 python scripts/summarize_opening_results.py \
-  --metrics-csv output/k8s/metrics/ridge_opening_full_metrics_by_year.csv
+  --metrics-csv output/k8s/metrics/gbm_opening_1y_next_month_metrics_by_year.csv
 ```
 
 比较已归档 full-window 实验：
@@ -359,7 +262,7 @@ python scripts/compare_opening_results.py
 
 ```bash
 python scripts/compare_opening_results.py \
-  --run ridge=experiments/results/metrics/ridge_opening_full_metrics_by_year.csv
+  --run gbm=output/k8s/metrics/gbm_opening_1y_next_month_metrics_by_year.csv
 ```
 
 重点看：
@@ -398,7 +301,7 @@ solve_rate_mean
 
 ```bash
 python scripts/record_experiment.py \
-  --config experiments/runs/ridge_opening_full.toml
+  --config experiments/runs/gbm_opening_1y_next_month.toml
 python scripts/audit_experiments.py
 python scripts/check_workflow_coverage.py
 ```

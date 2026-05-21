@@ -114,7 +114,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--config",
-        default="experiments/runs/ridge_opening_full.toml",
+        default="experiments/runs/gbm_opening_1y_next_month.toml",
         help="Run config that defines run.id, output.k8s_dir, namespace, and date range.",
     )
     parser.add_argument("--hfcli", default="hfcli")
@@ -130,7 +130,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--output-dir",
-        default="output/backtest/ridge_opening_full",
+        default="output/backtest/gbm_opening_1y_next_month",
         help="Local output directory for raw parquet files, combined predictions, and traces.",
     )
     args = parser.parse_args()

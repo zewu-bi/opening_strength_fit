@@ -87,8 +87,8 @@ def _env_int(name: str, default: int) -> int:
 
 def _status(ok: bool, *, warn: bool = False) -> str:
     if ok:
-        return "PASS"
-    return "WARN" if warn else "FAIL"
+        return "ok"
+    return "warn" if warn else "fail"
 
 
 def _check(status: str, detail: str) -> str:
@@ -96,7 +96,7 @@ def _check(status: str, detail: str) -> str:
 
 
 def _compact_pass(check: str) -> str:
-    return "PASS" if check.startswith("PASS:") else check
+    return "ok" if check.startswith("ok:") else check
 
 
 def _clock(series: pd.Series) -> pd.Series:
@@ -198,7 +198,7 @@ def _opening_window_check(
     requested_dates: list[str],
 ) -> str:
     if ticks.empty or "date" not in ticks.columns:
-        return _check("FAIL", "no rows")
+        return _check("fail", "no rows")
     dates_with_rows = set(ticks["date"].astype(str).unique())
     missing = sorted(set(requested_dates) - dates_with_rows)
     by_date = ticks.groupby("date")["timestamp"].agg(["size", "min", "max"])
@@ -223,7 +223,7 @@ def _symbol_filter_check(
     config: dict,
 ) -> str:
     if not _bool_config(config, "universe", "enabled", True):
-        return _check("SKIP", "universe.enabled=false")
+        return _check("skip", "universe.enabled=false")
     regex = _str_config(
         config,
         "universe",
@@ -248,7 +248,7 @@ def _symbol_filter_check(
 def _cumulative_check(ticks: pd.DataFrame) -> str:
     missing = [column for column in ("volume", "turnover") if column not in ticks.columns]
     if missing:
-        return _check("FAIL", f"missing columns: {missing}")
+        return _check("fail", f"missing columns: {missing}")
     sort_columns = [
         column
         for column in ("date", "symbol", "timestamp", EXCHANGE_OFFSET_US_COL)
@@ -271,7 +271,7 @@ def _cumulative_check(ticks: pd.DataFrame) -> str:
 
 def _timestamp_order_check(ticks: pd.DataFrame) -> str:
     if ticks.empty or "timestamp" not in ticks.columns:
-        return _check("FAIL", "missing timestamp")
+        return _check("fail", "missing timestamp")
     sort_columns = ["date", "symbol", "timestamp"]
     work = ticks.sort_values(sort_columns).copy()
     group = work.groupby(["date", "symbol"], sort=False)
@@ -307,7 +307,7 @@ def _ask1_execution_check(
     required = {"ask_price_1", "ask_volume_1", "bid_price_1", "status"}
     missing = sorted(required - set(labeled.columns))
     if missing:
-        return _check("FAIL", f"missing columns: {missing}")
+        return _check("fail", f"missing columns: {missing}")
     allowed = {status.upper() for status in tradable_statuses}
     status_upper = labeled["status"].astype(str).str.upper()
     decision_rows = len(labeled)
@@ -330,7 +330,7 @@ def _ask1_execution_check(
         and buy_price_ok
     )
     if ok:
-        return _check("PASS", f"{decision_rows:,} decision rows use ask1 as buy_price")
+        return _check("ok", f"{decision_rows:,} decision rows use ask1 as buy_price")
     return _check(
         _status(ok),
         f"rows={decision_rows:,}; status_ok={int(tradable.sum()):,}; "
@@ -346,7 +346,7 @@ def _decision_point_check(
     tradable_statuses: list[str],
 ) -> str:
     if labeled.empty:
-        return _check("FAIL", "no sampled decision rows")
+        return _check("fail", "no sampled decision rows")
     allowed = {status.upper() for status in tradable_statuses}
     status_ok = (
         labeled["status"].astype(str).str.upper().isin(allowed)
@@ -368,12 +368,17 @@ def _decision_point_check(
         lag = pd.to_numeric(labeled["decision_lag_seconds"], errors="coerce")
         lag_ok = lag.ge(0) & lag.le(max_lag)
         max_observed_lag = float(lag.max()) if len(lag) else None
-    time_clock = _clock(labeled["timestamp"])
+    if "decision_target_timestamp" in labeled.columns:
+        time_clock = _clock(labeled["decision_target_timestamp"])
+    elif "decision_time" in labeled.columns:
+        time_clock = labeled["decision_time"].astype(str)
+    else:
+        time_clock = _clock(labeled["timestamp"])
     in_window = time_clock.ge("09:30:00") & time_clock.le("09:40:00")
     ok = bool(status_ok.all() and decision_ok.all() and lag_ok.all() and in_window.all())
     if ok:
         return _check(
-            "PASS",
+            "ok",
             f"{len(labeled):,} rows; max_lag={max_observed_lag}; statuses={sorted(allowed)}",
         )
     return _check(
@@ -449,16 +454,26 @@ def print_dataset_checks(
     label_nan_rate = (
         float(labeled["label"].isna().mean()) if label_rows and "label" in labeled else 1.0
     )
-    feature_nan_count = (
-        int(
-            labeled[features]
-            .replace([np.inf, -np.inf], np.nan)
-            .isna()
-            .sum()
-            .sum()
+    feature_nan_columns = pd.Series(dtype="int64")
+    feature_nan_count = 0
+    if features:
+        feature_frame = labeled[features].replace([np.inf, -np.inf], np.nan)
+        feature_nan_columns = feature_frame.isna().sum()
+        feature_nan_columns = feature_nan_columns[feature_nan_columns > 0].sort_values(
+            ascending=False
         )
-        if features
-        else 0
+        feature_nan_count = int(feature_nan_columns.sum())
+    valid_mask = (
+        labeled["valid_label"].astype(bool)
+        if "valid_label" in labeled.columns
+        else labeled["label"].notna()
+    )
+    label_values = (
+        pd.to_numeric(labeled.loc[valid_mask, "label"], errors="coerce")
+        .replace([np.inf, -np.inf], np.nan)
+        .dropna()
+        if "label" in labeled.columns
+        else pd.Series(dtype="float64")
     )
 
     print_mapping(
@@ -487,6 +502,36 @@ def print_dataset_checks(
                 f"(nan_rate={label_nan_rate:.2%})"
             ),
             "feature_nan_values": f"{feature_nan_count:,}",
+            "feature_nan_columns": (
+                ", ".join(
+                    f"{column}={int(count):,}"
+                    for column, count in feature_nan_columns.head(8).items()
+                )
+                if feature_nan_count
+                else "<none>"
+            ),
+        },
+    )
+    print_mapping(
+        "label_distribution_check",
+        {
+            "rows": len(label_values),
+            "mean": float(label_values.mean()) if len(label_values) else float("nan"),
+            "std": float(label_values.std()) if len(label_values) else float("nan"),
+            "min": float(label_values.min()) if len(label_values) else float("nan"),
+            "p05": float(label_values.quantile(0.05))
+            if len(label_values)
+            else float("nan"),
+            "p50": float(label_values.quantile(0.50))
+            if len(label_values)
+            else float("nan"),
+            "p95": float(label_values.quantile(0.95))
+            if len(label_values)
+            else float("nan"),
+            "max": float(label_values.max()) if len(label_values) else float("nan"),
+            "win_rate": float((label_values > 0).mean())
+            if len(label_values)
+            else float("nan"),
         },
     )
 
@@ -531,7 +576,7 @@ def main() -> None:
     parser.add_argument("--date", nargs="+", default=list(DEFAULT_DATES))
     parser.add_argument(
         "--config",
-        default="experiments/runs/ridge_opening_full.toml",
+        default="experiments/runs/gbm_opening_1y_next_month.toml",
         help="Run config used for label/sample settings during inspection.",
     )
     parser.add_argument(

@@ -55,10 +55,7 @@ RESULT_COLUMNS = {
 }
 
 DEFAULT_RUNS = (
-    (
-        "ridge",
-        "experiments/results/metrics/ridge_opening_full_metrics_by_year.csv",
-    ),
+    ("gbm", "output/k8s/metrics/gbm_opening_1y_next_month_metrics_by_year.csv"),
 )
 
 

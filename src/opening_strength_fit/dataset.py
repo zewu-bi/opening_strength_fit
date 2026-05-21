@@ -13,6 +13,7 @@ from opening_strength_fit.schema import (
     OPEN_SAMPLE_END,
     OPEN_SAMPLE_START,
     ensure_timestamp_columns,
+    normalize_clock_time,
     standardize_columns,
 )
 from opening_strength_fit.universe import DEFAULT_A_SHARE_SYMBOL_REGEX, filter_symbol_universe
@@ -27,6 +28,21 @@ def load_ticks(
     ticks = read_frame(path, columns=columns)
     ticks = standardize_columns(ticks, aliases)
     return ensure_timestamp_columns(ticks)
+
+
+def _is_decision_point_mode(mode: str) -> bool:
+    return str(mode).strip().lower() in {
+        "decision",
+        "decision_point",
+        "decision_points",
+    }
+
+
+def _add_clock_seconds(value: str, seconds: int | None) -> str:
+    if not seconds:
+        return normalize_clock_time(value)
+    timestamp = pd.Timestamp(f"2000-01-01 {normalize_clock_time(value)}")
+    return (timestamp + pd.Timedelta(seconds=int(seconds))).strftime("%H:%M:%S")
 
 
 def build_labeled_feature_frame(
@@ -64,6 +80,11 @@ def build_labeled_feature_frame(
         turnover_col=turnover_col,
         volume_unit_multiplier=volume_unit_multiplier,
     )
+    label_sample_end_time = (
+        _add_clock_seconds(sample_end_time, decision_max_lag_seconds)
+        if _is_decision_point_mode(sample_mode)
+        else sample_end_time
+    )
     labeled = build_trade_labels(
         features,
         buy_price_col=buy_price_col,
@@ -74,7 +95,7 @@ def build_labeled_feature_frame(
         volume_unit_multiplier=volume_unit_multiplier,
         fee_bps=fee_bps,
         sample_start_time=sample_start_time,
-        sample_end_time=sample_end_time,
+        sample_end_time=label_sample_end_time,
         max_future_gap_seconds=max_future_gap_seconds,
         tradable_statuses=tradable_statuses,
     )

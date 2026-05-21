@@ -29,7 +29,9 @@ def project_files() -> list[str]:
             capture_output=True,
             text=True,
         )
-        return sorted(line for line in result.stdout.splitlines() if line)
+        return sorted(
+            line for line in result.stdout.splitlines() if line and (ROOT / line).exists()
+        )
     except (FileNotFoundError, subprocess.CalledProcessError):
         files = []
         for path in ROOT.rglob("*"):

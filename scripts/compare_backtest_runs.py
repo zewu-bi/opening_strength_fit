@@ -13,7 +13,7 @@ from opening_strength_fit.backtest import load_backtest_series, summarize_daily_
 
 
 DEFAULT_RUNS = (
-    ("ridge", Path("output/backtest/ridge_opening_full")),
+    ("gbm", Path("output/backtest/gbm_opening_1y_next_month")),
 )
 
 

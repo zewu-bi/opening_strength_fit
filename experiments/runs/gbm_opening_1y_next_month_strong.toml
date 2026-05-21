@@ -1,6 +1,6 @@
 [run]
-id = "ridge_opening_1y_next_month_strong"
-description = "One-year train, next-month test Ridge baseline on opening-strength candidate rows."
+id = "gbm_opening_1y_next_month_strong"
+description = "One-year train, next-month test sklearn GBM baseline on opening-strength candidate rows."
 status = "completed"
 
 [data]
@@ -83,8 +83,12 @@ test_end_date = "2022-01-31"
 train_fraction = 0.8
 
 [model]
-name = "ridge"
-alpha = 1.0
+name = "gbm"
+max_iter = 100
+learning_rate = 0.05
+max_leaf_nodes = 31
+l2_regularization = 0.0
+random_state = 7
 
 [evaluation]
 score_bins = 10
@@ -94,8 +98,8 @@ ic_mode = "cross_section"
 top_n = 20
 
 [output]
-local_dir = "output/local/ridge_opening_1y_next_month_strong"
-k8s_dir = "/mnt/output/opening_strength_fit/ridge_opening_1y_next_month_strong"
+local_dir = "output/local/gbm_opening_1y_next_month_strong"
+k8s_dir = "/mnt/output/opening_strength_fit/gbm_opening_1y_next_month_strong"
 
 [k8s]
 namespace = "bizewu"

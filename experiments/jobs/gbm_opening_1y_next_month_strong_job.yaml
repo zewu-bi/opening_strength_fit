@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: opening-strength-ridge-opening-full
+  name: opening-strength-gbm-opening-1y-next-month-strong
   namespace: bizewu
 spec:
   backoffLimit: 0
@@ -17,23 +17,26 @@ spec:
             claimName: bizewu-private-data
       containers:
         - name: opening-strength-fit
-          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:latest
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260520-overnight-v1
           imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: opening-strength-clickhouse
           workingDir: /app/opening_strength_fit
           command:
             - python
             - scripts/run_experiment.py
             - --config
-            - experiments/runs/ridge_opening_full.toml
+            - experiments/runs/gbm_opening_1y_next_month_strong.toml
             - --output-dir
-            - /mnt/output/opening_strength_fit/ridge_opening_full
+            - /mnt/output/opening_strength_fit/gbm_opening_1y_next_month_strong
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output
           resources:
             requests:
-              cpu: "4"
-              memory: 16Gi
-            limits:
               cpu: "8"
               memory: 32Gi
+            limits:
+              cpu: "16"
+              memory: 64Gi

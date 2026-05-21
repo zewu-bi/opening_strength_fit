@@ -23,12 +23,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--predictions",
-        default="output/backtest/ridge_opening_full/predictions_all.parquet",
+        default="output/backtest/gbm_opening_1y_next_month/predictions_all.parquet",
         help="Long-form parquet with date, symbol, and prediction columns.",
     )
     parser.add_argument(
         "--output-dir",
-        default="output/backtest/ridge_opening_full",
+        default="output/backtest/gbm_opening_1y_next_month",
         help="Directory for score matrices, API responses, and trace metadata.",
     )
     parser.add_argument(
