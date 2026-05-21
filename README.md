@@ -7,8 +7,8 @@ ClickHouse `stock.tick` 或本地 tick parquet 读取集合竞价与开盘盘口
 future return proxy，并检验模型分数是否有稳定的横截面排序价值。
 
 它当前解决的是高频信号发现闭环，不是完整实盘策略。A 股 T+1 约束下，当前 60 秒 label
-只能作为 opening microstructure 的 proxy label；当前阶段先完成 short-horizon alpha
-discovery，close、next open、next close 等 longer-horizon label 暂缓到后续阶段。
+只能作为 opening microstructure 的 proxy label；如果该信号稳定，后续还需要接
+close、next open、next close 等 longer-horizon label，验证能否沉淀成日频选股或组合特征。
 
 ```text
 ClickHouse stock.tick / local tick parquet
@@ -121,6 +121,9 @@ label = sell_vwap / buy_price - 1 - fee_bps / 10000
 
 `volume` 是累计成交量，`turnover` 是累计成交额。`valid_label` 要求买入价有效、entry tick 有效、
 退出窗口内有正成交量/成交额，并可按 `[filters].tradable_statuses` 约束交易状态。
+
+训练/replay 边界：改变 label 或样本域的口径进训练；只改变执行、成本、容量或选股后的约束先放 replay。
+当前先跑 delay1/delay2，fee/slippage/spread/容量/状态/同股一次等约束用同一批 predictions 压测。
 
 X 特征只允许使用 decision point 当时及此前可见的信息。当前重点包括：
 

@@ -135,6 +135,7 @@ lgbm strong delay2: experiments/runs/lgbm_opening_1y_next_month_strong_delay2.to
 - `[output].k8s_dir` 必须在 `/mnt/output/opening_strength_fit/` 下，且一个实验一个目录。
 - `evaluation.selection_mode` 第一版用 `cross_section`。
 - `[labels].entry_tick_delay` 控制决策后第几个 tick 成交；已归档结果是无延迟旧口径，后续新实验按 delay1/delay2 分支比较。
+- 训练只改会影响 label 或样本域的口径；fee/slippage/spread/容量/状态/同股一次等执行约束先在 replay 里压测。
 
 LightGBM GPU 主线还需要这些配置：
 

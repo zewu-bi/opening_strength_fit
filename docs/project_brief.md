@@ -8,7 +8,7 @@
 
 样本粒度是 `trading day x symbol x opening timestamp`。模型既可以研究单股票开盘阶段的短周期强弱变化，也可以在同一 decision point 下进行多股票横截面排序。
 
-注意：A 股 T+1 下，当前 60s label 不是最终可交易收益，而是 short-horizon proxy label。当前阶段先完成 short-horizon alpha discovery：确认 opening predictor 对 60s proxy label 是否有稳定横截面排序力，并量化延迟、成本和执行约束下的衰减。真实选股价值与 T+1 label 属于后续阶段，不是当前工作重点。
+注意：A 股 T+1 下，当前 60s label 不是最终可交易收益，而是 short-horizon proxy label，用于发现 opening microstructure 中是否存在具有 longer-horizon persistence 的高频信号。真实选股价值需要后续接日频/T+1 label 再验证。
 
 ---
 
@@ -25,32 +25,18 @@
 
 ---
 
-## 研究路线
+## 后续研究路线
 
-### 当前阶段：Short-horizon alpha discovery
+1. **Short-horizon alpha discovery**
+   继续使用当前高频 proxy label，验证开盘短周期横截面 alpha 是否稳定，并观察 `entry_tick_delay`、fee、容量与成交约束下的衰减。
 
-继续使用当前 60s proxy label，把开盘短周期信号发现闭环做扎实。当前阶段的核心问题不是“能不能直接实盘交易”，而是：
+2. **Alpha horizon decay / extension**
+   构造 30s、60s、5min、close、next open、next close 等 label，研究 opening predictor 的 alpha decay curve 与 horizon persistence。
 
-- opening predictor 对 `date x decision_target_timestamp` 横截面是否有稳定排序力；
-- `entry_tick_delay = 1/2` 后，IC、bucket 单调性、Top/Bottom label spread 和 TopN label mean 衰减多少；
-- 普通 universe 与 opening-strength candidate 分支，哪个更稳；
-- fee、slippage、交易状态、spread、容量、参与率、同股每日最多一次等执行约束下，short-horizon replay 是否仍支持信号方向性；
-- labeled feature cache 与 LightGBM GPU 流程是否足够稳定，能支持后续批量实验。
+3. **Daily alpha feature / overlay**
+   如果高频 predictor 存在 longer-horizon persistence，将 `09:30-09:40` 的 score 聚合成 stock-day feature，例如 `opening_strength_score`、`opening_score_mean/max`、`top_rank_count` 等，再接入日频模型或 portfolio optimizer。
 
-当前阶段的完成标准：
-
-- delay1/delay2 的 LightGBM 普通 universe 与 strong candidate 四个主线实验完成并归档；
-- 主要结论基于 IC、rank IC IR、score bucket、Top/Bottom spread、TopN label mean/win rate 和约束后 replay diagnostics；
-- compounded return 只作为 proxy replay 的诊断输出，不作为主结论或策略收益表达；
-- 明确哪些约束属于训练 label/feature 口径，哪些只属于 replay/执行口径。
-
-### 暂缓阶段：Alpha horizon extension
-
-只有当 short-horizon alpha discovery 的结论足够稳定，才构造 30s、60s、5min、close、next open、next close 等 label，研究 opening predictor 的 alpha decay curve 与 horizon persistence。这个阶段暂不作为当前任务展开。
-
-### 暂缓阶段：Daily alpha feature / overlay
-
-只有当 horizon extension 证明 signal 在 T+1/next-open 等可交易口径下仍保留排序力，才考虑把 `09:30-09:40` 的 score 聚合成 stock-day feature，例如 `opening_strength_score`、`opening_score_mean/max`、`top_rank_count` 等，再接入日频模型或 portfolio optimizer。
+当前 active work 是第 1 步。第 1 步完成并归档前，不推进第 2、3 步。
 
 ---
 
@@ -162,6 +148,12 @@ X 只能使用 decision point 当时及此前可见的信息。
 - 回测需要显式处理成本、滑点、成交容量/参与率、重复持仓或同股冷却。
 - 组合选择需要约束 TopN、单票权重和未选满现金处理。
 - 涨跌停、停牌、交易状态、spread 和流动性过滤应作为执行约束，不应混进未来信息。
+
+训练/replay 边界：
+
+- 改变 label 或训练样本域的口径进训练：`entry_tick_delay`、horizon、universe/candidate、label 有效性、固定部署硬过滤。
+- 只改变下单、成交、成本或选股后的约束先放 replay：fee、slippage、spread、容量/参与率、交易状态、涨停距离、同股每日最多一次。
+- 当前先单独跑 delay1/delay2；其他约束在同一批 predictions 上统一压测。
 
 ---
 
