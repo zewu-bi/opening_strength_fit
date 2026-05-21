@@ -123,7 +123,8 @@ label = sell_vwap / buy_price - 1 - fee_bps / 10000
 退出窗口内有正成交量/成交额，并可按 `[filters].tradable_statuses` 约束交易状态。
 
 训练/replay 边界：改变 label 或样本域的口径进训练；只改变执行、成本、容量或选股后的约束先放 replay。
-当前先跑 delay1/delay2，fee/slippage/spread/容量/状态/同股一次等约束用同一批 predictions 压测。
+当前先跑 delay1/delay2；也支持用瘦 prediction + replay context 复算 delay realized label。
+fee/slippage/spread/容量/状态/同股一次等约束用同一批 predictions 压测。
 fee 和滑点对固定入选交易是确定性 haircut，当前不需要为 fee 立刻重训；只有当研究目标变成
 net label 排序、成本改变样本有效性，或 fee/slippage 与成交容量一起改变训练样本域时，才另开训练分支。
 
@@ -201,7 +202,8 @@ metrics_by_month.csv / metrics_by_month.parquet  # monthly rolling 时生成
 | 交易状态 | 训练用 `[filters].tradable_statuses` 控制 label 有效性；replay 再检查 `status` / `entry_status`。 |
 | decision/entry lag | replay 用 `--max-decision-lag-seconds` / `--max-entry-lag-seconds` 控制 tick 新鲜度。 |
 | spread / 一档深度 | replay 用 `--max-spread-bps`、`--min-ask-volume-1`、`--min-bid-volume-1`。 |
-| 涨停距离 | 若 prediction 有 `ask1_to_limit_up_bps`，replay 用 `--min-limit-up-room-bps`。 |
+| entry 卖盘容量 | replay 用 prediction 自带或 `--context-input` 补齐的 `entry_ask_price_1..10` / `entry_ask_volume_1..10` 检查目标金额能否在 entry tick 的卖盘中成交；十档 sweep 场景会用 sweep VWAP 修正收益。 |
+| 涨停距离 | 若 prediction 或 `--context-input` 有 `ask1_to_limit_up_bps`，replay 用 `--min-limit-up-room-bps`。 |
 | 容量/参与率 | replay 用 `turnover_diff_30t` 等可见 notional proxy、`--capital-per-cycle` 和 `--max-participation-rate`。 |
 | TopN/现金/单票 | replay 控制 `--top-n`、`--max-symbol-weight`，未选满资金留现金。 |
 | 同股重复/冷却 | replay 控制 `--max-symbol-trades-per-day`、`--symbol-cooldown-minutes`。 |
@@ -348,10 +350,14 @@ python scripts/run_opening_intraday_backtest.py \
   --output-dir output/reports/opening_intraday_top20_lgbm_delay1_constrained
 ```
 
-新预测产物会额外带上 `status`、`entry_status`、`spread_bps`、`turnover_diff_30t` 等上下文列；
-有这些列后可以继续加 `--tradable-status`、`--max-spread-bps`、`--min-capacity-notional`
-和 `--max-participation-rate` 做更严格的成交约束。旧归档 prediction 文件没有这些上下文列，
-只能复算成本和同股重复交易约束。
+新预测产物可能额外带上 `status`、`entry_status`、`spread_bps`、`turnover_diff_30t` 等上下文列；
+有这些列，或用 `--context-input` 补齐这些列后，可以继续加 `--tradable-status`、`--max-spread-bps`、
+`--min-capacity-notional` 和 `--max-participation-rate` 做更严格的成交约束。旧归档 prediction 文件
+如果不传 context，只能复算成本和同股重复交易约束。
+prediction 如果已经带 `entry_ask_price_1..10` 和 `entry_ask_volume_1..10`，replay 会直接使用；
+旧的瘦 prediction 也可以通过 `--context-input` 指向 raw tick 或 labeled research dataset 来补齐这些
+执行上下文；`--context-label-mode replace` 会用 context label 作为 replay PnL，同时保留
+`prediction_label` 便于审计，用于区分“时间漂移后的 entry price”和“entry tick 上的真实卖盘容量”。
 
 LightGBM delay1/delay2 predictions 全部拉回后，可以直接跑标准 replay 网格：
 

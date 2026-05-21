@@ -10,9 +10,11 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 import _bootstrap  # noqa: F401
+from opening_strength_fit.dataset import build_labeled_feature_frame, load_ticks
 
 
 DEFAULT_RUNS = (
@@ -71,6 +73,47 @@ def parse_args() -> argparse.Namespace:
         help="Minutes from entry to realized exit point for plotting.",
     )
     parser.add_argument(
+        "--context-input",
+        default="",
+        help=(
+            "Optional raw tick or labeled research parquet/csv root used to enrich "
+            "prediction rows with replay-only execution context."
+        ),
+    )
+    parser.add_argument(
+        "--context-kind",
+        choices=["auto", "raw_ticks", "labeled"],
+        default="auto",
+        help="Whether --context-input is raw ticks or an already labeled research dataset.",
+    )
+    parser.add_argument(
+        "--context-entry-tick-delay",
+        type=int,
+        default=0,
+        help="Entry tick delay used when deriving replay context from raw ticks.",
+    )
+    parser.add_argument(
+        "--context-entry-max-gap-seconds",
+        type=int,
+        default=None,
+        help="Maximum decision-to-entry tick gap when deriving context from raw ticks.",
+    )
+    parser.add_argument(
+        "--context-decision-max-lag-seconds",
+        type=int,
+        default=5,
+        help="Decision point sampling lag when deriving context from raw ticks.",
+    )
+    parser.add_argument(
+        "--context-label-mode",
+        choices=["keep", "fill", "replace"],
+        default="replace",
+        help=(
+            "How to use label from --context-input: keep prediction label, fill only "
+            "missing labels, or replace prediction label for replay PnL."
+        ),
+    )
+    parser.add_argument(
         "--fee-bps",
         type=float,
         default=0.0,
@@ -121,6 +164,41 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.0,
         help="Capital in CNY for per-name participation checks.",
+    )
+    parser.add_argument(
+        "--ask-depth-levels",
+        type=int,
+        default=0,
+        help=(
+            "Number of entry ask levels to use for displayed sell-side depth. "
+            "0 disables ask-depth execution checks."
+        ),
+    )
+    parser.add_argument(
+        "--ask-depth-participation-rate",
+        type=float,
+        default=1.0,
+        help=(
+            "Usable fraction of displayed ask-side depth when --ask-depth-levels "
+            "is set; must be in (0, 1]."
+        ),
+    )
+    parser.add_argument(
+        "--ask-depth-fill-mode",
+        choices=["filter", "scale", "sweep"],
+        default="filter",
+        help=(
+            "filter drops rows without enough ask depth; scale partially fills and leaves "
+            "cash; sweep requires enough depth and adjusts returns by sweep VWAP."
+        ),
+    )
+    parser.add_argument(
+        "--allow-decision-depth-fallback",
+        action="store_true",
+        help=(
+            "Use decision-time ask_price/ask_volume columns when entry_ask_* columns "
+            "are missing. Prefer leaving this off for delay experiments."
+        ),
     )
     parser.add_argument(
         "--max-symbol-trades-per-day",
@@ -214,6 +292,128 @@ def slot_weight(*, top_n: int, max_symbol_weight: float) -> float:
     return weight
 
 
+def _positive_notional(price: pd.Series, volume: pd.Series) -> pd.Series:
+    price = pd.to_numeric(price, errors="coerce")
+    volume = pd.to_numeric(volume, errors="coerce")
+    return (price * volume).where(price.gt(0) & volume.gt(0), 0.0)
+
+
+def ask_depth_column_pairs(
+    frame: pd.DataFrame,
+    *,
+    levels: int,
+    allow_decision_fallback: bool,
+    run_label: str,
+    missing_policy: str,
+) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
+    for level in range(1, int(levels) + 1):
+        entry_price_col = f"entry_ask_price_{level}"
+        entry_volume_col = f"entry_ask_volume_{level}"
+        decision_price_col = f"ask_price_{level}"
+        decision_volume_col = f"ask_volume_{level}"
+        if entry_price_col in frame.columns and entry_volume_col in frame.columns:
+            pairs.append((entry_price_col, entry_volume_col))
+            continue
+        if (
+            allow_decision_fallback
+            and decision_price_col in frame.columns
+            and decision_volume_col in frame.columns
+        ):
+            pairs.append((decision_price_col, decision_volume_col))
+            continue
+        _handle_missing_column(
+            f"{entry_price_col}/{entry_volume_col}",
+            run_label=run_label,
+            constraint="entry ask-depth execution",
+            policy=missing_policy,
+        )
+        break
+    return pairs
+
+
+def add_ask_depth_execution_columns(
+    frame: pd.DataFrame,
+    *,
+    pairs: list[tuple[str, str]],
+    target_notional: float,
+    participation_rate: float,
+    fill_mode: str,
+) -> pd.DataFrame:
+    work = frame.copy()
+    usable_rate = float(participation_rate)
+    if usable_rate <= 0 or usable_rate > 1:
+        raise SystemExit("--ask-depth-participation-rate must be in (0, 1]")
+
+    level_notional = []
+    for price_col, volume_col in pairs:
+        level_notional.append(_positive_notional(work[price_col], work[volume_col]))
+    if not level_notional:
+        return work
+
+    depth_notional = sum(level_notional)
+    usable_depth = depth_notional * usable_rate
+    work["_ask_depth_levels"] = len(pairs)
+    work["_ask_depth_notional"] = depth_notional
+    work["_ask_depth_usable_notional"] = usable_depth
+    work["_ask_depth_target_notional"] = float(target_notional)
+
+    target = float(target_notional)
+    if target <= 0:
+        raise SystemExit("--capital-per-cycle must be positive when --ask-depth-levels is set")
+
+    if fill_mode == "scale":
+        fill_ratio = (usable_depth / target).clip(lower=0.0, upper=1.0)
+        work["_depth_fill_ratio"] = fill_ratio.where(fill_ratio.notna(), 0.0)
+        return work
+
+    enough_depth = usable_depth.ge(target)
+    work["_depth_fill_ratio"] = enough_depth.astype("float64")
+    if fill_mode != "sweep" or not enough_depth.any():
+        return work
+
+    price_matrix = work[[price_col for price_col, _ in pairs]].apply(
+        pd.to_numeric,
+        errors="coerce",
+    ).to_numpy(dtype="float64")
+    volume_matrix = work[[volume_col for _, volume_col in pairs]].apply(
+        pd.to_numeric,
+        errors="coerce",
+    ).to_numpy(dtype="float64")
+    valid = (price_matrix > 0) & (volume_matrix > 0)
+    level_capacity = np.where(valid, price_matrix * volume_matrix * usable_rate, 0.0)
+
+    remaining = np.full(len(work), target, dtype="float64")
+    spent = np.zeros(len(work), dtype="float64")
+    shares = np.zeros(len(work), dtype="float64")
+    for level_idx in range(level_capacity.shape[1]):
+        take = np.minimum(remaining, level_capacity[:, level_idx])
+        price = price_matrix[:, level_idx]
+        level_shares = np.divide(
+            take,
+            price,
+            out=np.zeros_like(take),
+            where=price > 0,
+        )
+        shares += level_shares
+        spent += take
+        remaining -= take
+
+    sweep_price = np.divide(
+        spent,
+        shares,
+        out=np.full_like(spent, np.nan),
+        where=shares > 0,
+    )
+    work["_sweep_buy_price"] = sweep_price
+    if "buy_price" in work.columns:
+        buy_price = pd.to_numeric(work["buy_price"], errors="coerce")
+        work["_depth_price_impact_bps"] = (
+            (pd.Series(sweep_price, index=work.index) / buy_price - 1.0) * 10_000.0
+        )
+    return work
+
+
 def clock_timestamp(value: str) -> pd.Timestamp:
     return pd.Timestamp(f"2000-01-01 {normalize_time(value)}")
 
@@ -241,6 +441,127 @@ def load_predictions(path: Path, *, score_col: str, label_col: str) -> pd.DataFr
     return work.loc[valid].copy()
 
 
+def _looks_labeled_context(frame: pd.DataFrame) -> bool:
+    return {"date", "symbol", "timestamp", "label"}.issubset(frame.columns)
+
+
+def load_replay_context(
+    path: str,
+    *,
+    kind: str,
+    entry_times: list[str],
+    entry_tick_delay: int,
+    entry_max_gap_seconds: int | None,
+    decision_max_lag_seconds: int | None,
+) -> pd.DataFrame:
+    if not path:
+        return pd.DataFrame()
+    frame = load_ticks(path)
+    if kind == "labeled" or (kind == "auto" and _looks_labeled_context(frame)):
+        return frame
+    if kind not in {"auto", "raw_ticks"}:
+        raise SystemExit(
+            f"unknown context kind {kind!r}; expected auto, raw_ticks, or labeled"
+        )
+    return build_labeled_feature_frame(
+        frame,
+        entry_tick_delay=int(entry_tick_delay),
+        entry_max_gap_seconds=entry_max_gap_seconds,
+        sample_mode="decision_points",
+        decision_times=entry_times,
+        decision_max_lag_seconds=decision_max_lag_seconds,
+    )
+
+
+def enrich_predictions_with_context(
+    predictions: pd.DataFrame,
+    context: pd.DataFrame,
+    *,
+    run_label: str,
+    label_col: str,
+    context_label_mode: str,
+) -> pd.DataFrame:
+    if context.empty:
+        return predictions
+    context_time_col = (
+        "decision_target_timestamp"
+        if "decision_target_timestamp" in context.columns
+        else "timestamp"
+    )
+    required = {"date", "symbol", context_time_col}
+    missing = required.difference(context.columns)
+    if missing:
+        raise SystemExit(
+            f"context input missing required columns for replay enrichment: {sorted(missing)}"
+        )
+
+    left = predictions.copy()
+    ctx = context.copy()
+    ctx["date"] = pd.to_datetime(ctx["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    ctx["symbol"] = ctx["symbol"].astype(str)
+    ctx["_decision_ts"] = pd.to_datetime(ctx[context_time_col], errors="coerce")
+    ctx["_context_matched"] = True
+
+    exclude = {"label", "prediction", "valid_label"}
+    value_columns = [
+        column
+        for column in ctx.columns
+        if column not in {"date", "symbol", "_decision_ts"}
+        and column not in exclude
+        and not str(column).startswith("_")
+    ]
+    ctx = ctx.dropna(subset=["date", "symbol", "_decision_ts"])
+    ctx = ctx.sort_values(["date", "symbol", "_decision_ts"]).drop_duplicates(
+        ["date", "symbol", "_decision_ts"],
+        keep="last",
+    )
+    before_columns = set(left.columns)
+    merged = left.merge(
+        ctx[["date", "symbol", "_decision_ts", "_context_matched", *value_columns]],
+        on=["date", "symbol", "_decision_ts"],
+        how="left",
+        suffixes=("", "_context"),
+    )
+    if "label" in ctx.columns and label_col in merged.columns:
+        label_context = (
+            ctx[["date", "symbol", "_decision_ts", "label"]]
+            .rename(columns={"label": "_context_label"})
+        )
+        merged = merged.merge(
+            label_context,
+            on=["date", "symbol", "_decision_ts"],
+            how="left",
+        )
+        context_label = pd.to_numeric(merged["_context_label"], errors="coerce")
+        if context_label_mode == "replace":
+            merged["_prediction_label"] = merged[label_col]
+            merged[label_col] = context_label.combine_first(merged[label_col])
+        elif context_label_mode == "fill":
+            merged["_prediction_label"] = merged[label_col]
+            merged[label_col] = pd.to_numeric(
+                merged[label_col],
+                errors="coerce",
+            ).combine_first(context_label)
+        elif context_label_mode != "keep":
+            raise SystemExit(f"unknown context label mode: {context_label_mode!r}")
+        merged = merged.drop(columns=["_context_label"])
+    for column in value_columns:
+        context_column = f"{column}_context"
+        if context_column in merged.columns:
+            merged[column] = merged[column].combine_first(merged[context_column])
+            merged = merged.drop(columns=[context_column])
+
+    matched = merged["_context_matched"].fillna(False).astype(bool).sum()
+    merged = merged.drop(columns=["_context_matched"])
+    added = sorted(set(merged.columns).difference(before_columns))
+    print(
+        f"{run_label}: replay_context_enriched "
+        f"matched_rows={int(matched):,}/{len(merged):,} added_columns={len(added)} "
+        f"label_mode={context_label_mode}"
+    )
+    return merged
+
+
 def apply_static_constraints(
     frame: pd.DataFrame,
     *,
@@ -262,6 +583,10 @@ def apply_static_constraints(
     min_capacity_notional: float,
     max_participation_rate: float,
     capital_per_cycle: float,
+    ask_depth_levels: int,
+    ask_depth_participation_rate: float,
+    ask_depth_fill_mode: str,
+    allow_decision_depth_fallback: bool,
     max_symbol_weight: float,
     missing_policy: str,
 ) -> pd.DataFrame:
@@ -394,6 +719,48 @@ def apply_static_constraints(
                 work["_capacity_target_notional"] = target_notional
                 mask &= (capacity * float(max_participation_rate)).ge(target_notional)
 
+    if int(ask_depth_levels) > 0:
+        if float(capital_per_cycle) <= 0:
+            raise SystemExit(
+                "--capital-per-cycle must be positive when --ask-depth-levels is set"
+            )
+        target_notional = float(capital_per_cycle) * slot_weight(
+            top_n=top_n,
+            max_symbol_weight=max_symbol_weight,
+        )
+        pairs = ask_depth_column_pairs(
+            work,
+            levels=int(ask_depth_levels),
+            allow_decision_fallback=allow_decision_depth_fallback,
+            run_label=run_label,
+            missing_policy=missing_policy,
+        )
+        if len(pairs) < int(ask_depth_levels):
+            raise SystemExit(
+                f"{run_label}: ask-depth execution requested {int(ask_depth_levels)} "
+                f"levels but only found {len(pairs)} usable level(s). Provide "
+                "--context-input or predictions with entry_ask_price/entry_ask_volume "
+                "context columns, reduce "
+                "--ask-depth-levels, or use --allow-decision-depth-fallback for "
+                "non-delay diagnostics."
+            )
+        if pairs:
+            work = add_ask_depth_execution_columns(
+                work,
+                pairs=pairs,
+                target_notional=target_notional,
+                participation_rate=float(ask_depth_participation_rate),
+                fill_mode=ask_depth_fill_mode,
+            )
+            if ask_depth_fill_mode in {"filter", "sweep"}:
+                mask &= work["_ask_depth_usable_notional"].ge(target_notional)
+            elif ask_depth_fill_mode == "scale":
+                mask &= work["_depth_fill_ratio"].gt(0)
+            else:
+                raise SystemExit(
+                    f"unknown ask depth fill mode: {ask_depth_fill_mode!r}"
+                )
+
     total_cost_bps = float(fee_bps) + float(slippage_bps)
     work["_cost_bps"] = total_cost_bps
     return work.loc[mask].copy()
@@ -410,6 +777,8 @@ def run_backtest(
     runs: list[tuple[str, Path]],
     *,
     entry_times: list[str],
+    context_frame: pd.DataFrame | None,
+    context_label_mode: str,
     cycle_minutes: int,
     top_n: int,
     fee_bps: float,
@@ -428,6 +797,10 @@ def run_backtest(
     min_capacity_notional: float,
     max_participation_rate: float,
     capital_per_cycle: float,
+    ask_depth_levels: int,
+    ask_depth_participation_rate: float,
+    ask_depth_fill_mode: str,
+    allow_decision_depth_fallback: bool,
     max_symbol_trades_per_day: int,
     symbol_cooldown_minutes: int,
     max_symbol_weight: float,
@@ -442,6 +815,14 @@ def run_backtest(
 
     for label, path in runs:
         predictions = load_predictions(path, score_col=score_col, label_col=label_col)
+        if context_frame is not None and not context_frame.empty:
+            predictions = enrich_predictions_with_context(
+                predictions,
+                context_frame,
+                run_label=label,
+                label_col=label_col,
+                context_label_mode=context_label_mode,
+            )
         predictions = predictions.loc[predictions["entry_time"].isin(entry_times)].copy()
         if predictions.empty:
             raise SystemExit(f"{label}: no prediction rows after filtering entry times")
@@ -465,6 +846,10 @@ def run_backtest(
             min_capacity_notional=min_capacity_notional,
             max_participation_rate=max_participation_rate,
             capital_per_cycle=capital_per_cycle,
+            ask_depth_levels=ask_depth_levels,
+            ask_depth_participation_rate=ask_depth_participation_rate,
+            ask_depth_fill_mode=ask_depth_fill_mode,
+            allow_decision_depth_fallback=allow_decision_depth_fallback,
             max_symbol_weight=max_symbol_weight,
             missing_policy=missing_policy,
         )
@@ -510,7 +895,32 @@ def run_backtest(
                     )
                     selected["rank"] = range(1, len(selected) + 1)
                     selected["weight"] = per_symbol_weight
-                    selected["net_label"] = selected[label_col] - cost_return
+                    if "_depth_fill_ratio" in selected.columns:
+                        selected["weight"] = selected["weight"] * pd.to_numeric(
+                            selected["_depth_fill_ratio"],
+                            errors="coerce",
+                        ).fillna(1.0).clip(lower=0.0, upper=1.0)
+                    selected["execution_label"] = pd.to_numeric(
+                        selected[label_col],
+                        errors="coerce",
+                    )
+                    if (
+                        "_sweep_buy_price" in selected.columns
+                        and "buy_price" in selected.columns
+                    ):
+                        buy_price = pd.to_numeric(selected["buy_price"], errors="coerce")
+                        sweep_buy_price = pd.to_numeric(
+                            selected["_sweep_buy_price"],
+                            errors="coerce",
+                        )
+                        valid_sweep = buy_price.gt(0) & sweep_buy_price.gt(0)
+                        selected.loc[valid_sweep, "execution_label"] = (
+                            (1.0 + selected.loc[valid_sweep, label_col].astype("float64"))
+                            * buy_price.loc[valid_sweep]
+                            / sweep_buy_price.loc[valid_sweep]
+                            - 1.0
+                        )
+                    selected["net_label"] = selected["execution_label"] - cost_return
                     selected_count = int(len(selected))
                     cycle_return = float((selected["net_label"] * selected["weight"]).sum())
                     median_return = float(selected["net_label"].median())
@@ -533,9 +943,52 @@ def run_backtest(
                                 "symbol": symbol,
                                 "weight": float(row["weight"]),
                                 "prediction": float(row[score_col]),
+                                "prediction_label": (
+                                    float(row["_prediction_label"])
+                                    if "_prediction_label" in row
+                                    and pd.notna(row["_prediction_label"])
+                                    else float("nan")
+                                ),
                                 "label": float(row[label_col]),
+                                "execution_label": float(row["execution_label"]),
                                 "net_label": float(row["net_label"]),
                                 "cost_bps": float(row["_cost_bps"]),
+                                "depth_fill_ratio": (
+                                    float(row["_depth_fill_ratio"])
+                                    if "_depth_fill_ratio" in row
+                                    and pd.notna(row["_depth_fill_ratio"])
+                                    else float("nan")
+                                ),
+                                "ask_depth_notional": (
+                                    float(row["_ask_depth_notional"])
+                                    if "_ask_depth_notional" in row
+                                    and pd.notna(row["_ask_depth_notional"])
+                                    else float("nan")
+                                ),
+                                "ask_depth_usable_notional": (
+                                    float(row["_ask_depth_usable_notional"])
+                                    if "_ask_depth_usable_notional" in row
+                                    and pd.notna(row["_ask_depth_usable_notional"])
+                                    else float("nan")
+                                ),
+                                "ask_depth_target_notional": (
+                                    float(row["_ask_depth_target_notional"])
+                                    if "_ask_depth_target_notional" in row
+                                    and pd.notna(row["_ask_depth_target_notional"])
+                                    else float("nan")
+                                ),
+                                "sweep_buy_price": (
+                                    float(row["_sweep_buy_price"])
+                                    if "_sweep_buy_price" in row
+                                    and pd.notna(row["_sweep_buy_price"])
+                                    else float("nan")
+                                ),
+                                "depth_price_impact_bps": (
+                                    float(row["_depth_price_impact_bps"])
+                                    if "_depth_price_impact_bps" in row
+                                    and pd.notna(row["_depth_price_impact_bps"])
+                                    else float("nan")
+                                ),
                                 "capacity_notional": (
                                     float(row["_capacity_notional"])
                                     if "_capacity_notional" in row
@@ -692,10 +1145,20 @@ def main() -> None:
     entry_times = [normalize_time(value) for value in (args.entry_times or DEFAULT_ENTRY_TIMES)]
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    context_frame = load_replay_context(
+        args.context_input,
+        kind=args.context_kind,
+        entry_times=entry_times,
+        entry_tick_delay=args.context_entry_tick_delay,
+        entry_max_gap_seconds=args.context_entry_max_gap_seconds,
+        decision_max_lag_seconds=args.context_decision_max_lag_seconds,
+    )
 
     cycles, selected = run_backtest(
         runs,
         entry_times=entry_times,
+        context_frame=context_frame,
+        context_label_mode=args.context_label_mode,
         cycle_minutes=args.cycle_minutes,
         top_n=args.top_n,
         fee_bps=args.fee_bps,
@@ -714,6 +1177,10 @@ def main() -> None:
         min_capacity_notional=args.min_capacity_notional,
         max_participation_rate=args.max_participation_rate,
         capital_per_cycle=args.capital_per_cycle,
+        ask_depth_levels=args.ask_depth_levels,
+        ask_depth_participation_rate=args.ask_depth_participation_rate,
+        ask_depth_fill_mode=args.ask_depth_fill_mode,
+        allow_decision_depth_fallback=args.allow_decision_depth_fallback,
         max_symbol_trades_per_day=args.max_symbol_trades_per_day,
         symbol_cooldown_minutes=args.symbol_cooldown_minutes,
         max_symbol_weight=args.max_symbol_weight,
@@ -748,6 +1215,12 @@ def main() -> None:
         "top_n": args.top_n,
         "entry_times": entry_times,
         "cycle_minutes": args.cycle_minutes,
+        "context_input": args.context_input,
+        "context_kind": args.context_kind,
+        "context_entry_tick_delay": args.context_entry_tick_delay,
+        "context_entry_max_gap_seconds": args.context_entry_max_gap_seconds,
+        "context_decision_max_lag_seconds": args.context_decision_max_lag_seconds,
+        "context_label_mode": args.context_label_mode,
         "fee_bps": args.fee_bps,
         "slippage_bps": args.slippage_bps,
         "tradable_statuses": sorted(parse_status_values(args.tradable_statuses)),
@@ -764,6 +1237,10 @@ def main() -> None:
         "min_capacity_notional": args.min_capacity_notional,
         "max_participation_rate": args.max_participation_rate,
         "capital_per_cycle": args.capital_per_cycle,
+        "ask_depth_levels": args.ask_depth_levels,
+        "ask_depth_participation_rate": args.ask_depth_participation_rate,
+        "ask_depth_fill_mode": args.ask_depth_fill_mode,
+        "allow_decision_depth_fallback": args.allow_decision_depth_fallback,
         "max_symbol_trades_per_day": args.max_symbol_trades_per_day,
         "symbol_cooldown_minutes": args.symbol_cooldown_minutes,
         "max_symbol_weight": args.max_symbol_weight,

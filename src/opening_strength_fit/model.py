@@ -11,6 +11,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from opening_strength_fit.evaluation import resolve_group_cols
+from opening_strength_fit.schema import PRICE_LEVELS
 
 
 NON_FEATURE_COLUMNS = {
@@ -41,6 +42,14 @@ LEAKY_PREFIXES = (
     "volume_sell_",
     "turnover_sell_",
     "timestamp_entry",
+    "entry_ask_price_",
+    "entry_ask_volume_",
+)
+
+ENTRY_ASK_CONTEXT_COLUMNS = tuple(
+    column
+    for level in PRICE_LEVELS
+    for column in (f"entry_ask_price_{level}", f"entry_ask_volume_{level}")
 )
 
 PREDICTION_CONTEXT_COLUMNS = (
@@ -76,6 +85,7 @@ PREDICTION_CONTEXT_COLUMNS = (
     "return_10t",
     "return_30t",
     "preopen_return_vs_prev_close",
+    *ENTRY_ASK_CONTEXT_COLUMNS,
 )
 
 

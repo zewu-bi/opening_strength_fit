@@ -19,7 +19,7 @@
 - `universe.py`: A 股股票池正则过滤和正式股票池文件读取 helper。
 - `sampling.py`: `09:30` 到 `09:40` 等整分钟决策点抽样 helper。
 - `features.py`: 盘口、成交、动量和集合竞价基础特征。
-- `labels.py`: 可成交收益 label 计算。
+- `labels.py`: 可成交收益 label 计算，并保留 entry tick 卖盘上下文给 replay 使用。
 - `candidates.py`: 基于当前及过去可见特征的开盘强势候选池过滤。
 - `label_audit.py`: 按年份、月份、分钟段和 fee_bps 统计 label 有效性与分布。
 - `rules.py`: 不训练模型的规则分数 baseline。
@@ -50,7 +50,7 @@
 - `render_k8s_job.py`: 从 TOML config 渲染 training Job 和 reader Job YAML，支持 `--sharded`；会根据 `[k8s.resources].gpu_limit` 渲染 GPU request/limit、GPU toleration 和 node selector。
 - `pull_k8s_metrics.py`: 从 K8s PVC 拉回 `metrics_by_year.csv`。
 - `fetch_k8s_predictions.py`: 从 K8s PVC 拉回 `predictions.parquet` / `predictions_all.parquet`。
-- `run_opening_intraday_backtest.py`: 对 tick predictions 做开盘短周期 TopN 回测，支持成本、滑点、容量、状态、spread 和同股重复交易约束。
+- `run_opening_intraday_backtest.py`: 对 tick predictions 做开盘短周期 TopN 回测，可用 raw tick/labeled context enrich 旧 prediction，支持成本、滑点、容量、entry 卖盘深度、状态、spread 和同股重复交易约束。
 - `run_lgbm_delay_replays.py`: 在拉回 LightGBM delay1/delay2 predictions 后，一键跑标准 constrained replay 场景网格并汇总 `scenario_summary.csv`。
 - `record_experiment.py`: 把 `output/` 里的轻量 metrics 证据归档到 `experiments/results/`。
 

@@ -316,12 +316,19 @@ python scripts/run_opening_intraday_backtest.py \
   --output-dir output/reports/opening_intraday_top20_lgbm_delay1_constrained
 ```
 
-新训练产物会把执行约束上下文列写进 predictions。拿到新 prediction 后，可以打开更严格约束：
+replay 可以从 prediction 自带上下文列或额外 context 数据补齐执行约束。`entry_tick_delay` 分支需要使用
+`entry_ask_price_1..10` 和 `entry_ask_volume_1..10` 建模 entry tick 卖盘容量；如果旧 prediction
+文件缺少这些列，传 `--context-input` 指向 raw tick 或 labeled research dataset，让 replay 按
+`date/symbol/decision_target_timestamp` enrich。拿到 prediction 和 context 后，可以打开更严格约束：
 
 ```bash
 python scripts/run_opening_intraday_backtest.py \
   --run gbm=output/predictions/gbm_opening_1y_next_month_delay1/predictions_all.parquet \
   --run gbm_strong=output/predictions/gbm_opening_1y_next_month_strong_delay1/predictions_all.parquet \
+  --context-input <raw_tick_or_labeled_context_root> \
+  --context-kind auto \
+  --context-entry-tick-delay 1 \
+  --context-label-mode replace \
   --fee-bps 5 \
   --slippage-bps 5 \
   --tradable-status T0 \
@@ -332,17 +339,23 @@ python scripts/run_opening_intraday_backtest.py \
   --min-capacity-notional 100000 \
   --capital-per-cycle 10000000 \
   --max-participation-rate 0.05 \
+  --ask-depth-levels 10 \
+  --ask-depth-fill-mode sweep \
+  --ask-depth-participation-rate 1.0 \
   --max-symbol-trades-per-day 1 \
   --output-dir output/reports/opening_intraday_top20_1y_next_month_delay1_constrained
 ```
 
-旧归档 predictions 没有 `status`、`spread_bps`、`turnover_diff_30t` 等上下文列；这些文件只能用于
-成本、滑点和同股重复交易的复算。
+旧归档 predictions 没有 `status`、`spread_bps`、`turnover_diff_30t` 等上下文列；如果不传
+`--context-input`，这些文件只能用于成本、滑点和同股重复交易的复算。
 
 LightGBM delay1/delay2 四个 prediction 都拉回后，优先跑标准 replay 网格：
 
 ```bash
-python scripts/run_lgbm_delay_replays.py
+python scripts/run_lgbm_delay_replays.py \
+  --context-input <raw_tick_or_labeled_context_root> \
+  --context-kind auto \
+  --context-label-mode replace
 ```
 
 默认读取：
@@ -362,8 +375,8 @@ output/predictions/lgbm_opening_1y_next_month_strong_delay2/predictions_all.parq
 | `cost_10bps` | `fee_bps=5`、`slippage_bps=5`。 |
 | `tradable_cost` | 成本 + `status/entry_status in T0,20,TRADE` + decision/entry lag 不超过 5 秒。 |
 | `liquidity_cost` | tradable + `spread_bps <= 100` + 一档买卖量正数 + 涨停距离至少 5 bps。 |
-| `capacity_10m_5pct` | liquidity + 每 cycle 1000 万资金、单票目标金额不超过 `turnover_diff_30t` 的 5%、最低可见容量 10 万。 |
-| `strict_10m_2pct` | 更严的压力测试：15 bps 成本、`spread_bps <= 50`、涨停距离 10 bps、最低可见容量 20 万、参与率 2%。 |
+| `capacity_10m_5pct` | liquidity + 每 cycle 1000 万资金、单票目标金额不超过 `turnover_diff_30t` 的 5%、最低可见容量 10 万，并要求 entry 十档卖盘能容纳目标金额；收益按十档 sweep VWAP 修正。 |
+| `strict_10m_2pct` | 更严的压力测试：15 bps 成本、`spread_bps <= 50`、涨停距离 10 bps、最低可见容量 20 万、成交额参与率 2%、只使用 50% entry 十档可见卖盘。 |
 
 输出：
 
@@ -380,8 +393,8 @@ output/reports/opening_intraday_lgbm_delay_replays/<delay>/<scenario>/intraday_s
 python scripts/run_lgbm_delay_replays.py --dry-run
 ```
 
-如果某些 optional 字段还没进 prediction，例如 `ask1_to_limit_up_bps`，默认会 warning 并跳过对应约束；
-确认字段都齐以后可以改成严格模式：
+如果某些 optional 字段在 prediction 和 `--context-input` 中都不存在，例如 `ask1_to_limit_up_bps`，
+默认会 warning 并跳过对应约束；确认字段都齐以后可以改成严格模式：
 
 ```bash
 python scripts/run_lgbm_delay_replays.py --missing-constraint error
@@ -389,19 +402,47 @@ python scripts/run_lgbm_delay_replays.py --missing-constraint error
 
 真实约束检查表：
 
+replay 实现上不要为每个真实限制单独造一套模型，优先合并成五类：
+
+```text
+成本 haircut: fee / slippage / 平均冲击成本
+时延和新鲜度: data latency / signal latency / gateway latency / entry tick delay / decision-entry lag
+可交易性: status / entry_status / 涨跌停距离 / 停牌临停
+流动性和成交: spread / 一档深度 / 十档 sweep / capacity / participation / partial fill
+组合调度: TopN / 单票权重 / 现金 / 同股重复 / cooldown / 换手
+```
+
 | 约束 | 字段/参数 | 是否需要重训 |
 | --- | --- | --- |
-| 成交延迟 | `[labels].entry_tick_delay` | 需要，当前 delay1/delay2 已单独训练。 |
+| 成交延迟 | `--context-entry-tick-delay` / `[labels].entry_tick_delay` | replay 可用 raw tick context 重算 realized label；若要让模型训练目标也变成 delay label，再单独训练 delay run。 |
 | fee/slippage | `--fee-bps` / `--slippage-bps` | 通常不需要，先 replay。 |
 | 交易状态 | `status` / `entry_status` / `--tradable-status` | 固定部署硬过滤可重训；压力测试先 replay。 |
 | tick 新鲜度 | `decision_lag_seconds` / `entry_lag_seconds` | 不需要，replay。 |
 | spread | `spread_bps` / `--max-spread-bps` | strong candidate 可进样本域；执行压测先 replay。 |
 | 涨停距离 | `ask1_to_limit_up_bps` / `--min-limit-up-room-bps` | 不需要，除非定义固定交易池。 |
 | 一档挂量 | `ask_volume_1` / `bid_volume_1` | 不需要，replay。 |
+| entry 卖盘容量 | `entry_ask_price_1..10` / `entry_ask_volume_1..10` / `--ask-depth-levels` | 不需要重训模型；prediction 可自带 entry 盘口上下文，也可由 replay `--context-input` enrich；用于 ask1-only 过滤、部分成交或十档 sweep。 |
 | 容量/参与率 | `turnover_diff_30t` / `--max-participation-rate` | 不需要，replay。 |
 | TopN/单票/现金 | `--top-n` / `--max-symbol-weight` | 不需要，replay。 |
 | 同股重复/冷却 | `--max-symbol-trades-per-day` / `--symbol-cooldown-minutes` | 不需要，replay。 |
 | T+1 | close/next-open/next-close label | 需要新的 horizon label，不是当前 60s replay 能解决。 |
+
+Ask-depth replay 参数：
+
+```text
+--context-input <path>  # prediction 很瘦时，从 raw tick/labeled context 补执行字段
+--context-kind auto     # auto/raw_ticks/labeled
+--context-label-mode replace  # 用 context label 作为 replay PnL，保留 prediction_label 便于审计
+--ask-depth-levels 1      # ask1-only
+--ask-depth-levels 10     # 十档卖盘
+--ask-depth-fill-mode filter  # 深度不足则不交易
+--ask-depth-fill-mode scale   # 深度不足则按可成交比例降权，剩余留现金
+--ask-depth-fill-mode sweep   # 深度足够时扫档成交，用 sweep VWAP 修正 label
+--ask-depth-participation-rate 0.5  # 只允许使用可见卖盘的一部分，取值 (0, 1]
+```
+
+默认不要开 `--allow-decision-depth-fallback`。用了 `entry_tick_delay` 后，decision tick 的
+`ask_volume_1` 不能代表真实 entry tick 的可成交量；fallback 只适合旧预测文件的粗略诊断。
 
 ## 10. 分析 Metrics
 

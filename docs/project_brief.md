@@ -159,13 +159,14 @@ X 只能使用 decision point 当时及此前可见的信息。
 
 | 约束 | 当前处理位置 | 说明 |
 | --- | --- | --- |
-| 成交延迟 | 训练 label | `entry_tick_delay = 1/2` 会改变买入价、entry 状态和 future label，必须单独出 prediction。 |
+| 成交延迟 | replay + 可选重训 | replay 可用 raw tick context 和 `--context-entry-tick-delay` 重算 realized label；如果希望模型训练目标也变成 delay label，再单独训练 delay run。 |
 | 手续费/滑点 | replay | 对固定入选交易是确定性收益扣减，用同一批 predictions 施加 `--fee-bps` / `--slippage-bps` 即可；除非要用 net label 重训排序器，否则不需要立刻重训 fee。 |
 | 交易状态 | label + replay | 训练配置用 `[filters].tradable_statuses` 约束 decision/entry label 有效性；replay 可再次要求 `status` / `entry_status`。 |
 | 决策和 entry 新鲜度 | replay | `decision_lag_seconds`、`entry_lag_seconds` 控制目标整分钟到实际 tick 的延迟，避免过旧 tick。 |
 | spread | replay / candidate | strong candidate 可硬过滤 `spread_bps`；正式成交压力测试用 replay 的 `--max-spread-bps`。 |
 | 涨停距离 | replay | 如果上游提供 `limit_up_price` 并生成 `ask1_to_limit_up_bps`，replay 用 `--min-limit-up-room-bps`；没有该列时该约束只能跳过或先补数据源。 |
-| 一档挂量 | replay | 用 `ask_volume_1` / `bid_volume_1` 做最低可见深度过滤，但不等价于完整排队成交模型。 |
+| 一档挂量 | replay | 用 `ask_volume_1` / `bid_volume_1` 做最低可见深度过滤，但这只是存在性检查，不等价于完整成交模型。 |
+| entry 卖盘容量 | replay | 使用 prediction 自带或 replay `--context-input` 补齐的 `entry_ask_price_1..10` / `entry_ask_volume_1..10` 检查目标金额能否在 entry tick 的卖盘里成交；十档 sweep 场景会用 sweep VWAP 修正 label。 |
 | 容量/参与率 | replay | 默认用 `turnover_diff_30t` 作为可见成交额 proxy，结合 `capital_per_cycle` 和 `max_participation_rate` 判断能否容纳单票目标金额。 |
 | TopN/单票权重/现金 | replay | `top_n` 决定目标持仓数；未选满资金留现金；可用 `max_symbol_weight` 限制单票权重。 |
 | 同股重复/冷却 | replay | `max_symbol_trades_per_day` 和 `symbol_cooldown_minutes` 防止同一股票在多个 opening cycle 中反复交易。 |
@@ -177,6 +178,8 @@ X 只能使用 decision point 当时及此前可见的信息。
 - 如果某个执行约束只是改变入选后的收益、容量或现金权重，继续放 replay。
 - 如果某个约束会改变训练样本域、候选池定义或未来 label 本身，再创建新的 run config 重训。
 - fee/slippage 默认先放 replay；只有在研究“扣费后最优排序”或成本显著改变 label 横截面顺序时，才单独训练 net-label 模型。
+- Ask1/十档卖盘不足不要只藏在 slippage 里。slippage 表示平均执行劣化；entry 卖盘容量决定是否能成交、成交多少，以及是否要扫到更高档位。
+- replay-only 约束应支持“瘦 prediction + context input”：prediction 提供 score/key，context 补真实盘口、状态、容量和 realized label。
 
 ---
 

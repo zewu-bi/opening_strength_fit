@@ -8,6 +8,9 @@ import pandas as pd
 from opening_strength_fit.schema import (
     OPEN_SAMPLE_END,
     OPEN_SAMPLE_START,
+    PRICE_LEVELS,
+    ask_price_col,
+    ask_volume_col,
     ensure_timestamp_columns,
     filter_time_range,
 )
@@ -148,8 +151,13 @@ def build_trade_labels(
     work = work.sort_values(["date", "symbol", "timestamp"]).reset_index(drop=True)
 
     entry_value_columns = [buy_price_col]
+    for level in PRICE_LEVELS:
+        for column in (ask_price_col(level), ask_volume_col(level)):
+            if column in work.columns:
+                entry_value_columns.append(column)
     if "status" in work.columns:
         entry_value_columns.append("status")
+    entry_value_columns = list(dict.fromkeys(entry_value_columns))
     entry = _future_tick_values(
         work,
         offset_ticks=int(entry_tick_delay),
@@ -168,6 +176,19 @@ def build_trade_labels(
         entry[f"{buy_price_col}_entry"],
         errors="coerce",
     ).astype("float64")
+    for level in PRICE_LEVELS:
+        price_col = ask_price_col(level)
+        volume_col_name = ask_volume_col(level)
+        if f"{price_col}_entry" in entry.columns:
+            work[f"entry_{price_col}"] = pd.to_numeric(
+                entry[f"{price_col}_entry"],
+                errors="coerce",
+            ).astype("float64")
+        if f"{volume_col_name}_entry" in entry.columns:
+            work[f"entry_{volume_col_name}"] = pd.to_numeric(
+                entry[f"{volume_col_name}_entry"],
+                errors="coerce",
+            ).astype("float64")
     if "status_entry" in entry.columns:
         work["entry_status"] = entry["status_entry"]
 

@@ -11,6 +11,7 @@ import _bootstrap  # noqa: F401
 from run_opening_intraday_backtest import (
     DEFAULT_ENTRY_TIMES,
     build_summary,
+    load_replay_context,
     normalize_time,
     parse_status_values,
     plot_contact_sheet,
@@ -39,6 +40,9 @@ class ReplayScenario:
     min_bid_volume_1: float | None = None
     min_capacity_notional: float = 0.0
     max_participation_rate: float = 0.0
+    ask_depth_levels: int = 0
+    ask_depth_participation_rate: float = 1.0
+    ask_depth_fill_mode: str = "filter"
     max_symbol_trades_per_day: int = 1
     symbol_cooldown_minutes: int = 0
     max_symbol_weight: float = 0.0
@@ -67,7 +71,7 @@ SCENARIOS: dict[str, ReplayScenario] = {
     ),
     "liquidity_cost": ReplayScenario(
         name="liquidity_cost",
-        description="Tradable-cost scenario plus spread, one-level depth, and limit-up room checks.",
+        description="Tradable-cost scenario plus spread, positive top-of-book depth, and limit-up room checks.",
         fee_bps=5.0,
         slippage_bps=5.0,
         tradable_statuses=("T0", "20", "TRADE"),
@@ -81,7 +85,7 @@ SCENARIOS: dict[str, ReplayScenario] = {
     ),
     "capacity_10m_5pct": ReplayScenario(
         name="capacity_10m_5pct",
-        description="Liquidity-cost scenario plus 10mm CNY/cycle and 5% participation cap.",
+        description="Liquidity-cost scenario plus 10mm CNY/cycle, 5% turnover participation, and ten-level ask sweep.",
         fee_bps=5.0,
         slippage_bps=5.0,
         tradable_statuses=("T0", "20", "TRADE"),
@@ -94,10 +98,13 @@ SCENARIOS: dict[str, ReplayScenario] = {
         min_bid_volume_1=1.0,
         min_capacity_notional=100_000.0,
         max_participation_rate=0.05,
+        ask_depth_levels=10,
+        ask_depth_participation_rate=1.0,
+        ask_depth_fill_mode="sweep",
     ),
     "strict_10m_2pct": ReplayScenario(
         name="strict_10m_2pct",
-        description="Stricter spread and participation stress for a 10mm CNY/cycle book.",
+        description="Stricter spread, participation, and displayed ask-depth stress for a 10mm CNY/cycle book.",
         fee_bps=5.0,
         slippage_bps=10.0,
         tradable_statuses=("T0", "20", "TRADE"),
@@ -110,6 +117,9 @@ SCENARIOS: dict[str, ReplayScenario] = {
         min_bid_volume_1=1.0,
         min_capacity_notional=200_000.0,
         max_participation_rate=0.02,
+        ask_depth_levels=10,
+        ask_depth_participation_rate=0.5,
+        ask_depth_fill_mode="sweep",
     ),
 }
 
@@ -158,6 +168,41 @@ def parse_args() -> argparse.Namespace:
         help="CNY capital used by participation-rate scenarios.",
     )
     parser.add_argument(
+        "--context-input",
+        default="",
+        help=(
+            "Optional raw tick or labeled research parquet/csv root used to enrich "
+            "prediction rows with replay-only execution context."
+        ),
+    )
+    parser.add_argument(
+        "--context-kind",
+        choices=["auto", "raw_ticks", "labeled"],
+        default="auto",
+        help="Whether --context-input is raw ticks or an already labeled research dataset.",
+    )
+    parser.add_argument(
+        "--context-entry-max-gap-seconds",
+        type=int,
+        default=None,
+        help="Maximum decision-to-entry tick gap when deriving context from raw ticks.",
+    )
+    parser.add_argument(
+        "--context-decision-max-lag-seconds",
+        type=int,
+        default=5,
+        help="Decision point sampling lag when deriving context from raw ticks.",
+    )
+    parser.add_argument(
+        "--context-label-mode",
+        choices=["keep", "fill", "replace"],
+        default="replace",
+        help=(
+            "How to use label from --context-input: keep prediction label, fill only "
+            "missing labels, or replace prediction label for replay PnL."
+        ),
+    )
+    parser.add_argument(
         "--capacity-notional-col",
         default="turnover_diff_30t",
         help="Visible notional proxy column used by capacity scenarios.",
@@ -168,6 +213,14 @@ def parse_args() -> argparse.Namespace:
         help="Fallback visible volume capacity column.",
     )
     parser.add_argument("--capacity-price-col", default="ask_price_1")
+    parser.add_argument(
+        "--allow-decision-depth-fallback",
+        action="store_true",
+        help=(
+            "Use decision-time ask depth when entry_ask_* columns are absent. "
+            "Prefer leaving this off for delay experiments."
+        ),
+    )
     parser.add_argument(
         "--missing-constraint",
         choices=["error", "warn", "ignore"],
@@ -210,6 +263,13 @@ def prediction_runs(prediction_root: Path, delay: str) -> list[tuple[str, Path]]
     return runs
 
 
+def delay_entry_ticks(delay: str) -> int:
+    token = str(delay).strip().lower()
+    if not token.startswith("delay"):
+        raise SystemExit(f"cannot infer entry tick delay from {delay!r}")
+    return int(token.removeprefix("delay"))
+
+
 def missing_prediction_paths(runs: list[tuple[str, Path]]) -> list[Path]:
     return [path for _, path in runs if not path.exists()]
 
@@ -227,11 +287,14 @@ def replay_scenario(
     output_dir: Path,
     args: argparse.Namespace,
     entry_times: list[str],
+    context_frame: pd.DataFrame | None,
 ) -> pd.DataFrame:
     output_dir.mkdir(parents=True, exist_ok=True)
     cycles, selected = run_backtest(
         runs,
         entry_times=entry_times,
+        context_frame=context_frame,
+        context_label_mode=args.context_label_mode,
         cycle_minutes=args.cycle_minutes,
         top_n=args.top_n,
         fee_bps=scenario.fee_bps,
@@ -250,6 +313,10 @@ def replay_scenario(
         min_capacity_notional=scenario.min_capacity_notional,
         max_participation_rate=scenario.max_participation_rate,
         capital_per_cycle=args.capital_per_cycle,
+        ask_depth_levels=scenario.ask_depth_levels,
+        ask_depth_participation_rate=scenario.ask_depth_participation_rate,
+        ask_depth_fill_mode=scenario.ask_depth_fill_mode,
+        allow_decision_depth_fallback=args.allow_decision_depth_fallback,
         max_symbol_trades_per_day=scenario.max_symbol_trades_per_day,
         symbol_cooldown_minutes=scenario.symbol_cooldown_minutes,
         max_symbol_weight=scenario.max_symbol_weight,
@@ -282,9 +349,18 @@ def replay_scenario(
             "entry_times": entry_times,
             "cycle_minutes": args.cycle_minutes,
             "capital_per_cycle": args.capital_per_cycle,
+            "context_input": args.context_input,
+            "context_kind": args.context_kind,
+            "context_entry_tick_delay": delay_entry_ticks(delay)
+            if args.context_input
+            else None,
+            "context_entry_max_gap_seconds": args.context_entry_max_gap_seconds,
+            "context_decision_max_lag_seconds": args.context_decision_max_lag_seconds,
+            "context_label_mode": args.context_label_mode,
             "capacity_notional_col": args.capacity_notional_col,
             "capacity_volume_col": args.capacity_volume_col,
             "capacity_price_col": args.capacity_price_col,
+            "allow_decision_depth_fallback": args.allow_decision_depth_fallback,
             "missing_constraint": args.missing_constraint,
             "skip_plots": args.skip_plots,
         },
@@ -320,6 +396,18 @@ def main() -> None:
         print(json.dumps({"replay_plan": plan}, indent=2))
         return
 
+    context_by_delay: dict[str, pd.DataFrame] = {}
+    if args.context_input:
+        for delay in delays:
+            context_by_delay[delay] = load_replay_context(
+                args.context_input,
+                kind=args.context_kind,
+                entry_times=entry_times,
+                entry_tick_delay=delay_entry_ticks(delay),
+                entry_max_gap_seconds=args.context_entry_max_gap_seconds,
+                decision_max_lag_seconds=args.context_decision_max_lag_seconds,
+            )
+
     summaries = []
     skipped = []
     for delay in delays:
@@ -345,6 +433,7 @@ def main() -> None:
                     output_dir=output_dir,
                     args=args,
                     entry_times=entry_times,
+                    context_frame=context_by_delay.get(delay),
                 )
             )
 
@@ -366,6 +455,12 @@ def main() -> None:
             "top_n": args.top_n,
             "cycle_minutes": args.cycle_minutes,
             "capital_per_cycle": args.capital_per_cycle,
+            "context_input": args.context_input,
+            "context_kind": args.context_kind,
+            "context_entry_max_gap_seconds": args.context_entry_max_gap_seconds,
+            "context_decision_max_lag_seconds": args.context_decision_max_lag_seconds,
+            "context_label_mode": args.context_label_mode,
+            "allow_decision_depth_fallback": args.allow_decision_depth_fallback,
             "missing_constraint": args.missing_constraint,
             "skipped": skipped,
         },
