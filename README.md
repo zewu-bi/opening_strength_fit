@@ -39,12 +39,12 @@ ClickHouse stock.tick / local tick parquet
 
 ## 文档分工
 
-- `README.md`: 项目入口，给人或 Codex 快速理解研究目标、高层结构、常用命令、实验状态和开发约定。
-- `docs/project_brief.md`: 研究大纲，说明问题定义、baseline 范围、数据、label、特征和评估口径。
-- `docs/project_map.md`: 逐文件职责索引，用于快速定位模块、脚本和实验目录。
-- `docs/runbook.md`: 执行手册，按日常实验顺序写清楚环境检查、本地 smoke、K8s、拉回、回测和归档步骤。
-- `docs/experiment_log.md`: 实验事实和阶段性结论，记录已跑 run、口径变更、关键结果和下一步判断。
-- `experiments/results/README.md`: 说明可提交轻量证据目录，不承载研究叙事。
+- `README.md`: 项目入口。
+- `docs/project_brief.md`: 研究目标、数据、label、特征和评估口径。
+- `docs/project_map.md`: 逐文件职责索引。
+- `docs/runbook.md`: 日常实验操作步骤。
+- `docs/experiment_log.md`: 实验记录和阶段性结论。
+- `experiments/results/README.md`: 轻量证据目录约定。
 
 ## 项目结构
 

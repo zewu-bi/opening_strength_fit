@@ -1,7 +1,5 @@
 # Project Map
 
-这份地图用于快速定位逐文件职责。README 只保留项目入口和高层结构；更细的模块、脚本和实验目录索引放在这里。项目和 `xy_fit` 保持同一层工作流：可复用逻辑放在 `src/opening_strength_fit/`，命令入口放在 `scripts/`，实验事实放在 `experiments/`。
-
 ## 根目录
 
 - `README.md`: 项目目标、高层结构、快速开始、实验记录和当前基线。

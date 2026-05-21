@@ -1,9 +1,5 @@
 # opening_strength_fit Runbook
 
-这份文档是执行手册：按你日常跑实验的顺序组织步骤和命令。研究大纲见
-`docs/project_brief.md`，项目入口见根目录 `README.md`，逐文件职责索引见
-`docs/project_map.md`。
-
 日常实验闭环：检查环境和 ClickHouse 数据，做极小本地 smoke，提交 K8s 训练，拉回 metrics/predictions，回测，分析，归档。
 
 ## 1. 环境准备
