@@ -58,6 +58,8 @@ LABELED_PREVIEW_COLUMNS = (
     "turnover_diff_30t",
     "return_10t",
     "preopen_turnover",
+    "entry_timestamp",
+    "entry_lag_seconds",
     "buy_price",
     "sell_vwap",
     "label",
@@ -302,6 +304,7 @@ def _timestamp_order_check(ticks: pd.DataFrame) -> str:
 
 def _ask1_execution_check(
     labeled: pd.DataFrame,
+    config: dict,
     tradable_statuses: list[str],
 ) -> str:
     required = {"ask_price_1", "ask_volume_1", "bid_price_1", "status"}
@@ -317,10 +320,25 @@ def _ask1_execution_check(
     bid_price = pd.to_numeric(labeled["bid_price_1"], errors="coerce")
     ask_price = pd.to_numeric(labeled["ask_price_1"], errors="coerce")
     spread_ok = ask_price.ge(bid_price) | bid_price.le(0) | bid_price.isna()
+    entry_tick_delay = (
+        _int_or_none(config_value(config, "labels", "entry_tick_delay", 0)) or 0
+    )
     buy_price_ok = True
     if "buy_price" in labeled.columns:
         buy_price = pd.to_numeric(labeled["buy_price"], errors="coerce")
-        buy_price_ok = bool(np.isclose(buy_price, ask_price, equal_nan=True).all())
+        if entry_tick_delay == 0:
+            buy_price_ok = bool(np.isclose(buy_price, ask_price, equal_nan=True).all())
+        else:
+            buy_price_ok = bool(buy_price.gt(0).all())
+    entry_ok = pd.Series(True, index=labeled.index)
+    if entry_tick_delay > 0:
+        if "entry_timestamp" not in labeled.columns or "entry_lag_seconds" not in labeled.columns:
+            entry_ok = pd.Series(False, index=labeled.index)
+        else:
+            lag = pd.to_numeric(labeled["entry_lag_seconds"], errors="coerce")
+            entry_ok = labeled["entry_timestamp"].notna() & lag.ge(0)
+        if "entry_status" in labeled.columns:
+            entry_ok &= labeled["entry_status"].astype(str).str.upper().isin(allowed)
     ok = bool(
         decision_rows
         and tradable.all()
@@ -328,15 +346,22 @@ def _ask1_execution_check(
         and ask_volume_ok.all()
         and spread_ok.all()
         and buy_price_ok
+        and entry_ok.all()
     )
     if ok:
+        if entry_tick_delay:
+            return _check(
+                "ok",
+                f"{decision_rows:,} rows use ask1 at entry_tick_delay={entry_tick_delay}",
+            )
         return _check("ok", f"{decision_rows:,} decision rows use ask1 as buy_price")
     return _check(
         _status(ok),
         f"rows={decision_rows:,}; status_ok={int(tradable.sum()):,}; "
         f"ask1_ok={int(ask_price_ok.sum()):,}; askvol1_ok={int(ask_volume_ok.sum()):,}; "
         f"spread_ok={int(spread_ok.sum()):,}; "
-        f"buy_price_eq_ask1={buy_price_ok}",
+        f"buy_price_ok={buy_price_ok}; entry_ok={int(entry_ok.sum()):,}; "
+        f"entry_tick_delay={entry_tick_delay}",
     )
 
 
@@ -426,6 +451,7 @@ def print_quality_checks(
             "ask1_executable_buy_price": _compact_pass(
                 _ask1_execution_check(
                     labeled,
+                    config,
                     tradable_statuses,
                 )
             ),

@@ -24,6 +24,9 @@ NON_FEATURE_COLUMNS = {
     "decision_time",
     "decision_target_timestamp",
     "decision_lag_seconds",
+    "entry_timestamp",
+    "entry_lag_seconds",
+    "entry_status",
     "label",
     "gross_label",
     "valid_label",
@@ -37,6 +40,42 @@ LEAKY_PREFIXES = (
     "timestamp_sell_",
     "volume_sell_",
     "turnover_sell_",
+    "timestamp_entry",
+)
+
+PREDICTION_CONTEXT_COLUMNS = (
+    "status",
+    "entry_status",
+    "entry_timestamp",
+    "entry_lag_seconds",
+    "gross_label",
+    "buy_price",
+    "volume",
+    "turnover",
+    "ask_price_1",
+    "bid_price_1",
+    "ask_volume_1",
+    "bid_volume_1",
+    "mid_price",
+    "spread_bps",
+    "ask1_to_limit_up_bps",
+    "ask_depth_10",
+    "bid_depth_10",
+    "depth_imbalance_1",
+    "depth_imbalance_10",
+    "volume_diff_1t",
+    "volume_diff_3t",
+    "volume_diff_10t",
+    "volume_diff_30t",
+    "turnover_diff_1t",
+    "turnover_diff_3t",
+    "turnover_diff_10t",
+    "turnover_diff_30t",
+    "preopen_volume",
+    "preopen_turnover",
+    "return_10t",
+    "return_30t",
+    "preopen_return_vs_prev_close",
 )
 
 
@@ -175,6 +214,11 @@ def predict_frame(model: RidgePredictionModel, frame: pd.DataFrame) -> pd.DataFr
         )
         if column in frame
     ]
+    columns.extend(
+        column
+        for column in PREDICTION_CONTEXT_COLUMNS
+        if column in frame and column not in columns
+    )
     out = frame[columns].copy()
     x = frame[model.features].replace([np.inf, -np.inf], np.nan)
     out["prediction"] = model.pipeline.predict(x)

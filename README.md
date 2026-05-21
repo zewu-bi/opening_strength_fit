@@ -322,17 +322,25 @@ python scripts/run_backtest_api.py \
 python scripts/run_opening_intraday_backtest.py \
   --run gbm=output/backtest/gbm_opening_1y_next_month/predictions_all.parquet \
   --run gbm_strong=output/backtest/gbm_opening_1y_next_month_strong/predictions_all.parquet \
-  --run ridge=output/backtest/ridge_opening_1y_next_month/predictions_all.parquet \
-  --run ridge_strong=output/backtest/ridge_opening_1y_next_month_strong/predictions_all.parquet \
-  --output-dir output/reports/opening_intraday_top20_1y_next_month
+  --fee-bps 5 \
+  --slippage-bps 5 \
+  --max-symbol-trades-per-day 1 \
+  --output-dir output/reports/opening_intraday_top20_1y_next_month_constrained
 ```
+
+新预测产物会额外带上 `status`、`entry_status`、`spread_bps`、`turnover_diff_30t` 等上下文列；
+有这些列后可以继续加 `--tradable-status`、`--max-spread-bps`、`--min-capacity-notional`
+和 `--max-participation-rate` 做更严格的成交约束。旧归档 prediction 文件没有这些上下文列，
+只能复算成本和同股重复交易约束。
 
 `output/` 保存本地 parquet、模型对象、图表和临时报告，默认不提交；
 `experiments/results/` 保存 `record_experiment.py` 归档后的轻量 CSV/JSON 证据，适合审计和汇报。
 
 ## 当前实验状态
 
-已有配置覆盖 Ridge/GBM、普通 universe/strong candidate、小窗 smoke、1y next-month 和 H1 rolling。
+已有归档覆盖 Ridge/GBM、普通 universe/strong candidate、小窗 smoke 和 1y next-month。
+后续活跃研究线收敛到 `gbm_opening_1y_next_month` 与
+`gbm_opening_1y_next_month_strong` 两条 GBM 分支。
 截至 `2026-05-21` 的实验索引与口径说明见 [docs/experiment_log.md](docs/experiment_log.md)。
 
 归档的 2021 训练、2022-01 测试结果显示，修正到
@@ -348,10 +356,10 @@ python scripts/run_opening_intraday_backtest.py \
 日频 I500 sanity-check 回测为负，主要说明 tick-level 开盘信号被压成日频 score 后口径不匹配。
 与 label 更一致的开盘短周期 Top20 replay 在 2022-01 单月上为正，普通 GBM 的
 mean cycle return 约 `+42.21 bps`、19 个测试日均为正。这个结果只能说明短周期方向性值得继续验证，
-还需要加入成本、滑点、容量、重复持仓、成交约束以及更长 rolling out-of-sample。
+下一步先在 GBM / GBM strong 上补成本、滑点、容量、同股重复交易和成交状态约束。
 
-注意：部分历史归档结果与当前 config 的 `entry_tick_delay` 设置可能不同；做横向比较时以
-[docs/experiment_log.md](docs/experiment_log.md) 中标注的口径为准。
+注意：已归档结果使用无成交延迟口径（`entry_tick_delay = 0`）。当前 config 已统一为
+`entry_tick_delay = 1`，后续新跑结果不要和旧归档直接横向混比。
 
 ## 开发约定
 

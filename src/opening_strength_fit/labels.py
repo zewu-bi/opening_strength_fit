@@ -21,27 +21,39 @@ def _future_values(
     suffix: str,
     group_columns: Sequence[str] = ("date", "symbol"),
     timestamp_col: str = "timestamp",
+    target_timestamp_col: str | None = None,
     max_gap_seconds: int | None = None,
 ) -> pd.DataFrame:
     tolerance = (
         pd.Timedelta(seconds=max_gap_seconds) if max_gap_seconds is not None else None
     )
     aligned_parts = []
+    target_col = target_timestamp_col or timestamp_col
+
+    out = pd.DataFrame(index=frame.index)
+    out[f"timestamp_{suffix}"] = pd.NaT
+    for column in value_columns:
+        out[f"{column}_{suffix}"] = pd.Series(pd.NA, index=frame.index, dtype="object")
 
     for _, group in frame.groupby(list(group_columns), sort=False, observed=True):
         group = group.sort_values(timestamp_col)
         left = pd.DataFrame(
             {
                 "_row": group.index.to_numpy(),
-                "_target_ts": group[timestamp_col]
+                "_target_ts": group[target_col]
                 + pd.to_timedelta(seconds, unit="s"),
             }
-        )
+        ).dropna(subset=["_target_ts"])
+        left["_target_ts"] = pd.to_datetime(left["_target_ts"]).astype("datetime64[ns]")
         right = (
             group[[timestamp_col, *value_columns]]
+            .dropna(subset=[timestamp_col])
             .rename(columns={timestamp_col: "_future_ts"})
             .sort_values("_future_ts")
         )
+        right["_future_ts"] = pd.to_datetime(right["_future_ts"]).astype("datetime64[ns]")
+        if left.empty or right.empty:
+            continue
         merged = pd.merge_asof(
             left.sort_values("_target_ts"),
             right,
@@ -53,17 +65,57 @@ def _future_values(
         merged = merged.sort_values("_row").set_index("_row")
         aligned_parts.append(merged)
 
-    out = pd.DataFrame(index=frame.index)
     if not aligned_parts:
-        out[f"timestamp_{suffix}"] = pd.NaT
-        for column in value_columns:
-            out[f"{column}_{suffix}"] = np.nan
         return out
 
     aligned = pd.concat(aligned_parts).sort_index()
-    out[f"timestamp_{suffix}"] = aligned["_future_ts"]
+    out.loc[aligned.index, f"timestamp_{suffix}"] = aligned["_future_ts"]
     for column in value_columns:
-        out[f"{column}_{suffix}"] = aligned[column]
+        out.loc[aligned.index, f"{column}_{suffix}"] = aligned[column]
+    return out
+
+
+def _future_tick_values(
+    frame: pd.DataFrame,
+    *,
+    offset_ticks: int,
+    value_columns: Sequence[str],
+    suffix: str,
+    group_columns: Sequence[str] = ("date", "symbol"),
+    timestamp_col: str = "timestamp",
+    max_gap_seconds: int | None = None,
+) -> pd.DataFrame:
+    if offset_ticks < 0:
+        raise SystemExit("entry_tick_delay must be non-negative")
+
+    out = pd.DataFrame(index=frame.index)
+    out[f"timestamp_{suffix}"] = pd.NaT
+    for column in value_columns:
+        out[f"{column}_{suffix}"] = pd.Series(pd.NA, index=frame.index, dtype="object")
+
+    aligned_parts = []
+    for _, group in frame.groupby(list(group_columns), sort=False, observed=True):
+        group = group.sort_values(timestamp_col)
+        shifted = group[[timestamp_col, *value_columns]].shift(-offset_ticks)
+        shifted.index = group.index
+        aligned_parts.append(shifted)
+
+    if not aligned_parts:
+        return out
+
+    aligned = pd.concat(aligned_parts).sort_index()
+    out.loc[aligned.index, f"timestamp_{suffix}"] = aligned[timestamp_col]
+    for column in value_columns:
+        out.loc[aligned.index, f"{column}_{suffix}"] = aligned[column]
+
+    if max_gap_seconds is not None:
+        entry_gap = (
+            out[f"timestamp_{suffix}"] - frame[timestamp_col]
+        ) / pd.Timedelta(seconds=1)
+        valid_gap = entry_gap.notna() & entry_gap.ge(0) & entry_gap.le(max_gap_seconds)
+        out.loc[~valid_gap, f"timestamp_{suffix}"] = pd.NaT
+        for column in value_columns:
+            out.loc[~valid_gap, f"{column}_{suffix}"] = np.nan
     return out
 
 
@@ -77,6 +129,8 @@ def build_trade_labels(
     sell_window_seconds: int = 60,
     volume_unit_multiplier: float = 1.0,
     fee_bps: float = 0.0,
+    entry_tick_delay: int = 0,
+    entry_max_gap_seconds: int | None = None,
     sample_start_time: str = OPEN_SAMPLE_START,
     sample_end_time: str = OPEN_SAMPLE_END,
     max_future_gap_seconds: int | None = None,
@@ -93,12 +147,37 @@ def build_trade_labels(
     work = ensure_timestamp_columns(ticks)
     work = work.sort_values(["date", "symbol", "timestamp"]).reset_index(drop=True)
 
+    entry_value_columns = [buy_price_col]
+    if "status" in work.columns:
+        entry_value_columns.append("status")
+    entry = _future_tick_values(
+        work,
+        offset_ticks=int(entry_tick_delay),
+        value_columns=entry_value_columns,
+        suffix="entry",
+        max_gap_seconds=entry_max_gap_seconds,
+    )
+    work["entry_timestamp"] = pd.to_datetime(
+        entry["timestamp_entry"],
+        errors="coerce",
+    ).astype("datetime64[ns]")
+    work["entry_lag_seconds"] = (
+        work["entry_timestamp"] - work["timestamp"]
+    ) / pd.Timedelta(seconds=1)
+    work["buy_price"] = pd.to_numeric(
+        entry[f"{buy_price_col}_entry"],
+        errors="coerce",
+    ).astype("float64")
+    if "status_entry" in entry.columns:
+        work["entry_status"] = entry["status_entry"]
+
     value_columns = [volume_col, turnover_col]
     sell_start = _future_values(
         work,
         seconds=hold_seconds,
         value_columns=value_columns,
         suffix="sell_start",
+        target_timestamp_col="entry_timestamp",
         max_gap_seconds=max_future_gap_seconds,
     )
     sell_end = _future_values(
@@ -106,6 +185,7 @@ def build_trade_labels(
         seconds=hold_seconds + sell_window_seconds,
         value_columns=value_columns,
         suffix="sell_end",
+        target_timestamp_col="entry_timestamp",
         max_gap_seconds=max_future_gap_seconds,
     )
     work = pd.concat([work, sell_start, sell_end], axis=1)
@@ -135,7 +215,6 @@ def build_trade_labels(
         work["sell_turnover"] / denominator,
         np.nan,
     )
-    work["buy_price"] = work[buy_price_col].astype("float64")
     work["gross_label"] = np.where(
         work["buy_price"] > 0,
         work["sell_vwap"] / work["buy_price"] - 1.0,
@@ -148,10 +227,15 @@ def build_trade_labels(
         & (work["sell_volume"] > 0)
         & (work["sell_turnover"] > 0)
         & (work["buy_price"] > 0)
+        & work["entry_timestamp"].notna()
     )
     if tradable_statuses and "status" in work.columns:
         allowed = {str(status).upper() for status in tradable_statuses}
         work["valid_label"] &= work["status"].astype(str).str.upper().isin(allowed)
+        if "entry_status" in work.columns:
+            work["valid_label"] &= (
+                work["entry_status"].astype(str).str.upper().isin(allowed)
+            )
 
     return filter_time_range(
         work,

@@ -350,6 +350,13 @@ def build_labeled_frame_from_config(ticks: pd.DataFrame, config: dict) -> pd.Dat
         sell_window_seconds=_int_config(config, "labels", "sell_window_seconds", 60),
         volume_unit_multiplier=volume_unit_multiplier,
         fee_bps=_float_config(config, "labels", "fee_bps", 0.0),
+        entry_tick_delay=_int_config(config, "labels", "entry_tick_delay", 0),
+        entry_max_gap_seconds=config_value(
+            config,
+            "labels",
+            "entry_max_gap_seconds",
+            None,
+        ),
         sample_start_time=_str_config(config, "sample", "start_time", "09:30:00"),
         sample_end_time=_str_config(config, "sample", "end_time", "09:40:00"),
         include_preopen=_bool_config(config, "features", "include_preopen", True),

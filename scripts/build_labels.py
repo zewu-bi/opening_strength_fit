@@ -19,6 +19,8 @@ def main() -> None:
     parser.add_argument("--sell-window-seconds", type=int, default=60)
     parser.add_argument("--volume-unit-multiplier", type=float, default=1.0)
     parser.add_argument("--fee-bps", type=float, default=0.0)
+    parser.add_argument("--entry-tick-delay", type=int, default=0)
+    parser.add_argument("--entry-max-gap-seconds", type=int, default=None)
     parser.add_argument("--sample-start-time", default="09:30:00")
     parser.add_argument("--sample-end-time", default="09:40:00")
     parser.add_argument("--max-future-gap-seconds", type=int, default=None)
@@ -35,6 +37,8 @@ def main() -> None:
         sell_window_seconds=args.sell_window_seconds,
         volume_unit_multiplier=args.volume_unit_multiplier,
         fee_bps=args.fee_bps,
+        entry_tick_delay=args.entry_tick_delay,
+        entry_max_gap_seconds=args.entry_max_gap_seconds,
         sample_start_time=args.sample_start_time,
         sample_end_time=args.sample_end_time,
         include_preopen=not args.no_preopen,
@@ -47,4 +51,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

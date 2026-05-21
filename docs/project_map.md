@@ -23,7 +23,7 @@
 - `candidates.py`: 基于当前及过去可见特征的开盘强势候选池过滤。
 - `label_audit.py`: 按年份、月份、分钟段和 fee_bps 统计 label 有效性与分布。
 - `rules.py`: 不训练模型的规则分数 baseline。
-- `model.py`: Ridge baseline、预测和 IC metrics。
+- `model.py`: Ridge baseline、sklearn GBM、预测、回测上下文列和 IC metrics。
 - `evaluation.py`: score 分组和 top-score 交易评估。
 - `rolling.py`: 日期切分 helper。
 - `training.py`: 统一训练编排，支持 ClickHouse 或 parquet/cache 数据源、月度/年度 rolling，写出 `predictions.parquet`、`predictions_<period>.parquet`、`score_buckets.csv`、`metrics.json`、`metrics_by_month.csv` 和 `metrics_by_year.csv`。
@@ -52,6 +52,7 @@
 - `pull_k8s_metrics.py`: 从 K8s PVC 拉回 `metrics_by_year.csv`。
 - `fetch_k8s_predictions.py`: 从 K8s PVC 拉回 `predictions.parquet` / `predictions_all.parquet`。
 - `run_backtest_api.py`: 将 tick predictions 汇总为 date-symbol score matrix，调用回测 API。
+- `run_opening_intraday_backtest.py`: 对 tick predictions 做开盘短周期 TopN 回测，支持成本、滑点、容量、状态、spread 和同股重复交易约束。
 - `plot_backtest_curves.py`: 画单个 run 的 cumulative alpha/profit 曲线。
 - `compare_backtest_runs.py`: 比较多个 backtest 输出目录的 cumulative alpha/profit 曲线。
 - `record_experiment.py`: 把 `output/` 里的轻量 metrics/backtest 证据归档到 `experiments/results/`。
@@ -61,4 +62,4 @@
 - `runs/*.toml`: 实验配置，`run.id` 必须等于文件名。
 - `jobs/`: 已渲染 Kubernetes training/reader Job YAML。
 - `results/metrics/`: 可提交的轻量 metrics CSV。
-- `results/backtests/`: 可提交的轻量 backtest JSON。
+- `results/backtests/`: 可提交的轻量 backtest JSON 和 intraday summary CSV。

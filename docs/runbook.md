@@ -103,7 +103,7 @@ python scripts/summarize_opening_results.py \
 
 ```text
 gbm: experiments/runs/gbm_opening_1y_next_month.toml
-ridge: experiments/runs/ridge_opening_1y_next_month.toml
+gbm strong: experiments/runs/gbm_opening_1y_next_month_strong.toml
 ```
 
 至少修改：
@@ -130,6 +130,7 @@ ridge: experiments/runs/ridge_opening_1y_next_month.toml
 - 本地 smoke 可传 `--input` 或设置 `[data].tick_path` 使用小的 prepared parquet/cache。
 - `[output].k8s_dir` 必须在 `/mnt/output/opening_strength_fit/` 下，且一个实验一个目录。
 - `evaluation.selection_mode` 第一版用 `cross_section`。
+- `[labels].entry_tick_delay` 控制决策后第几个 tick 成交；已归档结果是无延迟旧口径，后续新实验统一用 1。
 
 ## 5. Build 镜像
 
@@ -223,7 +224,8 @@ python scripts/fetch_k8s_predictions.py \
   --output-dir output/backtest/gbm_opening_1y_next_month
 ```
 
-调用回测 API。tick-level 预测会先按 `date x symbol` 聚合，默认取开盘窗口内最大预测分：
+调用通用回测 API。tick-level 预测会先按 `date x symbol` 聚合，默认取开盘窗口内最大预测分。
+这个口径只适合做日频组合 sanity check，不是本项目最贴近的高频交易回测：
 
 ```bash
 python scripts/run_backtest_api.py \
@@ -242,6 +244,44 @@ python scripts/plot_backtest_curves.py \
   --summary output/backtest/gbm_opening_1y_next_month/curve_summary.json \
   --baseline-output output/backtest/gbm_opening_1y_next_month/profit_vs_baseline.png
 ```
+
+开盘短周期回测使用 predictions 中的 `decision_target_timestamp` 和 `label`；如果训练配置设置了
+`entry_tick_delay`，这里的 `label` 已经是延迟成交后的收益。后续主线只继续 GBM 和 GBM strong。
+默认每天本金从 1.0 开始，在 `09:30/09:32/09:34/09:36/09:38` 五个非重叠两分钟 cycle 上按预测分选
+Top20；`--max-symbol-trades-per-day 1` 会阻止同一股票在同一天被重复选中，没选满的资金留作现金。
+
+```bash
+python scripts/run_opening_intraday_backtest.py \
+  --run gbm=output/backtest/gbm_opening_1y_next_month/predictions_all.parquet \
+  --run gbm_strong=output/backtest/gbm_opening_1y_next_month_strong/predictions_all.parquet \
+  --fee-bps 5 \
+  --slippage-bps 5 \
+  --max-symbol-trades-per-day 1 \
+  --output-dir output/reports/opening_intraday_top20_1y_next_month_constrained
+```
+
+新训练产物会把执行约束上下文列写进 predictions。拿到新 prediction 后，可以打开更严格约束：
+
+```bash
+python scripts/run_opening_intraday_backtest.py \
+  --run gbm=output/backtest/gbm_opening_1y_next_month_delay1/predictions_all.parquet \
+  --run gbm_strong=output/backtest/gbm_opening_1y_next_month_strong_delay1/predictions_all.parquet \
+  --fee-bps 5 \
+  --slippage-bps 5 \
+  --tradable-status T0 \
+  --tradable-status 20 \
+  --tradable-status TRADE \
+  --max-spread-bps 100 \
+  --min-limit-up-room-bps 5 \
+  --min-capacity-notional 100000 \
+  --capital-per-cycle 10000000 \
+  --max-participation-rate 0.05 \
+  --max-symbol-trades-per-day 1 \
+  --output-dir output/reports/opening_intraday_top20_1y_next_month_delay1_constrained
+```
+
+旧归档 predictions 没有 `status`、`spread_bps`、`turnover_diff_30t` 等上下文列；这些文件只能用于
+成本、滑点和同股重复交易的复算。
 
 ## 10. 分析 Metrics
 
@@ -279,7 +319,7 @@ top_score_mean_return
 
 ## 11. 分析 Backtest
 
-默认比较 full-window 回测：
+默认比较 full-window 日频 API 回测：
 
 ```bash
 python scripts/compare_backtest_runs.py
@@ -294,6 +334,21 @@ max_drawdown
 turnover_mean
 solve_rate_mean
 ```
+
+开盘短周期回测重点看：
+
+```text
+mean_cycle_return_bps
+cycle_win_rate
+mean_day_final_return_bps
+positive_day_rate
+compounded_month_return
+candidate_count
+eligible_count
+cash_weight
+```
+
+逐日曲线在 `output/reports/opening_intraday_top20_1y_next_month/daily_curves/`。
 
 ## 12. 收尾：记录和审计
 
