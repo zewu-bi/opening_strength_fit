@@ -96,7 +96,10 @@ def parse_args() -> argparse.Namespace:
         "--context-entry-max-gap-seconds",
         type=int,
         default=None,
-        help="Maximum decision-to-entry tick gap when deriving context from raw ticks.",
+        help=(
+            "Maximum adjacent tick gap on the decision-to-entry path when deriving "
+            "context from raw ticks."
+        ),
     )
     parser.add_argument(
         "--context-decision-max-lag-seconds",
@@ -137,7 +140,15 @@ def parse_args() -> argparse.Namespace:
         help="Require entry_status to exist and pass --tradable-status when statuses are set.",
     )
     parser.add_argument("--max-decision-lag-seconds", type=float, default=None)
-    parser.add_argument("--max-entry-lag-seconds", type=float, default=None)
+    parser.add_argument(
+        "--max-entry-tick-gap-seconds",
+        type=float,
+        default=None,
+        help=(
+            "Maximum adjacent tick gap on the decision-to-entry path. This is "
+            "entry freshness and is independent of --context-entry-tick-delay."
+        ),
+    )
     parser.add_argument("--max-spread-bps", type=float, default=None)
     parser.add_argument("--min-limit-up-room-bps", type=float, default=None)
     parser.add_argument("--min-ask-volume-1", type=float, default=None)
@@ -572,7 +583,7 @@ def apply_static_constraints(
     tradable_statuses: set[str],
     require_entry_status: bool,
     max_decision_lag_seconds: float | None,
-    max_entry_lag_seconds: float | None,
+    max_entry_tick_gap_seconds: float | None,
     max_spread_bps: float | None,
     min_limit_up_room_bps: float | None,
     min_ask_volume_1: float | None,
@@ -602,14 +613,16 @@ def apply_static_constraints(
     ):
         mask &= _numeric(work, "decision_lag_seconds").le(float(max_decision_lag_seconds))
 
-    if max_entry_lag_seconds is not None and _has_column(
+    if max_entry_tick_gap_seconds is not None and _has_column(
         work,
-        "entry_lag_seconds",
+        "entry_max_tick_gap_seconds",
         run_label=run_label,
-        constraint="max entry lag",
+        constraint="max entry tick gap",
         policy=missing_policy,
     ):
-        mask &= _numeric(work, "entry_lag_seconds").le(float(max_entry_lag_seconds))
+        mask &= _numeric(work, "entry_max_tick_gap_seconds").le(
+            float(max_entry_tick_gap_seconds)
+        )
 
     if max_spread_bps is not None and _has_column(
         work,
@@ -786,7 +799,7 @@ def run_backtest(
     tradable_statuses: set[str],
     require_entry_status: bool,
     max_decision_lag_seconds: float | None,
-    max_entry_lag_seconds: float | None,
+    max_entry_tick_gap_seconds: float | None,
     max_spread_bps: float | None,
     min_limit_up_room_bps: float | None,
     min_ask_volume_1: float | None,
@@ -835,7 +848,7 @@ def run_backtest(
             tradable_statuses=tradable_statuses,
             require_entry_status=require_entry_status,
             max_decision_lag_seconds=max_decision_lag_seconds,
-            max_entry_lag_seconds=max_entry_lag_seconds,
+            max_entry_tick_gap_seconds=max_entry_tick_gap_seconds,
             max_spread_bps=max_spread_bps,
             min_limit_up_room_bps=min_limit_up_room_bps,
             min_ask_volume_1=min_ask_volume_1,
@@ -1166,7 +1179,7 @@ def main() -> None:
         tradable_statuses=parse_status_values(args.tradable_statuses),
         require_entry_status=args.require_entry_status,
         max_decision_lag_seconds=args.max_decision_lag_seconds,
-        max_entry_lag_seconds=args.max_entry_lag_seconds,
+        max_entry_tick_gap_seconds=args.max_entry_tick_gap_seconds,
         max_spread_bps=args.max_spread_bps,
         min_limit_up_room_bps=args.min_limit_up_room_bps,
         min_ask_volume_1=args.min_ask_volume_1,
@@ -1226,7 +1239,7 @@ def main() -> None:
         "tradable_statuses": sorted(parse_status_values(args.tradable_statuses)),
         "require_entry_status": args.require_entry_status,
         "max_decision_lag_seconds": args.max_decision_lag_seconds,
-        "max_entry_lag_seconds": args.max_entry_lag_seconds,
+        "max_entry_tick_gap_seconds": args.max_entry_tick_gap_seconds,
         "max_spread_bps": args.max_spread_bps,
         "min_limit_up_room_bps": args.min_limit_up_room_bps,
         "min_ask_volume_1": args.min_ask_volume_1,

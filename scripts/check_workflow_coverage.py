@@ -9,6 +9,10 @@ from opening_strength_fit.config import load_toml
 
 ROOT = Path(__file__).resolve().parents[1]
 DIRECT_SCRIPT_EXEMPTIONS = {"_bootstrap.py"}
+K8S_JOB_ENTRYPOINTS = (
+    "scripts/run_experiment.py",
+    "scripts/materialize_labeled_caches.py",
+)
 REQUIRED_DIRS = (
     "src/opening_strength_fit",
     "scripts",
@@ -124,14 +128,15 @@ def main() -> None:
     for job in [path for path in files if path.startswith("experiments/jobs/")]:
         if job.endswith("_job.yaml") and "reader_job" not in job:
             text = read(job)
-            if "scripts/run_experiment.py" not in text:
-                errors.append(f"{job}: training job does not use scripts/run_experiment.py")
+            if not any(entrypoint in text for entrypoint in K8S_JOB_ENTRYPOINTS):
+                allowed = ", ".join(K8S_JOB_ENTRYPOINTS)
+                errors.append(f"{job}: k8s job does not use one of: {allowed}")
 
     print("workflow_coverage:")
     print(f"  direct_scripts: {len(direct_scripts)}")
     print(f"  library_modules: {len(modules)}")
     print(f"  required_dirs: {len(REQUIRED_DIRS)}")
-    print("  k8s_training_entrypoint: scripts/run_experiment.py")
+    print(f"  k8s_job_entrypoints: {', '.join(K8S_JOB_ENTRYPOINTS)}")
 
     if errors:
         print("\ncoverage_errors:")

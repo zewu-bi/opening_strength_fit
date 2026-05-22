@@ -72,10 +72,66 @@ def _gpu_tolerations_yaml(resources: dict, indent: int = 14) -> str:
     )
 
 
+def _gpu_opencl_bootstrap_yaml(resources: dict, indent: int) -> str:
+    if not _gpu_count(resources):
+        return ""
+    return textwrap.indent(
+        textwrap.dedent(
+            """\
+            mkdir -p /etc/OpenCL/vendors
+            echo libnvidia-opencl.so.1 > /etc/OpenCL/vendors/nvidia.icd
+            """
+        ),
+        " " * indent,
+    )
+
+
 def _scheduler_yaml(config: dict, resources: dict, indent: int = 14) -> str:
     return _node_selector_yaml(config, indent=indent) + _gpu_tolerations_yaml(
         resources,
         indent=indent,
+    )
+
+
+def _training_command_yaml(
+    *,
+    script: str,
+    config_path: Path,
+    output_dir: str,
+    resources: dict,
+    indent: int = 18,
+) -> str:
+    if _gpu_count(resources):
+        return textwrap.indent(
+            textwrap.dedent(
+                f"""\
+                command:
+                  - /bin/bash
+                  - -lc
+                  - |
+                    set -euo pipefail
+                    mkdir -p /etc/OpenCL/vendors
+                    echo libnvidia-opencl.so.1 > /etc/OpenCL/vendors/nvidia.icd
+                    exec python {script} \\
+                      --config {config_path.as_posix()} \\
+                      --output-dir {output_dir}
+                """
+            ),
+            " " * indent,
+        )
+    return textwrap.indent(
+        textwrap.dedent(
+            f"""\
+            command:
+              - python
+              - {script}
+              - --config
+              - {config_path.as_posix()}
+              - --output-dir
+              - {output_dir}
+            """
+        ),
+        " " * indent,
     )
 
 
@@ -141,6 +197,13 @@ def render_training_job(config_path: Path, config: dict, image: str) -> str:
     scheduler_yaml = _scheduler_yaml(config, resources, indent=14)
     script = training_script(config)
     env_from = _clickhouse_env_from(config, indent=18)
+    command_yaml = _training_command_yaml(
+        script=script,
+        config_path=config_path,
+        output_dir=output_dir,
+        resources=resources,
+        indent=18,
+    )
 
     return textwrap.dedent(
         f"""\
@@ -167,13 +230,7 @@ def render_training_job(config_path: Path, config: dict, image: str) -> str:
                   image: {image}
                   imagePullPolicy: Always
 {env_from}                  workingDir: /app/opening_strength_fit
-                  command:
-                    - python
-                    - {script}
-                    - --config
-                    - {config_path.as_posix()}
-                    - --output-dir
-                    - {output_dir}
+{command_yaml.rstrip()}
                   volumeMounts:
                     - name: opening-strength-output
                       mountPath: {mount_path}
@@ -262,6 +319,7 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
     scheduler_yaml = _scheduler_yaml(config, resources, indent=18)
     script = training_script(config)
     env_from = _clickhouse_env_from(config, indent=18)
+    opencl_bootstrap = _gpu_opencl_bootstrap_yaml(resources, indent=26)
     if _window_mode(config) == "rolling_monthly":
         env_from = _clickhouse_env_from(config, indent=22)
         months = " ".join(_month_range_from_config(config))
@@ -296,6 +354,7 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
                         - -lc
                         - |
                           set -euo pipefail
+{opencl_bootstrap.rstrip()}
                           ROOT={output_dir}
                           mkdir -p "${{ROOT}}"
 
@@ -366,6 +425,7 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
                     - -lc
                     - |
                       set -euo pipefail
+{_gpu_opencl_bootstrap_yaml(resources, indent=22).rstrip()}
                       ROOT={output_dir}
                       mkdir -p "${{ROOT}}"
 

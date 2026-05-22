@@ -121,10 +121,10 @@ label = sell_vwap / buy_price - 1 - fee_bps / 10000
 
 ```text
 fee_bps = 0
-entry_tick_delay = 1 / 2
+entry_tick_delay = 0 / 1 / 2
 ```
 
-做结果比较时，旧归档的 `entry_tick_delay = 0` 和后续的 `entry_tick_delay = 1/2` 需要分开看。
+做结果比较时，旧归档的 sklearn/Ridge `entry_tick_delay = 0` 和后续 LightGBM `entry_tick_delay = 0/1/2` 需要分开看。
 
 ---
 
@@ -153,7 +153,7 @@ X 只能使用 decision point 当时及此前可见的信息。
 
 - 改变 label 或训练样本域的口径进训练：`entry_tick_delay`、horizon、universe/candidate、label 有效性、固定部署硬过滤。
 - 只改变下单、成交、成本或选股后的约束先放 replay：fee、slippage、spread、容量/参与率、交易状态、涨停距离、同股每日最多一次。
-- 当前先单独跑 delay1/delay2；其他约束在同一批 predictions 上统一压测。
+- 当前先单独跑 delay0/delay1/delay2；其他约束在同一批 predictions 上统一压测。
 
 当前真实约束拆分如下：
 
@@ -162,7 +162,7 @@ X 只能使用 decision point 当时及此前可见的信息。
 | 成交延迟 | replay + 可选重训 | replay 可用 raw tick context 和 `--context-entry-tick-delay` 重算 realized label；如果希望模型训练目标也变成 delay label，再单独训练 delay run。 |
 | 手续费/滑点 | replay | 对固定入选交易是确定性收益扣减，用同一批 predictions 施加 `--fee-bps` / `--slippage-bps` 即可；除非要用 net label 重训排序器，否则不需要立刻重训 fee。 |
 | 交易状态 | label + replay | 训练配置用 `[filters].tradable_statuses` 约束 decision/entry label 有效性；replay 可再次要求 `status` / `entry_status`。 |
-| 决策和 entry 新鲜度 | replay | `decision_lag_seconds`、`entry_lag_seconds` 控制目标整分钟到实际 tick 的延迟，避免过旧 tick。 |
+| 决策和 entry 新鲜度 | replay | `decision_lag_seconds` 控制目标整分钟到实际 decision tick 的延迟；`entry_max_tick_gap_seconds` 控制 decision 到 entry 路径里的相邻 tick 最大间隔。成交延迟本身用 `entry_delay_seconds` 单独审计。 |
 | spread | replay / candidate | strong candidate 可硬过滤 `spread_bps`；正式成交压力测试用 replay 的 `--max-spread-bps`。 |
 | 涨停距离 | replay | 如果上游提供 `limit_up_price` 并生成 `ask1_to_limit_up_bps`，replay 用 `--min-limit-up-room-bps`；没有该列时该约束只能跳过或先补数据源。 |
 | 一档挂量 | replay | 用 `ask_volume_1` / `bid_volume_1` 做最低可见深度过滤，但这只是存在性检查，不等价于完整成交模型。 |
@@ -174,7 +174,7 @@ X 只能使用 decision point 当时及此前可见的信息。
 
 约束升级原则：
 
-- 先用 delay1/delay2 predictions 跑 `proxy_top20 -> cost -> tradable -> liquidity -> capacity -> strict` replay 场景，观察 IC、bucket 和 replay 是否同步衰减。
+- 先用 delay0/1/2 predictions 跑 `proxy_top20 -> cost -> tradable -> liquidity -> capacity -> strict` replay 场景，观察 IC、bucket 和 replay 是否同步衰减。
 - 如果某个执行约束只是改变入选后的收益、容量或现金权重，继续放 replay。
 - 如果某个约束会改变训练样本域、候选池定义或未来 label 本身，再创建新的 run config 重训。
 - fee/slippage 默认先放 replay；只有在研究“扣费后最优排序”或成本显著改变 label 横截面顺序时，才单独训练 net-label 模型。
@@ -190,8 +190,8 @@ X 只能使用 decision point 当时及此前可见的信息。
 - Ridge regression
 - sklearn GBM
 
-后续主线使用 LightGBM 普通 universe 与 opening-strength candidate 过滤分支，并按 `entry_tick_delay = 1/2` 比较延迟衰减。
-LightGBM 代码支持 CPU/GPU 参数；当前正式任务在 research 集群申请单卡 GPU，并优先调度到 `mem_per_gpu_tier = high` 的 A100/H100 节点。
+后续主线可使用 LightGBM 普通 universe 与 opening-strength candidate 过滤分支，并按 `entry_tick_delay = 0/1/2` 比较延迟衰减。
+LightGBM 代码支持 CPU/GPU 参数；PVC labeled cache workflow 已实现。当前本地实验注册表只保留已完成的 Ridge/GBM baseline。
 
 训练阶段使用 X 拟合 label；测试阶段仅使用 X 生成 `prediction`，再用事后 label 做评估。
 

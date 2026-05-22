@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import threading
 import time
 
 import numpy as np
@@ -64,9 +65,14 @@ def build_training_parser(description: str) -> argparse.ArgumentParser:
     parser.add_argument("--input", default=None, help="Tick parquet/csv path override.")
     parser.add_argument(
         "--data-source",
-        choices=["auto", "path", "clickhouse"],
+        choices=["auto", "path", "clickhouse", "labeled_pvc"],
         default=None,
         help="Override [data].source. --input always uses a local/path source.",
+    )
+    parser.add_argument(
+        "--labeled-input",
+        default=None,
+        help="PVC/local labeled parquet/csv path override for data.source=labeled_pvc.",
     )
     parser.add_argument(
         "--input-kind",
@@ -409,24 +415,28 @@ def _looks_labeled(frame: pd.DataFrame) -> bool:
     return {"date", "symbol", "timestamp", "label"}.issubset(frame.columns)
 
 
+def _filter_labeled_frame(labeled: pd.DataFrame, config: dict) -> pd.DataFrame:
+    labeled = ensure_timestamp_columns(standardize_columns(labeled))
+    if _bool_config(config, "universe", "enabled", True):
+        symbols_file = _str_config(config, "universe", "symbols_file", "")
+        labeled = filter_symbol_universe(
+            labeled,
+            symbol_regex=_str_config(
+                config,
+                "universe",
+                "symbol_regex",
+                DEFAULT_A_SHARE_SYMBOL_REGEX,
+            ),
+            symbols=load_symbol_list(symbols_file) if symbols_file else None,
+        )
+    return _apply_candidate_filter_from_config(labeled, config)
+
+
 def _load_training_frame(path: str, args: argparse.Namespace, config: dict) -> pd.DataFrame:
     frame = load_ticks(path)
     kind = _input_kind(args, config)
     if kind == "labeled" or (kind == "auto" and _looks_labeled(frame)):
-        labeled = ensure_timestamp_columns(standardize_columns(frame))
-        if _bool_config(config, "universe", "enabled", True):
-            symbols_file = _str_config(config, "universe", "symbols_file", "")
-            labeled = filter_symbol_universe(
-                labeled,
-                symbol_regex=_str_config(
-                    config,
-                    "universe",
-                    "symbol_regex",
-                    DEFAULT_A_SHARE_SYMBOL_REGEX,
-                ),
-                symbols=load_symbol_list(symbols_file) if symbols_file else None,
-            )
-        return _apply_candidate_filter_from_config(labeled, config)
+        return _filter_labeled_frame(frame, config)
     if kind not in {"auto", "raw_ticks"}:
         raise SystemExit(
             f"unknown data.input_kind={kind!r}; expected auto, raw_ticks, or labeled"
@@ -437,14 +447,22 @@ def _load_training_frame(path: str, args: argparse.Namespace, config: dict) -> p
 def _resolved_data_source(args: argparse.Namespace, config: dict, tick_path: str) -> str:
     if args.input:
         return "path"
+    if getattr(args, "labeled_input", None):
+        return "labeled_pvc"
     source = args.data_source or _str_config(config, "data", "source", "auto")
     source = source.strip().lower()
     if source == "auto":
+        labeled_path = (
+            os.environ.get("OPENING_STRENGTH_LABELED_PATH", "")
+            or config_value(config, "data", "labeled_path", "")
+        )
+        if labeled_path:
+            return "labeled_pvc"
         return "path" if tick_path else "clickhouse"
-    if source in {"path", "clickhouse"}:
+    if source in {"path", "clickhouse", "labeled_pvc"}:
         return source
     raise SystemExit(
-        f"unknown data.source={source!r}; expected auto, path, or clickhouse"
+        f"unknown data.source={source!r}; expected auto, path, clickhouse, or labeled_pvc"
     )
 
 
@@ -567,12 +585,89 @@ def _cache_path(config: dict) -> Path | None:
     return Path(str(raw))
 
 
+def _labeled_pvc_path(args: argparse.Namespace, config: dict) -> Path:
+    raw = (
+        args.labeled_input
+        or os.environ.get("OPENING_STRENGTH_LABELED_PATH", "")
+        or config_value(config, "data", "labeled_path", "")
+        or config_value(config, "data", "tick_path", "")
+        or config_value(
+            config,
+            "cache",
+            "labeled_path",
+            config_value(config, "cache", "path", ""),
+        )
+    )
+    if raw in (None, ""):
+        raise SystemExit(
+            "No labeled PVC path supplied. Set [data].labeled_path, "
+            "[data].tick_path, [cache].labeled_path, --labeled-input, or "
+            "OPENING_STRENGTH_LABELED_PATH."
+        )
+    return Path(str(raw))
+
+
 def _cache_bool(config: dict, key: str, default: bool) -> bool:
     return _bool_config(config, "cache", key, default)
 
 
 def _cache_timeout_seconds(config: dict) -> int:
     return _int_config(config, "cache", "lock_timeout_seconds", 21_600)
+
+
+def _cache_lock_done_path(lock_path: Path) -> Path:
+    return Path(f"{lock_path}.done")
+
+
+def _cache_lock_heartbeat_path(lock_path: Path) -> Path:
+    return lock_path / "heartbeat"
+
+
+def _write_cache_lock_heartbeat(lock_path: Path) -> None:
+    try:
+        lock_path.mkdir(parents=True, exist_ok=True)
+        _cache_lock_heartbeat_path(lock_path).write_text(
+            json.dumps({"pid": os.getpid(), "time": time.time()}) + "\n",
+            encoding="utf-8",
+        )
+    except OSError:
+        return
+
+
+def _cache_lock_has_fresh_heartbeat(
+    lock_path: Path,
+    *,
+    stale_after_seconds: float,
+) -> bool:
+    heartbeat_path = _cache_lock_heartbeat_path(lock_path)
+    try:
+        heartbeat_age = time.time() - heartbeat_path.stat().st_mtime
+    except OSError:
+        return False
+    return heartbeat_age <= float(stale_after_seconds)
+
+
+class _CacheLockHeartbeat:
+    def __init__(self, lock_path: Path, interval_seconds: float = 60.0) -> None:
+        self.lock_path = lock_path
+        self.interval_seconds = float(interval_seconds)
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def __enter__(self) -> "_CacheLockHeartbeat":
+        _write_cache_lock_heartbeat(self.lock_path)
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=min(1.0, self.interval_seconds))
+
+    def _run(self) -> None:
+        while not self._stop.wait(self.interval_seconds):
+            _write_cache_lock_heartbeat(self.lock_path)
 
 
 def _load_labeled_cache(path: Path) -> pd.DataFrame:
@@ -588,22 +683,71 @@ def _write_labeled_cache(labeled: pd.DataFrame, path: Path) -> None:
     os.replace(tmp_path, path)
 
 
-def _acquire_cache_lock(lock_path: Path, timeout_seconds: int) -> bool:
+def _mark_cache_ready(cache_path: Path, lock_path: Path) -> None:
+    _cache_lock_done_path(lock_path).write_text(
+        json.dumps(
+            {
+                "path": str(cache_path),
+                "bytes": cache_path.stat().st_size,
+                "time": time.time(),
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def _clear_cache_ready(lock_path: Path) -> None:
+    try:
+        _cache_lock_done_path(lock_path).unlink()
+    except FileNotFoundError:
+        return
+
+
+def _acquire_cache_lock(
+    lock_path: Path,
+    timeout_seconds: float,
+    *,
+    cache_path: Path | None = None,
+    cache_read: bool = True,
+    poll_seconds: float = 15.0,
+) -> str:
     start = time.monotonic()
+    timeout_seconds = float(timeout_seconds)
+    heartbeat_stale_after = max(timeout_seconds, float(poll_seconds) * 3.0, 60.0)
     while True:
+        if cache_path and cache_read and cache_path.exists():
+            return "cache_ready"
         try:
             lock_path.mkdir(parents=True)
-            return True
+            _write_cache_lock_heartbeat(lock_path)
+            return "acquired"
         except FileExistsError:
-            if (time.monotonic() - start) >= float(timeout_seconds):
-                return False
-            if lock_path.with_suffix(lock_path.suffix + ".done").exists():
-                return False
-            time.sleep(15)
+            if (
+                _cache_lock_done_path(lock_path).exists()
+                and cache_path
+                and cache_read
+                and cache_path.exists()
+            ):
+                return "cache_ready"
+            if timeout_seconds > 0.0 and (
+                time.monotonic() - start
+            ) >= timeout_seconds:
+                if _cache_lock_has_fresh_heartbeat(
+                    lock_path,
+                    stale_after_seconds=heartbeat_stale_after,
+                ):
+                    start = time.monotonic()
+                else:
+                    return "timeout"
+            time.sleep(float(poll_seconds))
 
 
 def _release_cache_lock(lock_path: Path) -> None:
     try:
+        for child in lock_path.iterdir():
+            if child.is_file() or child.is_symlink():
+                child.unlink()
         lock_path.rmdir()
     except FileNotFoundError:
         return
@@ -772,8 +916,22 @@ def _load_clickhouse_labeled_frame(
 
     lock_path = Path(f"{cache_path}.lock")
     timeout_seconds = _cache_timeout_seconds(config)
-    acquired = _acquire_cache_lock(lock_path, timeout_seconds)
-    if not acquired:
+    lock_status = _acquire_cache_lock(
+        lock_path,
+        timeout_seconds,
+        cache_path=cache_path,
+        cache_read=cache_read,
+    )
+    if lock_status == "cache_ready":
+        print_mapping(
+            "labeled_cache",
+            {"action": "read_after_wait", "path": str(cache_path)},
+        )
+        return _apply_candidate_filter_from_config(
+            _load_labeled_cache(cache_path),
+            config,
+        )
+    if lock_status == "timeout":
         if cache_read and cache_path.exists():
             print_mapping(
                 "labeled_cache",
@@ -789,27 +947,39 @@ def _load_clickhouse_labeled_frame(
         )
 
     try:
-        if cache_read and cache_path.exists():
-            print_mapping(
-                "labeled_cache",
-                {"action": "read_after_lock", "path": str(cache_path)},
-            )
-            base_labeled = _load_labeled_cache(cache_path)
-        else:
-            base_labeled = _build_clickhouse_labeled_frame(args, config)
-            _write_labeled_cache(base_labeled, cache_path)
-            print_mapping(
-                "labeled_cache",
-                {
-                    "action": "write",
-                    "path": str(cache_path),
-                    **dataset_summary(base_labeled),
-                },
-            )
+        with _CacheLockHeartbeat(lock_path):
+            if cache_read and cache_path.exists():
+                print_mapping(
+                    "labeled_cache",
+                    {"action": "read_after_lock", "path": str(cache_path)},
+                )
+                base_labeled = _load_labeled_cache(cache_path)
+            else:
+                _clear_cache_ready(lock_path)
+                base_labeled = _build_clickhouse_labeled_frame(args, config)
+                _write_labeled_cache(base_labeled, cache_path)
+                _mark_cache_ready(cache_path, lock_path)
+                print_mapping(
+                    "labeled_cache",
+                    {
+                        "action": "write",
+                        "path": str(cache_path),
+                        **dataset_summary(base_labeled),
+                    },
+                )
     finally:
         _release_cache_lock(lock_path)
 
     return _apply_candidate_filter_from_config(base_labeled, config)
+
+
+def _load_labeled_pvc_frame(
+    args: argparse.Namespace,
+    config: dict,
+) -> pd.DataFrame:
+    path = _labeled_pvc_path(args, config)
+    print_mapping("labeled_pvc", {"action": "read", "path": str(path)})
+    return _filter_labeled_frame(read_frame(path), config)
 
 
 def _test_year_from_args(args: argparse.Namespace, config: dict, key: str) -> int | None:
@@ -1157,6 +1327,8 @@ def train_from_args(args: argparse.Namespace) -> None:
 
     if data_source == "clickhouse":
         labeled = _load_clickhouse_labeled_frame(args, config)
+    elif data_source == "labeled_pvc":
+        labeled = _load_labeled_pvc_frame(args, config)
     else:
         labeled = _load_training_frame(tick_path, args, config)
     print_mapping("dataset", dataset_summary(labeled))

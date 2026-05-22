@@ -20,7 +20,12 @@ def main() -> None:
     parser.add_argument("--volume-unit-multiplier", type=float, default=1.0)
     parser.add_argument("--fee-bps", type=float, default=0.0)
     parser.add_argument("--entry-tick-delay", type=int, default=0)
-    parser.add_argument("--entry-max-gap-seconds", type=int, default=None)
+    parser.add_argument(
+        "--entry-max-gap-seconds",
+        type=int,
+        default=None,
+        help="Maximum adjacent tick gap on the decision-to-entry path.",
+    )
     parser.add_argument("--sample-start-time", default="09:30:00")
     parser.add_argument("--sample-end-time", default="09:40:00")
     parser.add_argument("--max-future-gap-seconds", type=int, default=None)

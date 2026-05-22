@@ -63,7 +63,7 @@ python scripts/inspect_dataset.py \
   --labeled-output output/local/inspect_smoke/multi_symbol_2021-09-22_2021-09-23_labeled.parquet
 ```
 
-默认不要在本地为一年或多月窗口运行 `prepare_research_dataset.py`。ClickHouse 里是原始 tick，feature/label 需要 Python 计算，长窗口本地准备会很慢且占空间。正式长窗口训练直接用 `[data].source = "clickhouse"` 的 K8s Job；长窗口 label audit / rule baseline 也应放到集群或专门的小结果 Job，只把 CSV/metrics 拉回本地。
+默认不要在本地为一年或多月窗口运行 `prepare_research_dataset.py`。后续长窗口训练优先用 `[data].source = "path"` 读取 PVC 上的 labeled cache；长窗口 label audit / rule baseline 也应放到集群或专门的小结果 Job，只把 CSV/metrics 拉回本地。
 
 ## 3. 本地 Smoke
 
@@ -84,7 +84,7 @@ python scripts/run_experiment.py \
   --output-dir output/local/gbm_opening_1y_next_month_multi_symbol_smoke
 ```
 
-本地训练 smoke 仍用 CPU config；GPU 是否可用通过第 5 节镜像 smoke 和 research 集群 Job 验证。
+本地训练 smoke 使用 CPU config；后续集群长窗口任务也默认从 PVC labeled cache 读取。
 
 `run_experiment.py` 会训练模型、生成 `predictions.parquet`、写出 `metrics_by_year.csv`，并按 config 中的 evaluation 设置评估一次。这里用 `--top-n 2` 覆盖 config 的 `top_n=20`，避免 smoke 中每个横截面只有 5 个 symbol 时 top-score 变成全选。
 
@@ -101,13 +101,12 @@ python scripts/summarize_opening_results.py \
 
 ## 4. 新建实验
 
-复制最接近的 config：
+当前本地实验注册表只保留 completed baseline。新建实验时复制最接近的已归档 config，再改成新的 run id 和模型/数据口径：
 
 ```text
-lgbm delay1: experiments/runs/lgbm_opening_1y_next_month_delay1.toml
-lgbm strong delay1: experiments/runs/lgbm_opening_1y_next_month_strong_delay1.toml
-lgbm delay2: experiments/runs/lgbm_opening_1y_next_month_delay2.toml
-lgbm strong delay2: experiments/runs/lgbm_opening_1y_next_month_strong_delay2.toml
+普通 universe: experiments/runs/gbm_opening_1y_next_month.toml
+strong candidate: experiments/runs/gbm_opening_1y_next_month_strong.toml
+小窗 smoke: experiments/runs/gbm_opening_1m_3d.toml
 ```
 
 至少修改：
@@ -130,42 +129,44 @@ lgbm strong delay2: experiments/runs/lgbm_opening_1y_next_month_strong_delay2.to
 
 - `run.id` 必须等于 config 文件名。
 - `status` 提交前写 `queued` 或 `running`，拉回 metrics 并确认后写 `completed`。
-- 集群训练默认用 `[data].source = "clickhouse"`，通过 ClickHouse 读取训练窗口原始 tick，只把结果写到 PVC。
+- 集群训练默认用 `[data].source = "path"` / `[data].input_kind = "labeled"`，直接读取 PVC 上的 labeled cache，只把模型结果写到 PVC。
 - 本地 smoke 可传 `--input` 或设置 `[data].tick_path` 使用小的 prepared parquet/cache。
 - `[output].k8s_dir` 必须在 `/mnt/output/opening_strength_fit/` 下，且一个实验一个目录。
 - `evaluation.selection_mode` 第一版用 `cross_section`。
-- `[labels].entry_tick_delay` 控制决策后第几个 tick 成交；已归档结果是无延迟旧口径，后续新实验按 delay1/delay2 分支比较。
+- `[labels].entry_tick_delay` 控制决策后第几个 tick 成交；后续 LightGBM 可按 delay0/delay1/delay2 新开分支比较。
 - 训练只改会影响 label 或样本域的口径；fee/slippage/spread/容量/状态/同股一次等执行约束先在 replay 里压测。
 
-LightGBM GPU 主线还需要这些配置：
+LightGBM CPU + PVC cache run 使用这些配置：
 
 ```toml
+[data]
+source = "path"
+tick_path = "/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay<0|1|2>_labeled.parquet"
+input_kind = "labeled"
+
 [model]
 name = "lightgbm"
-device_type = "gpu"
+device_type = "cpu"
 max_bin = 63
-gpu_use_dp = false
-
-[cache]
-enabled = true
-read = true
-write = true
-labeled_path = "/mnt/output/opening_strength_fit/cache/<delay>_labeled.parquet"
-
-[k8s.node_selector]
-mem_per_gpu_tier = "high"
-
-[k8s.resources]
-gpu_limit = "1"
 ```
 
 说明：
 
-- `device_type = "gpu"` 要求镜像里的 LightGBM 是 GPU 编译版。
-- `max_bin = 63` 是 LightGBM GPU 常用设置，先作为主线默认。
-- 普通 universe 和 strong candidate 可以共享同一个 delay 的 `labeled_path`；strong 过滤在 cache 读取后再做。
-- `mem_per_gpu_tier = "high"` 会优先落到 A100/H100 这类适合单卡任务的节点。
-- 渲染脚本会把 `gpu_limit` 同时写入 `requests` 和 `limits`，并加上 `has_gpu=true:NoSchedule` toleration。
+- `tick_path` 指向 PVC cache；普通 universe 和 strong candidate 共享同一个 delay cache。
+- strong 过滤在 labeled cache 读取后再做。
+- 提交训练前确认对应 cache 已经完整写好，并且 schema 包含 `entry_delay_seconds` 与 `entry_max_tick_gap_seconds`。只有旧 `entry_lag_seconds` 的 parquet 属于旧口径，不应用作新鲜度/延迟拆分后的正式训练输入。
+- 当前 CPU Job YAML 不应包含 `nvidia.com/gpu`、GPU toleration 或 GPU nodeSelector。
+
+PVC cache 由 `scripts/materialize_labeled_caches.py` 生成。若需要在集群里跑 materialize，使用专用 Job 入口；当前仓库不保留活跃 materialize Job YAML：
+
+```bash
+python scripts/materialize_labeled_caches.py --config experiments/runs/<cache_run_id>.toml --help
+```
+
+materialize Job 必须调用 `scripts/materialize_labeled_caches.py`，不要用通用 `render_k8s_job.py`
+把它渲成 `scripts/run_experiment.py`。如果 materialize 被中断，重启前先清理对应
+`.opening_*tmp.parquet`、`*.parquet.lock` 和 `*.parquet.lock.done`，但不要删除已经完整落盘的
+`opening_1y_next_month_delay*_labeled.parquet`。
 
 ## 5. Build 镜像
 
@@ -176,19 +177,12 @@ gpu_limit = "1"
 ```
 
 ```bash
-TAG=opening-strength-fit-$(date +%Y%m%d)-lgbm-gpu-v1
+TAG=opening-strength-fit-$(date +%Y%m%d)-lgbm-cpu-v1
 docker build --build-arg CACHE_BUST=${TAG} -t registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG} .
 docker push registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG}
 ```
 
-当前 Dockerfile 会从源码编译 GPU 版 LightGBM：
-
-```text
-pip install --no-binary=lightgbm --config-settings=cmake.define.USE_GPU=ON lightgbm
-```
-
-本地无 GPU 时可以用下面的 smoke 确认 GPU trainer 已编进镜像；输出里应出现
-`This is the GPU trainer!!`，随后报 `No OpenCL device found` 属于本机无 GPU 的正常结果：
+本地可以用下面的 smoke 确认镜像里的 LightGBM CPU trainer 可用：
 
 ```bash
 docker run --rm -i registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG} python - <<'PY'
@@ -197,11 +191,8 @@ from lightgbm import LGBMRegressor
 
 x = np.array([[0.0], [1.0], [2.0], [3.0]])
 y = np.array([0.0, 1.0, 2.0, 3.0])
-try:
-    LGBMRegressor(n_estimators=1, device_type="gpu", max_bin=63, verbosity=1).fit(x, y)
-except Exception as exc:
-    print(type(exc).__name__)
-    print(str(exc))
+model = LGBMRegressor(n_estimators=1, device_type="cpu", max_bin=63, verbosity=-1).fit(x, y)
+print(model.predict(x).round(6).tolist())
 PY
 ```
 
@@ -213,51 +204,51 @@ PY
 
 ```bash
 python scripts/render_k8s_job.py \
-  --config experiments/runs/lgbm_opening_1y_next_month_delay1.toml \
+  --config experiments/runs/<new_run_id>.toml \
   --image registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG}
 ```
 
 输出路径：
 
 ```text
-experiments/jobs/<run_id>_job.yaml
-experiments/jobs/<run_id>_reader_job.yaml
+experiments/jobs/<new_run_id>_job.yaml
+experiments/jobs/<new_run_id>_reader_job.yaml
 ```
 
 确认镜像：
 
 ```bash
-rg -n "image:" experiments/jobs/lgbm_opening_1y_next_month_delay1_job.yaml
+rg -n "image:" experiments/jobs/<new_run_id>_job.yaml
 ```
 
-确认 GPU YAML：
+确认 CPU YAML：
 
 ```bash
-rg -n "nodeSelector|tolerations|nvidia.com/gpu|image:" experiments/jobs/lgbm_opening_1y_next_month_delay1_job.yaml
-hfcli kubectl --cluster research apply --dry-run=client -f experiments/jobs/lgbm_opening_1y_next_month_delay1_job.yaml
+rg -n "nvidia|gpu|nodeSelector|tolerations|image:" experiments/jobs/<new_run_id>_job.yaml
+hfcli kubectl --cluster research apply --dry-run=client -f experiments/jobs/<new_run_id>_job.yaml
 ```
 
 ## 7. 提交和查看 Job
 
 ```bash
-hfcli kubectl --cluster research delete job opening-strength-lgbm-opening-1y-next-month-delay1 --ignore-not-found -n bizewu
-hfcli kubectl --cluster research apply -f experiments/jobs/lgbm_opening_1y_next_month_delay1_job.yaml
+hfcli kubectl --cluster research delete job opening-strength-<new-run-slug> --ignore-not-found -n bizewu
+hfcli kubectl --cluster research apply -f experiments/jobs/<new_run_id>_job.yaml
 hfcli kubectl --cluster research get jobs,pods -n bizewu -o wide
-hfcli kubectl --cluster research logs -f job/opening-strength-lgbm-opening-1y-next-month-delay1 -n bizewu
+hfcli kubectl --cluster research logs -f job/opening-strength-<new-run-slug> -n bizewu
 ```
 
 reader Job：
 
 ```bash
-hfcli kubectl --cluster research delete job opening-strength-read-lgbm-opening-1y-next-month-delay1 --ignore-not-found -n bizewu
-hfcli kubectl --cluster research apply -f experiments/jobs/lgbm_opening_1y_next_month_delay1_reader_job.yaml
-hfcli kubectl --cluster research wait --for=condition=complete job/opening-strength-read-lgbm-opening-1y-next-month-delay1 -n bizewu --timeout=300s
+hfcli kubectl --cluster research delete job opening-strength-read-<new-run-slug> --ignore-not-found -n bizewu
+hfcli kubectl --cluster research apply -f experiments/jobs/<new_run_id>_reader_job.yaml
+hfcli kubectl --cluster research wait --for=condition=complete job/opening-strength-read-<new-run-slug> -n bizewu --timeout=300s
 ```
 
-确认 GPU request 和节点：
+确认 Job request 和节点：
 
 ```bash
-hfcli kubectl --cluster research -n bizewu get pods -o go-template='{{range .items}}{{.metadata.name}}{{"\t"}}{{.spec.nodeName}}{{"\t"}}{{index (index .spec.containers 0).resources.requests "nvidia.com/gpu"}}{{"\n"}}{{end}}' | rg 'opening-strength'
+hfcli kubectl --cluster research -n bizewu get pods -o wide | rg 'opening-strength'
 ```
 
 排查要点：
@@ -265,10 +256,9 @@ hfcli kubectl --cluster research -n bizewu get pods -o go-template='{{range .ite
 - `field is immutable`: 删除同名 Job 后重新 apply。
 - `FileNotFoundError: experiments/runs/*.toml`: 镜像里没有新 config，重新 build/push。
 - `python: can't open file scripts/run_experiment.py`: Job 使用的镜像不是当前代码镜像，重新 build/push/render。
-- `GPU Tree Learner was not enabled in this build`: 镜像里的 LightGBM 不是 GPU 编译版，检查 Dockerfile 是否用了 `USE_GPU=ON` 并重新 build/push。
-- `No OpenCL device found`: 本地无 GPU smoke 会出现；如果在集群 GPU pod 里出现，检查 pod 是否申请到 `nvidia.com/gpu: "1"`、是否调度到 GPU 节点，以及节点驱动/OpenCL runtime。
+- `FileNotFoundError` / `No such file` 指向 cache path：确认对应 delay 的 PVC labeled cache 已存在。
+- `field is immutable`: 删除同名 Job 后重新 apply。
 - `No tick data path supplied`: 本地/path 模式没填 `[data].tick_path`，或本地 smoke 忘了传 `--input`。
-- `missing ClickHouse credentials`: 集群 Job 没有 `CLICKHOUSE_USER` / `CLICKHOUSE_PASSWORD` 环境变量；配置 `[k8s].clickhouse_secret` 或检查平台注入。
 - `input path does not exist`: 容器看不到该路径，检查 PVC、`mount_path` 和 `[data].tick_path`。
 
 ## 8. 拉回 Metrics
@@ -277,7 +267,7 @@ hfcli kubectl --cluster research -n bizewu get pods -o go-template='{{range .ite
 
 ```bash
 python scripts/pull_k8s_metrics.py \
-  --config experiments/runs/lgbm_opening_1y_next_month_delay1.toml
+  --config experiments/runs/<new_run_id>.toml
 ```
 
 拉回文件写到：
@@ -294,8 +284,8 @@ output/k8s/metrics/<run_id>_metrics_by_year.csv
 
 ```bash
 python scripts/fetch_k8s_predictions.py \
-  --config experiments/runs/lgbm_opening_1y_next_month_delay1.toml \
-  --output-dir output/predictions/lgbm_opening_1y_next_month_delay1
+  --config experiments/runs/<new_run_id>.toml \
+  --output-dir output/predictions/<new_run_id>
 ```
 
 开盘短周期回测使用 predictions 中的 `decision_target_timestamp` 和 `label`；如果训练配置设置了
@@ -308,12 +298,12 @@ Top20；`--max-symbol-trades-per-day 1` 会阻止同一股票在同一天被重�
 
 ```bash
 python scripts/run_opening_intraday_backtest.py \
-  --run lgbm_delay1=output/predictions/lgbm_opening_1y_next_month_delay1/predictions_all.parquet \
-  --run lgbm_strong_delay1=output/predictions/lgbm_opening_1y_next_month_strong_delay1/predictions_all.parquet \
+  --run gbm=output/predictions/gbm_opening_1y_next_month/predictions_all.parquet \
+  --run gbm_strong=output/predictions/gbm_opening_1y_next_month_strong/predictions_all.parquet \
   --fee-bps 5 \
   --slippage-bps 5 \
   --max-symbol-trades-per-day 1 \
-  --output-dir output/reports/opening_intraday_top20_lgbm_delay1_constrained
+  --output-dir output/reports/opening_intraday_top20_1y_next_month_constrained
 ```
 
 replay 可以从 prediction 自带上下文列或额外 context 数据补齐执行约束。`entry_tick_delay` 分支需要使用
@@ -323,8 +313,8 @@ replay 可以从 prediction 自带上下文列或额外 context 数据补齐执�
 
 ```bash
 python scripts/run_opening_intraday_backtest.py \
-  --run gbm=output/predictions/gbm_opening_1y_next_month_delay1/predictions_all.parquet \
-  --run gbm_strong=output/predictions/gbm_opening_1y_next_month_strong_delay1/predictions_all.parquet \
+  --run gbm=output/predictions/gbm_opening_1y_next_month/predictions_all.parquet \
+  --run gbm_strong=output/predictions/gbm_opening_1y_next_month_strong/predictions_all.parquet \
   --context-input <raw_tick_or_labeled_context_root> \
   --context-kind auto \
   --context-entry-tick-delay 1 \
@@ -343,13 +333,13 @@ python scripts/run_opening_intraday_backtest.py \
   --ask-depth-fill-mode sweep \
   --ask-depth-participation-rate 1.0 \
   --max-symbol-trades-per-day 1 \
-  --output-dir output/reports/opening_intraday_top20_1y_next_month_delay1_constrained
+  --output-dir output/reports/opening_intraday_top20_1y_next_month_constrained
 ```
 
 旧归档 predictions 没有 `status`、`spread_bps`、`turnover_diff_30t` 等上下文列；如果不传
 `--context-input`，这些文件只能用于成本、滑点和同股重复交易的复算。
 
-LightGBM delay1/delay2 四个 prediction 都拉回后，优先跑标准 replay 网格：
+如果后续重新生成 LightGBM delay0/1/2 六个 prediction，优先跑标准 replay 网格：
 
 ```bash
 python scripts/run_lgbm_delay_replays.py \
@@ -365,6 +355,8 @@ output/predictions/lgbm_opening_1y_next_month_delay1/predictions_all.parquet
 output/predictions/lgbm_opening_1y_next_month_strong_delay1/predictions_all.parquet
 output/predictions/lgbm_opening_1y_next_month_delay2/predictions_all.parquet
 output/predictions/lgbm_opening_1y_next_month_strong_delay2/predictions_all.parquet
+output/predictions/lgbm_opening_1y_next_month_delay0/predictions_all.parquet
+output/predictions/lgbm_opening_1y_next_month_strong_delay0/predictions_all.parquet
 ```
 
 默认场景：
@@ -373,10 +365,13 @@ output/predictions/lgbm_opening_1y_next_month_strong_delay2/predictions_all.parq
 | --- | --- |
 | `proxy_top20` | 无额外成本；Top20；同股每日最多一次。 |
 | `cost_10bps` | `fee_bps=5`、`slippage_bps=5`。 |
-| `tradable_cost` | 成本 + `status/entry_status in T0,20,TRADE` + decision/entry lag 不超过 5 秒。 |
+| `tradable_cost` | 成本 + `status/entry_status in T0,20,TRADE` + decision lag 不超过 5 秒 + entry 路径相邻 tick 最大间隔不超过 5 秒。 |
 | `liquidity_cost` | tradable + `spread_bps <= 100` + 一档买卖量正数 + 涨停距离至少 5 bps。 |
 | `capacity_10m_5pct` | liquidity + 每 cycle 1000 万资金、单票目标金额不超过 `turnover_diff_30t` 的 5%、最低可见容量 10 万，并要求 entry 十档卖盘能容纳目标金额；收益按十档 sweep VWAP 修正。 |
 | `strict_10m_2pct` | 更严的压力测试：15 bps 成本、`spread_bps <= 50`、涨停距离 10 bps、最低可见容量 20 万、成交额参与率 2%、只使用 50% entry 十档可见卖盘。 |
+
+旧 prediction 如果没有 `entry_max_tick_gap_seconds`，entry 新鲜度需要通过重建 prediction 或传
+`--context-input` 重新补齐；不要用总等待时间比较 delay0/1/2 的 entry 新鲜度。
 
 输出：
 
@@ -406,7 +401,7 @@ replay 实现上不要为每个真实限制单独造一套模型，优先合并�
 
 ```text
 成本 haircut: fee / slippage / 平均冲击成本
-时延和新鲜度: data latency / signal latency / gateway latency / entry tick delay / decision-entry lag
+时延和新鲜度: data latency / signal latency / gateway latency / entry tick delay / entry tick gap
 可交易性: status / entry_status / 涨跌停距离 / 停牌临停
 流动性和成交: spread / 一档深度 / 十档 sweep / capacity / participation / partial fill
 组合调度: TopN / 单票权重 / 现金 / 同股重复 / cooldown / 换手
@@ -417,7 +412,7 @@ replay 实现上不要为每个真实限制单独造一套模型，优先合并�
 | 成交延迟 | `--context-entry-tick-delay` / `[labels].entry_tick_delay` | replay 可用 raw tick context 重算 realized label；若要让模型训练目标也变成 delay label，再单独训练 delay run。 |
 | fee/slippage | `--fee-bps` / `--slippage-bps` | 通常不需要，先 replay。 |
 | 交易状态 | `status` / `entry_status` / `--tradable-status` | 固定部署硬过滤可重训；压力测试先 replay。 |
-| tick 新鲜度 | `decision_lag_seconds` / `entry_lag_seconds` | 不需要，replay。 |
+| tick 新鲜度 | `decision_lag_seconds` / `entry_max_tick_gap_seconds` / `--max-entry-tick-gap-seconds` | 不需要，replay。成交延迟本身用 `entry_delay_seconds` 单独审计。 |
 | spread | `spread_bps` / `--max-spread-bps` | strong candidate 可进样本域；执行压测先 replay。 |
 | 涨停距离 | `ask1_to_limit_up_bps` / `--min-limit-up-room-bps` | 不需要，除非定义固定交易池。 |
 | 一档挂量 | `ask_volume_1` / `bid_volume_1` | 不需要，replay。 |
@@ -501,7 +496,7 @@ cash_weight
 
 ```bash
 python scripts/record_experiment.py \
-  --config experiments/runs/lgbm_opening_1y_next_month_delay1.toml
+  --config experiments/runs/<new_run_id>.toml
 python scripts/audit_experiments.py
 python scripts/check_workflow_coverage.py
 ```

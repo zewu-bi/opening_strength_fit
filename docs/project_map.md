@@ -4,7 +4,7 @@
 
 - `README.md`: 项目目标、高层结构、快速开始、实验记录和当前基线。
 - `requirements.txt`: Python 运行依赖。
-- `Dockerfile`: 训练镜像定义，工作目录为 `/app/opening_strength_fit`；当前会从源码编译 `USE_GPU=ON` 的 LightGBM。
+- `Dockerfile`: 训练镜像定义，工作目录为 `/app/opening_strength_fit`；安装 `requirements.txt` 中的 CPU 依赖。
 - `.env.example`: 本地 tick path 和 ClickHouse 凭证示例。
 - `.gitignore`: 忽略虚拟环境、缓存和本地输出。
 
@@ -43,15 +43,16 @@
 - `fetch_clickhouse_ticks.py`: 按 symbol/date 从 ClickHouse 抓取 tick 窗口并写出 parquet/csv。
 - `concat_frames.py`: 合并多个 parquet/csv tick 文件，生成训练输入。
 - `build_labels.py`: 从 tick 表生成带特征和 label 的 parquet/csv。
+- `materialize_labeled_caches.py`: 在集群内按 delay 生成可复用的 labeled parquet cache，并用 lock/heartbeat 协调 PVC 写入。
 - `run_experiment.py`: 按 TOML 配置运行 baseline 训练和预测。
 - `evaluate_predictions.py`: 读取 prediction parquet/csv 并按 `selection_mode` 输出 IC、分桶和 top-score 摘要。
 - `summarize_opening_results.py`: 读取 `metrics_by_year.csv`，输出 yearly table 和稳定性摘要。
 - `compare_opening_results.py`: 比较多个 opening metrics CSV，生成 CSV、Markdown 和 PNG 报告。
-- `render_k8s_job.py`: 从 TOML config 渲染 training Job 和 reader Job YAML，支持 `--sharded`；会根据 `[k8s.resources].gpu_limit` 渲染 GPU request/limit、GPU toleration 和 node selector。
+- `render_k8s_job.py`: 从 TOML config 渲染 training Job 和 reader Job YAML，支持 `--sharded`；CPU 任务不渲染 GPU request/toleration，只有配置了 `[k8s.resources].gpu_limit` 时才渲染 GPU 资源。
 - `pull_k8s_metrics.py`: 从 K8s PVC 拉回 `metrics_by_year.csv`。
 - `fetch_k8s_predictions.py`: 从 K8s PVC 拉回 `predictions.parquet` / `predictions_all.parquet`。
 - `run_opening_intraday_backtest.py`: 对 tick predictions 做开盘短周期 TopN 回测，可用 raw tick/labeled context enrich 旧 prediction，支持成本、滑点、容量、entry 卖盘深度、状态、spread 和同股重复交易约束。
-- `run_lgbm_delay_replays.py`: 在拉回 LightGBM delay1/delay2 predictions 后，一键跑标准 constrained replay 场景网格并汇总 `scenario_summary.csv`。
+- `run_lgbm_delay_replays.py`: 在拉回 LightGBM delay0/1/2 predictions 后，一键跑标准 constrained replay 场景网格并汇总 `scenario_summary.csv`。
 - `record_experiment.py`: 把 `output/` 里的轻量 metrics 证据归档到 `experiments/results/`。
 
 ## `experiments/`

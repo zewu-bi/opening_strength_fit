@@ -104,7 +104,8 @@ Status
 ## Label 和特征
 
 当前 label 是“当前 tick 决策、延迟 N 个 tick 成交、持有 60 秒、再用后续 60 秒 VWAP 退出”的
-short-horizon proxy。当前主线分别跑 `entry_tick_delay = 1/2`、`fee_bps = 0`：
+short-horizon proxy。已归档 Ridge/GBM baseline 使用 `entry_tick_delay = 0`；
+代码和 replay 工具支持后续新实验按 `entry_tick_delay = 0/1/2`、`fee_bps = 0` 拆分比较：
 
 ```text
 decision_t = 当前样本 tick
@@ -121,9 +122,11 @@ label = sell_vwap / buy_price - 1 - fee_bps / 10000
 
 `volume` 是累计成交量，`turnover` 是累计成交额。`valid_label` 要求买入价有效、entry tick 有效、
 退出窗口内有正成交量/成交额，并可按 `[filters].tradable_statuses` 约束交易状态。
+delay 和新鲜度分开记录：`entry_delay_seconds` 是从 decision tick 到 entry tick 的总等待时间；
+`entry_max_tick_gap_seconds` 是这段路径里相邻 tick 的最大间隔，用于判断 entry 行情是否过旧。
 
 训练/replay 边界：改变 label 或样本域的口径进训练；只改变执行、成本、容量或选股后的约束先放 replay。
-当前先跑 delay1/delay2；也支持用瘦 prediction + replay context 复算 delay realized label。
+后续新实验可按 delay0/1/2 拆分；也支持用瘦 prediction + replay context 复算 delay realized label。
 fee/slippage/spread/容量/状态/同股一次等约束用同一批 predictions 压测。
 fee 和滑点对固定入选交易是确定性 haircut，当前不需要为 fee 立刻重训；只有当研究目标变成
 net label 排序、成本改变样本有效性，或 fee/slippage 与成交容量一起改变训练样本域时，才另开训练分支。
@@ -155,14 +158,14 @@ X 特征只允许使用 decision point 当时及此前可见的信息。当前�
 [model]         ridge 或 gbm 参数
 [evaluation]    IC/bucket/selection group、score bins、TopN
 [output]        local_dir 和 k8s_dir
-[k8s]           namespace、PVC、镜像拉取和 ClickHouse secret
+[k8s]           namespace、PVC 和镜像拉取配置
 ```
 
 模型：
 
 - Ridge regression：`SimpleImputer -> StandardScaler -> Ridge`。
 - sklearn GBM：`SimpleImputer -> HistGradientBoostingRegressor`。
-- LightGBM：`SimpleImputer -> LGBMRegressor`，支持 `device_type = "cpu"` / `"gpu"`；当前主线在 research 集群用单卡 A100/H100 GPU 跑。
+- LightGBM：`SimpleImputer -> LGBMRegressor`，支持 `device_type = "cpu"` / `"gpu"`；PVC labeled cache + CPU LightGBM workflow 已实现，当前本地实验注册表只保留已完成的 Ridge/GBM baseline。
 
 评估 group mode：
 
@@ -197,10 +200,10 @@ metrics_by_month.csv / metrics_by_month.parquet  # monthly rolling 时生成
 
 | 约束 | 处理方式 |
 | --- | --- |
-| `entry_tick_delay` | 改变 entry price 和 label，进训练配置，当前跑 delay1/delay2。 |
+| `entry_tick_delay` | 改变 entry price 和 label，进训练配置；后续可按 delay0/1/2 新开 run。 |
 | fee / slippage | 不改变 prediction 排序，先在 replay 用 `--fee-bps` / `--slippage-bps` 扣减。 |
 | 交易状态 | 训练用 `[filters].tradable_statuses` 控制 label 有效性；replay 再检查 `status` / `entry_status`。 |
-| decision/entry lag | replay 用 `--max-decision-lag-seconds` / `--max-entry-lag-seconds` 控制 tick 新鲜度。 |
+| tick 新鲜度 | replay 用 `--max-decision-lag-seconds` 控制 decision tick；用 `--max-entry-tick-gap-seconds` 控制 entry 路径相邻 tick 最大间隔。 |
 | spread / 一档深度 | replay 用 `--max-spread-bps`、`--min-ask-volume-1`、`--min-bid-volume-1`。 |
 | entry 卖盘容量 | replay 用 prediction 自带或 `--context-input` 补齐的 `entry_ask_price_1..10` / `entry_ask_volume_1..10` 检查目标金额能否在 entry tick 的卖盘中成交；十档 sweep 场景会用 sweep VWAP 修正收益。 |
 | 涨停距离 | 若 prediction 或 `--context-input` 有 `ask1_to_limit_up_bps`，replay 用 `--min-limit-up-room-bps`。 |
@@ -208,6 +211,9 @@ metrics_by_month.csv / metrics_by_month.parquet  # monthly rolling 时生成
 | TopN/现金/单票 | replay 控制 `--top-n`、`--max-symbol-weight`，未选满资金留现金。 |
 | 同股重复/冷却 | replay 控制 `--max-symbol-trades-per-day`、`--symbol-cooldown-minutes`。 |
 | T+1 | 当前 60s label 只是 microstructure proxy；真实选股要接 close/next open/next close 等 longer-horizon label。 |
+
+旧 prediction 如果没有 `entry_max_tick_gap_seconds`，需要重建 prediction 或通过 `--context-input`
+补齐后再做 entry 新鲜度过滤。
 
 ## 快速开始
 
@@ -262,7 +268,7 @@ python scripts/run_experiment.py \
   --output-dir output/local/gbm_opening_1y_next_month_multi_symbol_smoke
 ```
 
-本地训练 smoke 仍用 CPU config；GPU 是否可用通过镜像 smoke 和 research 集群 Job 验证。
+本地训练 smoke 仍用 CPU config；正式长窗口任务在 research 集群直接读取 PVC 上的 labeled cache。
 
 查看 smoke 结果：
 
@@ -275,51 +281,59 @@ python scripts/evaluate_predictions.py \
 ```
 
 不要在本地为一年或多月窗口准备完整 labeled dataset。正式长窗口实验应通过
-`[data].source = "clickhouse"` 的 K8s Job 在集群内读取原始 tick、构造 feature/label、训练和评估，
-本地只拉回 metrics、predictions 和轻量 opening replay 结果。
+`[data].source = "path"` / `[data].input_kind = "labeled"` 的 K8s Job 直接读取 PVC cache，
+训练和评估后只拉回 metrics、predictions 和轻量 opening replay 结果。
+
+提交训练前先确认 PVC cache 是新口径完整文件：计划使用的 delay cache 应存在于
+`/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay*_labeled.parquet`，
+且 schema 包含 `entry_delay_seconds` 和 `entry_max_tick_gap_seconds`。只有
+`entry_lag_seconds` 的旧 cache 不用于新鲜度/延迟拆分后的正式训练。cache 由
+`scripts/materialize_labeled_caches.py` 生成；如果需要在 K8s 上跑 materialize，使用专用
+Job 入口，不要用通用训练 renderer 改成 `scripts/run_experiment.py`。
 
 ## K8s 实验闭环
 
-常规长窗口实验流程：
+常规长窗口实验流程。当前 repo 不保留活跃 LightGBM run/job YAML；新开实验时先创建
+`experiments/runs/<new_run_id>.toml`，再渲染对应 Job：
 
 ```bash
-TAG=opening-strength-fit-$(date +%Y%m%d)-lgbm-gpu-v1
+TAG=opening-strength-fit-$(date +%Y%m%d)-lgbm-cpu-v1
 docker build --build-arg CACHE_BUST=${TAG} -t registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG} .
 docker push registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG}
 
 python scripts/render_k8s_job.py \
-  --config experiments/runs/lgbm_opening_1y_next_month_delay1.toml \
+  --config experiments/runs/<new_run_id>.toml \
   --image registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG}
 
-rg -n "nodeSelector|tolerations|nvidia.com/gpu|image:" experiments/jobs/lgbm_opening_1y_next_month_delay1_job.yaml
-hfcli kubectl --cluster research delete job opening-strength-lgbm-opening-1y-next-month-delay1 --ignore-not-found -n bizewu
-hfcli kubectl --cluster research apply -f experiments/jobs/lgbm_opening_1y_next_month_delay1_job.yaml
-hfcli kubectl --cluster research logs -f job/opening-strength-lgbm-opening-1y-next-month-delay1 -n bizewu
+rg -n "nvidia|gpu|nodeSelector|envFrom|image:" experiments/jobs/<new_run_id>_job.yaml
+hfcli kubectl --cluster research delete job opening-strength-<new-run-slug> --ignore-not-found -n bizewu
+hfcli kubectl --cluster research apply -f experiments/jobs/<new_run_id>_job.yaml
+hfcli kubectl --cluster research logs -f job/opening-strength-<new-run-slug> -n bizewu
 ```
 
 reader、拉回和归档：
 
 ```bash
-hfcli kubectl --cluster research delete job opening-strength-read-lgbm-opening-1y-next-month-delay1 --ignore-not-found -n bizewu
-hfcli kubectl --cluster research apply -f experiments/jobs/lgbm_opening_1y_next_month_delay1_reader_job.yaml
-hfcli kubectl --cluster research wait --for=condition=complete job/opening-strength-read-lgbm-opening-1y-next-month-delay1 -n bizewu --timeout=300s
+hfcli kubectl --cluster research delete job opening-strength-read-<new-run-slug> --ignore-not-found -n bizewu
+hfcli kubectl --cluster research apply -f experiments/jobs/<new_run_id>_reader_job.yaml
+hfcli kubectl --cluster research wait --for=condition=complete job/opening-strength-read-<new-run-slug> -n bizewu --timeout=300s
 
 python scripts/pull_k8s_metrics.py \
-  --config experiments/runs/lgbm_opening_1y_next_month_delay1.toml
+  --config experiments/runs/<new_run_id>.toml
 
 python scripts/fetch_k8s_predictions.py \
-  --config experiments/runs/lgbm_opening_1y_next_month_delay1.toml \
-  --output-dir output/predictions/lgbm_opening_1y_next_month_delay1
+  --config experiments/runs/<new_run_id>.toml \
+  --output-dir output/predictions/<new_run_id>
 
 python scripts/record_experiment.py \
-  --config experiments/runs/lgbm_opening_1y_next_month_delay1.toml
+  --config experiments/runs/<new_run_id>.toml
 
 python scripts/audit_experiments.py
 python scripts/check_workflow_coverage.py
 ```
 
-LightGBM GPU 任务需要 `[model].device_type = "gpu"`、`[k8s.resources].gpu_limit = "1"`，
-并通过 `[k8s.node_selector].mem_per_gpu_tier = "high"` 优先落到 research 集群的单卡友好节点。
+当前 LightGBM 正式任务使用 `[model].device_type = "cpu"`，Job YAML 不应包含
+`nvidia.com/gpu`、GPU toleration 或 GPU nodeSelector。
 
 ## 结果分析
 
@@ -327,7 +341,7 @@ LightGBM GPU 任务需要 `[model].device_type = "gpu"`、`[k8s.resources].gpu_l
 
 ```bash
 python scripts/summarize_opening_results.py \
-  --metrics-csv output/k8s/metrics/lgbm_opening_1y_next_month_delay1_metrics_by_year.csv
+  --metrics-csv output/k8s/metrics/gbm_opening_1y_next_month_metrics_by_year.csv
 ```
 
 多实验 metrics 对比：
@@ -342,12 +356,12 @@ python scripts/compare_opening_results.py
 
 ```bash
 python scripts/run_opening_intraday_backtest.py \
-  --run lgbm_delay1=output/predictions/lgbm_opening_1y_next_month_delay1/predictions_all.parquet \
-  --run lgbm_strong_delay1=output/predictions/lgbm_opening_1y_next_month_strong_delay1/predictions_all.parquet \
+  --run gbm=output/predictions/gbm_opening_1y_next_month/predictions_all.parquet \
+  --run gbm_strong=output/predictions/gbm_opening_1y_next_month_strong/predictions_all.parquet \
   --fee-bps 5 \
   --slippage-bps 5 \
   --max-symbol-trades-per-day 1 \
-  --output-dir output/reports/opening_intraday_top20_lgbm_delay1_constrained
+  --output-dir output/reports/opening_intraday_top20_1y_next_month_constrained
 ```
 
 新预测产物可能额外带上 `status`、`entry_status`、`spread_bps`、`turnover_diff_30t` 等上下文列；
@@ -359,13 +373,13 @@ prediction 如果已经带 `entry_ask_price_1..10` 和 `entry_ask_volume_1..10`�
 执行上下文；`--context-label-mode replace` 会用 context label 作为 replay PnL，同时保留
 `prediction_label` 便于审计，用于区分“时间漂移后的 entry price”和“entry tick 上的真实卖盘容量”。
 
-LightGBM delay1/delay2 predictions 全部拉回后，可以直接跑标准 replay 网格：
+如果后续重新生成 LightGBM delay0/1/2 predictions，可以直接跑标准 replay 网格：
 
 ```bash
 python scripts/run_lgbm_delay_replays.py
 ```
 
-默认会对 delay1/delay2 的普通与 strong predictions 跑：
+默认会对 delay0/1/2 的普通与 strong predictions 跑：
 
 ```text
 proxy_top20
@@ -387,10 +401,10 @@ output/reports/opening_intraday_lgbm_delay_replays/scenario_summary.csv
 
 ## 当前实验状态
 
-已有归档覆盖 Ridge/GBM、普通 universe/strong candidate、小窗 smoke 和 1y next-month。
-后续活跃研究线切到 LightGBM，并按 `entry_tick_delay = 1/2` 比较延迟衰减。
-普通 universe 与 strong candidate 分支共享同一个 delay 对应的 base labeled feature cache。
-截至 `2026-05-21` 的实验索引与口径说明见 [docs/experiment_log.md](docs/experiment_log.md)。
+当前本地实验注册表只保留两组已完成归档：`1m3d` 小窗口 Ridge/GBM 对比，以及
+`1y_next_month` Ridge/GBM/strong 对比。后续若继续 LightGBM，需要新建 run/job，再按
+`entry_tick_delay = 0/1/2` 比较延迟衰减；普通 universe 与 strong candidate 分支可共享同一个
+delay 对应的 PVC labeled feature cache。实验索引与口径说明见 [docs/experiment_log.md](docs/experiment_log.md)。
 
 归档的 2021 训练、2022-01 测试结果显示，修正到
 `date x decision_target_timestamp` 的横截面口径后，旧 sklearn GBM 暂时最强：
@@ -404,11 +418,11 @@ output/reports/opening_intraday_lgbm_delay_replays/scenario_summary.csv
 
 与 label 一致的开盘短周期 Top20 replay 在 2022-01 单月上为正，旧普通 GBM 的
 mean cycle return 约 `+42.21 bps`、19 个测试日均为正。这个结果只能说明短周期方向性值得继续验证，
-当前已提交 LightGBM GPU + labeled cache 的 delay1/delay2 四个任务，后续主要比较 IC、bucket 单调性、
-Top/Bottom spread 和延迟衰减；opening replay 只作为 proxy 压力测试，不作为 A 股 T+1 可交易回测。
+后续 LightGBM 主要比较 IC、bucket 单调性、Top/Bottom spread 和延迟衰减；opening replay
+只作为 proxy 压力测试，不作为 A 股 T+1 可交易回测。
 
-注意：已归档结果使用无成交延迟口径（`entry_tick_delay = 0`）。当前 config 按
-`entry_tick_delay = 1/2` 分支比较，后续新跑结果不要和旧归档直接横向混比。
+注意：旧 Ridge/GBM 归档结果使用无成交延迟口径（`entry_tick_delay = 0`），新 LightGBM delay0
+只用于同模型延迟基准；不要和旧模型归档直接横向混比。
 
 ## 开发约定
 

@@ -20,7 +20,7 @@ from run_opening_intraday_backtest import (
 )
 
 
-DEFAULT_DELAYS = ("delay1", "delay2")
+DEFAULT_DELAYS = ("delay0", "delay1", "delay2")
 RUN_ID_TEMPLATE = "lgbm_opening_1y_next_month{strong_suffix}_{delay}"
 
 
@@ -33,7 +33,7 @@ class ReplayScenario:
     tradable_statuses: tuple[str, ...] = ()
     require_entry_status: bool = False
     max_decision_lag_seconds: float | None = None
-    max_entry_lag_seconds: float | None = None
+    max_entry_tick_gap_seconds: float | None = None
     max_spread_bps: float | None = None
     min_limit_up_room_bps: float | None = None
     min_ask_volume_1: float | None = None
@@ -61,13 +61,13 @@ SCENARIOS: dict[str, ReplayScenario] = {
     ),
     "tradable_cost": ReplayScenario(
         name="tradable_cost",
-        description="Cost plus continuous-trading status and fresh decision/entry ticks.",
+        description="Cost plus continuous-trading status and fresh decision/entry tick path.",
         fee_bps=5.0,
         slippage_bps=5.0,
         tradable_statuses=("T0", "20", "TRADE"),
         require_entry_status=True,
         max_decision_lag_seconds=5.0,
-        max_entry_lag_seconds=5.0,
+        max_entry_tick_gap_seconds=5.0,
     ),
     "liquidity_cost": ReplayScenario(
         name="liquidity_cost",
@@ -77,7 +77,7 @@ SCENARIOS: dict[str, ReplayScenario] = {
         tradable_statuses=("T0", "20", "TRADE"),
         require_entry_status=True,
         max_decision_lag_seconds=5.0,
-        max_entry_lag_seconds=5.0,
+        max_entry_tick_gap_seconds=5.0,
         max_spread_bps=100.0,
         min_limit_up_room_bps=5.0,
         min_ask_volume_1=1.0,
@@ -91,7 +91,7 @@ SCENARIOS: dict[str, ReplayScenario] = {
         tradable_statuses=("T0", "20", "TRADE"),
         require_entry_status=True,
         max_decision_lag_seconds=5.0,
-        max_entry_lag_seconds=5.0,
+        max_entry_tick_gap_seconds=5.0,
         max_spread_bps=100.0,
         min_limit_up_room_bps=5.0,
         min_ask_volume_1=1.0,
@@ -110,7 +110,7 @@ SCENARIOS: dict[str, ReplayScenario] = {
         tradable_statuses=("T0", "20", "TRADE"),
         require_entry_status=True,
         max_decision_lag_seconds=5.0,
-        max_entry_lag_seconds=5.0,
+        max_entry_tick_gap_seconds=5.0,
         max_spread_bps=50.0,
         min_limit_up_room_bps=10.0,
         min_ask_volume_1=1.0,
@@ -127,7 +127,7 @@ SCENARIOS: dict[str, ReplayScenario] = {
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Run the standard constrained replay grid for LightGBM delay1/delay2 "
+            "Run the standard constrained replay grid for LightGBM delay0/1/2 "
             "prediction files after they are fetched from the k8s PVC."
         )
     )
@@ -145,7 +145,7 @@ def parse_args() -> argparse.Namespace:
         "--delay",
         action="append",
         choices=DEFAULT_DELAYS,
-        help="Delay branch to replay. Defaults to delay1 and delay2.",
+        help="Delay branch to replay. Defaults to delay0, delay1, and delay2.",
     )
     parser.add_argument(
         "--scenario",
@@ -185,7 +185,10 @@ def parse_args() -> argparse.Namespace:
         "--context-entry-max-gap-seconds",
         type=int,
         default=None,
-        help="Maximum decision-to-entry tick gap when deriving context from raw ticks.",
+        help=(
+            "Maximum adjacent tick gap on the decision-to-entry path when deriving "
+            "context from raw ticks."
+        ),
     )
     parser.add_argument(
         "--context-decision-max-lag-seconds",
@@ -302,7 +305,7 @@ def replay_scenario(
         tradable_statuses=parse_status_values(list(scenario.tradable_statuses)),
         require_entry_status=scenario.require_entry_status,
         max_decision_lag_seconds=scenario.max_decision_lag_seconds,
-        max_entry_lag_seconds=scenario.max_entry_lag_seconds,
+        max_entry_tick_gap_seconds=scenario.max_entry_tick_gap_seconds,
         max_spread_bps=scenario.max_spread_bps,
         min_limit_up_room_bps=scenario.min_limit_up_room_bps,
         min_ask_volume_1=scenario.min_ask_volume_1,

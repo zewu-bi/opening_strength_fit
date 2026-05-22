@@ -91,8 +91,15 @@ def _future_tick_values(
     if offset_ticks < 0:
         raise SystemExit("entry_tick_delay must be non-negative")
 
+    timing_columns = (
+        f"{suffix}_delay_ticks",
+        f"{suffix}_delay_seconds",
+        f"{suffix}_max_tick_gap_seconds",
+    )
     out = pd.DataFrame(index=frame.index)
     out[f"timestamp_{suffix}"] = pd.NaT
+    for column in timing_columns:
+        out[column] = pd.Series(np.nan, index=frame.index, dtype="float64")
     for column in value_columns:
         out[f"{column}_{suffix}"] = pd.Series(pd.NA, index=frame.index, dtype="object")
 
@@ -101,6 +108,35 @@ def _future_tick_values(
         group = group.sort_values(timestamp_col)
         shifted = group[[timestamp_col, *value_columns]].shift(-offset_ticks)
         shifted.index = group.index
+        timestamps = pd.to_datetime(group[timestamp_col], errors="coerce").astype(
+            "datetime64[ns]"
+        )
+        entry_timestamps = pd.to_datetime(
+            shifted[timestamp_col],
+            errors="coerce",
+        ).astype("datetime64[ns]")
+        valid_entry = timestamps.notna() & entry_timestamps.notna()
+        shifted[f"_{suffix}_delay_ticks"] = np.where(
+            valid_entry,
+            float(offset_ticks),
+            np.nan,
+        )
+        shifted[f"_{suffix}_delay_seconds"] = (
+            entry_timestamps - timestamps
+        ) / pd.Timedelta(seconds=1)
+        if offset_ticks == 0:
+            max_tick_gap = pd.Series(np.nan, index=group.index, dtype="float64")
+            max_tick_gap.loc[valid_entry] = 0.0
+        else:
+            step_gap = timestamps.diff() / pd.Timedelta(seconds=1)
+            path_gaps = pd.concat(
+                [step_gap.shift(-step) for step in range(1, offset_ticks + 1)],
+                axis=1,
+            )
+            complete_path = path_gaps.notna().all(axis=1)
+            max_tick_gap = pd.Series(np.nan, index=group.index, dtype="float64")
+            max_tick_gap.loc[complete_path] = path_gaps.loc[complete_path].max(axis=1)
+        shifted[f"_{suffix}_max_tick_gap_seconds"] = max_tick_gap
         aligned_parts.append(shifted)
 
     if not aligned_parts:
@@ -108,15 +144,20 @@ def _future_tick_values(
 
     aligned = pd.concat(aligned_parts).sort_index()
     out.loc[aligned.index, f"timestamp_{suffix}"] = aligned[timestamp_col]
+    for column in timing_columns:
+        out.loc[aligned.index, column] = pd.to_numeric(
+            aligned[f"_{column}"],
+            errors="coerce",
+        )
     for column in value_columns:
         out.loc[aligned.index, f"{column}_{suffix}"] = aligned[column]
 
     if max_gap_seconds is not None:
-        entry_gap = (
-            out[f"timestamp_{suffix}"] - frame[timestamp_col]
-        ) / pd.Timedelta(seconds=1)
+        entry_gap = out[f"{suffix}_max_tick_gap_seconds"]
         valid_gap = entry_gap.notna() & entry_gap.ge(0) & entry_gap.le(max_gap_seconds)
         out.loc[~valid_gap, f"timestamp_{suffix}"] = pd.NaT
+        for column in timing_columns:
+            out.loc[~valid_gap, column] = np.nan
         for column in value_columns:
             out.loc[~valid_gap, f"{column}_{suffix}"] = np.nan
     return out
@@ -169,9 +210,18 @@ def build_trade_labels(
         entry["timestamp_entry"],
         errors="coerce",
     ).astype("datetime64[ns]")
-    work["entry_lag_seconds"] = (
-        work["entry_timestamp"] - work["timestamp"]
-    ) / pd.Timedelta(seconds=1)
+    work["entry_delay_ticks"] = pd.to_numeric(
+        entry["entry_delay_ticks"],
+        errors="coerce",
+    ).astype("float64")
+    work["entry_delay_seconds"] = pd.to_numeric(
+        entry["entry_delay_seconds"],
+        errors="coerce",
+    ).astype("float64")
+    work["entry_max_tick_gap_seconds"] = pd.to_numeric(
+        entry["entry_max_tick_gap_seconds"],
+        errors="coerce",
+    ).astype("float64")
     work["buy_price"] = pd.to_numeric(
         entry[f"{buy_price_col}_entry"],
         errors="coerce",

@@ -59,7 +59,8 @@ LABELED_PREVIEW_COLUMNS = (
     "return_10t",
     "preopen_turnover",
     "entry_timestamp",
-    "entry_lag_seconds",
+    "entry_delay_seconds",
+    "entry_max_tick_gap_seconds",
     "buy_price",
     "sell_vwap",
     "label",
@@ -332,11 +333,26 @@ def _ask1_execution_check(
             buy_price_ok = bool(buy_price.gt(0).all())
     entry_ok = pd.Series(True, index=labeled.index)
     if entry_tick_delay > 0:
-        if "entry_timestamp" not in labeled.columns or "entry_lag_seconds" not in labeled.columns:
+        if (
+            "entry_timestamp" not in labeled.columns
+            or "entry_delay_seconds" not in labeled.columns
+        ):
             entry_ok = pd.Series(False, index=labeled.index)
         else:
-            lag = pd.to_numeric(labeled["entry_lag_seconds"], errors="coerce")
-            entry_ok = labeled["entry_timestamp"].notna() & lag.ge(0)
+            delay = pd.to_numeric(labeled["entry_delay_seconds"], errors="coerce")
+            entry_ok = labeled["entry_timestamp"].notna() & delay.ge(0)
+        max_entry_gap = _int_or_none(
+            config_value(config, "labels", "entry_max_gap_seconds", None)
+        )
+        if max_entry_gap is not None:
+            if "entry_max_tick_gap_seconds" not in labeled.columns:
+                entry_ok &= False
+            else:
+                entry_gap = pd.to_numeric(
+                    labeled["entry_max_tick_gap_seconds"],
+                    errors="coerce",
+                )
+                entry_ok &= entry_gap.le(max_entry_gap)
         if "entry_status" in labeled.columns:
             entry_ok &= labeled["entry_status"].astype(str).str.upper().isin(allowed)
     ok = bool(
