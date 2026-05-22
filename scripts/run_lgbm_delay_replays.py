@@ -5,10 +5,6 @@ from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
 
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import pandas as pd
 import pyarrow.parquet as pq
 
@@ -577,92 +573,6 @@ def replay_scenario(
     return summary
 
 
-def write_delay_comparison(
-    summary: pd.DataFrame,
-    *,
-    scenario_names: list[str],
-    output_root: Path,
-    metric: str = "mean_cycle_return_bps",
-) -> None:
-    if summary.empty or metric not in summary.columns:
-        return
-    work = summary.copy()
-    scenario_order = {name: idx for idx, name in enumerate(scenario_names)}
-    work["scenario_order"] = work["scenario"].map(scenario_order)
-    work["model_variant"] = work["run"].map(
-        lambda value: "strong" if "strong" in str(value) else "normal"
-    )
-    columns = [
-        "scenario_order",
-        "scenario",
-        "model_variant",
-        "delay",
-        "run",
-        "dates",
-        "cycles",
-        "selected_trades",
-        "mean_cycle_return_bps",
-        "cycle_win_rate",
-        "mean_day_final_return_bps",
-        "positive_day_rate",
-        "compounded_month_return",
-    ]
-    columns = [column for column in columns if column in work.columns]
-    comparison = work[columns].sort_values(
-        ["model_variant", "scenario_order", "delay", "run"]
-    )
-    comparison.to_csv(output_root / "scenario_delay_comparison.csv", index=False)
-
-    pivot = comparison.pivot_table(
-        index=["model_variant", "scenario_order", "scenario"],
-        columns="delay",
-        values=metric,
-        aggfunc="first",
-    ).reset_index()
-    pivot.to_csv(output_root / f"scenario_delay_{metric}.csv", index=False)
-
-    variants = [
-        variant
-        for variant in ("normal", "strong")
-        if variant in work["model_variant"].unique()
-    ]
-    if not variants:
-        return
-    fig, axes = plt.subplots(
-        len(variants),
-        1,
-        figsize=(12, 4.2 * len(variants)),
-        sharex=True,
-        constrained_layout=True,
-    )
-    if len(variants) == 1:
-        axes = [axes]
-    for ax, variant in zip(axes, variants):
-        frame = work.loc[work["model_variant"] == variant].sort_values(
-            ["scenario_order", "delay"]
-        )
-        for delay in ("delay0", "delay1", "delay2"):
-            delay_frame = frame.loc[frame["delay"] == delay]
-            if delay_frame.empty:
-                continue
-            ax.plot(
-                delay_frame["scenario_order"],
-                delay_frame[metric],
-                marker="o",
-                linewidth=2.0,
-                label=delay,
-            )
-        ax.axhline(0.0, color="#999999", linewidth=1.0, linestyle="--")
-        ax.set_title(f"{variant} {metric}")
-        ax.set_ylabel(metric)
-        ax.grid(True, axis="y", alpha=0.3)
-        ax.legend()
-    axes[-1].set_xticks(range(len(scenario_names)))
-    axes[-1].set_xticklabels(scenario_names, rotation=30, ha="right")
-    fig.savefig(output_root / f"scenario_delay_{metric}.png", dpi=160)
-    plt.close(fig)
-
-
 def main() -> None:
     args = parse_args()
     prediction_root = Path(args.prediction_root)
@@ -770,11 +680,6 @@ def main() -> None:
     if summaries:
         combined = pd.concat(summaries, ignore_index=True)
         combined.to_csv(output_root / "scenario_summary.csv", index=False)
-        write_delay_comparison(
-            combined,
-            scenario_names=scenario_names,
-            output_root=output_root,
-        )
         print("\nreplay_scenario_summary:")
         print(combined.to_string(index=False, float_format="{:.6f}".format))
 
