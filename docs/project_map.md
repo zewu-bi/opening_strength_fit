@@ -51,8 +51,8 @@
 - `render_k8s_job.py`: 从 TOML config 渲染 training Job 和 reader Job YAML，支持 `--sharded`；CPU 任务不渲染 GPU request/toleration，只有配置了 `[k8s.resources].gpu_limit` 时才渲染 GPU 资源。
 - `pull_k8s_metrics.py`: 从 K8s PVC 拉回 `metrics_by_year.csv`。
 - `fetch_k8s_predictions.py`: 从 K8s PVC 拉回 `predictions.parquet` / `predictions_all.parquet`。
-- `run_opening_intraday_backtest.py`: 对 tick predictions 做开盘短周期 TopN 回测，可用 raw tick/labeled context enrich 旧 prediction，支持成本、滑点、容量、entry 卖盘深度、状态、spread 和同股重复交易约束。
-- `run_lgbm_delay_replays.py`: 在拉回 LightGBM delay0/1/2 predictions 后，一键跑标准 constrained replay 场景网格并汇总 `scenario_summary.csv`。
+- `run_opening_intraday_backtest.py`: 对 tick predictions 做开盘短周期 TopN 回测，可用 raw tick 或同 delay labeled context enrich 旧 prediction，支持成本、滑点、容量、entry 卖盘深度、状态、spread 和同股重复交易约束。
+- `run_lgbm_delay_replays.py`: 在拉回 LightGBM delay0/1/2 predictions 后，一键跑标准 constrained replay 场景网格并汇总 `scenario_summary.csv`；默认主线 freshness 用 10s，5s 场景作为压力测试。
 - `record_experiment.py`: 把 `output/` 里的轻量 metrics 证据归档到 `experiments/results/`。
 
 ## `experiments/`

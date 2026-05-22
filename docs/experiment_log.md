@@ -67,6 +67,13 @@ baseline metrics/opening replay 使用无成交延迟旧口径（`entry_tick_del
 修正横截面对比表位于 `experiments/results/metrics/`，开盘 Top20 replay 摘要位于
 `experiments/results/backtests/`；大体积 predictions、模型和临时图表仍留在 `output/`，不进入 git。
 
+同日重新按实时 PVC 校准状态：
+
+- 当前 PVC 可分析结果仍只有已归档的 Ridge/GBM baseline 目录；没有可拉回的 LightGBM delay0/1/2 结果目录。
+- 本地已删除过期的 `output/cache/opening_1y_next_month/` cache snapshot 和 `output/k8s/pvc_snapshot/remote_tree.txt`。这类快照不是实时事实源，后续以 `hfcli kubectl exec ... find /mnt/output/opening_strength_fit` 为准。
+- `opening_1y_next_month_delay{0,1,2}_labeled.parquet` 与 `opening_2013_2024_delay1_labeled.parquet` 当前属于 PVC cache 目标路径；只有最终 `*.parquet` 落盘后才可用于训练，`.tmp.parquet`、lock 和 heartbeat 只表示 materialize 正在进行或被中断。
+- 当前正式训练路径是 CPU LightGBM + PVC labeled cache；GPU 仅保留为显式配置能力，当前没有活跃 GPU run/job。
+
 ## 2026-05-20 小窗结果
 
 三组小窗实验均已从 K8s PVC 拉回 `metrics_by_year.csv` 并用

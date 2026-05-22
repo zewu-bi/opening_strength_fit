@@ -63,7 +63,7 @@ python scripts/inspect_dataset.py \
   --labeled-output output/local/inspect_smoke/multi_symbol_2021-09-22_2021-09-23_labeled.parquet
 ```
 
-默认不要在本地为一年或多月窗口运行 `prepare_research_dataset.py`。后续长窗口训练优先用 `[data].source = "path"` 读取 PVC 上的 labeled cache；长窗口 label audit / rule baseline 也应放到集群或专门的小结果 Job，只把 CSV/metrics 拉回本地。
+默认不要在本地为一年或多月窗口运行 `prepare_research_dataset.py`。长窗口数据先在集群里从 ClickHouse materialize 到 PVC labeled cache；后续训练优先用 `[data].source = "labeled_pvc"` 读取这个 cache。长窗口 label audit / rule baseline 也应放到集群或专门的小结果 Job，只把 CSV/metrics 拉回本地。
 
 ## 3. 本地 Smoke
 
@@ -97,7 +97,18 @@ python scripts/summarize_opening_results.py \
 
 `summarize_opening_results.py` 只读取 `metrics_by_year.csv` 做摘要，不重算预测；本地 smoke 和后续集群拉回的年度 metrics 都用这一条查看。
 
-正式 one-year / full-window opening 实验不要在本地准备 labeled dataset。使用 K8s Job 直接读 ClickHouse 原始 tick，在集群内计算 feature/label、训练和评估，然后只拉回 `metrics_by_year.csv`、`metrics_by_month.csv`、`predictions.parquet` 或开盘 replay 所需结果。
+正式 one-year / full-window opening 实验不要在本地准备 labeled dataset。当前推荐路径是：
+
+```text
+ClickHouse stock.tick
+-> K8s materialize Job
+-> /mnt/output/opening_strength_fit/cache/*.parquet
+-> CPU LightGBM training Job with [data].source = "labeled_pvc"
+-> /mnt/output/opening_strength_fit/<run_id>/
+-> local output/k8s/metrics/ and output/predictions/
+```
+
+只拉回 `metrics_by_year.csv`、`metrics_by_month.csv`、`predictions.parquet` 或开盘 replay 所需结果。
 
 ## 4. 新建实验
 
@@ -116,7 +127,7 @@ strong candidate: experiments/runs/gbm_opening_1y_next_month_strong.toml
 [run].description
 [run].status
 [data].source
-[data].tick_path
+[data].labeled_path
 [window].test_start_date / test_end_date 或 test_start_month / test_end_month
 [model]...
 [evaluation].selection_mode
@@ -129,7 +140,7 @@ strong candidate: experiments/runs/gbm_opening_1y_next_month_strong.toml
 
 - `run.id` 必须等于 config 文件名。
 - `status` 提交前写 `queued` 或 `running`，拉回 metrics 并确认后写 `completed`。
-- 集群训练默认用 `[data].source = "path"` / `[data].input_kind = "labeled"`，直接读取 PVC 上的 labeled cache，只把模型结果写到 PVC。
+- 集群训练默认用 `[data].source = "labeled_pvc"` / `[data].labeled_path`，直接读取 PVC 上的 labeled cache，只把模型结果写到 PVC。
 - 本地 smoke 可传 `--input` 或设置 `[data].tick_path` 使用小的 prepared parquet/cache。
 - `[output].k8s_dir` 必须在 `/mnt/output/opening_strength_fit/` 下，且一个实验一个目录。
 - `evaluation.selection_mode` 第一版用 `cross_section`。
@@ -140,9 +151,8 @@ LightGBM CPU + PVC cache run 使用这些配置：
 
 ```toml
 [data]
-source = "path"
-tick_path = "/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay<0|1|2>_labeled.parquet"
-input_kind = "labeled"
+source = "labeled_pvc"
+labeled_path = "/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay<0|1|2>_labeled.parquet"
 
 [model]
 name = "lightgbm"
@@ -152,10 +162,22 @@ max_bin = 63
 
 说明：
 
-- `tick_path` 指向 PVC cache；普通 universe 和 strong candidate 共享同一个 delay cache。
+- `[data].labeled_path` 指向 PVC cache；普通 universe 和 strong candidate 共享同一个 delay cache。
 - strong 过滤在 labeled cache 读取后再做。
-- 提交训练前确认对应 cache 已经完整写好，并且 schema 包含 `entry_delay_seconds` 与 `entry_max_tick_gap_seconds`。只有旧 `entry_lag_seconds` 的 parquet 属于旧口径，不应用作新鲜度/延迟拆分后的正式训练输入。
+- 提交训练前确认对应 cache 已经完整写好，并且 schema 包含 `entry_delay_seconds` 与 `entry_max_tick_gap_seconds`。完整 cache 是最终 `*.parquet` 文件；`.tmp.parquet`、`*.parquet.lock` 和 heartbeat 只表示 materialize 仍在跑或被中断，不是可用训练输入。
+- 只有旧 `entry_lag_seconds` 的 parquet 属于旧口径，不应用作新鲜度/延迟拆分后的正式训练输入。
 - 当前 CPU Job YAML 不应包含 `nvidia.com/gpu`、GPU toleration 或 GPU nodeSelector。
+
+当前路径：
+
+```text
+ClickHouse source: stock.tick, 09:15:00-09:45:00
+1y delay cache: /mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay{0,1,2}_labeled.parquet
+long delay1 cache: /mnt/output/opening_strength_fit/cache/opening_2013_2024_delay1_labeled.parquet
+run output: /mnt/output/opening_strength_fit/<run_id>/
+local metrics: output/k8s/metrics/<run_id>_metrics_by_year.csv
+local predictions: output/predictions/<run_id>/predictions_all.parquet
+```
 
 PVC cache 由 `scripts/materialize_labeled_caches.py` 生成。若需要在集群里跑 materialize，使用专用 Job 入口；当前仓库不保留活跃 materialize Job YAML：
 
@@ -197,6 +219,10 @@ PY
 ```
 
 换了 `TAG` 后必须重新 render Job YAML。
+
+GPU 路径当前不作为默认实验路径。只有显式设置 `[model].device_type = "gpu"` 且
+`[k8s.resources].gpu_limit` 时，`render_k8s_job.py` 才会渲染 GPU request/toleration/nodeSelector；
+这种情况下需要 GPU 兼容镜像和重新 dry-run YAML。没有这些配置时，一律按 CPU Job 处理。
 
 ## 6. 生成 Job YAML
 
@@ -308,14 +334,15 @@ python scripts/run_opening_intraday_backtest.py \
 
 replay 可以从 prediction 自带上下文列或额外 context 数据补齐执行约束。`entry_tick_delay` 分支需要使用
 `entry_ask_price_1..10` 和 `entry_ask_volume_1..10` 建模 entry tick 卖盘容量；如果旧 prediction
-文件缺少这些列，传 `--context-input` 指向 raw tick 或 labeled research dataset，让 replay 按
-`date/symbol/decision_target_timestamp` enrich。拿到 prediction 和 context 后，可以打开更严格约束：
+文件缺少这些列，优先传 `--context-input` 指向 raw tick，让 replay 按
+`date/symbol/decision_target_timestamp` enrich。labeled context 只适合单个已知 delay 分支，必须和
+`--context-entry-tick-delay` 一致。拿到 prediction 和 context 后，可以打开更严格约束：
 
 ```bash
 python scripts/run_opening_intraday_backtest.py \
   --run gbm=output/predictions/gbm_opening_1y_next_month/predictions_all.parquet \
   --run gbm_strong=output/predictions/gbm_opening_1y_next_month_strong/predictions_all.parquet \
-  --context-input <raw_tick_or_labeled_context_root> \
+  --context-input <raw_tick_or_same_delay_labeled_context_root> \
   --context-kind auto \
   --context-entry-tick-delay 1 \
   --context-label-mode replace \
@@ -336,6 +363,9 @@ python scripts/run_opening_intraday_backtest.py \
   --output-dir output/reports/opening_intraday_top20_1y_next_month_constrained
 ```
 
+`--min-limit-up-room-bps` 只有在 prediction 或 context 已有 `ask1_to_limit_up_bps` 时才能使用；
+当前缺字段默认报错，便于发现“场景名写了约束但实际没执行”的问题。
+
 旧归档 predictions 没有 `status`、`spread_bps`、`turnover_diff_30t` 等上下文列；如果不传
 `--context-input`，这些文件只能用于成本、滑点和同股重复交易的复算。
 
@@ -343,10 +373,13 @@ python scripts/run_opening_intraday_backtest.py \
 
 ```bash
 python scripts/run_lgbm_delay_replays.py \
-  --context-input <raw_tick_or_labeled_context_root> \
+  --context-input <raw_tick_context_root> \
   --context-kind auto \
   --context-label-mode replace
 ```
+
+标准 delay 网格优先用 raw tick context，让 wrapper 对 delay0/1/2 分别派生 entry label 和执行上下文。
+如果必须使用 labeled context，需要按 delay 分开传入；wrapper 会检查 `entry_delay_ticks`，不匹配或缺列会直接退出。
 
 默认读取：
 
@@ -359,16 +392,20 @@ output/predictions/lgbm_opening_1y_next_month_delay0/predictions_all.parquet
 output/predictions/lgbm_opening_1y_next_month_strong_delay0/predictions_all.parquet
 ```
 
+这些是生成 LightGBM delay predictions 后的预期本地路径，不代表当前已经存在。运行前先用
+`test -f` 或 `find output/predictions -maxdepth 2 -type f` 确认文件已拉回。
+
 默认场景：
 
 | scenario | 约束 |
 | --- | --- |
 | `proxy_top20` | 无额外成本；Top20；同股每日最多一次。 |
 | `cost_10bps` | `fee_bps=5`、`slippage_bps=5`。 |
-| `tradable_cost` | 成本 + `status/entry_status in T0,20,TRADE` + decision lag 不超过 5 秒 + entry 路径相邻 tick 最大间隔不超过 5 秒。 |
-| `liquidity_cost` | tradable + `spread_bps <= 100` + 一档买卖量正数 + 涨停距离至少 5 bps。 |
-| `capacity_10m_5pct` | liquidity + 每 cycle 1000 万资金、单票目标金额不超过 `turnover_diff_30t` 的 5%、最低可见容量 10 万，并要求 entry 十档卖盘能容纳目标金额；收益按十档 sweep VWAP 修正。 |
-| `strict_10m_2pct` | 更严的压力测试：15 bps 成本、`spread_bps <= 50`、涨停距离 10 bps、最低可见容量 20 万、成交额参与率 2%、只使用 50% entry 十档可见卖盘。 |
+| `tradable_cost` | 成本 + `status/entry_status in T0,20,TRADE` + decision lag 不超过 5 秒 + entry 路径相邻 tick 最大间隔不超过 10 秒。 |
+| `tradable_cost_5s` | 同 `tradable_cost`，但 entry 路径相邻 tick 最大间隔不超过 5 秒，用作严格新鲜度压力测试。 |
+| `liquidity_cost` | `tradable_cost` + `spread_bps <= 100` + decision tick 一档买卖量正数。 |
+| `capacity_10m_5pct` | `liquidity_cost` + 每 cycle 1000 万资金、单票目标金额不超过 `turnover_diff_30t` 的 5%、最低可见容量 10 万，并要求 entry 十档卖盘能容纳目标金额；收益按十档 sweep VWAP 修正。 |
+| `strict_10m_2pct` | 更严的压力测试：15 bps 成本、entry gap 5 秒、`spread_bps <= 50`、最低可见容量 20 万、成交额参与率 2%、只使用 50% entry 十档可见卖盘。 |
 
 旧 prediction 如果没有 `entry_max_tick_gap_seconds`，entry 新鲜度需要通过重建 prediction 或传
 `--context-input` 重新补齐；不要用总等待时间比较 delay0/1/2 的 entry 新鲜度。
@@ -388,12 +425,25 @@ output/reports/opening_intraday_lgbm_delay_replays/<delay>/<scenario>/intraday_s
 python scripts/run_lgbm_delay_replays.py --dry-run
 ```
 
-如果某些 optional 字段在 prediction 和 `--context-input` 中都不存在，例如 `ask1_to_limit_up_bps`，
-默认会 warning 并跳过对应约束；确认字段都齐以后可以改成严格模式：
+拉回新的 CPU LightGBM predictions 后，先跑接口检查：
 
 ```bash
-python scripts/run_lgbm_delay_replays.py --missing-constraint error
+python scripts/run_lgbm_delay_replays.py --check-interface-only
 ```
+
+这一步会检查 `output/predictions/<run_id>/predictions_all.parquet` 是否包含 replay 默认场景需要的
+core prediction、delay metadata、freshness、状态、spread、容量和 entry 十档卖盘字段，并确认
+`entry_delay_ticks` 与 delay0/1/2 分支一致。检查通过后再跑完整 replay。
+
+默认 `--missing-constraint error`，所以请求了某个约束但 prediction 和 `--context-input` 都缺字段时会直接报错。
+这能防止 replay 名字里写着约束、实际却被静默跳过。只有做探索性诊断、明确接受缺字段时，才临时降级：
+
+```bash
+python scripts/run_lgbm_delay_replays.py --missing-constraint warn
+```
+
+涨停距离现在不是默认网格的一部分；需要额外压测时显式运行
+`--scenario limit_up_room_10s`，并确保 context/prediction 已有 `ask1_to_limit_up_bps`。
 
 真实约束检查表：
 
@@ -425,7 +475,7 @@ replay 实现上不要为每个真实限制单独造一套模型，优先合并�
 Ask-depth replay 参数：
 
 ```text
---context-input <path>  # prediction 很瘦时，从 raw tick/labeled context 补执行字段
+--context-input <path>  # prediction 很瘦时，从 raw tick 或同 delay labeled context 补执行字段
 --context-kind auto     # auto/raw_ticks/labeled
 --context-label-mode replace  # 用 context label 作为 replay PnL，保留 prediction_label 便于审计
 --ask-depth-levels 1      # ask1-only

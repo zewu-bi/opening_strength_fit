@@ -165,7 +165,7 @@ X 特征只允许使用 decision point 当时及此前可见的信息。当前�
 
 - Ridge regression：`SimpleImputer -> StandardScaler -> Ridge`。
 - sklearn GBM：`SimpleImputer -> HistGradientBoostingRegressor`。
-- LightGBM：`SimpleImputer -> LGBMRegressor`，支持 `device_type = "cpu"` / `"gpu"`；PVC labeled cache + CPU LightGBM workflow 已实现，当前本地实验注册表只保留已完成的 Ridge/GBM baseline。
+- LightGBM：`SimpleImputer -> LGBMRegressor`，支持 `device_type = "cpu"` / `"gpu"`；当前正式路径优先用 CPU Job 读取 PVC labeled cache。GPU 仍是可配置能力，但当前没有活跃 GPU run/job，仓库本地实验注册表只保留已完成的 Ridge/GBM baseline。
 
 评估 group mode：
 
@@ -212,8 +212,9 @@ metrics_by_month.csv / metrics_by_month.parquet  # monthly rolling 时生成
 | 同股重复/冷却 | replay 控制 `--max-symbol-trades-per-day`、`--symbol-cooldown-minutes`。 |
 | T+1 | 当前 60s label 只是 microstructure proxy；真实选股要接 close/next open/next close 等 longer-horizon label。 |
 
-旧 prediction 如果没有 `entry_max_tick_gap_seconds`，需要重建 prediction 或通过 `--context-input`
-补齐后再做 entry 新鲜度过滤。
+旧 prediction 如果没有 `entry_max_tick_gap_seconds`，需要重建 prediction 或通过 raw tick
+`--context-input` 补齐后再做 entry 新鲜度过滤。delay0/1/2 replay 优先用 raw tick context；
+如果传 labeled context，它必须和当前 delay 分支一致，并包含 `entry_delay_ticks`，否则 wrapper 会直接报错。
 
 ## 快速开始
 
@@ -280,13 +281,22 @@ python scripts/evaluate_predictions.py \
   --input output/local/gbm_opening_1y_next_month_multi_symbol_smoke/predictions.parquet
 ```
 
-不要在本地为一年或多月窗口准备完整 labeled dataset。正式长窗口实验应通过
-`[data].source = "path"` / `[data].input_kind = "labeled"` 的 K8s Job 直接读取 PVC cache，
-训练和评估后只拉回 metrics、predictions 和轻量 opening replay 结果。
+不要在本地为一年或多月窗口准备完整 labeled dataset。当前路径约定：
 
-提交训练前先确认 PVC cache 是新口径完整文件：计划使用的 delay cache 应存在于
-`/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay*_labeled.parquet`，
-且 schema 包含 `entry_delay_seconds` 和 `entry_max_tick_gap_seconds`。只有
+| 用途 | 当前路径 |
+| --- | --- |
+| ClickHouse 原始 tick | `stock.tick`，`09:15:00-09:45:00`，用于 probe、smoke 和 cache materialize |
+| PVC labeled cache | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay{0,1,2}_labeled.parquet` |
+| PVC 长窗口 cache | `/mnt/output/opening_strength_fit/cache/opening_2013_2024_delay1_labeled.parquet` |
+| PVC 实验输出 | `/mnt/output/opening_strength_fit/<run_id>/` |
+| 本地拉回 metrics | `output/k8s/metrics/<run_id>_metrics_by_year.csv` |
+| 本地拉回 predictions | `output/predictions/<run_id>/predictions_all.parquet` |
+
+正式长窗口实验优先通过 `[data].source = "labeled_pvc"` / `[data].labeled_path = "...delayN_labeled.parquet"`
+的 K8s Job 直接读取最终 PVC cache；`[data].source = "path"` / `[data].input_kind = "labeled"` 也兼容。
+只有完整落盘的 `*.parquet` 可用于训练；`.tmp.parquet`、
+`*.parquet.lock` 和 heartbeat 只表示 materialize 仍在进行或被中断，不是可用结果。提交训练前还要
+确认 schema 包含 `entry_delay_seconds` 和 `entry_max_tick_gap_seconds`。只有
 `entry_lag_seconds` 的旧 cache 不用于新鲜度/延迟拆分后的正式训练。cache 由
 `scripts/materialize_labeled_caches.py` 生成；如果需要在 K8s 上跑 materialize，使用专用
 Job 入口，不要用通用训练 renderer 改成 `scripts/run_experiment.py`。
@@ -333,7 +343,9 @@ python scripts/check_workflow_coverage.py
 ```
 
 当前 LightGBM 正式任务使用 `[model].device_type = "cpu"`，Job YAML 不应包含
-`nvidia.com/gpu`、GPU toleration 或 GPU nodeSelector。
+`nvidia.com/gpu`、GPU toleration 或 GPU nodeSelector。GPU 路径只在显式设置
+`[model].device_type = "gpu"` 且 `[k8s.resources].gpu_limit` 时启用；启用后必须重新 build/push
+GPU 兼容镜像、重新 render Job，并确认 YAML 中的 GPU request/toleration/nodeSelector 都符合集群约束。
 
 ## 结果分析
 
@@ -369,13 +381,15 @@ python scripts/run_opening_intraday_backtest.py \
 `--min-capacity-notional` 和 `--max-participation-rate` 做更严格的成交约束。旧归档 prediction 文件
 如果不传 context，只能复算成本和同股重复交易约束。
 prediction 如果已经带 `entry_ask_price_1..10` 和 `entry_ask_volume_1..10`，replay 会直接使用；
-旧的瘦 prediction 也可以通过 `--context-input` 指向 raw tick 或 labeled research dataset 来补齐这些
-执行上下文；`--context-label-mode replace` 会用 context label 作为 replay PnL，同时保留
-`prediction_label` 便于审计，用于区分“时间漂移后的 entry price”和“entry tick 上的真实卖盘容量”。
+旧的瘦 prediction 也可以通过 `--context-input` 指向 raw tick 来补齐这些执行上下文；
+如果使用 labeled research dataset，必须使用和当前 delay 分支相同的 labeled context，且 schema
+包含 `entry_delay_ticks`。`--context-label-mode replace` 会用 context label 作为 replay PnL，
+同时保留 `prediction_label` 便于审计，用于区分“时间漂移后的 entry price”和“entry tick 上的真实卖盘容量”。
 
 如果后续重新生成 LightGBM delay0/1/2 predictions，可以直接跑标准 replay 网格：
 
 ```bash
+python scripts/run_lgbm_delay_replays.py --check-interface-only
 python scripts/run_lgbm_delay_replays.py
 ```
 
@@ -385,10 +399,17 @@ python scripts/run_lgbm_delay_replays.py
 proxy_top20
 cost_10bps
 tradable_cost
+tradable_cost_5s
 liquidity_cost
 capacity_10m_5pct
 strict_10m_2pct
 ```
+
+默认主线场景用 `entry_max_tick_gap_seconds <= 10` 来避免 delay2 被正常 6 秒两跳误杀；
+`tradable_cost_5s` 和 `strict_10m_2pct` 保留 5 秒作为更严的新鲜度压力测试。涨停距离不在默认网格里，
+需要时显式跑 `--scenario limit_up_room_10s`，且必须有 `ask1_to_limit_up_bps` 字段。
+`--check-interface-only` 会先验证拉回的 CPU LightGBM `predictions_all.parquet` 是否含 replay
+默认场景需要的执行字段，并检查 `entry_delay_ticks` 是否和 delay 分支一致。
 
 总表写到：
 
@@ -402,8 +423,9 @@ output/reports/opening_intraday_lgbm_delay_replays/scenario_summary.csv
 ## 当前实验状态
 
 当前本地实验注册表只保留两组已完成归档：`1m3d` 小窗口 Ridge/GBM 对比，以及
-`1y_next_month` Ridge/GBM/strong 对比。后续若继续 LightGBM，需要新建 run/job，再按
-`entry_tick_delay = 0/1/2` 比较延迟衰减；普通 universe 与 strong candidate 分支可共享同一个
+`1y_next_month` Ridge/GBM/strong 对比。实时 PVC 上也只有这些 baseline 结果目录可分析。
+LightGBM delay 结果目录当前不存在；后续要先等对应 PVC cache 完整落盘，再新建 run/job 按
+`entry_tick_delay = 0/1/2` 比较延迟衰减。普通 universe 与 strong candidate 分支可共享同一个
 delay 对应的 PVC labeled feature cache。实验索引与口径说明见 [docs/experiment_log.md](docs/experiment_log.md)。
 
 归档的 2021 训练、2022-01 测试结果显示，修正到

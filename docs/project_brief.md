@@ -21,14 +21,14 @@
 3. Ridge / GBM baseline：用多组数值特征拟合 label，做 out-of-sample 测试；后续活跃研究主线切到 LightGBM，并用 labeled feature cache 降低重复 ClickHouse/feature 构造成本。
 4. 简单 replay：测试阶段只用 model prediction 决策，用事后 label 做 gross replay；该 replay 仅用于观察信号方向性与稳定性，不代表真实可交易的 T+1 策略收益。
 
-当前阶段不接日频组合回测，也不把 tick-level opening score 聚合成日频组合结果。
+已归档的 `1y_next_month` baseline 说明：在无成交延迟、无成本、ask1 理想成交的 proxy 条件下，开盘高频截面信息有 alpha 和排序能力。当前阶段不接日频组合回测，也不把 tick-level opening score 聚合成日频组合结果。
 
 ---
 
 ## 后续研究路线
 
 1. **Short-horizon alpha discovery**
-   继续使用当前高频 proxy label，验证开盘短周期横截面 alpha 是否稳定，并观察 `entry_tick_delay`、fee、容量与成交约束下的衰减。
+   继续使用当前高频 proxy label，验证开盘短周期横截面 alpha 是否稳定，并观察真实交易约束下的衰减。当前重点是等待 delay cache 完整落盘，训练 LightGBM 普通/strong 的 `entry_tick_delay = 0/1/2` 分支，再用统一 replay 网格压测成本、状态、spread、容量、十档卖盘和同股重复约束。
 
 2. **Alpha horizon decay / extension**
    构造 30s、60s、5min、close、next open、next close 等 label，研究 opening predictor 的 alpha decay curve 与 horizon persistence。
@@ -36,7 +36,7 @@
 3. **Daily alpha feature / overlay**
    如果高频 predictor 存在 longer-horizon persistence，将 `09:30-09:40` 的 score 聚合成 stock-day feature，例如 `opening_strength_score`、`opening_score_mean/max`、`top_rank_count` 等，再接入日频模型或 portfolio optimizer。
 
-当前 active work 是第 1 步。第 1 步完成并归档前，不推进第 2、3 步。
+当前 active work 是第 1 步。只有在 delay 和真实交易约束后仍保留稳定 alpha，才推进第 2、3 步。
 
 ---
 
@@ -117,7 +117,7 @@ label = sell_vwap / buy_price - 1 - fee_bps / 10000
 - `volume` 为累计成交量，单位为股；
 - `turnover` 为累计成交额，单位为元。
 
-已归档 baseline 使用无成交延迟旧口径；后续新实验按 delay 分支比较：
+已归档 baseline 使用无成交延迟旧口径；后续新实验按 delay 分支比较。`entry_tick_delay` 会改变买入价和未来退出窗口，因此需要重做 labeled cache；交易成本先不进 delay label，统一在 replay 中扣减。
 
 ```text
 fee_bps = 0
@@ -164,7 +164,7 @@ X 只能使用 decision point 当时及此前可见的信息。
 | 交易状态 | label + replay | 训练配置用 `[filters].tradable_statuses` 约束 decision/entry label 有效性；replay 可再次要求 `status` / `entry_status`。 |
 | 决策和 entry 新鲜度 | replay | `decision_lag_seconds` 控制目标整分钟到实际 decision tick 的延迟；`entry_max_tick_gap_seconds` 控制 decision 到 entry 路径里的相邻 tick 最大间隔。成交延迟本身用 `entry_delay_seconds` 单独审计。 |
 | spread | replay / candidate | strong candidate 可硬过滤 `spread_bps`；正式成交压力测试用 replay 的 `--max-spread-bps`。 |
-| 涨停距离 | replay | 如果上游提供 `limit_up_price` 并生成 `ask1_to_limit_up_bps`，replay 用 `--min-limit-up-room-bps`；没有该列时该约束只能跳过或先补数据源。 |
+| 涨停距离 | replay | 如果上游提供 `limit_up_price` 并生成 `ask1_to_limit_up_bps`，replay 可显式跑 `limit_up_room_10s` 或 `--min-limit-up-room-bps`；没有该列时不要把它混进默认 replay 网格。 |
 | 一档挂量 | replay | 用 `ask_volume_1` / `bid_volume_1` 做最低可见深度过滤，但这只是存在性检查，不等价于完整成交模型。 |
 | entry 卖盘容量 | replay | 使用 prediction 自带或 replay `--context-input` 补齐的 `entry_ask_price_1..10` / `entry_ask_volume_1..10` 检查目标金额能否在 entry tick 的卖盘里成交；十档 sweep 场景会用 sweep VWAP 修正 label。 |
 | 容量/参与率 | replay | 默认用 `turnover_diff_30t` 作为可见成交额 proxy，结合 `capital_per_cycle` 和 `max_participation_rate` 判断能否容纳单票目标金额。 |
@@ -174,12 +174,12 @@ X 只能使用 decision point 当时及此前可见的信息。
 
 约束升级原则：
 
-- 先用 delay0/1/2 predictions 跑 `proxy_top20 -> cost -> tradable -> liquidity -> capacity -> strict` replay 场景，观察 IC、bucket 和 replay 是否同步衰减。
+- 先用 delay0/1/2 predictions 跑 `proxy_top20 -> cost -> tradable(10s) -> tradable_5s -> liquidity -> capacity -> strict` replay 场景，观察 IC、bucket 和 replay 是否同步衰减。
 - 如果某个执行约束只是改变入选后的收益、容量或现金权重，继续放 replay。
 - 如果某个约束会改变训练样本域、候选池定义或未来 label 本身，再创建新的 run config 重训。
 - fee/slippage 默认先放 replay；只有在研究“扣费后最优排序”或成本显著改变 label 横截面顺序时，才单独训练 net-label 模型。
 - Ask1/十档卖盘不足不要只藏在 slippage 里。slippage 表示平均执行劣化；entry 卖盘容量决定是否能成交、成交多少，以及是否要扫到更高档位。
-- replay-only 约束应支持“瘦 prediction + context input”：prediction 提供 score/key，context 补真实盘口、状态、容量和 realized label。
+- replay-only 约束应支持“瘦 prediction + context input”：prediction 提供 score/key，raw tick 或同 delay labeled context 补真实盘口、状态、容量和 realized label；缺关键字段默认报错。
 
 ---
 
@@ -191,7 +191,7 @@ X 只能使用 decision point 当时及此前可见的信息。
 - sklearn GBM
 
 后续主线可使用 LightGBM 普通 universe 与 opening-strength candidate 过滤分支，并按 `entry_tick_delay = 0/1/2` 比较延迟衰减。
-LightGBM 代码支持 CPU/GPU 参数；PVC labeled cache workflow 已实现。当前本地实验注册表只保留已完成的 Ridge/GBM baseline。
+当前正式路径优先用 CPU LightGBM 读取 PVC labeled cache；GPU 只是显式配置能力，当前没有活跃 GPU run/job。PVC cache 目标路径是 `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay{0,1,2}_labeled.parquet`，只有最终 `*.parquet` 落盘后才可用于训练；`.tmp.parquet`、lock 和 heartbeat 不算完成结果。当前本地实验注册表只保留已完成的 Ridge/GBM baseline。
 
 训练阶段使用 X 拟合 label；测试阶段仅使用 X 生成 `prediction`，再用事后 label 做评估。
 
