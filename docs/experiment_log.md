@@ -1,8 +1,8 @@
 # Experiment Log
 
-Note: 已归档的 baseline metrics/opening replay 使用无成交延迟旧口径（`entry_tick_delay = 0`，
-当前 tick ask1 买入）。当前主线配置已切到 LightGBM GPU + labeled feature cache，并分别跑
-`entry_tick_delay = 1/2`；新旧两类口径不要直接横向混比。
+Note: 本地 `experiments/jobs`、`experiments/runs` 和 `experiments/results` 当前只保留两组已归档对比：
+`1m3d` 小窗口 Ridge/GBM 对比，以及 `1y_next_month` Ridge/GBM/strong 对比。已归档的
+baseline metrics/opening replay 使用无成交延迟旧口径（`entry_tick_delay = 0`，当前 tick ask1 买入）。
 
 | run | status | notes |
 | --- | --- | --- |
@@ -53,8 +53,19 @@ Note: 已归档的 baseline metrics/opening replay 使用无成交延迟旧口�
 | `ridge_opening_1y_next_month_strong` | +14.66 | 64.2% | +73.51 | 15/19 | +14.9% |
 
 初步判断：横截面排序信号在 2022-01 单月上均为正，且在匹配 label 的开盘短周期回测中
-能转化为明显正收益；普通 GBM 最强。下一步已切到 LightGBM GPU + labeled cache，并用
-delay1/delay2 比较成交延迟下的排序衰减。
+能转化为明显正收益；普通 GBM 最强。
+
+## 2026-05-22 本地实验清理
+
+按当前 PVC/研究口径，本地实验注册表只保留两组结果：
+
+- `1m3d` 小窗口对比：`ridge_opening_1m_3d`、`ridge_opening_1m_3d_strong`、`gbm_opening_1m_3d`
+- `1y_next_month` 对比：`ridge_opening_1y_next_month`、`ridge_opening_1y_next_month_strong`、`gbm_opening_1y_next_month`、`gbm_opening_1y_next_month_strong`
+
+已清理本地未进入这两组归档的 LightGBM delay/materialize Job YAML 和 run config。
+`experiments/results/` 按 runbook 只保留轻量证据：单 run metrics 位于 `experiments/results/metrics/*_metrics_by_year.csv`，
+修正横截面对比表位于 `experiments/results/metrics/`，开盘 Top20 replay 摘要位于
+`experiments/results/backtests/`；大体积 predictions、模型和临时图表仍留在 `output/`，不进入 git。
 
 ## 2026-05-20 小窗结果
 
