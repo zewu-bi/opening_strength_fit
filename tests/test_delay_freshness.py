@@ -16,6 +16,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 from run_lgbm_delay_replays import DEFAULT_SCENARIOS, SCENARIOS  # noqa: E402
 from run_lgbm_delay_replays import validate_context_delay  # noqa: E402
 from run_lgbm_delay_replays import validate_prediction_interface  # noqa: E402
+from run_lgbm_delay_replays import write_delay_comparison  # noqa: E402
 from run_opening_intraday_backtest import apply_static_constraints  # noqa: E402
 
 
@@ -200,6 +201,46 @@ class DelayFreshnessTest(unittest.TestCase):
                 )
 
         self.assertIn("entry_ask_volume_10", str(caught.exception))
+
+    def test_lgbm_delay_comparison_writes_three_delay_view(self) -> None:
+        summary = pd.DataFrame(
+            [
+                {
+                    "delay": delay,
+                    "scenario": scenario,
+                    "run": run,
+                    "dates": 1,
+                    "cycles": 1,
+                    "selected_trades": 1,
+                    "mean_cycle_return_bps": value,
+                    "cycle_win_rate": 1.0,
+                    "mean_day_final_return_bps": value,
+                    "positive_day_rate": 1.0,
+                    "compounded_month_return": value / 10_000.0,
+                }
+                for scenario, base in (("proxy_top20", 1.0), ("cost_10bps", 2.0))
+                for run, offset in (("lgbm_delay", 0.0), ("lgbm_strong_delay", 10.0))
+                for delay, value in (
+                    ("delay0", base + offset),
+                    ("delay1", base + offset + 1.0),
+                    ("delay2", base + offset + 2.0),
+                )
+            ]
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            write_delay_comparison(
+                summary,
+                scenario_names=["proxy_top20", "cost_10bps"],
+                output_root=output,
+            )
+            pivot = pd.read_csv(output / "scenario_delay_mean_cycle_return_bps.csv")
+
+            self.assertTrue((output / "scenario_delay_comparison.csv").exists())
+            self.assertTrue((output / "scenario_delay_mean_cycle_return_bps.png").exists())
+            self.assertEqual(set(["delay0", "delay1", "delay2"]) - set(pivot.columns), set())
+            self.assertEqual(set(pivot["model_variant"]), {"normal", "strong"})
 
 
 if __name__ == "__main__":
