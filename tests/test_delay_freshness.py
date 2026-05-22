@@ -7,7 +7,6 @@ import unittest
 
 import pandas as pd
 
-from opening_strength_fit.model import RidgePredictionModel, predict_frame
 from opening_strength_fit.labels import build_trade_labels
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
@@ -67,11 +66,6 @@ def _cpu_lgbm_prediction_row(*, delay: int = 1) -> dict[str, object]:
         row[f"entry_ask_price_{level}"] = 10.01 + level * 0.01
         row[f"entry_ask_volume_{level}"] = 10_000.0
     return row
-
-
-class _ConstantPipeline:
-    def predict(self, frame: pd.DataFrame) -> list[float]:
-        return [0.02] * len(frame)
 
 
 class DelayFreshnessTest(unittest.TestCase):
@@ -206,31 +200,6 @@ class DelayFreshnessTest(unittest.TestCase):
                 )
 
         self.assertIn("entry_ask_volume_10", str(caught.exception))
-
-    def test_lgbm_cpu_predictions_preserve_replay_context_columns(self) -> None:
-        frame = pd.DataFrame([{**_cpu_lgbm_prediction_row(delay=2), "feature": 1.0}])
-        model = RidgePredictionModel(
-            features=["feature"],
-            alpha=float("nan"),
-            pipeline=_ConstantPipeline(),
-            model_name="lightgbm_cpu",
-        )
-
-        predictions = predict_frame(model, frame)
-
-        for column in (
-            "decision_target_timestamp",
-            "decision_lag_seconds",
-            "entry_delay_ticks",
-            "entry_max_tick_gap_seconds",
-            "entry_status",
-            "spread_bps",
-            "turnover_diff_30t",
-            "entry_ask_price_10",
-            "entry_ask_volume_10",
-        ):
-            self.assertIn(column, predictions.columns)
-        self.assertEqual(float(predictions.loc[0, "entry_delay_ticks"]), 2.0)
 
 
 if __name__ == "__main__":

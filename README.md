@@ -105,7 +105,7 @@ Status
 
 当前 label 是“当前 tick 决策、延迟 N 个 tick 成交、持有 60 秒、再用后续 60 秒 VWAP 退出”的
 short-horizon proxy。已归档 Ridge/GBM baseline 使用 `entry_tick_delay = 0`；
-代码和 replay 工具支持后续新实验按 `entry_tick_delay = 0/1/2`、`fee_bps = 0` 拆分比较：
+后续主口径采用 `entry_tick_delay = 1`、`fee_bps = 0`：
 
 ```text
 decision_t = 当前样本 tick
@@ -126,7 +126,7 @@ delay 和新鲜度分开记录：`entry_delay_seconds` 是从 decision tick 到 
 `entry_max_tick_gap_seconds` 是这段路径里相邻 tick 的最大间隔，用于判断 entry 行情是否过旧。
 
 训练/replay 边界：改变 label 或样本域的口径进训练；只改变执行、成本、容量或选股后的约束先放 replay。
-后续新实验可按 delay0/1/2 拆分；也支持用瘦 prediction + replay context 复算 delay realized label。
+delay0/2 只作为执行敏感性或上下界参考；真正的 alpha horizon decay 另接 5min、close、next open、next close 等 label。也支持用瘦 prediction + replay context 复算 delay realized label。
 fee/slippage/spread/容量/状态/同股一次等约束用同一批 predictions 压测。
 fee 和滑点对固定入选交易是确定性 haircut，当前不需要为 fee 立刻重训；只有当研究目标变成
 net label 排序、成本改变样本有效性，或 fee/slippage 与成交容量一起改变训练样本域时，才另开训练分支。
@@ -200,7 +200,7 @@ metrics_by_month.csv / metrics_by_month.parquet  # monthly rolling 时生成
 
 | 约束 | 处理方式 |
 | --- | --- |
-| `entry_tick_delay` | 改变 entry price 和 label，进训练配置；后续可按 delay0/1/2 新开 run。 |
+| `entry_tick_delay` | 改变 entry price 和 label，进训练配置；主口径用 delay1，delay0/2 只做执行敏感性。 |
 | fee / slippage | 不改变 prediction 排序，先在 replay 用 `--fee-bps` / `--slippage-bps` 扣减。 |
 | 交易状态 | 训练用 `[filters].tradable_statuses` 控制 label 有效性；replay 再检查 `status` / `entry_status`。 |
 | tick 新鲜度 | replay 用 `--max-decision-lag-seconds` 控制 decision tick；用 `--max-entry-tick-gap-seconds` 控制 entry 路径相邻 tick 最大间隔。 |
@@ -386,7 +386,7 @@ prediction 如果已经带 `entry_ask_price_1..10` 和 `entry_ask_volume_1..10`�
 包含 `entry_delay_ticks`。`--context-label-mode replace` 会用 context label 作为 replay PnL，
 同时保留 `prediction_label` 便于审计，用于区分“时间漂移后的 entry price”和“entry tick 上的真实卖盘容量”。
 
-如果后续重新生成 LightGBM delay0/1/2 predictions，可以直接跑标准 replay 网格：
+如果后续需要检查 execution-delay sensitivity，可以对 LightGBM delay0/1/2 predictions 跑标准 replay 网格：
 
 ```bash
 python scripts/run_lgbm_delay_replays.py --check-interface-only
@@ -424,9 +424,9 @@ output/reports/opening_intraday_lgbm_delay_replays/scenario_summary.csv
 
 当前本地实验注册表只保留两组已完成归档：`1m3d` 小窗口 Ridge/GBM 对比，以及
 `1y_next_month` Ridge/GBM/strong 对比。实时 PVC 上也只有这些 baseline 结果目录可分析。
-LightGBM delay 结果目录当前不存在；后续要先等对应 PVC cache 完整落盘，再新建 run/job 按
-`entry_tick_delay = 0/1/2` 比较延迟衰减。普通 universe 与 strong candidate 分支可共享同一个
-delay 对应的 PVC labeled feature cache。实验索引与口径说明见 [docs/experiment_log.md](docs/experiment_log.md)。
+LightGBM delay 结果目录当前不存在；后续要先等对应 PVC cache 完整落盘，再新建 run/job。
+主执行口径采用 `entry_tick_delay = 1`；普通 universe 与 strong candidate 分支可共享同一个
+delay1 PVC labeled feature cache。实验索引与口径说明见 [docs/experiment_log.md](docs/experiment_log.md)。
 
 归档的 2021 训练、2022-01 测试结果显示，修正到
 `date x decision_target_timestamp` 的横截面口径后，旧 sklearn GBM 暂时最强：
@@ -440,7 +440,7 @@ delay 对应的 PVC labeled feature cache。实验索引与口径说明见 [docs
 
 与 label 一致的开盘短周期 Top20 replay 在 2022-01 单月上为正，旧普通 GBM 的
 mean cycle return 约 `+42.21 bps`、19 个测试日均为正。这个结果只能说明短周期方向性值得继续验证，
-后续 LightGBM 主要比较 IC、bucket 单调性、Top/Bottom spread 和延迟衰减；opening replay
+后续 LightGBM 主要比较 IC、bucket 单调性、Top/Bottom spread 和执行约束后的 replay 稳定性；opening replay
 只作为 proxy 压力测试，不作为 A 股 T+1 可交易回测。
 
 注意：旧 Ridge/GBM 归档结果使用无成交延迟口径（`entry_tick_delay = 0`），新 LightGBM delay0

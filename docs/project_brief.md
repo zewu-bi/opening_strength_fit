@@ -28,7 +28,7 @@
 ## 后续研究路线
 
 1. **Short-horizon alpha discovery**
-   继续使用当前高频 proxy label，验证开盘短周期横截面 alpha 是否稳定，并观察真实交易约束下的衰减。当前重点是等待 delay cache 完整落盘，训练 LightGBM 普通/strong 的 `entry_tick_delay = 0/1/2` 分支，再用统一 replay 网格压测成本、状态、spread、容量、十档卖盘和同股重复约束。
+   继续使用当前高频 proxy label，验证开盘短周期横截面 alpha 是否稳定。`entry_tick_delay = 1` 是主执行口径，用来修正“当前 tick 不能成交”的遗憾；delay0/2 只作为执行敏感性，不作为 alpha horizon decay。当前重点是等待 delay1 cache 完整落盘，训练 LightGBM 普通/strong，再用统一 replay 网格压测成本、状态、spread、容量、十档卖盘和同股重复约束。
 
 2. **Alpha horizon decay / extension**
    构造 30s、60s、5min、close、next open、next close 等 label，研究 opening predictor 的 alpha decay curve 与 horizon persistence。
@@ -36,7 +36,7 @@
 3. **Daily alpha feature / overlay**
    如果高频 predictor 存在 longer-horizon persistence，将 `09:30-09:40` 的 score 聚合成 stock-day feature，例如 `opening_strength_score`、`opening_score_mean/max`、`top_rank_count` 等，再接入日频模型或 portfolio optimizer。
 
-当前 active work 是第 1 步。只有在 delay 和真实交易约束后仍保留稳定 alpha，才推进第 2、3 步。
+当前 active work 是第 1 步。只有在主执行口径和真实交易约束后仍保留稳定 alpha，才推进第 2、3 步。
 
 ---
 
@@ -117,14 +117,14 @@ label = sell_vwap / buy_price - 1 - fee_bps / 10000
 - `volume` 为累计成交量，单位为股；
 - `turnover` 为累计成交额，单位为元。
 
-已归档 baseline 使用无成交延迟旧口径；后续新实验按 delay 分支比较。`entry_tick_delay` 会改变买入价和未来退出窗口，因此需要重做 labeled cache；交易成本先不进 delay label，统一在 replay 中扣减。
+已归档 baseline 使用无成交延迟旧口径；后续主口径采用 `entry_tick_delay = 1`。`entry_tick_delay` 会改变买入价和未来退出窗口，因此需要对应的 labeled cache；交易成本先不进 delay label，统一在 replay 中扣减。
 
 ```text
 fee_bps = 0
-entry_tick_delay = 0 / 1 / 2
+entry_tick_delay = 1
 ```
 
-做结果比较时，旧归档的 sklearn/Ridge `entry_tick_delay = 0` 和后续 LightGBM `entry_tick_delay = 0/1/2` 需要分开看。
+做结果比较时，旧归档的 sklearn/Ridge `entry_tick_delay = 0` 和后续 LightGBM `entry_tick_delay = 1` 需要分开看。delay0/2 可用于执行敏感性或上下界检查，不进入 alpha horizon decay 结论。
 
 ---
 
@@ -153,7 +153,7 @@ X 只能使用 decision point 当时及此前可见的信息。
 
 - 改变 label 或训练样本域的口径进训练：`entry_tick_delay`、horizon、universe/candidate、label 有效性、固定部署硬过滤。
 - 只改变下单、成交、成本或选股后的约束先放 replay：fee、slippage、spread、容量/参与率、交易状态、涨停距离、同股每日最多一次。
-- 当前先单独跑 delay0/delay1/delay2；其他约束在同一批 predictions 上统一压测。
+- 当前主线先固定 delay1；其他约束在同一批 predictions 上统一压测。delay0/2 可补做执行敏感性。
 
 当前真实约束拆分如下：
 
@@ -174,7 +174,7 @@ X 只能使用 decision point 当时及此前可见的信息。
 
 约束升级原则：
 
-- 先用 delay0/1/2 predictions 跑 `proxy_top20 -> cost -> tradable(10s) -> tradable_5s -> liquidity -> capacity -> strict` replay 场景，观察 IC、bucket 和 replay 是否同步衰减。
+- 先用 delay1 predictions 跑 `proxy_top20 -> cost -> tradable(10s) -> tradable_5s -> liquidity -> capacity -> strict` replay 场景，观察 IC、bucket 和 replay 在执行约束下是否仍成立。
 - 如果某个执行约束只是改变入选后的收益、容量或现金权重，继续放 replay。
 - 如果某个约束会改变训练样本域、候选池定义或未来 label 本身，再创建新的 run config 重训。
 - fee/slippage 默认先放 replay；只有在研究“扣费后最优排序”或成本显著改变 label 横截面顺序时，才单独训练 net-label 模型。
@@ -190,7 +190,7 @@ X 只能使用 decision point 当时及此前可见的信息。
 - Ridge regression
 - sklearn GBM
 
-后续主线可使用 LightGBM 普通 universe 与 opening-strength candidate 过滤分支，并按 `entry_tick_delay = 0/1/2` 比较延迟衰减。
+后续主线可使用 LightGBM 普通 universe 与 opening-strength candidate 过滤分支，主执行口径采用 `entry_tick_delay = 1`。真正的 alpha horizon decay 另由 5min、close、next open、next close 等 label 验证。
 当前正式路径优先用 CPU LightGBM 读取 PVC labeled cache；GPU 只是显式配置能力，当前没有活跃 GPU run/job。PVC cache 目标路径是 `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay{0,1,2}_labeled.parquet`，只有最终 `*.parquet` 落盘后才可用于训练；`.tmp.parquet`、lock 和 heartbeat 不算完成结果。当前本地实验注册表只保留已完成的 Ridge/GBM baseline。
 
 训练阶段使用 X 拟合 label；测试阶段仅使用 X 生成 `prediction`，再用事后 label 做评估。

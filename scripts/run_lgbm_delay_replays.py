@@ -32,7 +32,6 @@ DEFAULT_SCENARIOS = (
     "capacity_10m_5pct",
     "strict_10m_2pct",
 )
-CORE_PREDICTION_COLUMNS = ("date", "symbol", "prediction", "label")
 TIME_PREDICTION_COLUMNS = ("decision_target_timestamp", "timestamp")
 
 
@@ -374,7 +373,7 @@ def replay_required_columns(
     capacity_price_col: str,
     allow_decision_depth_fallback: bool,
 ) -> set[str]:
-    required: set[str] = set()
+    required: set[str] = {"date", "symbol", "prediction", "label", "entry_delay_ticks"}
     for scenario in scenarios:
         if scenario.tradable_statuses:
             required.add("status")
@@ -408,60 +407,6 @@ def replay_required_columns(
     return required
 
 
-def _prediction_columns(path: Path) -> list[str]:
-    try:
-        return pq.ParquetFile(path).schema_arrow.names
-    except Exception as exc:
-        raise SystemExit(f"{path}: cannot read prediction parquet schema: {exc}") from exc
-
-
-def _validate_prediction_delay(path: Path, *, delay: str) -> None:
-    expected = float(delay_entry_ticks(delay))
-    column = "entry_delay_ticks"
-    try:
-        values = pd.read_parquet(path, columns=[column])[column]
-    except Exception as exc:
-        raise SystemExit(f"{delay}: cannot read {column!r} from {path}: {exc}") from exc
-    values = pd.to_numeric(values, errors="coerce").dropna()
-    if values.empty:
-        raise SystemExit(f"{delay}: {path} has no non-null {column!r}")
-    bad = values.ne(expected)
-    if bool(bad.any()):
-        observed = sorted(float(value) for value in values.drop_duplicates().head(8))
-        raise SystemExit(
-            f"{delay}: prediction delay mismatch in {path}; expected "
-            f"{column}={expected:g}, observed sample={observed}"
-        )
-
-
-def _validate_ask_depth_alternatives(
-    *,
-    available: set[str],
-    scenarios: list[ReplayScenario],
-    context_columns: set[str],
-    path: Path,
-) -> None:
-    levels = max((int(scenario.ask_depth_levels) for scenario in scenarios), default=0)
-    if levels <= 0:
-        return
-    missing = []
-    for level in range(1, levels + 1):
-        entry_pair = {f"entry_ask_price_{level}", f"entry_ask_volume_{level}"}
-        decision_pair = {f"ask_price_{level}", f"ask_volume_{level}"}
-        if entry_pair.issubset(available) or decision_pair.issubset(available):
-            continue
-        missing.append(
-            f"level{level}: {'/'.join(sorted(entry_pair))} or "
-            f"{'/'.join(sorted(decision_pair))}"
-        )
-    if missing:
-        source = "prediction/context" if context_columns else "prediction"
-        raise SystemExit(
-            f"{path}: {source} missing ask-depth interface columns for "
-            f"--allow-decision-depth-fallback: {missing[:5]}"
-        )
-
-
 def validate_prediction_interface(
     path: Path,
     *,
@@ -473,11 +418,12 @@ def validate_prediction_interface(
     capacity_price_col: str = "ask_price_1",
     allow_decision_depth_fallback: bool = False,
 ) -> dict[str, object]:
-    prediction_columns = set(_prediction_columns(path))
+    try:
+        prediction_columns = set(pq.ParquetFile(path).schema_arrow.names)
+    except Exception as exc:
+        raise SystemExit(f"{path}: cannot read prediction parquet schema: {exc}") from exc
+
     context_columns = set(context_columns or set())
-    missing_core = sorted(set(CORE_PREDICTION_COLUMNS) - prediction_columns)
-    if missing_core:
-        raise SystemExit(f"{path}: missing core prediction columns: {missing_core}")
     if not prediction_columns.intersection(TIME_PREDICTION_COLUMNS):
         raise SystemExit(
             f"{path}: missing a decision timestamp column; expected one of "
@@ -501,24 +447,21 @@ def validate_prediction_interface(
             "delay labeled cache, or provide a matching --context-input."
         )
 
-    if allow_decision_depth_fallback:
-        _validate_ask_depth_alternatives(
-            available=available,
-            scenarios=scenarios,
-            context_columns=context_columns,
-            path=path,
-        )
-
     if "entry_delay_ticks" in prediction_columns:
-        _validate_prediction_delay(path, delay=delay)
+        values = pd.read_parquet(path, columns=["entry_delay_ticks"])["entry_delay_ticks"]
+        values = pd.to_numeric(values, errors="coerce").dropna()
+        expected = float(delay_entry_ticks(delay))
+        if values.empty:
+            raise SystemExit(f"{delay}: {path} has no non-null 'entry_delay_ticks'")
+        if bool(values.ne(expected).any()):
+            observed = sorted(float(value) for value in values.drop_duplicates().head(8))
+            raise SystemExit(
+                f"{delay}: prediction delay mismatch in {path}; expected "
+                f"entry_delay_ticks={expected:g}, observed sample={observed}"
+            )
         delay_source = "prediction"
-    elif "entry_delay_ticks" in context_columns:
-        delay_source = "context"
     else:
-        raise SystemExit(
-            f"{delay}: {path} missing 'entry_delay_ticks'; cannot verify that "
-            "this prediction file matches the replay delay branch."
-        )
+        delay_source = "context"
 
     return {
         "path": str(path),

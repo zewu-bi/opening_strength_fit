@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: opening-strength-read-lgbm-opening-1y-next-month-delay2
+  namespace: bizewu
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      volumes:
+        - name: opening-strength-output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+      containers:
+        - name: reader
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260522-lgbm-cpu-v7
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          command:
+            - python
+            - scripts/summarize_opening_results.py
+            - --input-dir
+            - /mnt/output/opening_strength_fit/lgbm_opening_1y_next_month_delay2
+          volumeMounts:
+            - name: opening-strength-output
+              mountPath: /mnt/output

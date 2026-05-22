@@ -144,7 +144,7 @@ strong candidate: experiments/runs/gbm_opening_1y_next_month_strong.toml
 - 本地 smoke 可传 `--input` 或设置 `[data].tick_path` 使用小的 prepared parquet/cache。
 - `[output].k8s_dir` 必须在 `/mnt/output/opening_strength_fit/` 下，且一个实验一个目录。
 - `evaluation.selection_mode` 第一版用 `cross_section`。
-- `[labels].entry_tick_delay` 控制决策后第几个 tick 成交；后续 LightGBM 可按 delay0/delay1/delay2 新开分支比较。
+- `[labels].entry_tick_delay` 控制决策后第几个 tick 成交；主执行口径用 delay1，delay0/2 只做执行敏感性。
 - 训练只改会影响 label 或样本域的口径；fee/slippage/spread/容量/状态/同股一次等执行约束先在 replay 里压测。
 
 LightGBM CPU + PVC cache run 使用这些配置：
@@ -369,7 +369,7 @@ python scripts/run_opening_intraday_backtest.py \
 旧归档 predictions 没有 `status`、`spread_bps`、`turnover_diff_30t` 等上下文列；如果不传
 `--context-input`，这些文件只能用于成本、滑点和同股重复交易的复算。
 
-如果后续重新生成 LightGBM delay0/1/2 六个 prediction，优先跑标准 replay 网格：
+如果后续需要检查 execution-delay sensitivity，可以对 LightGBM delay0/1/2 六个 prediction 跑标准 replay 网格：
 
 ```bash
 python scripts/run_lgbm_delay_replays.py \
