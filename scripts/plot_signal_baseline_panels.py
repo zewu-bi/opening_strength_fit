@@ -277,18 +277,19 @@ def plot_panel(
         sem = summary[sem_col].to_numpy(dtype=float)
         ax.fill_between(x, y - sem, y + sem, color=color, alpha=0.15, linewidth=0)
     ax.axhline(0, color="black", linewidth=0.8)
-    scale = max(abs(np.nanmax(y)), abs(np.nanmin(y)), 1.0)
     for xi, yi in zip(x, y):
         if pd.isna(yi):
             continue
-        offset = scale * 0.03
-        va = "bottom" if yi >= 0 else "top"
-        ax.text(
-            xi,
-            yi + (offset if yi >= 0 else -offset),
+        is_last = xi == x[-1]
+        x_offset = -5 if is_last else 5
+        y_offset = 4 if yi >= 0 else -4
+        ax.annotate(
             value_fmt.format(yi),
-            ha="center",
-            va=va,
+            xy=(xi, yi),
+            xytext=(x_offset, y_offset),
+            textcoords="offset points",
+            ha="right" if is_last else "left",
+            va="bottom" if yi >= 0 else "top",
             fontsize=7,
         )
     ax.set_title(title)
