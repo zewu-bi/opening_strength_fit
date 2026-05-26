@@ -1,7 +1,9 @@
 # Experiment Log
 
-本文件是实验事实源；README 和 project brief 只保留摘要。当前本地 `experiments/runs`、
-`experiments/jobs` 和 `experiments/results` 保留三类归档：
+本文件是实验事实源；README 和 project brief 只保留摘要。当前项目保留正式归档实验、active
+cache/materialization 任务和 active feature exploration 三类记录。
+
+正式归档实验：
 
 - `1m3d` 小窗口 Ridge/GBM 对比。
 - `1y_next_month` Ridge/GBM/strong 对比。
@@ -9,6 +11,13 @@
 
 旧 Ridge/GBM baseline 使用无成交延迟旧口径（`entry_tick_delay = 0`）；LightGBM delay 分支使用各自
 PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混比。
+
+Active 非归档任务：
+
+| task | kind | status | output |
+| --- | --- | --- | --- |
+| `materialize_opening_2013_2024_delay1_cache` | cache | running | `/mnt/output/opening_strength_fit/cache/opening_2013_2024_delay1_labeled.parquet` |
+| `lgbm_delay2_postopen_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_v1/` |
 
 ## Run 索引
 
@@ -27,6 +36,21 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `lgbm_opening_1y_next_month_strong_delay0` | completed | CPU LightGBM strong delay0；group rank IC = 0.1729，Top20 mean = +29.28 bps。 |
 | `lgbm_opening_1y_next_month_strong_delay1` | completed | CPU LightGBM strong delay1；group rank IC = 0.1389，Top20 mean = +17.17 bps。 |
 | `lgbm_opening_1y_next_month_strong_delay2` | completed | CPU LightGBM strong delay2；group rank IC = 0.1298，Top20 mean = +12.60 bps。 |
+
+## Output 索引
+
+本地 `output/` 只保留能追溯到上述 run/job 的产物：
+
+| local path | source |
+| --- | --- |
+| `output/predictions/<run_id>/predictions_all.parquet` | 对应 `experiments/runs/<run_id>.toml` 和 K8s training/reader job。 |
+| `output/k8s/metrics/<run_id>_metrics_by_year.csv` | 从对应 PVC run output 拉回的 raw metrics。 |
+| `output/reports/opening_1m3d_*` | 小窗 Ridge/GBM 归档实验对比和校正指标。 |
+| `output/reports/opening_1y_next_month_*` | 一年训练、次月测试 Ridge/GBM 归档实验对比和校正指标。 |
+| `output/reports/opening_intraday_top20_1y_next_month` | 旧 GBM/strong baseline replay，对应 `opening_intraday_top20_1y_next_month_*` 归档摘要。 |
+| `output/reports/opening_intraday_lgbm_delay_replays` | LightGBM delay0/1/2 标准 replay，对应 `opening_intraday_lgbm_delay_replays_*` 归档摘要。 |
+| `output/reports/opening_alpha_horizon_decay_delay2_*` | delay2 horizon decay，对应 `opening_alpha_horizon_decay_delay2_*` 归档摘要。 |
+| `output/reports/opening_delay2_signal_baseline` | delay2 保守 baseline 的分钟四曲线，用于当前 feature-strengthening 门槛。 |
 
 ## 2026-05-26 CPU LightGBM Delay
 
@@ -123,6 +147,50 @@ group rank IC：
 
 下一组实验应优先做开盘后盘口特征工程，并补充 feature importance / permutation / ablation
 报告。时间段拆分只作为稳定性诊断，不作为主评估。
+
+## 2026-05-26 Delay2 Post-Open Feature v1
+
+按 runbook 恢复为标准实验：`experiments/runs/lgbm_delay2_postopen_v1.toml` ->
+`scripts/render_k8s_job.py` -> K8s `run_experiment.py` -> `scripts/sync_experiment_artifacts.py` ->
+四宫格分析。训练仍使用已有 delay2 labeled cache：
+
+```text
+/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_labeled.parquet
+```
+
+本轮只改特征，不改 label、split、模型参数或 universe。新增
+`[features].include_postopen_decision = true`，在 labeled decision rows 上追加开盘后盘口动态特征：
+ask/bid 一档队列变化、10 档深度变化、depth imbalance 变化、spread/mid/ask/bid 变化、成交量/成交额变化、
+top depth share、gap shape 和 trade-vs-ask1 queue。Top100 只作为评估口径。
+
+K8s 训练完成：
+
+```text
+run:     lgbm_delay2_postopen_v1
+image:   registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260526-postopen-v1
+output:  /mnt/output/opening_strength_fit/lgbm_delay2_postopen_v1
+local:   output/predictions/lgbm_delay2_postopen_v1/predictions_all.parquet
+report:  output/reports/lgbm_delay2_postopen_v1_four_panel/signal_baseline_four_panel.png
+```
+
+训练 metrics：
+
+| run | features | group rank IC | rank IC IR | Top100 mean bps | Top100 win rate | rows |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `lgbm_delay2_postopen_v1` | 203 | 0.1366 | 2.1929 | +13.32 | 52.2% | 940,748 |
+
+相对旧 delay2 baseline 四宫格的分钟平均变化：
+
+| metric | mean delta |
+| --- | ---: |
+| short Rank IC | +0.0005 |
+| short Top100 excess | +2.13 bps |
+| next-close Rank IC | +0.0010 |
+| next-close Top100 excess | +1.31 bps |
+
+逐分钟 short Top100 excess 大多改善，尤其 `09:32-09:39`；short Rank IC 基本持平。next-close 两条线没有
+系统性变强，只能算没有明显恶化。结论：decision-level post-open 动态特征方向有效但幅度小，下一轮需要
+更强的 tick-level 开盘后特征，或做 preopen/auction ablation 来释放模型容量。
 
 ## 2026-05-21 1y Next-Month Baseline
 

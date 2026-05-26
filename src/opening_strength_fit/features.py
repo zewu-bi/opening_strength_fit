@@ -145,6 +145,96 @@ def add_momentum_features(ticks: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def add_postopen_decision_features(
+    frame: pd.DataFrame,
+    *,
+    windows: tuple[int, ...] = (1, 3, 5),
+) -> pd.DataFrame:
+    out = ensure_timestamp_columns(frame)
+    time_col = (
+        "decision_target_timestamp"
+        if "decision_target_timestamp" in out.columns
+        else "timestamp"
+    )
+    out = out.sort_values(["date", "symbol", time_col]).reset_index(drop=True)
+    group = out.groupby(["date", "symbol"], sort=False)
+
+    timestamp = pd.to_datetime(out[time_col], errors="coerce")
+    open_timestamp = pd.to_datetime(
+        out["date"].astype(str) + " 09:30:00",
+        errors="coerce",
+    )
+    out["postopen_minutes_since_0930"] = (
+        (timestamp - open_timestamp).dt.total_seconds() / 60.0
+    )
+
+    dynamic_columns = [
+        "ask_volume_1",
+        "bid_volume_1",
+        "ask_depth_10",
+        "bid_depth_10",
+        "depth_imbalance_1",
+        "depth_imbalance_10",
+        "spread_bps",
+        "mid_price",
+        "ask_price_1",
+        "bid_price_1",
+        "volume",
+        "turnover",
+    ]
+    for column in dynamic_columns:
+        if column not in out.columns:
+            continue
+        values = _numeric_series(out[column])
+        for window in windows:
+            lagged = pd.to_numeric(group[column].shift(window), errors="coerce")
+            diff = values - lagged
+            out[f"postopen_{column}_diff_{window}m"] = diff
+            out[f"postopen_{column}_rel_{window}m"] = safe_divide(
+                diff,
+                lagged.abs(),
+            )
+
+    if "ask_volume_1" in out.columns and "ask_depth_10" in out.columns:
+        out["postopen_ask1_depth_share"] = safe_divide(
+            out["ask_volume_1"],
+            out["ask_depth_10"],
+        )
+    if "bid_volume_1" in out.columns and "bid_depth_10" in out.columns:
+        out["postopen_bid1_depth_share"] = safe_divide(
+            out["bid_volume_1"],
+            out["bid_depth_10"],
+        )
+    if (
+        "postopen_bid1_depth_share" in out.columns
+        and "postopen_ask1_depth_share" in out.columns
+    ):
+        out["postopen_top_depth_share_imbalance"] = (
+            out["postopen_bid1_depth_share"] - out["postopen_ask1_depth_share"]
+        )
+
+    ask_gap_cols = [f"ask_gap_{level}_bps" for level in range(2, 11)]
+    bid_gap_cols = [f"bid_gap_{level}_bps" for level in range(2, 11)]
+    present_ask_gaps = [column for column in ask_gap_cols if column in out.columns]
+    present_bid_gaps = [column for column in bid_gap_cols if column in out.columns]
+    if present_ask_gaps:
+        out["postopen_ask_gap_mean_2_10"] = out[present_ask_gaps].mean(axis=1)
+        out["postopen_ask_gap_std_2_10"] = out[present_ask_gaps].std(axis=1)
+    if present_bid_gaps:
+        out["postopen_bid_gap_mean_2_10"] = out[present_bid_gaps].mean(axis=1)
+        out["postopen_bid_gap_std_2_10"] = out[present_bid_gaps].std(axis=1)
+    if "spread_bps" in out.columns and "depth_imbalance_1" in out.columns:
+        out["postopen_spread_x_imbalance_1"] = (
+            _numeric_series(out["spread_bps"]) * _numeric_series(out["depth_imbalance_1"])
+        )
+    if "volume_diff_1t" in out.columns and "ask_volume_1" in out.columns:
+        out["postopen_trade_vs_ask1_queue"] = safe_divide(
+            out["volume_diff_1t"],
+            out["ask_volume_1"],
+        )
+    return out
+
+
 def build_preopen_features(
     ticks: pd.DataFrame,
     *,

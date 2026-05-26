@@ -30,6 +30,7 @@ from opening_strength_fit.evaluation import (
     summarize_trades,
     top_score_trades,
 )
+from opening_strength_fit.features import add_postopen_decision_features
 from opening_strength_fit.io import read_frame, write_frame
 from opening_strength_fit.model import (
     evaluate_prediction_frame,
@@ -197,6 +198,40 @@ def _float_mapping_config(config: dict, section: str, key: str) -> dict[str, flo
         for column, threshold in value.items()
         if threshold not in (None, "")
     }
+
+
+def _int_tuple_config(
+    config: dict,
+    section: str,
+    key: str,
+    default: tuple[int, ...],
+) -> tuple[int, ...]:
+    value = config_value(config, section, key, default)
+    if value is None:
+        return default
+    if isinstance(value, str):
+        raw = value.replace(",", " ").split()
+    else:
+        raw = list(value)
+    parsed = tuple(int(item) for item in raw if str(item).strip())
+    return parsed or default
+
+
+def _apply_feature_transforms_from_config(
+    labeled: pd.DataFrame,
+    config: dict,
+) -> pd.DataFrame:
+    if _bool_config(config, "features", "include_postopen_decision", False):
+        labeled = add_postopen_decision_features(
+            labeled,
+            windows=_int_tuple_config(
+                config,
+                "features",
+                "postopen_decision_windows",
+                (1, 3, 5),
+            ),
+        )
+    return labeled
 
 
 def _apply_candidate_filter_from_config(
@@ -402,6 +437,7 @@ def build_labeled_frame_from_config(
             None if max_decision_lag in (None, "") else int(max_decision_lag)
         ),
     )
+    labeled = _apply_feature_transforms_from_config(labeled, config)
     if apply_candidate_filter:
         return _apply_candidate_filter_from_config(labeled, config)
     return labeled
@@ -429,6 +465,7 @@ def _filter_labeled_frame(labeled: pd.DataFrame, config: dict) -> pd.DataFrame:
             ),
             symbols=load_symbol_list(symbols_file) if symbols_file else None,
         )
+    labeled = _apply_feature_transforms_from_config(labeled, config)
     return _apply_candidate_filter_from_config(labeled, config)
 
 
