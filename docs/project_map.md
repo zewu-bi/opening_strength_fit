@@ -55,6 +55,7 @@
 - `run_lgbm_delay_replays.py`: 在需要检查 execution-delay sensitivity 时，对 LightGBM delay0/1/2 predictions 跑标准 constrained replay 场景网格，汇总 `scenario_summary.csv`，并生成各 delay 的 scenario summary PNG；默认只保留一个 tradable freshness 口径。
 - `plot_lgbm_delay_decay.py`: 基于 `run_lgbm_delay_replays.py` 的 `scenario_summary.csv` 和 `intraday_cycles.csv`，单独绘制 delay0/1/2 的无约束 replay 衰减图。
 - `run_alpha_horizon_decay.py`: 读取 delay2 opening predictions，用 opening-window sampled rows 或 ClickHouse target-minute mid price 扫 1m/2m/5m/10m decay，并可从 ClickHouse 补 same-day close / next-day close label，输出 summary/bucket CSV 和 Universe vs Strong 柱状图。
+- `plot_signal_baseline_panels.py`: 读取 delay2 predictions 和 next-close labels，按分钟输出四宫格 baseline：short Rank IC、short Top100 excess、next-close Rank IC 和 next-close Top100 excess。
 - `record_experiment.py`: 把 `output/` 里的轻量 metrics 证据归档到 `experiments/results/`。
 
 ## `experiments/`
