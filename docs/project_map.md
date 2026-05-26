@@ -52,7 +52,9 @@
 - `pull_k8s_metrics.py`: 从 K8s PVC 拉回 `metrics_by_year.csv`。
 - `fetch_k8s_predictions.py`: 从 K8s PVC 拉回 `predictions.parquet` / `predictions_all.parquet`。
 - `run_opening_intraday_backtest.py`: 对 tick predictions 做开盘短周期 TopN 回测，可用 raw tick 或同 delay labeled context enrich 旧 prediction，支持成本、滑点、容量、entry 卖盘深度、状态、spread 和同股重复交易约束。
-- `run_lgbm_delay_replays.py`: 在需要检查 execution-delay sensitivity 时，对 LightGBM delay0/1/2 predictions 跑标准 constrained replay 场景网格并汇总 `scenario_summary.csv`；默认主线 freshness 用 10s，5s 场景作为压力测试。
+- `run_lgbm_delay_replays.py`: 在需要检查 execution-delay sensitivity 时，对 LightGBM delay0/1/2 predictions 跑标准 constrained replay 场景网格，汇总 `scenario_summary.csv`，并生成各 delay 的 scenario summary PNG；默认只保留一个 tradable freshness 口径。
+- `plot_lgbm_delay_decay.py`: 基于 `run_lgbm_delay_replays.py` 的 `scenario_summary.csv` 和 `intraday_cycles.csv`，单独绘制 delay0/1/2 的无约束 replay 衰减图。
+- `run_alpha_horizon_decay.py`: 读取 delay2 opening predictions，用 opening-window sampled rows 或 ClickHouse target-minute mid price 扫 1m/2m/5m/10m decay，并可从 ClickHouse 补 same-day close / next-day close label，输出 summary/bucket CSV 和 Universe vs Strong 柱状图。
 - `record_experiment.py`: 把 `output/` 里的轻量 metrics 证据归档到 `experiments/results/`。
 
 ## `experiments/`

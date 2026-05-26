@@ -1,7 +1,7 @@
 [run]
 id = "lgbm_opening_1y_next_month_strong_delay1"
 description = "CPU LightGBM one-year train, next-month test on opening-strength candidates using PVC labeled cache with entry_tick_delay=1."
-status = "queued"
+status = "completed"
 
 [data]
 source = "labeled_pvc"

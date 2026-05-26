@@ -7,8 +7,8 @@ ClickHouse `stock.tick` 或本地 tick parquet 读取集合竞价与开盘盘口
 future return proxy，并检验模型分数是否有稳定的横截面排序价值。
 
 它当前解决的是高频信号发现闭环，不是完整实盘策略。A 股 T+1 约束下，当前 60 秒 label
-只能作为 opening microstructure 的 proxy label；如果该信号稳定，后续还需要接
-close、next open、next close 等 longer-horizon label，验证能否沉淀成日频选股或组合特征。
+只能作为 opening microstructure 的 proxy label；项目已补充 close / next close 等更长周期衰减检查，
+下一步是验证 opening score 能否作为已有日频候选池的辅助排序信号。
 
 ```text
 ClickHouse stock.tick / local tick parquet
@@ -126,7 +126,7 @@ delay 和新鲜度分开记录：`entry_delay_seconds` 是从 decision tick 到 
 `entry_max_tick_gap_seconds` 是这段路径里相邻 tick 的最大间隔，用于判断 entry 行情是否过旧。
 
 训练/replay 边界：改变 label 或样本域的口径进训练；只改变执行、成本、容量或选股后的约束先放 replay。
-delay0/2 只作为执行敏感性或上下界参考；真正的 alpha horizon decay 另接 5min、close、next open、next close 等 label。也支持用瘦 prediction + replay context 复算 delay realized label。
+delay0/2 只作为执行敏感性或上下界参考；alpha horizon decay 已另接 5min、close、next close 等 label。也支持用瘦 prediction + replay context 复算 delay realized label。
 fee/slippage/spread/容量/状态/同股一次等约束用同一批 predictions 压测。
 fee 和滑点对固定入选交易是确定性 haircut，当前不需要为 fee 立刻重训；只有当研究目标变成
 net label 排序、成本改变样本有效性，或 fee/slippage 与成交容量一起改变训练样本域时，才另开训练分支。
@@ -165,7 +165,7 @@ X 特征只允许使用 decision point 当时及此前可见的信息。当前�
 
 - Ridge regression：`SimpleImputer -> StandardScaler -> Ridge`。
 - sklearn GBM：`SimpleImputer -> HistGradientBoostingRegressor`。
-- LightGBM：`SimpleImputer -> LGBMRegressor`，支持 `device_type = "cpu"` / `"gpu"`；当前正式路径优先用 CPU Job 读取 PVC labeled cache。GPU 仍是可配置能力，但当前没有活跃 GPU run/job，仓库本地实验注册表只保留已完成的 Ridge/GBM baseline。
+- LightGBM：`SimpleImputer -> LGBMRegressor`，支持 `device_type = "cpu"` / `"gpu"`；当前正式路径优先用 CPU Job 读取 PVC labeled cache。GPU 仍是可配置能力；仓库本地实验注册表保留已完成的 Ridge/GBM baseline，以及 CPU LightGBM delay0/1/2 普通 universe 与 strong 分支。
 
 评估 group mode：
 
@@ -205,12 +205,12 @@ metrics_by_month.csv / metrics_by_month.parquet  # monthly rolling 时生成
 | 交易状态 | 训练用 `[filters].tradable_statuses` 控制 label 有效性；replay 再检查 `status` / `entry_status`。 |
 | tick 新鲜度 | replay 用 `--max-decision-lag-seconds` 控制 decision tick；用 `--max-entry-tick-gap-seconds` 控制 entry 路径相邻 tick 最大间隔。 |
 | spread / 一档深度 | replay 用 `--max-spread-bps`、`--min-ask-volume-1`、`--min-bid-volume-1`。 |
-| entry 卖盘容量 | replay 用 prediction 自带或 `--context-input` 补齐的 `entry_ask_price_1..10` / `entry_ask_volume_1..10` 检查目标金额能否在 entry tick 的卖盘中成交；十档 sweep 场景会用 sweep VWAP 修正收益。 |
+| entry 卖盘容量 | replay 用 prediction 自带或 `--context-input` 补齐的 `entry_ask_price_1..N` / `entry_ask_volume_1..N` 检查目标金额能否在 entry tick 的卖盘中成交；默认容量场景使用 3 档和 5 档 sweep，并用真实档位价格的 sweep VWAP 修正收益。 |
 | 涨停距离 | 若 prediction 或 `--context-input` 有 `ask1_to_limit_up_bps`，replay 用 `--min-limit-up-room-bps`。 |
 | 容量/参与率 | replay 用 `turnover_diff_30t` 等可见 notional proxy、`--capital-per-cycle` 和 `--max-participation-rate`。 |
 | TopN/现金/单票 | replay 控制 `--top-n`、`--max-symbol-weight`，未选满资金留现金。 |
 | 同股重复/冷却 | replay 控制 `--max-symbol-trades-per-day`、`--symbol-cooldown-minutes`。 |
-| T+1 | 当前 60s label 只是 microstructure proxy；真实选股要接 close/next open/next close 等 longer-horizon label。 |
+| T+1 | 当前 60s label 只是 microstructure proxy；close / next close 衰减已做，真实选股结论还要接已有日频候选池 overlay。 |
 
 旧 prediction 如果没有 `entry_max_tick_gap_seconds`，需要重建 prediction 或通过 raw tick
 `--context-input` 补齐后再做 entry 新鲜度过滤。delay0/1/2 replay 优先用 raw tick context；
@@ -303,8 +303,8 @@ Job 入口，不要用通用训练 renderer 改成 `scripts/run_experiment.py`�
 
 ## K8s 实验闭环
 
-常规长窗口实验流程。当前 repo 不保留活跃 LightGBM run/job YAML；新开实验时先创建
-`experiments/runs/<new_run_id>.toml`，再渲染对应 Job：
+常规长窗口实验流程。新开实验时先创建 `experiments/runs/<new_run_id>.toml`，
+再渲染对应 Job；已完成的 CPU LightGBM delay run/job YAML 保留作复现实验索引：
 
 ```bash
 TAG=opening-strength-fit-$(date +%Y%m%d)-lgbm-cpu-v1
@@ -391,6 +391,15 @@ prediction 如果已经带 `entry_ask_price_1..10` 和 `entry_ask_volume_1..10`�
 ```bash
 python scripts/run_lgbm_delay_replays.py --check-interface-only
 python scripts/run_lgbm_delay_replays.py
+python scripts/plot_lgbm_delay_decay.py
+```
+
+`run_lgbm_delay_replays.py` 默认会对 delay0/1/2 的普通与 strong predictions 跑 6 个约束场景，
+写出 `scenario_summary.csv`，并生成 `replay_l3_l5_single_tradable_delay{0,1,2}.png`。如果只想重画
+scenario summary 图，不重新跑 replay：
+
+```bash
+python scripts/run_lgbm_delay_replays.py --plot-summary-only --summary-plot-delay delay2
 ```
 
 默认会对 delay0/1/2 的普通与 strong predictions 跑：
@@ -399,14 +408,14 @@ python scripts/run_lgbm_delay_replays.py
 proxy_top20
 cost_10bps
 tradable_cost
-tradable_cost_5s
 liquidity_cost
-capacity_10m_5pct
-strict_10m_2pct
+capacity_l3_1m
+capacity_l5_2m
 ```
 
 默认主线场景用 `entry_max_tick_gap_seconds <= 10` 来避免 delay2 被正常 6 秒两跳误杀；
-`tradable_cost_5s` 和 `strict_10m_2pct` 保留 5 秒作为更严的新鲜度压力测试。涨停距离不在默认网格里，
+不再保留额外 5 秒 freshness 压力测试。容量场景使用 `capacity_l3_1m`（每 cycle 100 万、单票 5 万、entry 3 档 sweep）和
+`capacity_l5_2m`（每 cycle 200 万、单票 10 万、entry 5 档 sweep）。涨停距离不在默认网格里，
 需要时显式跑 `--scenario limit_up_room_10s`，且必须有 `ask1_to_limit_up_bps` 字段。
 `--check-interface-only` 会先验证拉回的 CPU LightGBM `predictions_all.parquet` 是否含 replay
 默认场景需要的执行字段，并检查 `entry_delay_ticks` 是否和 delay 分支一致。
@@ -422,9 +431,15 @@ output/reports/opening_intraday_lgbm_delay_replays/scenario_summary.csv
 
 ## 当前实验状态
 
-当前本地实验注册表只保留两组已完成归档：`1m3d` 小窗口 Ridge/GBM 对比，以及
-`1y_next_month` Ridge/GBM/strong 对比。实时 PVC 上也只有这些 baseline 结果目录可分析。
-LightGBM delay 结果目录当前不存在；后续要先等对应 PVC cache 完整落盘，再新建 run/job。
+当前本地实验注册表保留 `1m3d` 小窗口 Ridge/GBM 对比、
+`1y_next_month` Ridge/GBM/strong 对比，以及 `1y_next_month` CPU LightGBM delay0/1/2
+普通 universe 与 strong 分支。LightGBM delay 结果目录已在 PVC 上完成，metrics 已归档，
+predictions 已拉回 `output/predictions/<run_id>/predictions_all.parquet`。
+标准 6 场景 replay 网格已完成，轻量 summary 已归档到 `experiments/results/backtests/`；
+汇报图留在 `output/reports/opening_intraday_lgbm_delay_replays/`。Alpha horizon decay 也已完成阶段归档，
+对比固定 `09:30` cohort 和 `09:30-09:39` 十分钟平均口径；轻量 summary 已归档到
+`experiments/results/backtests/`，汇报图留在
+`output/reports/opening_alpha_horizon_decay_delay2_compare_selected/`。
 主执行口径采用 `entry_tick_delay = 1`；普通 universe 与 strong candidate 分支可共享同一个
 delay1 PVC labeled feature cache。实验索引与口径说明见 [docs/experiment_log.md](docs/experiment_log.md)。
 
@@ -438,10 +453,18 @@ delay1 PVC labeled feature cache。实验索引与口径说明见 [docs/experime
 | `ridge_opening_1y_next_month_strong` | 0.1156 | 1.5987 | +9.63 | 51.2% |
 | `ridge_opening_1y_next_month` | 0.0799 | 1.4788 | +18.96 | 54.4% |
 
-与 label 一致的开盘短周期 Top20 replay 在 2022-01 单月上为正，旧普通 GBM 的
-mean cycle return 约 `+42.21 bps`、19 个测试日均为正。这个结果只能说明短周期方向性值得继续验证，
-后续 LightGBM 主要比较 IC、bucket 单调性、Top/Bottom spread 和执行约束后的 replay 稳定性；opening replay
-只作为 proxy 压力测试，不作为 A 股 T+1 可交易回测。
+CPU LightGBM delay replay 显示：普通 universe 分支稳定强于 strong candidate 分支；
+无约束 Top20 replay 从 delay0 到 delay2 明显衰减，但 delay2 universe 仍为正
+（mean cycle return 约 `+39.00 bps`）。在基础可交易 / liquidity 约束下，delay2 universe
+仍约 `+28.74 bps`；加入更温和的容量压力后，`capacity_l3_1m` 约 `+21.88 bps`，
+`capacity_l5_2m` 约 `+18.38 bps`。delay2 universe 的 group rank IC 在 L3/L5
+约 `0.130` / `0.132`，说明排序信号没有在小容量 sweep 口径下消失。
+这个结果说明 short-horizon alpha discovery 第一阶段可以归档：opening proxy signal 存在，
+但容量可扩展性不足，opening replay 仍只作为 proxy 压力测试，不作为 A 股 T+1 可交易回测。
+Alpha horizon decay 进一步显示：固定 `09:30` opening score 到 close / next close 仍有弱正
+Rank IC，但 next close Top20 收益不稳定；`09:30-09:39` 简单平均后长周期排序效果基本消失。
+下一步 active work 是把 opening score 接到已有日频候选池中做重排序 / 辅助排序验证，而不是
+直接扩大 tick-level Top20 replay 的资金规模。
 
 注意：旧 Ridge/GBM 归档结果使用无成交延迟口径（`entry_tick_delay = 0`），新 LightGBM delay0
 只用于同模型延迟基准；不要和旧模型归档直接横向混比。

@@ -353,10 +353,10 @@ python scripts/run_opening_intraday_backtest.py \
   --tradable-status TRADE \
   --max-spread-bps 100 \
   --min-limit-up-room-bps 5 \
-  --min-capacity-notional 100000 \
-  --capital-per-cycle 10000000 \
+  --min-capacity-notional 50000 \
+  --capital-per-cycle 1000000 \
   --max-participation-rate 0.05 \
-  --ask-depth-levels 10 \
+  --ask-depth-levels 3 \
   --ask-depth-fill-mode sweep \
   --ask-depth-participation-rate 1.0 \
   --max-symbol-trades-per-day 1 \
@@ -376,6 +376,19 @@ python scripts/run_lgbm_delay_replays.py \
   --context-input <raw_tick_context_root> \
   --context-kind auto \
   --context-label-mode replace
+```
+
+`run_lgbm_delay_replays.py` 会汇总 `scenario_summary.csv`，并生成
+`replay_l3_l5_single_tradable_delay{0,1,2}.png` 作为 6 场景约束衰减图。只重画 summary 图、不重新跑 replay：
+
+```bash
+python scripts/run_lgbm_delay_replays.py --plot-summary-only --summary-plot-delay delay2
+```
+
+无约束 delay0/1/2 衰减图单独生成：
+
+```bash
+python scripts/plot_lgbm_delay_decay.py
 ```
 
 标准 delay 网格优先用 raw tick context，让 wrapper 对 delay0/1/2 分别派生 entry label 和执行上下文。
@@ -401,11 +414,10 @@ output/predictions/lgbm_opening_1y_next_month_strong_delay0/predictions_all.parq
 | --- | --- |
 | `proxy_top20` | 无额外成本；Top20；同股每日最多一次。 |
 | `cost_10bps` | `fee_bps=5`、`slippage_bps=5`。 |
-| `tradable_cost` | 成本 + `status/entry_status in T0,20,TRADE` + decision lag 不超过 5 秒 + entry 路径相邻 tick 最大间隔不超过 10 秒。 |
-| `tradable_cost_5s` | 同 `tradable_cost`，但 entry 路径相邻 tick 最大间隔不超过 5 秒，用作严格新鲜度压力测试。 |
+| `tradable_cost` | 成本 + `status/entry_status in T0,20,TRADE` + decision lag 不超过 5 秒 + entry 路径相邻 tick 最大间隔不超过 10 秒。只保留这一版 tradable 口径。 |
 | `liquidity_cost` | `tradable_cost` + `spread_bps <= 100` + decision tick 一档买卖量正数。 |
-| `capacity_10m_5pct` | `liquidity_cost` + 每 cycle 1000 万资金、单票目标金额不超过 `turnover_diff_30t` 的 5%、最低可见容量 10 万，并要求 entry 十档卖盘能容纳目标金额；收益按十档 sweep VWAP 修正。 |
-| `strict_10m_2pct` | 更严的压力测试：15 bps 成本、entry gap 5 秒、`spread_bps <= 50`、最低可见容量 20 万、成交额参与率 2%、只使用 50% entry 十档可见卖盘。 |
+| `capacity_l3_1m` | `liquidity_cost` + 每 cycle 100 万资金、单票目标 5 万、`turnover_diff_30t` 参与率不超过 5%、最低可见容量 5 万，并要求 entry 3 档卖盘能容纳目标金额；收益按 3 档 sweep VWAP 修正。 |
+| `capacity_l5_2m` | `liquidity_cost` + 每 cycle 200 万资金、单票目标 10 万、`turnover_diff_30t` 参与率不超过 5%、最低可见容量 10 万，并要求 entry 5 档卖盘能容纳目标金额；收益按 5 档 sweep VWAP 修正。 |
 
 旧 prediction 如果没有 `entry_max_tick_gap_seconds`，entry 新鲜度需要通过重建 prediction 或传
 `--context-input` 重新补齐；不要用总等待时间比较 delay0/1/2 的 entry 新鲜度。
@@ -414,9 +426,121 @@ output/predictions/lgbm_opening_1y_next_month_strong_delay0/predictions_all.parq
 
 ```text
 output/reports/opening_intraday_lgbm_delay_replays/scenario_summary.csv
+output/reports/opening_intraday_lgbm_delay_replays/replay_l3_l5_single_tradable_delay{0,1,2}.png
+output/reports/opening_intraday_lgbm_delay_replays/delay_scan_proxy_top20.csv
+output/reports/opening_intraday_lgbm_delay_replays/delay_scan_proxy_top20.png
 output/reports/opening_intraday_lgbm_delay_replays/<delay>/<scenario>/intraday_summary.csv
 output/reports/opening_intraday_lgbm_delay_replays/<delay>/<scenario>/intraday_cycles.csv
 output/reports/opening_intraday_lgbm_delay_replays/<delay>/<scenario>/intraday_selected_trades.csv
+```
+
+阶段归档时，把轻量 replay evidence 复制到 `experiments/results/backtests/`：
+
+```text
+opening_intraday_lgbm_delay_replays_scenario_summary.csv
+opening_intraday_lgbm_delay_replays_delay_scan_proxy_top20.csv
+opening_intraday_lgbm_delay_replays_trace.json
+```
+
+PNG 和大 parquet 仍保留在 `output/`，默认不提交。
+
+## 10. Alpha Horizon Decay
+
+Alpha horizon decay 已完成阶段归档。这个步骤的目的不是继续扩大 tick-level replay 资金规模，
+而是检查 opening score 在更长 horizon 上是否仍有 cross-sectional alpha。归档实验固定使用
+delay2 作为保守 entry 口径，比较 Universe 与 Strong 分支在 opening window 的 1m/2m/5m/10m、
+same-day close 和 next-day close 上的 TopN mean alpha return 和 rank IC。
+
+归档结论：
+
+- 固定 `09:30` cohort 的 Rank IC 从 1m 到 10m 逐步衰减，到 close / next close 仍有弱正排序。
+- 固定 `09:30` 的 next close Top20 mean alpha return 为负，不能解释成隔夜 Top20 已可交易。
+- `09:30-09:39` 十分钟简单平均后，close / next close 排序效果基本消失，不支持直接取十分钟均值作为日频特征。
+- 下一步 active work 是已有日频候选池内的 opening score 重排序 / 辅助排序，而不是继续扩大 opening replay。
+
+主口径直接从 ClickHouse 拉 target-minute bid/ask mid price。timed horizon 一律用当前 delay2
+`buy_price` 到未来整分钟有效 `mid_price` 的 point return；`1m` 不再混用旧 60s VWAP proxy label。
+固定 `09:30:00-09:39:00` 这 10 个开盘分钟作为 decision cohort，并设置
+`--timed-target-end-time none`，让 1m/2m/5m/10m 都使用同一组 opening cohorts：
+
+```bash
+python scripts/run_alpha_horizon_decay.py \
+  --decision-time 09:30:00,09:31:00,09:32:00,09:33:00,09:34:00,09:35:00,09:36:00,09:37:00,09:38:00,09:39:00 \
+  --timed-target-end-time none \
+  --horizon 1m --horizon 2m --horizon 5m --horizon 10m \
+  --horizon close --horizon next_close \
+  --no-sampled-intraday \
+  --clickhouse-intraday-labels \
+  --clickhouse-close-labels \
+  --allow-missing-horizons \
+  --output-root output/reports/opening_alpha_horizon_decay_delay2_clickhouse_point_open10_selected
+```
+
+如果只看固定 `09:30` opening score，与早期 smooth decay 图对齐，可加 `--decision-time 09:30:00`。
+这个读法回答的是“09:30 这一批股票持有更久以后排序 IC 如何衰减”，不是每个开盘分钟平均：
+
+```bash
+python scripts/run_alpha_horizon_decay.py \
+  --decision-time 09:30:00 \
+  --horizon 1m --horizon 2m --horizon 5m --horizon 10m \
+  --horizon close --horizon next_close \
+  --no-sampled-intraday \
+  --clickhouse-intraday-labels \
+  --clickhouse-close-labels \
+  --allow-missing-horizons \
+  --output-root output/reports/opening_alpha_horizon_decay_delay2_clickhouse_point_0930_selected
+```
+
+PVC 上跑同样命令时显式指定 prediction cache 路径：
+
+```bash
+python scripts/run_alpha_horizon_decay.py \
+  --run Universe=/mnt/output/opening_strength_fit/lgbm_opening_1y_next_month_delay2/predictions_all.parquet \
+  --run Strong=/mnt/output/opening_strength_fit/lgbm_opening_1y_next_month_strong_delay2/predictions_all.parquet \
+  --decision-time 09:30:00,09:31:00,09:32:00,09:33:00,09:34:00,09:35:00,09:36:00,09:37:00,09:38:00,09:39:00 \
+  --timed-target-end-time none \
+  --horizon 1m --horizon 2m --horizon 5m --horizon 10m \
+  --horizon close --horizon next_close \
+  --no-sampled-intraday \
+  --clickhouse-intraday-labels \
+  --clickhouse-close-labels \
+  --allow-missing-horizons \
+  --output-root /mnt/output/opening_strength_fit/alpha_horizon_decay_delay2_clickhouse_point_open10_selected
+```
+
+输出：
+
+```text
+alpha_horizon_decay_summary.csv
+alpha_horizon_decay_buckets.csv
+alpha_horizon_decay_mean_return.png
+alpha_horizon_decay_rank_ic.png
+alpha_horizon_decay_trace.json
+```
+
+阶段归档路径：
+
+```text
+output/reports/opening_alpha_horizon_decay_delay2_clickhouse_point_open10_selected
+output/reports/opening_alpha_horizon_decay_delay2_clickhouse_point_0930_selected
+output/reports/opening_alpha_horizon_decay_delay2_compare_selected
+
+experiments/results/backtests/opening_alpha_horizon_decay_delay2_0930_summary.csv
+experiments/results/backtests/opening_alpha_horizon_decay_delay2_0930_trace.json
+experiments/results/backtests/opening_alpha_horizon_decay_delay2_open10_summary.csv
+experiments/results/backtests/opening_alpha_horizon_decay_delay2_open10_trace.json
+experiments/results/backtests/opening_alpha_horizon_decay_delay2_0930_vs_open10_summary.csv
+experiments/results/backtests/opening_alpha_horizon_decay_delay2_close_next_close_by_decision_minute.csv
+```
+
+Daily candidate reranking / overlay 的下一步使用口径：
+
+```text
+输入: 上游日频策略给出的当天候选池、日频分数或目标持仓
+开盘辅助信号: 优先使用固定 09:30 或最早可交易 opening score
+对照: 原始日频候选排序 vs 加 opening score 后的 rerank / overlay
+评估: 候选池内 Rank IC、TopK 命中率、最终持仓收益、换手和未成交样本
+暂不主推: 09:30-09:39 opening score 简单平均
 ```
 
 如果只想预览任务而不读取 parquet：
@@ -432,7 +556,7 @@ python scripts/run_lgbm_delay_replays.py --check-interface-only
 ```
 
 这一步会检查 `output/predictions/<run_id>/predictions_all.parquet` 是否包含 replay 默认场景需要的
-core prediction、delay metadata、freshness、状态、spread、容量和 entry 十档卖盘字段，并确认
+core prediction、delay metadata、freshness、状态、spread、容量和 entry 3/5 档卖盘字段，并确认
 `entry_delay_ticks` 与 delay0/1/2 分支一致。检查通过后再跑完整 replay。
 
 默认 `--missing-constraint error`，所以请求了某个约束但 prediction 和 `--context-input` 都缺字段时会直接报错。
@@ -453,7 +577,7 @@ replay 实现上不要为每个真实限制单独造一套模型，优先合并�
 成本 haircut: fee / slippage / 平均冲击成本
 时延和新鲜度: data latency / signal latency / gateway latency / entry tick delay / entry tick gap
 可交易性: status / entry_status / 涨跌停距离 / 停牌临停
-流动性和成交: spread / 一档深度 / 十档 sweep / capacity / participation / partial fill
+流动性和成交: spread / 一档深度 / 多档 sweep / capacity / participation / partial fill
 组合调度: TopN / 单票权重 / 现金 / 同股重复 / cooldown / 换手
 ```
 
@@ -466,7 +590,7 @@ replay 实现上不要为每个真实限制单独造一套模型，优先合并�
 | spread | `spread_bps` / `--max-spread-bps` | strong candidate 可进样本域；执行压测先 replay。 |
 | 涨停距离 | `ask1_to_limit_up_bps` / `--min-limit-up-room-bps` | 不需要，除非定义固定交易池。 |
 | 一档挂量 | `ask_volume_1` / `bid_volume_1` | 不需要，replay。 |
-| entry 卖盘容量 | `entry_ask_price_1..10` / `entry_ask_volume_1..10` / `--ask-depth-levels` | 不需要重训模型；prediction 可自带 entry 盘口上下文，也可由 replay `--context-input` enrich；用于 ask1-only 过滤、部分成交或十档 sweep。 |
+| entry 卖盘容量 | `entry_ask_price_1..N` / `entry_ask_volume_1..N` / `--ask-depth-levels` | 不需要重训模型；prediction 可自带 entry 盘口上下文，也可由 replay `--context-input` enrich；用于 ask1-only 过滤、部分成交或多档 sweep。 |
 | 容量/参与率 | `turnover_diff_30t` / `--max-participation-rate` | 不需要，replay。 |
 | TopN/单票/现金 | `--top-n` / `--max-symbol-weight` | 不需要，replay。 |
 | 同股重复/冷却 | `--max-symbol-trades-per-day` / `--symbol-cooldown-minutes` | 不需要，replay。 |
@@ -479,7 +603,8 @@ Ask-depth replay 参数：
 --context-kind auto     # auto/raw_ticks/labeled
 --context-label-mode replace  # 用 context label 作为 replay PnL，保留 prediction_label 便于审计
 --ask-depth-levels 1      # ask1-only
---ask-depth-levels 10     # 十档卖盘
+--ask-depth-levels 3      # 默认小容量 L3 场景
+--ask-depth-levels 5      # 默认小容量 L5 场景
 --ask-depth-fill-mode filter  # 深度不足则不交易
 --ask-depth-fill-mode scale   # 深度不足则按可成交比例降权，剩余留现金
 --ask-depth-fill-mode sweep   # 深度足够时扫档成交，用 sweep VWAP 修正 label
@@ -489,7 +614,7 @@ Ask-depth replay 参数：
 默认不要开 `--allow-decision-depth-fallback`。用了 `entry_tick_delay` 后，decision tick 的
 `ask_volume_1` 不能代表真实 entry tick 的可成交量；fallback 只适合旧预测文件的粗略诊断。
 
-## 10. 分析 Metrics
+## 11. 分析 Metrics
 
 单个实验：
 
@@ -523,7 +648,7 @@ top_score_mean_return
 
 当前主配置的 `ic_mode` 是 `cross_section`。
 
-## 11. 分析开盘短周期回测
+## 12. 分析开盘短周期回测
 
 重点看：
 
@@ -540,9 +665,11 @@ cash_weight
 
 逐日曲线在 `output/reports/opening_intraday_top20_1y_next_month/daily_curves/`。
 
-## 12. 收尾：记录和审计
+## 13. 收尾：记录和审计
 
 一轮实验包括：训练完成、reader 合并完成、metrics 拉回、需要的 predictions/opening replay 分析完成，并且相关 config 的 `status` 已更新为 `completed`。
+如果某条 `docs/project_brief.md` 的 active research route 已满足阶段目标，还需要同步更新
+`docs/project_brief.md`、`docs/experiment_log.md` 和 README 的当前状态说明，明确“已归档”和下一步 active work。
 
 ```bash
 python scripts/record_experiment.py \

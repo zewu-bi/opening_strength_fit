@@ -5,6 +5,12 @@ from dataclasses import asdict, dataclass
 import json
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
+
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 
@@ -27,12 +33,28 @@ DEFAULT_SCENARIOS = (
     "proxy_top20",
     "cost_10bps",
     "tradable_cost",
-    "tradable_cost_5s",
     "liquidity_cost",
-    "capacity_10m_5pct",
-    "strict_10m_2pct",
+    "capacity_l3_1m",
+    "capacity_l5_2m",
 )
 TIME_PREDICTION_COLUMNS = ("decision_target_timestamp", "timestamp")
+SCENARIO_PLOT_LABELS = {
+    "proxy_top20": "Proxy\nTop20",
+    "cost_10bps": "Cost\n10bps",
+    "tradable_cost": "Tradable",
+    "liquidity_cost": "Liquidity",
+    "capacity_l3_1m": "Capacity\nL3 / 1m",
+    "capacity_l5_2m": "Capacity\nL5 / 2m",
+    "limit_up_room_10s": "Limit-up\nroom",
+}
+RUN_PLOT_LABELS = {
+    "universe": "Universe",
+    "strong": "Strong",
+}
+RUN_PLOT_COLORS = {
+    "Universe": "#1f77b4",
+    "Strong": "#d17a22",
+}
 
 
 @dataclass(frozen=True)
@@ -51,6 +73,7 @@ class ReplayScenario:
     min_bid_volume_1: float | None = None
     min_capacity_notional: float = 0.0
     max_participation_rate: float = 0.0
+    capital_per_cycle: float | None = None
     ask_depth_levels: int = 0
     ask_depth_participation_rate: float = 1.0
     ask_depth_fill_mode: str = "filter"
@@ -83,19 +106,6 @@ SCENARIOS: dict[str, ReplayScenario] = {
         max_decision_lag_seconds=5.0,
         max_entry_tick_gap_seconds=10.0,
     ),
-    "tradable_cost_5s": ReplayScenario(
-        name="tradable_cost_5s",
-        description=(
-            "Stricter freshness stress: cost plus continuous-trading status, "
-            "decision lag <=5s, and entry tick-path gap <=5s."
-        ),
-        fee_bps=5.0,
-        slippage_bps=5.0,
-        tradable_statuses=("T0", "20", "TRADE"),
-        require_entry_status=True,
-        max_decision_lag_seconds=5.0,
-        max_entry_tick_gap_seconds=5.0,
-    ),
     "liquidity_cost": ReplayScenario(
         name="liquidity_cost",
         description=(
@@ -112,11 +122,33 @@ SCENARIOS: dict[str, ReplayScenario] = {
         min_ask_volume_1=1.0,
         min_bid_volume_1=1.0,
     ),
-    "capacity_10m_5pct": ReplayScenario(
-        name="capacity_10m_5pct",
+    "capacity_l3_1m": ReplayScenario(
+        name="capacity_l3_1m",
         description=(
-            "Liquidity-cost scenario plus 10mm CNY/cycle, 5% turnover "
-            "participation, and ten-level entry ask sweep."
+            "Liquidity-cost scenario plus 1mm CNY/cycle, 5% turnover "
+            "participation, and three-level entry ask sweep."
+        ),
+        fee_bps=5.0,
+        slippage_bps=5.0,
+        tradable_statuses=("T0", "20", "TRADE"),
+        require_entry_status=True,
+        max_decision_lag_seconds=5.0,
+        max_entry_tick_gap_seconds=10.0,
+        max_spread_bps=100.0,
+        min_ask_volume_1=1.0,
+        min_bid_volume_1=1.0,
+        min_capacity_notional=50_000.0,
+        max_participation_rate=0.05,
+        capital_per_cycle=1_000_000.0,
+        ask_depth_levels=3,
+        ask_depth_participation_rate=1.0,
+        ask_depth_fill_mode="sweep",
+    ),
+    "capacity_l5_2m": ReplayScenario(
+        name="capacity_l5_2m",
+        description=(
+            "Liquidity-cost scenario plus 2mm CNY/cycle, 5% turnover "
+            "participation, and five-level entry ask sweep."
         ),
         fee_bps=5.0,
         slippage_bps=5.0,
@@ -129,29 +161,9 @@ SCENARIOS: dict[str, ReplayScenario] = {
         min_bid_volume_1=1.0,
         min_capacity_notional=100_000.0,
         max_participation_rate=0.05,
-        ask_depth_levels=10,
+        capital_per_cycle=2_000_000.0,
+        ask_depth_levels=5,
         ask_depth_participation_rate=1.0,
-        ask_depth_fill_mode="sweep",
-    ),
-    "strict_10m_2pct": ReplayScenario(
-        name="strict_10m_2pct",
-        description=(
-            "Stricter freshness, spread, participation, and displayed entry "
-            "ask-depth stress for a 10mm CNY/cycle book."
-        ),
-        fee_bps=5.0,
-        slippage_bps=10.0,
-        tradable_statuses=("T0", "20", "TRADE"),
-        require_entry_status=True,
-        max_decision_lag_seconds=5.0,
-        max_entry_tick_gap_seconds=5.0,
-        max_spread_bps=50.0,
-        min_ask_volume_1=1.0,
-        min_bid_volume_1=1.0,
-        min_capacity_notional=200_000.0,
-        max_participation_rate=0.02,
-        ask_depth_levels=10,
-        ask_depth_participation_rate=0.5,
         ask_depth_fill_mode="sweep",
     ),
     "limit_up_room_10s": ReplayScenario(
@@ -217,8 +229,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--capital-per-cycle",
         type=float,
-        default=10_000_000.0,
-        help="CNY capital used by participation-rate scenarios.",
+        default=0.0,
+        help=(
+            "Fallback CNY capital used by participation-rate scenarios that do "
+            "not define scenario-specific capital. The default replay grid uses "
+            "capacity_l3_1m and capacity_l5_2m values from SCENARIOS."
+        ),
     )
     parser.add_argument(
         "--context-input",
@@ -300,9 +316,34 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--plot-summary-only",
+        action="store_true",
+        help=(
+            "Read an existing scenario_summary.csv under --output-root and redraw "
+            "summary plots without rerunning replay."
+        ),
+    )
+    parser.add_argument(
+        "--summary-plot-delay",
+        action="append",
+        choices=(*DEFAULT_DELAYS, "all"),
+        help=(
+            "Delay branch to include in scenario summary plots. Defaults to all "
+            "delay branches present in scenario_summary.csv. May be repeated."
+        ),
+    )
+    parser.add_argument(
+        "--skip-summary-plots",
+        action="store_true",
+        help="Do not write scenario summary PNGs from scenario_summary.csv.",
+    )
+    parser.add_argument(
         "--skip-plots",
         action="store_true",
-        help="Write CSV/JSON only, without daily curve PNGs.",
+        help=(
+            "Skip per-scenario daily curve PNGs. Scenario summary PNGs are "
+            "controlled separately by --skip-summary-plots."
+        ),
     )
     parser.add_argument(
         "--dry-run",
@@ -481,6 +522,112 @@ def write_trace(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def scenario_capital_per_cycle(
+    scenario: ReplayScenario,
+    args: argparse.Namespace,
+) -> float:
+    if scenario.capital_per_cycle is not None:
+        return float(scenario.capital_per_cycle)
+    return float(args.capital_per_cycle)
+
+
+def run_branch(run: object) -> str:
+    return RUN_PLOT_LABELS["strong"] if "strong" in str(run) else RUN_PLOT_LABELS["universe"]
+
+
+def summary_plot_delays(
+    summary: pd.DataFrame,
+    requested: list[str] | None,
+) -> list[str]:
+    present = [delay for delay in DEFAULT_DELAYS if delay in set(summary["delay"].astype(str))]
+    if not requested or "all" in requested:
+        return present
+    return [delay for delay in requested if delay in present]
+
+
+def plot_scenario_summary(
+    summary: pd.DataFrame,
+    *,
+    output_root: Path,
+    requested_delays: list[str] | None,
+) -> list[Path]:
+    if summary.empty:
+        return []
+    work = summary.copy()
+    work["branch"] = work["run"].map(run_branch)
+    scenario_order = {
+        name: index
+        for index, name in enumerate(
+            [name for name in DEFAULT_SCENARIOS if name in set(work["scenario"])]
+            + [
+                name
+                for name in work["scenario"].astype(str).drop_duplicates()
+                if name not in DEFAULT_SCENARIOS
+            ]
+        )
+    }
+    work["scenario_order"] = work["scenario"].map(scenario_order)
+    paths = []
+    for delay in summary_plot_delays(work, requested_delays):
+        delay_frame = work.loc[work["delay"].astype(str) == delay].copy()
+        if delay_frame.empty:
+            continue
+        scenarios = [
+            name
+            for name, _index in sorted(
+                scenario_order.items(),
+                key=lambda item: item[1],
+            )
+            if name in set(delay_frame["scenario"].astype(str))
+        ]
+        x = np.arange(len(scenarios), dtype="float64")
+        width = 0.34
+        fig, ax = plt.subplots(figsize=(11.0, 5.4))
+        for offset, branch in ((-width / 2.0, "Universe"), (width / 2.0, "Strong")):
+            branch_frame = delay_frame.loc[delay_frame["branch"] == branch].set_index(
+                "scenario"
+            )
+            if branch_frame.empty:
+                continue
+            values = [
+                float(branch_frame.loc[scenario, "mean_cycle_return_bps"])
+                if scenario in branch_frame.index
+                else np.nan
+                for scenario in scenarios
+            ]
+            ax.bar(
+                x + offset,
+                values,
+                width=width,
+                color=RUN_PLOT_COLORS.get(branch, "#333333"),
+                label=branch,
+            )
+            for xpos, value in zip(x + offset, values, strict=True):
+                if not np.isfinite(value):
+                    continue
+                ax.annotate(
+                    f"{value:.1f}",
+                    (xpos, value),
+                    textcoords="offset points",
+                    xytext=(0, 4 if value >= 0 else -12),
+                    ha="center",
+                    fontsize=7.5,
+                )
+        ax.axhline(0.0, color="#555555", linewidth=0.9)
+        ax.set_xticks(x)
+        ax.set_xticklabels([SCENARIO_PLOT_LABELS.get(name, name) for name in scenarios])
+        ax.set_ylabel("Mean cycle return (bps)")
+        ax.set_title(f"{delay} replay under execution constraints")
+        ax.grid(axis="y", alpha=0.22)
+        ax.legend(frameon=False)
+        fig.tight_layout()
+        output_path = output_root / f"replay_l3_l5_single_tradable_{delay}.png"
+        fig.savefig(output_path, dpi=180)
+        plt.close(fig)
+        paths.append(output_path)
+    return paths
+
+
 def replay_scenario(
     *,
     delay: str,
@@ -514,7 +661,7 @@ def replay_scenario(
         capacity_price_col=args.capacity_price_col,
         min_capacity_notional=scenario.min_capacity_notional,
         max_participation_rate=scenario.max_participation_rate,
-        capital_per_cycle=args.capital_per_cycle,
+        capital_per_cycle=scenario_capital_per_cycle(scenario, args),
         ask_depth_levels=scenario.ask_depth_levels,
         ask_depth_participation_rate=scenario.ask_depth_participation_rate,
         ask_depth_fill_mode=scenario.ask_depth_fill_mode,
@@ -551,6 +698,7 @@ def replay_scenario(
             "entry_times": entry_times,
             "cycle_minutes": args.cycle_minutes,
             "capital_per_cycle": args.capital_per_cycle,
+            "scenario_capital_per_cycle": scenario_capital_per_cycle(scenario, args),
             "context_input": args.context_input,
             "context_kind": args.context_kind,
             "context_entry_tick_delay": delay_entry_ticks(delay)
@@ -580,6 +728,24 @@ def main() -> None:
     delays = args.delay or list(DEFAULT_DELAYS)
     scenario_names = args.scenario or list(DEFAULT_SCENARIOS)
     entry_times = [normalize_time(value) for value in (args.entry_times or DEFAULT_ENTRY_TIMES)]
+
+    if args.plot_summary_only:
+        summary_path = output_root / "scenario_summary.csv"
+        if not summary_path.exists():
+            raise SystemExit(f"missing scenario summary: {summary_path}")
+        summary = pd.read_csv(summary_path)
+        paths = [] if args.skip_summary_plots else plot_scenario_summary(
+            summary,
+            output_root=output_root,
+            requested_delays=args.summary_plot_delay,
+        )
+        print(
+            json.dumps(
+                {"summary_plots": [str(path) for path in paths]},
+                indent=2,
+            )
+        )
+        return
 
     plan = []
     for delay in delays:
@@ -680,8 +846,19 @@ def main() -> None:
     if summaries:
         combined = pd.concat(summaries, ignore_index=True)
         combined.to_csv(output_root / "scenario_summary.csv", index=False)
+        summary_plot_paths = []
+        if not args.skip_summary_plots:
+            summary_plot_paths = plot_scenario_summary(
+                combined,
+                output_root=output_root,
+                requested_delays=args.summary_plot_delay,
+            )
         print("\nreplay_scenario_summary:")
         print(combined.to_string(index=False, float_format="{:.6f}".format))
+        if summary_plot_paths:
+            print("\nreplay_summary_plots:")
+            for path in summary_plot_paths:
+                print(f"  {path}")
 
     write_trace(
         output_root / "scenario_trace.json",
@@ -702,6 +879,8 @@ def main() -> None:
             "context_label_mode": args.context_label_mode,
             "allow_decision_depth_fallback": args.allow_decision_depth_fallback,
             "missing_constraint": args.missing_constraint,
+            "summary_plot_delay": args.summary_plot_delay or ["all"],
+            "skip_summary_plots": args.skip_summary_plots,
             "interface_checks": interface_checks,
             "skipped": skipped,
         },
