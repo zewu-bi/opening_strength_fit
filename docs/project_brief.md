@@ -5,8 +5,7 @@ decision point 当时及以前可见的集合竞价、盘口、成交和短期�
 future gross return，并检查模型分数是否能稳定识别更强股票或更好入场时刻。
 
 样本粒度固定为 `trading day x symbol x opening timestamp`。当前 60s label 是
-microstructure proxy，不是 A 股 T+1 下的可交易收益。后续先把开盘后横截面信号做强，
-再考虑 longer-horizon label、日频候选池 overlay 和交易约束。
+microstructure proxy，不是 A 股 T+1 下的可交易收益。当前阶段只做一件事：把开盘后横截面信号做强。
 
 ## 当前结论
 
@@ -25,21 +24,46 @@ microstructure proxy，不是 A 股 T+1 下的可交易收益。后续先把开�
 阶段判断：
 
 - opening high-frequency proxy signal 存在，且在 2022-01 单月上有稳定横截面排序能力。
-- 旧 Top20 结果偏尖，后续不再作为主评估；主评估改为 Rank IC 和 Top100 选股收益。
-- `09:30` 是否受集合竞价影响不是当前决策门槛；后续重做特征时只需监控集合竞价依赖度。
+- 当前阶段唯一主目标是把 opening signal 做强；交易约束、容量扩展和日频 overlay 暂不重要。
+- 主评估改为 Rank IC 和 Top100 选股收益；Top20 不再作为主评估。
+- 容量只保留 ask1 口径；多档 sweep、fee/slippage、同股冷却等不进入当前实验目标。
+- 特征重点转向开盘后的盘口信息和 ask/bid 档位。集合竞价会随时间衰弱，可以保留但应轻微削弱，
+  不能成为主要依赖。
 - 手工 strong candidate filter 没有提升 alpha density，更适合作为候选/约束诊断。
 - short-horizon alpha discovery 与 horizon decay 均可归档，下一步不应直接扩大 tick-level replay 资金规模。
+
+## 当前 Baseline
+
+使用 `lgbm_opening_1y_next_month_delay2` 旧模型重新按新口径评估。baseline 不看单个均值，而固定为
+`09:30-09:40` 分钟曲线。短期信号用 delay2 60s VWAP proxy label，长期检查用 next close label。
+
+| minute | short Rank IC | short Top100 excess bps | next close Rank IC | next close Top100 bps |
+| --- | ---: | ---: | ---: | ---: |
+| 09:30 | 0.196 | +49.0 | 0.039 | -70.0 |
+| 09:31 | 0.085 | +16.6 | -0.026 | -136.4 |
+| 09:32 | 0.087 | +16.6 | -0.021 | -116.5 |
+| 09:33 | 0.127 | +19.1 | -0.026 | -141.0 |
+| 09:34 | 0.138 | +18.3 | -0.026 | -146.8 |
+| 09:35 | 0.142 | +20.7 | -0.026 | -152.3 |
+| 09:36 | 0.143 | +21.4 | -0.034 | -132.6 |
+| 09:37 | 0.140 | +18.3 | -0.033 | -136.6 |
+| 09:38 | 0.163 | +21.6 | -0.026 | -144.7 |
+| 09:39 | 0.148 | +13.8 | -0.035 | -159.8 |
+| 09:40 | 0.127 | +16.8 | -0.037 | -151.4 |
+
+结论：短期高频信号成立，`09:30` 最强且很稳，`09:33-09:40` 仍有明确排序和 Top100 超额；
+但旧模型没有证明 next close 可赚钱。后续实验先抬高 short Rank IC 和 short Top100 曲线，同时用
+next close 两条曲线做长期检查。
 
 ## 下一步
 
 | 路线 | 优先级 | 口径 |
 | --- | --- | --- |
-| 开盘后盘口特征增强 | active | 主评估使用 Rank IC 和 Top100 选股收益，重点加强 ask/bid 档位、深度、queue 变化和成交冲击。 |
-| Feature dependence audit | active | 评估 `preopen_*`、累计成交字段和各类盘口特征的重要性；集合竞价贡献可以存在，但不应成为主要依赖。 |
-| 盘口档位特征 | active | 加强 ask/bid 档位 gap、深度斜率、ask1/bid1 queue 变化、depth imbalance 变化和成交冲击比例。 |
-| 容量口径 | secondary | 暂只考虑 ask1 可买量；多档 sweep、fee/slippage、同股冷却等交易约束放到信号增强之后。 |
-| 时间段诊断 | optional | 分钟或时间段拆分只用于稳定性观察，不作为当前主目标。 |
-| 日频候选池 rerank / overlay | later | 等 opening signal 在 Top100 上更稳后再验证。 |
+| Fresh delay2 baseline training | active | 从 delay2 cache 重训当前特征模型，输出同样四张分钟曲线和 feature importance。 |
+| Feature dependence audit | active | 评估 `preopen_*`、累计成交字段和盘口特征贡献；集合竞价可以有贡献，但应削弱且不能是主要依赖。 |
+| 开盘后盘口特征增强 | active | 加强 ask/bid 档位 gap、深度斜率、ask1/bid1 queue 变化、depth imbalance 变化和成交冲击比例。 |
+| 训练目标增强 | secondary | 尝试横截面 demean/zscore label 或排序目标，让训练目标更贴近 Rank IC 和 Top100。 |
+| Next close sanity check | secondary | 不作为当前优化目标，只检查增强后的高频信号是否完全牺牲长期表现。 |
 
 ## 数据和 Label
 
@@ -90,7 +114,7 @@ X 只能使用 decision point 当时及以前可见的信息。新主线优先�
 | Rank IC、Top100 选股收益 | 当前主评估。 |
 | 容量 | 暂只看 ask1。 |
 | fee/slippage、状态、spread、tick 新鲜度、同股冷却 | 信号增强后再 replay。 |
-| T+1 | 当前 60s replay 不能解决；信号增强后再做 close / next close 或日频候选 overlay 验证。 |
+| next close | 当前只做 sanity check，不作为优化目标。 |
 
 已归档 replay 使用同一批 predictions 逐步叠加成本、可交易性、流动性和小容量 3/5 档 sweep。
 后续不把多档 sweep 作为主线目标，避免过早优化执行假设。
