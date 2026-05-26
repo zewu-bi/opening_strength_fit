@@ -25,8 +25,8 @@ microstructure proxy，不是 A 股 T+1 下的可交易收益。后续先把开�
 阶段判断：
 
 - opening high-frequency proxy signal 存在，且在 2022-01 单月上有稳定横截面排序能力。
-- 旧 Top20 结果偏尖，后续主评估改为 Rank IC 和 Top100 选股收益。
-- 当前 `09:30` 信号偏强，需要警惕集合竞价特征和跨竞价边界累计成交字段的贡献。
+- 旧 Top20 结果偏尖，后续不再作为主评估；主评估改为 Rank IC 和 Top100 选股收益。
+- `09:30` 是否受集合竞价影响不是当前决策门槛；后续重做特征时只需监控集合竞价依赖度。
 - 手工 strong candidate filter 没有提升 alpha density，更适合作为候选/约束诊断。
 - short-horizon alpha discovery 与 horizon decay 均可归档，下一步不应直接扩大 tick-level replay 资金规模。
 
@@ -34,11 +34,12 @@ microstructure proxy，不是 A 股 T+1 下的可交易收益。后续先把开�
 
 | 路线 | 优先级 | 口径 |
 | --- | --- | --- |
-| 开盘后信号增强 | active | 主评估使用 Rank IC 和 Top100 选股收益；按分钟拆分 `09:30`、`09:31-09:35`、`09:36-09:40`。 |
-| Feature ablation | active | 对比 all features、去掉 `preopen_*`、post-open reset、只用开盘后盘口/成交动态，判断 `09:30` 是否被集合竞价支配。 |
+| 开盘后盘口特征增强 | active | 主评估使用 Rank IC 和 Top100 选股收益，重点加强 ask/bid 档位、深度、queue 变化和成交冲击。 |
+| Feature dependence audit | active | 评估 `preopen_*`、累计成交字段和各类盘口特征的重要性；集合竞价贡献可以存在，但不应成为主要依赖。 |
 | 盘口档位特征 | active | 加强 ask/bid 档位 gap、深度斜率、ask1/bid1 queue 变化、depth imbalance 变化和成交冲击比例。 |
 | 容量口径 | secondary | 暂只考虑 ask1 可买量；多档 sweep、fee/slippage、同股冷却等交易约束放到信号增强之后。 |
-| 日频候选池 rerank / overlay | later | 等 opening signal 在 Top100 和非 09:30 分钟上更稳后再验证。 |
+| 时间段诊断 | optional | 分钟或时间段拆分只用于稳定性观察，不作为当前主目标。 |
+| 日频候选池 rerank / overlay | later | 等 opening signal 在 Top100 上更稳后再验证。 |
 
 ## 数据和 Label
 
@@ -71,14 +72,14 @@ label = sell_vwap / buy_price - 1 - fee_bps / 10000
 
 ## 特征和约束
 
-X 只能使用 decision point 当时及以前可见的信息。新主线优先开盘后信息，集合竞价相关特征不再作为
-增强方向，只保留为对照和诊断：
+X 只能使用 decision point 当时及以前可见的信息。新主线优先增强开盘后盘口信息；集合竞价相关特征
+可以保留，但必须监控模型依赖度，避免信号主要来自集合竞价：
 
 - 盘口结构：mid price、spread、一档/多档深度、买卖盘不平衡、档位 gap。
 - 档位动态：ask/bid 深度斜率、ask1/bid1 queue 变化、深度集中度、档位 gap 变化。
 - 成交活跃度：开盘后短窗口 `volume` / `turnover` 增量、成交速度、成交 VWAP、成交冲击比例。
 - 动量：相对开盘价、mid/ask/bid 短 tick return。
-- 集合竞价：仅作为 ablation 对照，重点检查 `preopen_*` 和跨 09:30 累计字段是否支配结果。
+- 集合竞价：可作为辅助特征保留；通过 feature importance / permutation / ablation 检查权重是否过重。
 - 交易约束：涨停距离、A 股 universe、交易状态、candidate filter。
 
 训练/replay 边界：
@@ -86,7 +87,7 @@ X 只能使用 decision point 当时及以前可见的信息。新主线优先�
 | 约束 | 当前处理 |
 | --- | --- |
 | entry delay、horizon、feature set、universe/candidate、固定部署硬过滤 | 影响 label、特征或样本域时重训。 |
-| Rank IC、Top100 选股收益、分分钟诊断 | 当前主评估。 |
+| Rank IC、Top100 选股收益 | 当前主评估。 |
 | 容量 | 暂只看 ask1。 |
 | fee/slippage、状态、spread、tick 新鲜度、同股冷却 | 信号增强后再 replay。 |
 | T+1 | 当前 60s replay 不能解决；信号增强后再做 close / next close 或日频候选 overlay 验证。 |
@@ -105,7 +106,7 @@ opening-strength candidate 分支共享对应 delay 的 PVC labeled cache。GPU 
 - `symbol_day IC`：同一股票当天多个 opening tick 的排序能力。
 - `score bucket`：收益是否随模型分数单调变化。
 - `Top/Bottom`：TopN 与 BottomN 的 gross label mean、win rate 和 spread。
-- `Top100`：当前主选股收益口径，Top20 只作为尖端 alpha 辅助观察。
-- `by-minute diagnostics`：按 decision minute 比较 Rank IC 和 Top100，重点看非 `09:30` 是否持续。
+- `Top100`：当前主选股收益口径；Top20 不再作为主评估。
+- `feature dependence`：跟踪集合竞价、累计成交字段和开盘后盘口特征的模型贡献。
 
-当前阶段结论以开盘后信号增强和 feature ablation 为下一道门槛。
+当前阶段结论以开盘后盘口特征增强和 feature dependence audit 为下一道门槛。

@@ -81,7 +81,7 @@ max_bin = 63
 | 变化 | 放哪里 |
 | --- | --- |
 | label、horizon、entry delay、feature set、universe/candidate、固定部署硬过滤 | 新 run / 重训 |
-| Rank IC、Top100 选股收益、分分钟诊断 | 主评估 |
+| Rank IC、Top100 选股收益 | 主评估 |
 | 容量 | 暂只看 ask1，先不做多档 sweep 主线 |
 | fee、slippage、spread、状态、tick 新鲜度、同股冷却 | 后续 replay |
 | close / next close / T+1 价值 | 信号增强后再做新 horizon label 或日频候选 overlay |
@@ -222,9 +222,10 @@ delay2 universe 在基础 liquidity 约束下约 `+28.74 bps`，容量场景
 固定 `09:30` opening score 到 close / next close 仍有弱正 Rank IC，但 next close Top20 收益不稳定；
 `09:30-09:39` 简单平均后长周期排序效果基本消失。
 
-下一步 active work：先做信号增强。评估标准改为 Rank IC 和 Top100 选股收益；重点检查
-`09:30` 是否受集合竞价特征或跨竞价边界累计成交字段影响，并加强开盘后 ask/bid 档位、
-盘口深度和队列变化特征。交易约束、日频 overlay 和多档容量放到信号变强之后。
+下一步 active work：先做信号增强。评估标准改为 Rank IC 和 Top100 选股收益，Top20 不再作为主评估。
+集合竞价相关特征不需要一刀切删除，但要检查模型依赖度，确认它们不是主要贡献来源。
+真正的特征增强重点是开盘后 ask/bid 档位、盘口深度、队列变化和成交冲击。交易约束、
+日频 overlay 和多档容量放到信号变强之后。
 
 ## 开发约定
 
