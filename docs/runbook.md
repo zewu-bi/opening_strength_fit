@@ -283,9 +283,26 @@ python scripts/run_alpha_horizon_decay.py \
 ```
 
 归档结论：固定 `09:30` 到 close / next close 仍有弱正 Rank IC，但 Top20 next close 收益不稳定；
-`09:30-09:39` 简单平均后 close / next close 排序基本消失。下一步是日频候选池内 rerank / overlay。
+`09:30-09:39` 简单平均后 close / next close 排序基本消失。
 
-## 9. 排查和收尾
+## 9. 当前新目标：信号增强
+
+后续先把开盘后信号做强，再考虑交易约束、容量扩展和日频 overlay。主评估口径：
+
+- Rank IC，按 `date x decision_target_timestamp` 分组。
+- Top100 选股收益，Top20 只作为尖端 alpha 辅助观察。
+- by-minute 诊断，至少拆 `09:30`、`09:31-09:35`、`09:36-09:40`。
+
+优先实验：
+
+1. all features baseline。
+2. 去掉显式 `preopen_*` feature。
+3. post-open reset：切断或重置 09:30 前累计成交字段对 `volume_diff_*` / `turnover_diff_*` 的影响。
+4. post-open order-book only：重点使用 ask/bid 档位、深度、queue 变化、spread 和成交冲击比例。
+
+容量暂只看 ask1 可买量；L3/L5 sweep、fee/slippage、同股冷却等 replay 约束放到信号增强之后。
+
+## 10. 排查和收尾
 
 常见问题：
 

@@ -5,8 +5,8 @@ decision point 当时及以前可见的集合竞价、盘口、成交和短期�
 future gross return，并检查模型分数是否能稳定识别更强股票或更好入场时刻。
 
 样本粒度固定为 `trading day x symbol x opening timestamp`。当前 60s label 是
-microstructure proxy，不是 A 股 T+1 下的可交易收益；真实选股价值要用 longer-horizon label
-或日频候选池 overlay 继续验证。
+microstructure proxy，不是 A 股 T+1 下的可交易收益。后续先把开盘后横截面信号做强，
+再考虑 longer-horizon label、日频候选池 overlay 和交易约束。
 
 ## 当前结论
 
@@ -25,7 +25,8 @@ microstructure proxy，不是 A 股 T+1 下的可交易收益；真实选股价�
 阶段判断：
 
 - opening high-frequency proxy signal 存在，且在 2022-01 单月上有稳定横截面排序能力。
-- 成交延迟和容量是主要衰减来源；当前 opening replay 只能作为 proxy 压力测试。
+- 旧 Top20 结果偏尖，后续主评估改为 Rank IC 和 Top100 选股收益。
+- 当前 `09:30` 信号偏强，需要警惕集合竞价特征和跨竞价边界累计成交字段的贡献。
 - 手工 strong candidate filter 没有提升 alpha density，更适合作为候选/约束诊断。
 - short-horizon alpha discovery 与 horizon decay 均可归档，下一步不应直接扩大 tick-level replay 资金规模。
 
@@ -33,9 +34,11 @@ microstructure proxy，不是 A 股 T+1 下的可交易收益；真实选股价�
 
 | 路线 | 优先级 | 口径 |
 | --- | --- | --- |
-| 日频候选池内 opening score rerank / overlay | active | 使用固定 `09:30` 或最早可交易 opening score，对比 overlay 前后的日频候选收益、Rank IC、TopK 命中率、换手和未成交样本。 |
-| 日频特征聚合 | secondary | 暂不主推 `09:30-09:39` 简单平均；可研究固定 09:30、早盘前几分钟最大值/分位数、衰减斜率、持续强势次数。 |
-| 执行容量复盘 | secondary | 若继续看 tick-level replay，应做容量参数敏感性、目标资金下降、分批执行和盘口冲击建模。 |
+| 开盘后信号增强 | active | 主评估使用 Rank IC 和 Top100 选股收益；按分钟拆分 `09:30`、`09:31-09:35`、`09:36-09:40`。 |
+| Feature ablation | active | 对比 all features、去掉 `preopen_*`、post-open reset、只用开盘后盘口/成交动态，判断 `09:30` 是否被集合竞价支配。 |
+| 盘口档位特征 | active | 加强 ask/bid 档位 gap、深度斜率、ask1/bid1 queue 变化、depth imbalance 变化和成交冲击比例。 |
+| 容量口径 | secondary | 暂只考虑 ask1 可买量；多档 sweep、fee/slippage、同股冷却等交易约束放到信号增强之后。 |
+| 日频候选池 rerank / overlay | later | 等 opening signal 在 Top100 和非 09:30 分钟上更稳后再验证。 |
 
 ## 数据和 Label
 
@@ -68,25 +71,28 @@ label = sell_vwap / buy_price - 1 - fee_bps / 10000
 
 ## 特征和约束
 
-X 只能使用 decision point 当时及以前可见的信息：
+X 只能使用 decision point 当时及以前可见的信息。新主线优先开盘后信息，集合竞价相关特征不再作为
+增强方向，只保留为对照和诊断：
 
 - 盘口结构：mid price、spread、一档/多档深度、买卖盘不平衡、档位 gap。
-- 成交活跃度：短窗口 `volume` / `turnover` 增量、成交速度、成交 VWAP。
-- 动量：相对昨收/开盘收益、短 tick return。
-- 集合竞价：竞价累计量额、竞价末价、竞价价格区间、竞价不平衡。
+- 档位动态：ask/bid 深度斜率、ask1/bid1 queue 变化、深度集中度、档位 gap 变化。
+- 成交活跃度：开盘后短窗口 `volume` / `turnover` 增量、成交速度、成交 VWAP、成交冲击比例。
+- 动量：相对开盘价、mid/ask/bid 短 tick return。
+- 集合竞价：仅作为 ablation 对照，重点检查 `preopen_*` 和跨 09:30 累计字段是否支配结果。
 - 交易约束：涨停距离、A 股 universe、交易状态、candidate filter。
 
 训练/replay 边界：
 
 | 约束 | 当前处理 |
 | --- | --- |
-| entry delay、horizon、universe/candidate、固定部署硬过滤 | 影响 label 或样本域时重训。 |
-| fee/slippage | 固定入选交易的收益扣减，先在 replay 中压测。 |
-| 状态、spread、tick 新鲜度、容量、entry 卖盘 sweep、TopN、同股冷却 | 不改模型排序，先 replay。 |
-| T+1 | 当前 60s replay 不能解决；用 close / next close 或日频候选 overlay 验证。 |
+| entry delay、horizon、feature set、universe/candidate、固定部署硬过滤 | 影响 label、特征或样本域时重训。 |
+| Rank IC、Top100 选股收益、分分钟诊断 | 当前主评估。 |
+| 容量 | 暂只看 ask1。 |
+| fee/slippage、状态、spread、tick 新鲜度、同股冷却 | 信号增强后再 replay。 |
+| T+1 | 当前 60s replay 不能解决；信号增强后再做 close / next close 或日频候选 overlay 验证。 |
 
-标准 replay 使用同一批 predictions 逐步叠加成本、可交易性、流动性和小容量 3/5 档 sweep。
-如果 prediction 很瘦，可通过 raw tick 或同 delay labeled context 补执行字段；缺关键字段默认报错。
+已归档 replay 使用同一批 predictions 逐步叠加成本、可交易性、流动性和小容量 3/5 档 sweep。
+后续不把多档 sweep 作为主线目标，避免过早优化执行假设。
 
 ## 模型与评估
 
@@ -99,6 +105,7 @@ opening-strength candidate 分支共享对应 delay 的 PVC labeled cache。GPU 
 - `symbol_day IC`：同一股票当天多个 opening tick 的排序能力。
 - `score bucket`：收益是否随模型分数单调变化。
 - `Top/Bottom`：TopN 与 BottomN 的 gross label mean、win rate 和 spread。
-- `gross replay`：按模型分数选 TopN，用 label 或 context label 回放方向性与稳定性。
+- `Top100`：当前主选股收益口径，Top20 只作为尖端 alpha 辅助观察。
+- `by-minute diagnostics`：按 decision minute 比较 Rank IC 和 Top100，重点看非 `09:30` 是否持续。
 
-当前阶段结论以日频候选池 overlay 的直接验证为下一道门槛。
+当前阶段结论以开盘后信号增强和 feature ablation 为下一道门槛。

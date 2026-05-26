@@ -107,8 +107,22 @@ group rank IC：
 `-38.16 bps`。因此 weak positive next close Rank IC 不能解释成“隔夜 Top20 已能赚钱”。
 `09:30-09:39` 简单平均后，close / next close 排序效果基本消失。
 
-阶段结论：alpha horizon decay 路线可以归档。下一步 active work 是已有日频候选池内的 opening score
-重排序 / 辅助排序验证，优先使用固定 `09:30` 或最早可交易 opening score。
+阶段结论：alpha horizon decay 路线可以归档。固定 `09:30` 虽然强，但可能受集合竞价特征或跨竞价边界
+累计成交字段影响，不能直接作为最终信号形态。
+
+## 2026-05-26 Mentor Re-scope
+
+后续目标从交易约束和日频 overlay 前移为信号增强：
+
+- 先把 opening signal 做强，再考虑 fee/slippage、同股冷却、T+1 overlay 等交易问题。
+- 容量暂只看 ask1 可买量，不把 L3/L5 sweep 作为主线优化目标。
+- 主评估改为 Rank IC 和 Top100 选股收益；Top20 保留为尖端 alpha 辅助观察。
+- 重点放在开盘后的盘口信息，尤其是 ask/bid 档位、深度、queue 变化和成交冲击。
+- 集合竞价相关 feature 应减少或作为对照组，重点排查 `09:30` 强势是否由 `preopen_*`
+  或跨 09:30 的累计 `volume/turnover` 差分造成。
+
+下一组实验应优先做 feature ablation：all features、去掉 `preopen_*`、post-open reset、
+只用开盘后盘口/成交动态，并按分钟输出 Rank IC 和 Top100 收益。
 
 ## 2026-05-21 1y Next-Month Baseline
 

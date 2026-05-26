@@ -7,8 +7,8 @@ ClickHouse `stock.tick` 或本地 tick parquet 读取集合竞价与开盘盘口
 future return proxy，并检查模型分数是否有稳定横截面排序价值。
 
 当前结论很明确：opening proxy signal 存在，但它不是完整实盘策略。A 股 T+1 约束下，
-60s label 只能作为 microstructure discovery label；已经完成 close / next close 衰减检查，
-下一步应验证 opening score 能否作为已有日频候选池的辅助排序信号。
+60s label 只能作为 microstructure discovery label；已经完成 close / next close 衰减检查。
+后续目标已调整为先把开盘后横截面信号做强，再考虑交易约束和日频 overlay。
 
 ```text
 ClickHouse stock.tick / local tick parquet
@@ -56,9 +56,9 @@ label = sell_vwap / buy_price - 1 - fee_bps / 10000
 `entry_tick_delay = 1`，并补充 delay0/2 敏感性。`entry_delay_seconds` 记录总等待时间，
 `entry_max_tick_gap_seconds` 记录 decision-to-entry 路径最大相邻 tick gap。
 
-X 特征只允许使用 decision point 当时及以前可见的信息，包括盘口结构、成交活跃度、短期动量、
-集合竞价、交易状态和候选池过滤特征。`model.feature_columns()` 会排除 label、entry/sell future
-字段和 future timestamp 字段。
+X 特征只允许使用 decision point 当时及以前可见的信息。新主线优先强化开盘后的盘口结构、
+ask/bid 档位、深度变化、成交活跃度和短期动量；集合竞价特征只作为对照组或诊断项。
+`model.feature_columns()` 会排除 label、entry/sell future 字段和 future timestamp 字段。
 
 ## 训练和 Replay
 
@@ -76,15 +76,17 @@ device_type = "cpu"
 max_bin = 63
 ```
 
-训练/replay 边界：
+训练/评估/replay 边界：
 
 | 变化 | 放哪里 |
 | --- | --- |
-| label、horizon、entry delay、universe/candidate、固定部署硬过滤 | 新 run / 重训 |
-| fee、slippage、spread、状态、tick 新鲜度、容量、盘口 sweep、TopN、同股冷却 | replay |
-| close / next close / T+1 价值 | 新 horizon label 或日频候选 overlay |
+| label、horizon、entry delay、feature set、universe/candidate、固定部署硬过滤 | 新 run / 重训 |
+| Rank IC、Top100 选股收益、分分钟诊断 | 主评估 |
+| 容量 | 暂只看 ask1，先不做多档 sweep 主线 |
+| fee、slippage、spread、状态、tick 新鲜度、同股冷却 | 后续 replay |
+| close / next close / T+1 价值 | 信号增强后再做新 horizon label 或日频候选 overlay |
 
-标准 LightGBM delay replay 默认 6 个场景：
+已归档的 LightGBM delay replay 默认 6 个场景：
 
 ```text
 proxy_top20
@@ -95,9 +97,8 @@ capacity_l3_1m
 capacity_l5_2m
 ```
 
-容量场景使用 entry tick 真实 `entry_ask_price_1..N` / `entry_ask_volume_1..N`，按 3 档或 5 档
-sweep VWAP 修正收益。旧瘦 prediction 可通过 `--context-input` 指向 raw tick 或同 delay labeled
-context 补齐执行字段。
+这些 replay 是历史压力测试证据。新主线暂不把多档 sweep 作为优化目标，容量只保留 ask1
+可买量口径，避免过早把问题转成执行建模。
 
 ## 快速开始
 
@@ -221,8 +222,9 @@ delay2 universe 在基础 liquidity 约束下约 `+28.74 bps`，容量场景
 固定 `09:30` opening score 到 close / next close 仍有弱正 Rank IC，但 next close Top20 收益不稳定；
 `09:30-09:39` 简单平均后长周期排序效果基本消失。
 
-下一步 active work：把 opening score 接到已有日频候选池中做 rerank / overlay 验证，而不是继续扩大
-tick-level Top20 replay 的资金规模。
+下一步 active work：先做信号增强。评估标准改为 Rank IC 和 Top100 选股收益；重点检查
+`09:30` 是否受集合竞价特征或跨竞价边界累计成交字段影响，并加强开盘后 ask/bid 档位、
+盘口深度和队列变化特征。交易约束、日频 overlay 和多档容量放到信号变强之后。
 
 ## 开发约定
 
