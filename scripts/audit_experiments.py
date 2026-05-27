@@ -38,14 +38,11 @@ def collect_runs(runs_dir: Path) -> dict[str, RunRecord]:
         output = config.get("output", {})
         run_section = config.get("run", {})
         data = config.get("data", {})
-        cache = config.get("cache", {})
         model = str(config.get("model", {}).get("name", "ridge"))
         evaluation = config.get("evaluation", {})
         status = str(run_section.get("status", "completed"))
         kind = str(run_section.get("kind", "experiment"))
         pvc_dir = str(output.get("k8s_dir", f"/mnt/output/opening_strength_fit/{run_id}"))
-        if kind == "cache":
-            pvc_dir = str(cache.get("dir", pvc_dir))
         runs[run_id] = RunRecord(
             run_id=run_id,
             config_path=path,
@@ -90,7 +87,7 @@ def has_training_job(kinds: set[str]) -> bool:
 
 
 def is_artifact_run(record: RunRecord) -> bool:
-    return record.kind in {"cache", "feature_audit"}
+    return record.kind == "feature_audit"
 
 
 def is_exploration_run(record: RunRecord) -> bool:
@@ -154,10 +151,7 @@ def main() -> None:
         is_running = record.status in ACTIVE_STATUSES
         is_completed = record.status == COMPLETED_STATUS
         if not has_jobs:
-            if is_cache:
-                errors.append(f"{run_id}: missing materialize job yaml")
-            else:
-                errors.append(f"{run_id}: missing training job yaml")
+            errors.append(f"{run_id}: missing training job yaml")
 
         if record.status not in KNOWN_STATUSES:
             warnings.append(

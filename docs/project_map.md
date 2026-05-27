@@ -33,8 +33,7 @@
 
 - `run_experiment.py`: train/evaluate a configured experiment.
 - `audit_feature_dependence.py`: run grouped feature importance, permutation, and drop-retrain ablation audits.
-- `materialize_labeled_caches.py`: build reusable labeled PVC caches.
-- `render_k8s_job.py`: render training, cache, and sharded K8s manifests.
+- `render_k8s_job.py`: render training, feature-audit, and sharded K8s manifests.
 - `sync_experiment_artifacts.py`: pull metrics/predictions from PVC, combine shard metrics, and archive lightweight metrics.
 - `audit_experiments.py`: check config/job/metrics alignment.
 - `check_workflow_coverage.py`: check script/module/doc/job coverage.
@@ -60,8 +59,8 @@
 
 - `experiments/runs/*.toml`: run configs. `run.id` must match the filename.
 - `experiments/jobs/*.yaml`: rendered K8s jobs. Training jobs use
-  `scripts/run_experiment.py`; cache jobs use `scripts/materialize_labeled_caches.py`;
-  feature-audit jobs use `scripts/audit_feature_dependence.py`.
+  `scripts/run_experiment.py`; feature-audit jobs use
+  `scripts/audit_feature_dependence.py`.
 - `experiments/results/metrics/`: tracked metrics CSV evidence.
 - `experiments/results/backtests/`: tracked replay and horizon-decay summaries.
 

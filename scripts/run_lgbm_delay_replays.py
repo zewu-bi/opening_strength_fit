@@ -389,7 +389,7 @@ def validate_context_delay(
         raise SystemExit(
             f"{delay}: context input is missing {column!r}; cannot verify that "
             "the replay context matches this delay branch. Use raw tick context "
-            "or a labeled context/cache materialized for the same delay."
+            "or a prebuilt labeled context/cache for the same delay."
         )
     values = pd.to_numeric(context[column], errors="coerce").dropna()
     if values.empty:

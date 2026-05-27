@@ -11,7 +11,6 @@ ROOT = Path(__file__).resolve().parents[1]
 DIRECT_SCRIPT_EXEMPTIONS = {"_bootstrap.py"}
 K8S_JOB_ENTRYPOINTS = (
     "scripts/run_experiment.py",
-    "scripts/materialize_labeled_caches.py",
     "scripts/audit_feature_dependence.py",
 )
 REQUIRED_DIRS = (

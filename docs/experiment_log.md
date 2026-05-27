@@ -268,11 +268,11 @@ experiments/results/metrics/opening_1y_next_month_corrected_score_buckets.csv
 ## 2026-05-22 本地实验清理
 
 当时按 PVC/研究口径，本地只保留 `1m3d` 小窗口和 `1y_next_month` Ridge/GBM baseline 归档；
-未进入归档的旧 LightGBM delay/materialize Job YAML 和 run config 已清理。随后按实时 PVC 校准状态：
+未进入归档的旧 LightGBM delay Job YAML 和 run config 已清理。随后按实时 PVC 校准状态：
 
 - 当时 PVC 可分析结果仍只有 Ridge/GBM baseline；没有可拉回的 LightGBM delay 结果目录。
 - 已删除过期的本地 cache snapshot；后续以实时 PVC `find /mnt/output/opening_strength_fit` 为准。
-- `*.tmp.parquet`、lock 和 heartbeat 只表示 materialize 进行中或被中断，不是可用训练输入。
+- `*.tmp.parquet`、lock 和 heartbeat 只表示进行中或被中断，不是可用训练输入。
 - 正式训练路径校准为 CPU LightGBM + PVC labeled cache；GPU 仅保留为显式配置能力。
 
 ## 2026-05-20 小窗结果

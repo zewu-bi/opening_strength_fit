@@ -41,8 +41,8 @@ python scripts/summarize_opening_results.py \
   --input-dir output/local/gbm_opening_1y_next_month_multi_symbol_smoke
 ```
 
-Do not build multi-month labeled datasets locally. Long windows should be
-materialized on the cluster into PVC caches.
+Do not build multi-month labeled datasets locally; use existing PVC labeled caches
+or dedicated training runs.
 
 ## 3. Experiment Config
 
@@ -56,7 +56,6 @@ experiments/results/metrics/<run_id>_metrics_by_year.csv
 
 Exceptions:
 
-- `[run].kind = "cache"` materializes reusable PVC cache files and has no metrics.
 - `[run].kind = "feature_audit"` runs grouped importance, permutation, and
   drop-retrain ablations and writes audit CSVs under the run output dir.
 - `[run].kind = "exploration"` may be active/running without metrics until it
