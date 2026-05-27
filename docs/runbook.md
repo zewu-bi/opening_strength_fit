@@ -1,9 +1,9 @@
-# Runbook
+# 运行手册
 
-This file is the operating manual. Research interpretation belongs in
-`docs/project_brief.md`; historical numbers belong in `docs/experiment_log.md`.
+这个文件只放操作命令。研究解释放在 [docs/project_brief.md](project_brief.md)，历史数值放在
+[docs/experiment_log.md](experiment_log.md)。
 
-## 1. Preflight
+## 1. 预检
 
 ```bash
 cd /home/hefu/projects/opening_strength_fit
@@ -15,7 +15,7 @@ python scripts/check_workflow_coverage.py
 python scripts/probe_clickhouse_data.py --schema --field-notes
 ```
 
-## 2. Local Smoke
+## 2. 本地 Smoke
 
 ```bash
 python scripts/inspect_dataset.py \
@@ -41,12 +41,11 @@ python scripts/summarize_opening_results.py \
   --input-dir output/local/gbm_opening_1y_next_month_multi_symbol_smoke
 ```
 
-Do not build multi-month labeled datasets locally; use existing PVC labeled caches
-or dedicated training runs.
+不要在本地构造多月或一年级别 labeled dataset；正式长窗口使用已有 PVC cache 或专门训练任务。
 
-## 3. Experiment Config
+## 3. 实验配置
 
-Every formal experiment has:
+每个正式实验至少对应：
 
 ```text
 experiments/runs/<run_id>.toml
@@ -54,17 +53,15 @@ experiments/jobs/<run_id>_job.yaml
 experiments/results/metrics/<run_id>_metrics_by_year.csv
 ```
 
-Exceptions:
+例外：
 
-- `[run].kind = "feature_audit"` runs grouped importance, permutation, and
-  drop-retrain ablations and writes audit CSVs under the run output dir.
-- `[run].kind = "exploration"` may be active/running without metrics until it
-  graduates into a formal archived experiment.
-- Post-open signal experiments use the normal `scripts/run_experiment.py` path with
-  `[features].include_postopen_decision = true`; richer v2 feature experiments add
-  `[features].include_postopen_v2 = true`.
+- `[run].kind = "feature_audit"`：运行 grouped importance、permutation 和 drop-retrain ablation，
+  audit CSV 写到 run output dir。
+- `[run].kind = "exploration"`：可以先保持 active/running，不要求立刻有 metrics；确认后再归档成正式实验。
+- Post-open 实验仍走 `scripts/run_experiment.py`；`[features].include_postopen_decision = true`
+  打开 post-open decision 特征，v2 特征再加 `[features].include_postopen_v2 = true`。
 
-PVC convention:
+PVC 约定：
 
 ```text
 cache:      /mnt/output/opening_strength_fit/cache/*.parquet
@@ -72,10 +69,9 @@ run output: /mnt/output/opening_strength_fit/<run_id>/
 local pull: output/predictions/<run_id>/predictions_all.parquet
 ```
 
-`*.tmp.parquet`, `*.parquet.lock`, and heartbeat files are in-progress state, not
-training inputs.
+`*.tmp.parquet`、`*.parquet.lock` 和 heartbeat 文件都是运行中状态，不能当训练输入。
 
-## 4. Build and Run on K8s
+## 4. 构建和 K8s
 
 ```bash
 TAG=opening-strength-fit-$(date +%Y%m%d)-lgbm-cpu-v1
@@ -92,13 +88,12 @@ hfcli kubectl --cluster research apply -f experiments/jobs/<run_id>_job.yaml
 hfcli kubectl --cluster research wait --for=condition=complete job/opening-strength-<run-slug> -n bizewu --timeout=24h
 ```
 
-CPU LightGBM + PVC labeled cache is the default path. GPU is used only when
-`[model].device_type = "gpu"` and `[k8s.resources].gpu_limit` are explicitly set.
+默认正式路径是 CPU LightGBM + PVC labeled cache。GPU 只在显式设置
+`[model].device_type = "gpu"` 和 `[k8s.resources].gpu_limit` 时使用。
 
-## 5. Sync Artifacts
+## 5. 同步产物
 
-Metrics pull, predictions pull, shard metric combination, and lightweight archive
-use one interface:
+metrics 拉回、predictions 拉回、shard metrics 合并和轻量归档统一使用：
 
 ```bash
 python scripts/sync_experiment_artifacts.py \
@@ -109,7 +104,7 @@ python scripts/audit_experiments.py
 python scripts/check_workflow_coverage.py
 ```
 
-Default outputs:
+默认输出：
 
 ```text
 output/k8s/metrics/<run_id>_metrics_by_year.csv
@@ -117,9 +112,9 @@ output/predictions/<run_id>/predictions_all.parquet
 experiments/results/metrics/<run_id>_metrics_by_year.csv
 ```
 
-## 6. Analysis
+## 6. 分析命令
 
-Metrics:
+Metrics：
 
 ```bash
 python scripts/summarize_opening_results.py \
@@ -128,7 +123,7 @@ python scripts/summarize_opening_results.py \
 python scripts/compare_opening_results.py
 ```
 
-Standard LightGBM delay replay:
+标准 LightGBM delay replay：
 
 ```bash
 python scripts/run_lgbm_delay_replays.py --check-interface-only
@@ -136,7 +131,7 @@ python scripts/run_lgbm_delay_replays.py
 python scripts/plot_lgbm_delay_decay.py
 ```
 
-Horizon decay:
+Horizon decay：
 
 ```bash
 python scripts/run_alpha_horizon_decay.py \
@@ -150,7 +145,7 @@ python scripts/run_alpha_horizon_decay.py \
   --output-root output/reports/opening_alpha_horizon_decay_delay2_clickhouse_point_0930_selected
 ```
 
-Feature dependence audit:
+Feature dependence audit：
 
 ```bash
 python scripts/audit_feature_dependence.py \
@@ -158,10 +153,10 @@ python scripts/audit_feature_dependence.py \
   --output-dir output/local/lgbm_delay2_feature_dependence_v1
 ```
 
-## 7. Troubleshooting
+## 7. 排查
 
-- `field is immutable`: delete the same-name Job, then apply again.
-- missing config in K8s: rebuild/push image and rerender the Job.
-- missing PVC cache: wait for final `*.parquet`; do not train from `.tmp` or lock files.
-- replay missing context columns: pass `--context-input` or run only interface checks.
-- completed config with no metrics: run `sync_experiment_artifacts.py --all`, then audit.
+- `field is immutable`：删除同名 Job 后重新 apply。
+- K8s 内找不到新 config：重新 build/push 镜像，并重新 render Job。
+- PVC cache 缺失：等待最终 `*.parquet`，不要使用 `.tmp` 或 lock 文件。
+- replay 缺少上下文字段：传 `--context-input`，或先运行 interface check。
+- completed config 没有 metrics：运行 `sync_experiment_artifacts.py --all`，然后 audit。

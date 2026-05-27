@@ -1,43 +1,43 @@
 # opening_strength_fit
 
-`opening_strength_fit` studies short-horizon A-share opening alpha. It builds
-`date x symbol x opening decision time` samples from ClickHouse `stock.tick` or local
-tick parquet, uses only information visible at the decision point, and predicts a
-rough 60s buy-at-ask / sell-VWAP return proxy.
+`opening_strength_fit` 研究 A 股开盘阶段的 short-horizon alpha。项目从
+ClickHouse `stock.tick` 或本地 tick parquet 构造
+`date x symbol x opening decision time` 样本，只使用 decision point 当时及以前可见的信息，
+预测一个约 60 秒的 buy-at-ask / sell-VWAP return proxy。
 
-Current project spine:
+当前结论：opening proxy signal 真实存在，但它不是完整 T+1 策略。下一阶段主线是信号增强：
+提高开盘后横截面 Rank IC 和 Top100 excess，重点检查 post-open orderbook、队列深度变化、
+成交冲击和价格/成交热度暴露。
 
 ```text
 ClickHouse / local ticks
--> standard schema + A-share universe
+-> 标准 schema + A-share universe
 -> opening features + entry-delay label
 -> Ridge / GBM / LightGBM training
--> IC, score bucket, TopN metrics
+-> IC、score bucket、TopN metrics
 -> constrained replay + horizon decay diagnostics
 -> lightweight evidence in experiments/results/
 ```
 
-Current conclusion: the opening proxy signal is real, but it is not a complete
-T+1 trading strategy. The next research task is signal strengthening: raise
-cross-sectional Rank IC and Top100 excess return with post-open orderbook,
-queue-depth, depth-change, and trade-impact features.
+## 文档分工
 
-## Documents
-
-| file | role |
+| 文件 | 职责 |
 | --- | --- |
-| [docs/project_brief.md](docs/project_brief.md) | Research target, current conclusion, next decision gates. |
-| [docs/runbook.md](docs/runbook.md) | Commands for local smoke, K8s jobs, artifact sync, replay, and archive. |
-| [docs/experiment_log.md](docs/experiment_log.md) | Fact source for completed and active experiments. |
-| [docs/project_map.md](docs/project_map.md) | File/module/script index. |
-| [experiments/results/README.md](experiments/results/README.md) | Tracked lightweight result contract. |
+| [docs/project_brief.md](docs/project_brief.md) | 研究目标、当前结论、四宫格解释和下一步路线。 |
+| [docs/runbook.md](docs/runbook.md) | 本地 smoke、K8s Job、artifact sync、replay 和归档命令。 |
+| [docs/experiment_log.md](docs/experiment_log.md) | 已完成和进行中实验的事实来源。 |
+| [docs/project_map.md](docs/project_map.md) | 文件、模块和脚本索引。 |
+| [experiments/results/README.md](experiments/results/README.md) | 可提交轻量结果目录约定。 |
 
-## Key Contract
+## 核心口径
 
-- Sample window: `09:30:00` through `09:40:00` integer-minute decision points.
-- Default source window: `09:15:00` through `09:45:00`.
-- Universe: A-share `00/30.SZ` and `60/68.SH`, unless a symbols file overrides it.
-- Label:
+- 采样窗口：`09:30:00` 到 `09:40:00` 的整分钟 decision points。
+- 默认数据窗口：`09:15:00` 到 `09:45:00`。
+- 股票池：A 股 `00/30.SZ` 和 `60/68.SH`，除非 config 显式指定 symbols file。
+- 当前主评估：short-horizon Rank IC 和 Top100 excess；next close 只做 sanity check。
+- 当前主线：增强开盘后信号，不把容量、fee/slippage、多档 sweep 和日频 overlay 提前作为优化目标。
+
+Label 定义：
 
 ```text
 decision_t = sampled decision tick
@@ -47,16 +47,16 @@ sell_vwap = VWAP(entry_t + 60s, entry_t + 120s)
 label = sell_vwap / buy_price - 1 - fee_bps / 10000
 ```
 
-LightGBM delay branches use PVC labeled caches:
+LightGBM delay 分支默认使用 PVC labeled cache：
 
 ```text
 /mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay{0,1,2}_labeled.parquet
 ```
 
-Large predictions, models, PNGs, and scratch reports stay in ignored `output/`.
-Tracked evidence stays in `experiments/results/`.
+大体积 predictions、models、PNGs 和临时报告保留在 ignored `output/`；
+可提交证据放在 `experiments/results/`。
 
-## Quick Start
+## 快速开始
 
 ```bash
 cd /home/hefu/projects/opening_strength_fit
@@ -72,7 +72,7 @@ python scripts/audit_experiments.py
 python scripts/check_workflow_coverage.py
 ```
 
-Local smoke:
+本地 smoke：
 
 ```bash
 python scripts/inspect_dataset.py \
@@ -93,7 +93,7 @@ python scripts/run_experiment.py \
   --output-dir output/local/gbm_opening_1y_next_month_multi_symbol_smoke
 ```
 
-K8s training loop:
+K8s 训练闭环：
 
 ```bash
 TAG=opening-strength-fit-$(date +%Y%m%d)-lgbm-cpu-v1
@@ -112,5 +112,4 @@ python scripts/audit_experiments.py
 python scripts/check_workflow_coverage.py
 ```
 
-Current active work and archived metrics are summarized in
-[docs/experiment_log.md](docs/experiment_log.md).
+当前活跃工作和已归档指标见 [docs/experiment_log.md](docs/experiment_log.md)。
