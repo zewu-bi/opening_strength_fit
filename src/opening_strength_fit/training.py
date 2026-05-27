@@ -217,6 +217,21 @@ def _int_tuple_config(
     return parsed or default
 
 
+def _drop_feature_prefixes_from_config(
+    labeled: pd.DataFrame,
+    config: dict,
+) -> pd.DataFrame:
+    prefixes = tuple(_list_config(config, "features", "drop_feature_prefixes", []))
+    if not prefixes:
+        return labeled
+    drop_columns = [
+        column for column in labeled.columns if column.startswith(prefixes)
+    ]
+    if not drop_columns:
+        return labeled
+    return labeled.drop(columns=drop_columns)
+
+
 def _apply_feature_transforms_from_config(
     labeled: pd.DataFrame,
     config: dict,
@@ -231,6 +246,7 @@ def _apply_feature_transforms_from_config(
                 (1, 3, 5),
             ),
         )
+    labeled = _drop_feature_prefixes_from_config(labeled, config)
     return labeled
 
 

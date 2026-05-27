@@ -18,6 +18,7 @@ Active 非归档任务：
 | --- | --- | --- | --- |
 | `materialize_opening_2013_2024_delay1_cache` | cache | running | `/mnt/output/opening_strength_fit/cache/opening_2013_2024_delay1_labeled.parquet` |
 | `lgbm_delay2_postopen_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_v1/` |
+| `lgbm_delay2_postopen_no_preopen_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_no_preopen_v1/` |
 
 ## Run 索引
 
@@ -191,6 +192,41 @@ report:  output/reports/lgbm_delay2_postopen_v1_four_panel/signal_baseline_four_
 逐分钟 short Top100 excess 大多改善，尤其 `09:32-09:39`；short Rank IC 基本持平。next-close 两条线没有
 系统性变强，只能算没有明显恶化。结论：decision-level post-open 动态特征方向有效但幅度小，下一轮需要
 更强的 tick-level 开盘后特征，或做 preopen/auction ablation 来释放模型容量。
+
+## 2026-05-27 Delay2 Post-Open No-Preopen v1
+
+按 runbook 跑 `lgbm_delay2_postopen_no_preopen_v1`。本轮仍使用已有 delay2 labeled cache，只改训练特征：
+保留 `postopen_v1` 决策点盘口动态特征，同时在读取 labeled cache 后删除 `preopen_*` 特征。训练仍走
+`run_experiment.py`，Top100 只作为 evaluation。
+
+```text
+run:     lgbm_delay2_postopen_no_preopen_v1
+image:   registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260527-no-preopen-v1
+output:  /mnt/output/opening_strength_fit/lgbm_delay2_postopen_no_preopen_v1
+local:   output/predictions/lgbm_delay2_postopen_no_preopen_v1/predictions_all.parquet
+report:  output/reports/lgbm_delay2_postopen_no_preopen_v1_four_panel/signal_baseline_four_panel.png
+```
+
+训练 metrics：
+
+| run | features | group rank IC | rank IC IR | Top100 mean bps | Top100 win rate | rows |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `lgbm_delay2_postopen_no_preopen_v1` | 197 | 0.1354 | 2.2420 | +12.94 | 52.2% | 940,748 |
+
+相对旧 delay2 baseline 四宫格的分钟平均变化：
+
+| metric | mean delta |
+| --- | ---: |
+| short Rank IC | -0.0006 |
+| short Top100 excess | +1.75 bps |
+| next-close Rank IC | +0.0016 |
+| next-close Top100 excess | +3.04 bps |
+
+相对 `postopen_v1`，short Rank IC 平均低 `0.0011`，short Top100 excess 平均低 `0.38 bps`；但
+next-close 两条线略好。逐分钟看，去掉 preopen 后 `09:30` 明显变弱，`09:32-09:39` 的 short
+Top100 excess 仍多数高于旧 baseline。结论：完全删除 `preopen_*` 不是更强的短期方案，但后续分钟没有
+崩掉，说明开盘后盘口动态本身有独立信息；下一步不应一刀切删除集合竞价，而应做轻降权/特征组 ablation
+或加强 tick-level post-open 特征。
 
 ## 2026-05-21 1y Next-Month Baseline
 
