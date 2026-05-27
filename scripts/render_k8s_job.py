@@ -18,6 +18,9 @@ def load_config(path: Path) -> dict:
 
 
 def training_script(config: dict) -> str:
+    run_kind = str(get(config, "run", "kind", "experiment")).strip().lower()
+    if run_kind == "cache":
+        return "scripts/materialize_labeled_caches.py"
     model_name = str(get(config, "model", "name", "ridge")).strip().lower()
     if model_name in {
         "ridge",
@@ -29,6 +32,10 @@ def training_script(config: dict) -> str:
     }:
         return "scripts/run_experiment.py"
     raise SystemExit(f"Unsupported model.name for k8s rendering: {model_name}")
+
+
+def is_cache_run(config: dict) -> bool:
+    return str(get(config, "run", "kind", "experiment")).strip().lower() == "cache"
 
 
 def _gpu_count(resources: dict) -> str:
@@ -177,7 +184,7 @@ def _clickhouse_env_from(config: dict, indent: int = 18) -> str:
 
 def render_training_job(config_path: Path, config: dict, image: str) -> str:
     run_id_value = run_id(config, config_path)
-    job_name = f"opening-strength-{slug(run_id_value)}"
+    job_name = get(config, "k8s", "job_name", f"opening-strength-{slug(run_id_value)}")
     namespace = get(config, "k8s", "namespace", "bizewu")
     pull_secret = get(config, "k8s", "image_pull_secret", "highfort")
     pvc = get(config, "k8s", "pvc", "bizewu-private-data")
@@ -243,6 +250,63 @@ def render_training_job(config_path: Path, config: dict, image: str) -> str:
                       cpu: "{cpu_limit}"
                       memory: {memory_limit}
 {gpu_resource_line.rstrip()}
+        """
+    )
+
+
+def render_materialize_job(config_path: Path, config: dict, image: str) -> str:
+    run_id_value = run_id(config, config_path)
+    job_name = get(config, "k8s", "job_name", f"opening-strength-{slug(run_id_value)}")
+    namespace = get(config, "k8s", "namespace", "bizewu")
+    pull_secret = get(config, "k8s", "image_pull_secret", "highfort")
+    pvc = get(config, "k8s", "pvc", "bizewu-private-data")
+    mount_path = get(config, "k8s", "mount_path", "/mnt/output")
+    resources = config.get("k8s", {}).get("resources", {})
+    cpu_request = resources.get("cpu_request", "4")
+    cpu_limit = resources.get("cpu_limit", "8")
+    memory_request = resources.get("memory_request", "16Gi")
+    memory_limit = resources.get("memory_limit", "32Gi")
+    env_from = _clickhouse_env_from(config, indent=18)
+
+    return textwrap.dedent(
+        f"""\
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: {job_name}
+          namespace: {namespace}
+        spec:
+          backoffLimit: 0
+          ttlSecondsAfterFinished: 86400
+          template:
+            spec:
+              restartPolicy: Never
+              imagePullSecrets:
+                - name: {pull_secret}
+              volumes:
+                - name: opening-strength-output
+                  persistentVolumeClaim:
+                    claimName: {pvc}
+              containers:
+                - name: materialize-labeled-cache
+                  image: {image}
+                  imagePullPolicy: Always
+{env_from}                  workingDir: /app/opening_strength_fit
+                  command:
+                    - python
+                    - scripts/materialize_labeled_caches.py
+                    - --config
+                    - {config_path.as_posix()}
+                  volumeMounts:
+                    - name: opening-strength-output
+                      mountPath: {mount_path}
+                  resources:
+                    requests:
+                      cpu: "{cpu_request}"
+                      memory: {memory_request}
+                    limits:
+                      cpu: "{cpu_limit}"
+                      memory: {memory_limit}
         """
     )
 
@@ -687,6 +751,16 @@ def main() -> None:
     suffix = "_sharded" if args.sharded else ""
     training_path = output_dir / f"{run_id_value}{suffix}_job.yaml"
     reader_path = output_dir / f"{run_id_value}{suffix}_reader_job.yaml"
+    if is_cache_run(config):
+        if args.sharded:
+            raise SystemExit("--sharded is only supported for training experiments")
+        training_path.write_text(
+            render_materialize_job(config_path, config, args.image),
+            encoding="utf-8",
+        )
+        print("rendered_k8s_jobs:")
+        print(f"  materialize: {training_path}")
+        return
     if args.sharded:
         training_path.write_text(
             render_sharded_training_job(config_path, config, args.image),

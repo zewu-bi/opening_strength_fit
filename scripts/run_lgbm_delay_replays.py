@@ -37,6 +37,7 @@ DEFAULT_SCENARIOS = (
     "capacity_l3_1m",
     "capacity_l5_2m",
 )
+DEFAULT_ENTRY_DEPTH_LEVELS = 10
 TIME_PREDICTION_COLUMNS = ("decision_target_timestamp", "timestamp")
 SCENARIO_PLOT_LABELS = {
     "proxy_top20": "Proxy\nTop20",
@@ -438,7 +439,11 @@ def replay_required_columns(
             elif capacity_volume_col:
                 required.update({capacity_volume_col, capacity_price_col})
         if scenario.ask_depth_levels > 0 and not allow_decision_depth_fallback:
-            for level in range(1, int(scenario.ask_depth_levels) + 1):
+            required_depth_levels = max(
+                int(scenario.ask_depth_levels),
+                DEFAULT_ENTRY_DEPTH_LEVELS,
+            )
+            for level in range(1, required_depth_levels + 1):
                 required.update(
                     {
                         f"entry_ask_price_{level}",

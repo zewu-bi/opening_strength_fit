@@ -23,6 +23,7 @@ KNOWN_STATUSES = {*ACTIVE_STATUSES, COMPLETED_STATUS}
 class RunRecord:
     run_id: str
     config_path: Path
+    kind: str
     model: str
     status: str
     selection_mode: str
@@ -39,17 +40,23 @@ def collect_runs(runs_dir: Path) -> dict[str, RunRecord]:
         output = config.get("output", {})
         run_section = config.get("run", {})
         data = config.get("data", {})
+        cache = config.get("cache", {})
         model = str(config.get("model", {}).get("name", "ridge"))
         evaluation = config.get("evaluation", {})
         status = str(run_section.get("status", "completed"))
+        kind = str(run_section.get("kind", "experiment"))
+        pvc_dir = str(output.get("k8s_dir", f"/mnt/output/opening_strength_fit/{run_id}"))
+        if kind == "cache":
+            pvc_dir = str(cache.get("dir", pvc_dir))
         runs[run_id] = RunRecord(
             run_id=run_id,
             config_path=path,
+            kind=kind,
             model=model,
             status=status,
             selection_mode=str(evaluation.get("selection_mode", "symbol_day")),
             tick_path=str(data.get("tick_path", "")),
-            pvc_dir=str(output.get("k8s_dir", f"/mnt/output/opening_strength_fit/{run_id}")),
+            pvc_dir=pvc_dir,
             local_dir=str(output.get("local_dir", f"output/local/{run_id}")),
         )
     return runs
@@ -86,6 +93,14 @@ def has_training_job(kinds: set[str]) -> bool:
 
 def has_reader_job(kinds: set[str]) -> bool:
     return bool({"reader", "sharded_reader"} & kinds)
+
+
+def is_artifact_run(record: RunRecord) -> bool:
+    return record.kind == "cache"
+
+
+def is_exploration_run(record: RunRecord) -> bool:
+    return record.kind == "exploration"
 
 
 def format_bool(value: bool) -> str:
@@ -138,19 +153,28 @@ def main() -> None:
                 f"{run_id}: config filename must match run.id ({record.config_path.name})"
             )
         job_kinds = jobs.get(run_id, set())
-        has_jobs = has_training_job(job_kinds) and has_reader_job(job_kinds)
+        is_cache = is_artifact_run(record)
+        is_exploration = is_exploration_run(record)
+        has_jobs = has_training_job(job_kinds) and (
+            is_cache or is_exploration or has_reader_job(job_kinds)
+        )
         has_metrics = run_id in metrics
         is_running = record.status in ACTIVE_STATUSES
         is_completed = record.status == COMPLETED_STATUS
         if not has_jobs:
-            errors.append(f"{run_id}: missing training or reader job yaml")
+            if is_cache:
+                errors.append(f"{run_id}: missing materialize job yaml")
+            else:
+                errors.append(f"{run_id}: missing training or reader job yaml")
 
         if record.status not in KNOWN_STATUSES:
             warnings.append(
                 f"{run_id}: unknown status={record.status!r}; use queued, running, or completed"
             )
 
-        if has_jobs and not has_metrics and is_running:
+        if has_jobs and not has_metrics and is_running and not (
+            is_cache or is_exploration
+        ):
             warnings.append(
                 f"{run_id}: has job yaml but no metrics yet; status={record.status!r} is plausible"
             )
@@ -158,14 +182,16 @@ def main() -> None:
             warnings.append(
                 f"{run_id}: metrics exist but status={record.status!r}; update status to completed after confirming results"
             )
-        if not has_metrics and is_completed:
+        if not has_metrics and is_completed and not (is_cache or is_exploration):
             errors.append(f"{run_id}: missing metrics csv")
+        if has_metrics and is_cache:
+            errors.append(f"{run_id}: cache run should not have metrics csv")
 
         records.append(
             {
                 "run_id": run_id,
                 "status": record.status,
-                "model": record.model,
+                "model": record.kind if (is_cache or is_exploration) else record.model,
                 "selection": record.selection_mode,
                 "jobs": ",".join(sorted(job_kinds)) if job_kinds else "missing",
                 "metrics": format_bool(has_metrics),
