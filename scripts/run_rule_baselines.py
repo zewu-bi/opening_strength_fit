@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 
 import _bootstrap  # noqa: F401
-from opening_strength_fit.config import load_toml
+from opening_strength_fit.config import config_int, config_str, load_toml
 from opening_strength_fit.evaluation import (
     format_group_cols,
     group_cols_for_mode,
@@ -16,15 +16,6 @@ from opening_strength_fit.io import read_frame, write_frame
 from opening_strength_fit.model import evaluate_prediction_frame
 from opening_strength_fit.reports import dataset_summary, print_mapping
 from opening_strength_fit.rules import available_rule_scores, rule_prediction_frame
-
-
-def _int_config(config: dict, section: str, key: str, default: int) -> int:
-    return int(config.get(section, {}).get(key, default))
-
-
-def _str_config(config: dict, section: str, key: str, default: str) -> str:
-    return str(config.get(section, {}).get(key, default))
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(
@@ -50,14 +41,14 @@ def main() -> None:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    bucket_mode = _str_config(config, "evaluation", "bucket_mode", "daily")
-    selection_mode = _str_config(config, "evaluation", "selection_mode", "symbol_day")
-    ic_mode = _str_config(config, "evaluation", "ic_mode", bucket_mode)
+    bucket_mode = config_str(config, "evaluation", "bucket_mode", "daily")
+    selection_mode = config_str(config, "evaluation", "selection_mode", "symbol_day")
+    ic_mode = config_str(config, "evaluation", "ic_mode", bucket_mode)
     bucket_group_cols = group_cols_for_mode(bucket_mode)
     selection_group_cols = group_cols_for_mode(selection_mode)
     ic_group_cols = group_cols_for_mode(ic_mode)
-    bins = _int_config(config, "evaluation", "score_bins", 10)
-    top_n = _int_config(config, "evaluation", "top_n", 20)
+    bins = config_int(config, "evaluation", "score_bins", 10)
+    top_n = config_int(config, "evaluation", "top_n", 20)
 
     metrics_rows = []
     bucket_frames = []

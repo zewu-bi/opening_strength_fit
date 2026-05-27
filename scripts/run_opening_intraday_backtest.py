@@ -573,6 +573,209 @@ def enrich_predictions_with_context(
     return merged
 
 
+def _apply_quality_filters(
+    work: pd.DataFrame,
+    mask: pd.Series,
+    *,
+    run_label: str,
+    tradable_statuses: set[str],
+    require_entry_status: bool,
+    max_decision_lag_seconds: float | None,
+    max_entry_tick_gap_seconds: float | None,
+    max_spread_bps: float | None,
+    min_limit_up_room_bps: float | None,
+    min_ask_volume_1: float | None,
+    min_bid_volume_1: float | None,
+    missing_policy: str,
+) -> pd.Series:
+    numeric_filters = (
+        ("decision_lag_seconds", max_decision_lag_seconds, "max decision lag", "le"),
+        ("entry_max_tick_gap_seconds", max_entry_tick_gap_seconds, "max entry tick gap", "le"),
+        ("spread_bps", max_spread_bps, "max spread", "le"),
+        ("ask1_to_limit_up_bps", min_limit_up_room_bps, "limit-up room", "ge"),
+        ("ask_volume_1", min_ask_volume_1, "minimum ask volume", "ge"),
+        ("bid_volume_1", min_bid_volume_1, "minimum bid volume", "ge"),
+    )
+    for column, threshold, label, operator in numeric_filters:
+        if threshold is None:
+            continue
+        if not _has_column(
+            work,
+            column,
+            run_label=run_label,
+            constraint=label,
+            policy=missing_policy,
+        ):
+            continue
+        values = _numeric(work, column)
+        mask &= values.le(float(threshold)) if operator == "le" else values.ge(float(threshold))
+
+    if tradable_statuses:
+        if _has_column(
+            work,
+            "status",
+            run_label=run_label,
+            constraint="tradable status",
+            policy=missing_policy,
+        ):
+            mask &= work["status"].astype(str).str.upper().isin(tradable_statuses)
+        if "entry_status" in work.columns:
+            mask &= work["entry_status"].astype(str).str.upper().isin(tradable_statuses)
+        elif require_entry_status:
+            _handle_missing_column(
+                "entry_status",
+                run_label=run_label,
+                constraint="entry tradable status",
+                policy=missing_policy,
+            )
+    return mask
+
+
+def _capacity_notional(
+    work: pd.DataFrame,
+    *,
+    run_label: str,
+    capacity_notional_col: str,
+    capacity_volume_col: str,
+    capacity_price_col: str,
+    missing_policy: str,
+) -> pd.Series | None:
+    if capacity_notional_col and capacity_notional_col in work.columns:
+        return _numeric(work, capacity_notional_col)
+    if capacity_volume_col:
+        has_volume = _has_column(
+            work,
+            capacity_volume_col,
+            run_label=run_label,
+            constraint="capacity volume",
+            policy=missing_policy,
+        )
+        has_price = _has_column(
+            work,
+            capacity_price_col,
+            run_label=run_label,
+            constraint="capacity price",
+            policy=missing_policy,
+        )
+        if has_volume and has_price:
+            return _numeric(work, capacity_volume_col) * _numeric(
+                work,
+                capacity_price_col,
+            )
+    elif capacity_notional_col:
+        _handle_missing_column(
+            capacity_notional_col,
+            run_label=run_label,
+            constraint="capacity notional",
+            policy=missing_policy,
+        )
+    return None
+
+
+def _apply_capacity_filter(
+    work: pd.DataFrame,
+    mask: pd.Series,
+    *,
+    run_label: str,
+    top_n: int,
+    capacity_notional_col: str,
+    capacity_volume_col: str,
+    capacity_price_col: str,
+    min_capacity_notional: float,
+    max_participation_rate: float,
+    capital_per_cycle: float,
+    max_symbol_weight: float,
+    missing_policy: str,
+) -> pd.Series:
+    if float(min_capacity_notional) <= 0 and float(max_participation_rate) <= 0:
+        return mask
+    capacity = _capacity_notional(
+        work,
+        run_label=run_label,
+        capacity_notional_col=capacity_notional_col,
+        capacity_volume_col=capacity_volume_col,
+        capacity_price_col=capacity_price_col,
+        missing_policy=missing_policy,
+    )
+    if capacity is None:
+        return mask
+
+    work["_capacity_notional"] = capacity
+    mask &= capacity.notna() & capacity.gt(0)
+    if float(min_capacity_notional) > 0:
+        mask &= capacity.ge(float(min_capacity_notional))
+    if float(max_participation_rate) > 0:
+        if float(capital_per_cycle) <= 0:
+            raise SystemExit(
+                "--capital-per-cycle must be positive when --max-participation-rate is set"
+            )
+        target_notional = float(capital_per_cycle) * slot_weight(
+            top_n=top_n,
+            max_symbol_weight=max_symbol_weight,
+        )
+        work["_capacity_target_notional"] = target_notional
+        mask &= (capacity * float(max_participation_rate)).ge(target_notional)
+    return mask
+
+
+def _apply_ask_depth_filter(
+    work: pd.DataFrame,
+    mask: pd.Series,
+    *,
+    run_label: str,
+    top_n: int,
+    ask_depth_levels: int,
+    ask_depth_participation_rate: float,
+    ask_depth_fill_mode: str,
+    allow_decision_depth_fallback: bool,
+    capital_per_cycle: float,
+    max_symbol_weight: float,
+    missing_policy: str,
+) -> tuple[pd.DataFrame, pd.Series]:
+    if int(ask_depth_levels) <= 0:
+        return work, mask
+    if float(capital_per_cycle) <= 0:
+        raise SystemExit(
+            "--capital-per-cycle must be positive when --ask-depth-levels is set"
+        )
+    target_notional = float(capital_per_cycle) * slot_weight(
+        top_n=top_n,
+        max_symbol_weight=max_symbol_weight,
+    )
+    pairs = ask_depth_column_pairs(
+        work,
+        levels=int(ask_depth_levels),
+        allow_decision_fallback=allow_decision_depth_fallback,
+        run_label=run_label,
+        missing_policy=missing_policy,
+    )
+    if len(pairs) < int(ask_depth_levels):
+        raise SystemExit(
+            f"{run_label}: ask-depth execution requested {int(ask_depth_levels)} "
+            f"levels but only found {len(pairs)} usable level(s). Provide "
+            "--context-input or predictions with entry_ask_price/entry_ask_volume "
+            "context columns, reduce --ask-depth-levels, or use "
+            "--allow-decision-depth-fallback for non-delay diagnostics."
+        )
+    if not pairs:
+        return work, mask
+
+    work = add_ask_depth_execution_columns(
+        work,
+        pairs=pairs,
+        target_notional=target_notional,
+        participation_rate=float(ask_depth_participation_rate),
+        fill_mode=ask_depth_fill_mode,
+    )
+    if ask_depth_fill_mode in {"filter", "sweep"}:
+        mask &= work["_ask_depth_usable_notional"].ge(target_notional)
+    elif ask_depth_fill_mode == "scale":
+        mask &= work["_depth_fill_ratio"].gt(0)
+    else:
+        raise SystemExit(f"unknown ask depth fill mode: {ask_depth_fill_mode!r}")
+    return work, mask
+
+
 def apply_static_constraints(
     frame: pd.DataFrame,
     *,
@@ -604,175 +807,47 @@ def apply_static_constraints(
     work = frame.copy()
     mask = pd.Series(True, index=work.index)
 
-    if max_decision_lag_seconds is not None and _has_column(
+    mask = _apply_quality_filters(
         work,
-        "decision_lag_seconds",
+        mask,
         run_label=run_label,
-        constraint="max decision lag",
-        policy=missing_policy,
-    ):
-        mask &= _numeric(work, "decision_lag_seconds").le(float(max_decision_lag_seconds))
-
-    if max_entry_tick_gap_seconds is not None and _has_column(
-        work,
-        "entry_max_tick_gap_seconds",
-        run_label=run_label,
-        constraint="max entry tick gap",
-        policy=missing_policy,
-    ):
-        mask &= _numeric(work, "entry_max_tick_gap_seconds").le(
-            float(max_entry_tick_gap_seconds)
-        )
-
-    if max_spread_bps is not None and _has_column(
-        work,
-        "spread_bps",
-        run_label=run_label,
-        constraint="max spread",
-        policy=missing_policy,
-    ):
-        mask &= _numeric(work, "spread_bps").le(float(max_spread_bps))
-
-    if min_limit_up_room_bps is not None and _has_column(
-        work,
-        "ask1_to_limit_up_bps",
-        run_label=run_label,
-        constraint="limit-up room",
-        policy=missing_policy,
-    ):
-        mask &= _numeric(work, "ask1_to_limit_up_bps").ge(float(min_limit_up_room_bps))
-
-    if min_ask_volume_1 is not None and _has_column(
-        work,
-        "ask_volume_1",
-        run_label=run_label,
-        constraint="minimum ask volume",
-        policy=missing_policy,
-    ):
-        mask &= _numeric(work, "ask_volume_1").ge(float(min_ask_volume_1))
-
-    if min_bid_volume_1 is not None and _has_column(
-        work,
-        "bid_volume_1",
-        run_label=run_label,
-        constraint="minimum bid volume",
-        policy=missing_policy,
-    ):
-        mask &= _numeric(work, "bid_volume_1").ge(float(min_bid_volume_1))
-
-    if tradable_statuses:
-        if _has_column(
-            work,
-            "status",
-            run_label=run_label,
-            constraint="tradable status",
-            policy=missing_policy,
-        ):
-            mask &= work["status"].astype(str).str.upper().isin(tradable_statuses)
-        if "entry_status" in work.columns:
-            mask &= work["entry_status"].astype(str).str.upper().isin(tradable_statuses)
-        elif require_entry_status:
-            _handle_missing_column(
-                "entry_status",
-                run_label=run_label,
-                constraint="entry tradable status",
-                policy=missing_policy,
-            )
-
-    capacity_requested = (
-        float(min_capacity_notional) > 0 or float(max_participation_rate) > 0
+        tradable_statuses=tradable_statuses,
+        require_entry_status=require_entry_status,
+        max_decision_lag_seconds=max_decision_lag_seconds,
+        max_entry_tick_gap_seconds=max_entry_tick_gap_seconds,
+        max_spread_bps=max_spread_bps,
+        min_limit_up_room_bps=min_limit_up_room_bps,
+        min_ask_volume_1=min_ask_volume_1,
+        min_bid_volume_1=min_bid_volume_1,
+        missing_policy=missing_policy,
     )
-    if capacity_requested:
-        capacity = None
-        if capacity_notional_col and capacity_notional_col in work.columns:
-            capacity = _numeric(work, capacity_notional_col)
-        elif capacity_volume_col:
-            has_volume = _has_column(
-                work,
-                capacity_volume_col,
-                run_label=run_label,
-                constraint="capacity volume",
-                policy=missing_policy,
-            )
-            has_price = _has_column(
-                work,
-                capacity_price_col,
-                run_label=run_label,
-                constraint="capacity price",
-                policy=missing_policy,
-            )
-            if has_volume and has_price:
-                capacity = _numeric(work, capacity_volume_col) * _numeric(
-                    work,
-                    capacity_price_col,
-                )
-        elif capacity_notional_col:
-            _handle_missing_column(
-                capacity_notional_col,
-                run_label=run_label,
-                constraint="capacity notional",
-                policy=missing_policy,
-            )
-
-        if capacity is not None:
-            work["_capacity_notional"] = capacity
-            mask &= capacity.notna() & capacity.gt(0)
-            if float(min_capacity_notional) > 0:
-                mask &= capacity.ge(float(min_capacity_notional))
-            if float(max_participation_rate) > 0:
-                if float(capital_per_cycle) <= 0:
-                    raise SystemExit(
-                        "--capital-per-cycle must be positive when "
-                        "--max-participation-rate is set"
-                    )
-                target_notional = float(capital_per_cycle) * slot_weight(
-                    top_n=top_n,
-                    max_symbol_weight=max_symbol_weight,
-                )
-                work["_capacity_target_notional"] = target_notional
-                mask &= (capacity * float(max_participation_rate)).ge(target_notional)
-
-    if int(ask_depth_levels) > 0:
-        if float(capital_per_cycle) <= 0:
-            raise SystemExit(
-                "--capital-per-cycle must be positive when --ask-depth-levels is set"
-            )
-        target_notional = float(capital_per_cycle) * slot_weight(
-            top_n=top_n,
-            max_symbol_weight=max_symbol_weight,
-        )
-        pairs = ask_depth_column_pairs(
-            work,
-            levels=int(ask_depth_levels),
-            allow_decision_fallback=allow_decision_depth_fallback,
-            run_label=run_label,
-            missing_policy=missing_policy,
-        )
-        if len(pairs) < int(ask_depth_levels):
-            raise SystemExit(
-                f"{run_label}: ask-depth execution requested {int(ask_depth_levels)} "
-                f"levels but only found {len(pairs)} usable level(s). Provide "
-                "--context-input or predictions with entry_ask_price/entry_ask_volume "
-                "context columns, reduce "
-                "--ask-depth-levels, or use --allow-decision-depth-fallback for "
-                "non-delay diagnostics."
-            )
-        if pairs:
-            work = add_ask_depth_execution_columns(
-                work,
-                pairs=pairs,
-                target_notional=target_notional,
-                participation_rate=float(ask_depth_participation_rate),
-                fill_mode=ask_depth_fill_mode,
-            )
-            if ask_depth_fill_mode in {"filter", "sweep"}:
-                mask &= work["_ask_depth_usable_notional"].ge(target_notional)
-            elif ask_depth_fill_mode == "scale":
-                mask &= work["_depth_fill_ratio"].gt(0)
-            else:
-                raise SystemExit(
-                    f"unknown ask depth fill mode: {ask_depth_fill_mode!r}"
-                )
+    mask = _apply_capacity_filter(
+        work,
+        mask,
+        run_label=run_label,
+        top_n=top_n,
+        capacity_notional_col=capacity_notional_col,
+        capacity_volume_col=capacity_volume_col,
+        capacity_price_col=capacity_price_col,
+        min_capacity_notional=min_capacity_notional,
+        max_participation_rate=max_participation_rate,
+        capital_per_cycle=capital_per_cycle,
+        max_symbol_weight=max_symbol_weight,
+        missing_policy=missing_policy,
+    )
+    work, mask = _apply_ask_depth_filter(
+        work,
+        mask,
+        run_label=run_label,
+        top_n=top_n,
+        ask_depth_levels=ask_depth_levels,
+        ask_depth_participation_rate=ask_depth_participation_rate,
+        ask_depth_fill_mode=ask_depth_fill_mode,
+        allow_decision_depth_fallback=allow_decision_depth_fallback,
+        capital_per_cycle=capital_per_cycle,
+        max_symbol_weight=max_symbol_weight,
+        missing_policy=missing_policy,
+    )
 
     total_cost_bps = float(fee_bps) + float(slippage_bps)
     work["_cost_bps"] = total_cost_bps

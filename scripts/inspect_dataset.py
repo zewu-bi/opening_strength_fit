@@ -20,7 +20,13 @@ from opening_strength_fit.clickhouse_ticks import (
     normalize_clickhouse_ticks,
     query_tick_window,
 )
-from opening_strength_fit.config import config_value, load_toml
+from opening_strength_fit.config import (
+    config_bool,
+    config_list,
+    config_str,
+    config_value,
+    load_toml,
+)
 from opening_strength_fit.dataset import load_ticks
 from opening_strength_fit.io import write_frame
 from opening_strength_fit.model import feature_columns
@@ -104,33 +110,6 @@ def _compact_pass(check: str) -> str:
 
 def _clock(series: pd.Series) -> pd.Series:
     return pd.to_datetime(series).dt.strftime("%H:%M:%S")
-
-
-def _list_config(
-    config: dict,
-    section: str,
-    key: str,
-    default: tuple[str, ...],
-) -> list[str]:
-    value = config_value(config, section, key, default)
-    if value is None:
-        return []
-    if isinstance(value, str):
-        raw = value.replace(",", " ").split()
-    else:
-        raw = [str(item) for item in value]
-    return [item.strip() for item in raw if item and item.strip()]
-
-
-def _str_config(config: dict, section: str, key: str, default: str) -> str:
-    return str(config_value(config, section, key, default))
-
-
-def _bool_config(config: dict, section: str, key: str, default: bool) -> bool:
-    value = config_value(config, section, key, default)
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
-    return bool(value)
 
 
 def _int_or_none(value) -> int | None:
@@ -225,9 +204,9 @@ def _symbol_filter_check(
     labeled: pd.DataFrame,
     config: dict,
 ) -> str:
-    if not _bool_config(config, "universe", "enabled", True):
+    if not config_bool(config, "universe", "enabled", True):
         return _check("skip", "universe.enabled=false")
-    regex = _str_config(
+    regex = config_str(
         config,
         "universe",
         "symbol_regex",
@@ -438,7 +417,7 @@ def print_quality_checks(
     config: dict,
     requested_dates: list[str],
 ) -> None:
-    tradable_statuses = _list_config(
+    tradable_statuses = config_list(
         config,
         "filters",
         "tradable_statuses",

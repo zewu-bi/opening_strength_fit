@@ -15,8 +15,9 @@ RUN apt-get update \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN python -m pip install -r requirements.txt
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN python -m pip install .
 
 ARG CACHE_BUST=dev
 RUN test -n "$CACHE_BUST"

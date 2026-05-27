@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "opening-strength-fit"
+version = "0.1.0"
+description = "A-share opening-stage signal research pipeline."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "clickhouse-connect",
+  "lightgbm",
+  "matplotlib",
+  "numpy",
+  "pandas",
+  "pyarrow",
+  "requests",
+  "scikit-learn",
+  "tqdm",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "scripts"]
+testpaths = ["tests"]

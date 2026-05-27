@@ -235,7 +235,7 @@ def fit_lightgbm_frame(
     except ImportError as exc:
         raise SystemExit(
             "model.name='lightgbm' requires the lightgbm package. "
-            "Install requirements.txt or rebuild the training image."
+            "Install project dependencies or rebuild the training image."
         ) from exc
 
     features = feature_columns(train, feature_limit)

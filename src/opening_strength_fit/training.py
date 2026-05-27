@@ -21,7 +21,20 @@ from opening_strength_fit.clickhouse_ticks import (
     query_tick_day_window,
 )
 from opening_strength_fit.candidates import filter_opening_candidates
-from opening_strength_fit.config import config_value, load_toml, run_id
+from opening_strength_fit.config import (
+    config_bool,
+    config_clock_list,
+    config_float,
+    config_float_mapping,
+    config_int,
+    config_int_tuple,
+    config_list,
+    config_optional_int,
+    config_str,
+    config_value,
+    load_toml,
+    run_id,
+)
 from opening_strength_fit.dataset import build_labeled_feature_frame, load_ticks
 from opening_strength_fit.evaluation import (
     format_group_cols,
@@ -42,13 +55,17 @@ from opening_strength_fit.model import (
     fit_ridge_frame,
     predict_frame,
 )
-from opening_strength_fit.reports import dataset_summary, print_mapping
+from opening_strength_fit.reports import (
+    dataset_summary,
+    metrics_by_year_from_windows,
+    print_mapping,
+)
 from opening_strength_fit.rolling import (
     annual_rolling_date_splits,
     chronological_date_split,
     monthly_rolling_date_splits,
 )
-from opening_strength_fit.sampling import DEFAULT_DECISION_TIMES, parse_clock_times
+from opening_strength_fit.sampling import DEFAULT_DECISION_TIMES
 from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns
 from opening_strength_fit.universe import (
     DEFAULT_A_SHARE_SYMBOL_REGEX,
@@ -136,95 +153,11 @@ def build_training_parser(description: str) -> argparse.ArgumentParser:
     return parser
 
 
-def _int_config(config: dict, section: str, key: str, default: int) -> int:
-    return int(config_value(config, section, key, default))
-
-
-def _float_config(config: dict, section: str, key: str, default: float) -> float:
-    return float(config_value(config, section, key, default))
-
-
-def _str_config(config: dict, section: str, key: str, default: str) -> str:
-    return str(config_value(config, section, key, default))
-
-
-def _bool_config(config: dict, section: str, key: str, default: bool) -> bool:
-    value = config_value(config, section, key, default)
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
-    return bool(value)
-
-
-def _optional_int_config(
-    config: dict,
-    section: str,
-    key: str,
-    default: int | None = None,
-) -> int | None:
-    value = config_value(config, section, key, default)
-    return None if value in (None, "") else int(value)
-
-
-def _list_config(
-    config: dict,
-    section: str,
-    key: str,
-    default: list[str] | tuple[str, ...],
-) -> list[str]:
-    value = config_value(config, section, key, default)
-    if value is None:
-        return []
-    if isinstance(value, str):
-        parts = value.replace(",", " ").split()
-    else:
-        parts = [str(item) for item in value]
-    return [part.strip() for part in parts if part and part.strip()]
-
-
-def _clock_list_config(
-    config: dict,
-    section: str,
-    key: str,
-    default: list[str] | tuple[str, ...],
-) -> list[str]:
-    return parse_clock_times(config_value(config, section, key, default))
-
-
-def _float_mapping_config(config: dict, section: str, key: str) -> dict[str, float]:
-    value = config_value(config, section, key, {})
-    if not value:
-        return {}
-    if not isinstance(value, dict):
-        raise SystemExit(f"[{section}].{key} must be a table of column = value")
-    return {
-        str(column): float(threshold)
-        for column, threshold in value.items()
-        if threshold not in (None, "")
-    }
-
-
-def _int_tuple_config(
-    config: dict,
-    section: str,
-    key: str,
-    default: tuple[int, ...],
-) -> tuple[int, ...]:
-    value = config_value(config, section, key, default)
-    if value is None:
-        return default
-    if isinstance(value, str):
-        raw = value.replace(",", " ").split()
-    else:
-        raw = list(value)
-    parsed = tuple(int(item) for item in raw if str(item).strip())
-    return parsed or default
-
-
 def _drop_feature_prefixes_from_config(
     labeled: pd.DataFrame,
     config: dict,
 ) -> pd.DataFrame:
-    prefixes = tuple(_list_config(config, "features", "drop_feature_prefixes", []))
+    prefixes = tuple(config_list(config, "features", "drop_feature_prefixes", []))
     if not prefixes:
         return labeled
     drop_columns = [
@@ -239,26 +172,26 @@ def _apply_feature_transforms_from_config(
     labeled: pd.DataFrame,
     config: dict,
 ) -> pd.DataFrame:
-    if _bool_config(config, "features", "include_postopen_decision", False):
+    if config_bool(config, "features", "include_postopen_decision", False):
         labeled = add_postopen_decision_features(
             labeled,
-            windows=_int_tuple_config(
+            windows=config_int_tuple(
                 config,
                 "features",
                 "postopen_decision_windows",
                 (1, 3, 5),
             ),
         )
-    if _bool_config(config, "features", "include_postopen_v2", False):
+    if config_bool(config, "features", "include_postopen_v2", False):
         labeled = add_postopen_v2_decision_features(
             labeled,
-            windows=_int_tuple_config(
+            windows=config_int_tuple(
                 config,
                 "features",
                 "postopen_v2_windows",
                 (1, 2, 3, 5),
             ),
-            depth_levels=_int_tuple_config(
+            depth_levels=config_int_tuple(
                 config,
                 "features",
                 "postopen_v2_depth_levels",
@@ -273,18 +206,18 @@ def _apply_candidate_filter_from_config(
     frame: pd.DataFrame,
     config: dict,
 ) -> pd.DataFrame:
-    if not _bool_config(config, "candidate_filter", "enabled", False):
+    if not config_bool(config, "candidate_filter", "enabled", False):
         return frame
     return filter_opening_candidates(
         frame,
-        min_values=_float_mapping_config(config, "candidate_filter", "min"),
-        max_values=_float_mapping_config(config, "candidate_filter", "max"),
-        rank_min_values=_float_mapping_config(
+        min_values=config_float_mapping(config, "candidate_filter", "min"),
+        max_values=config_float_mapping(config, "candidate_filter", "max"),
+        rank_min_values=config_float_mapping(
             config,
             "candidate_filter",
             "rank_min",
         ),
-        rank_group_cols=_list_config(
+        rank_group_cols=config_list(
             config,
             "candidate_filter",
             "rank_group_cols",
@@ -397,7 +330,7 @@ def _feature_limit(args: argparse.Namespace, config: dict) -> int | None:
     raw = (
         args.feature_limit
         if args.feature_limit is not None
-        else _int_config(config, "data", "feature_limit", 0)
+        else config_int(config, "data", "feature_limit", 0)
     )
     return raw if raw and raw > 0 else None
 
@@ -408,16 +341,16 @@ def build_labeled_frame_from_config(
     *,
     apply_candidate_filter: bool = True,
 ) -> pd.DataFrame:
-    volume_unit_multiplier = _float_config(
+    volume_unit_multiplier = config_float(
         config,
         "labels",
         "volume_unit_multiplier",
         1.0,
     )
-    use_universe = _bool_config(config, "universe", "enabled", True)
-    symbols_file = _str_config(config, "universe", "symbols_file", "")
+    use_universe = config_bool(config, "universe", "enabled", True)
+    symbols_file = config_str(config, "universe", "symbols_file", "")
     universe_symbols = load_symbol_list(symbols_file) if symbols_file else None
-    sample_mode = _str_config(config, "sample", "mode", "all_ticks")
+    sample_mode = config_str(config, "sample", "mode", "all_ticks")
     max_decision_lag = config_value(
         config,
         "sample",
@@ -426,32 +359,32 @@ def build_labeled_frame_from_config(
     )
     labeled = build_labeled_feature_frame(
         ticks,
-        buy_price_col=_str_config(config, "labels", "buy_price_col", "ask_price_1"),
-        volume_col=_str_config(config, "labels", "volume_col", "volume"),
-        turnover_col=_str_config(config, "labels", "turnover_col", "turnover"),
-        hold_seconds=_int_config(config, "labels", "hold_seconds", 60),
-        sell_window_seconds=_int_config(config, "labels", "sell_window_seconds", 60),
+        buy_price_col=config_str(config, "labels", "buy_price_col", "ask_price_1"),
+        volume_col=config_str(config, "labels", "volume_col", "volume"),
+        turnover_col=config_str(config, "labels", "turnover_col", "turnover"),
+        hold_seconds=config_int(config, "labels", "hold_seconds", 60),
+        sell_window_seconds=config_int(config, "labels", "sell_window_seconds", 60),
         volume_unit_multiplier=volume_unit_multiplier,
-        fee_bps=_float_config(config, "labels", "fee_bps", 0.0),
-        entry_tick_delay=_int_config(config, "labels", "entry_tick_delay", 0),
+        fee_bps=config_float(config, "labels", "fee_bps", 0.0),
+        entry_tick_delay=config_int(config, "labels", "entry_tick_delay", 0),
         entry_max_gap_seconds=config_value(
             config,
             "labels",
             "entry_max_gap_seconds",
             None,
         ),
-        sample_start_time=_str_config(config, "sample", "start_time", "09:30:00"),
-        sample_end_time=_str_config(config, "sample", "end_time", "09:40:00"),
-        include_preopen=_bool_config(config, "features", "include_preopen", True),
+        sample_start_time=config_str(config, "sample", "start_time", "09:30:00"),
+        sample_end_time=config_str(config, "sample", "end_time", "09:40:00"),
+        include_preopen=config_bool(config, "features", "include_preopen", True),
         max_future_gap_seconds=config_value(
             config,
             "labels",
             "max_future_gap_seconds",
             None,
         ),
-        tradable_statuses=_list_config(config, "filters", "tradable_statuses", []),
+        tradable_statuses=config_list(config, "filters", "tradable_statuses", []),
         universe_regex=(
-            _str_config(
+            config_str(
                 config,
                 "universe",
                 "symbol_regex",
@@ -462,7 +395,7 @@ def build_labeled_frame_from_config(
         ),
         universe_symbols=universe_symbols if use_universe else None,
         sample_mode=sample_mode,
-        decision_times=_clock_list_config(
+        decision_times=config_clock_list(
             config,
             "sample",
             "decision_times",
@@ -479,7 +412,7 @@ def build_labeled_frame_from_config(
 
 
 def _input_kind(args: argparse.Namespace, config: dict) -> str:
-    return args.input_kind or _str_config(config, "data", "input_kind", "auto")
+    return args.input_kind or config_str(config, "data", "input_kind", "auto")
 
 
 def _looks_labeled(frame: pd.DataFrame) -> bool:
@@ -488,11 +421,11 @@ def _looks_labeled(frame: pd.DataFrame) -> bool:
 
 def _filter_labeled_frame(labeled: pd.DataFrame, config: dict) -> pd.DataFrame:
     labeled = ensure_timestamp_columns(standardize_columns(labeled))
-    if _bool_config(config, "universe", "enabled", True):
-        symbols_file = _str_config(config, "universe", "symbols_file", "")
+    if config_bool(config, "universe", "enabled", True):
+        symbols_file = config_str(config, "universe", "symbols_file", "")
         labeled = filter_symbol_universe(
             labeled,
-            symbol_regex=_str_config(
+            symbol_regex=config_str(
                 config,
                 "universe",
                 "symbol_regex",
@@ -521,7 +454,7 @@ def _resolved_data_source(args: argparse.Namespace, config: dict, tick_path: str
         return "path"
     if getattr(args, "labeled_input", None):
         return "labeled_pvc"
-    source = args.data_source or _str_config(config, "data", "source", "auto")
+    source = args.data_source or config_str(config, "data", "source", "auto")
     source = source.strip().lower()
     if source == "auto":
         labeled_path = (
@@ -563,7 +496,7 @@ def _clickhouse_date_bounds(args: argparse.Namespace, config: dict) -> tuple[str
         train_months = (
             args.train_months
             if args.train_months is not None
-            else _int_config(config, "window", "train_months", 12)
+            else config_int(config, "window", "train_months", 12)
         )
         first_test_month = (
             args.test_start_month
@@ -587,7 +520,7 @@ def _clickhouse_date_bounds(args: argparse.Namespace, config: dict) -> tuple[str
         train_start_year = (
             args.train_start_year
             if args.train_start_year is not None
-            else _optional_int_config(config, "window", "train_start_year", None)
+            else config_optional_int(config, "window", "train_start_year", None)
         )
         first_test_year = _test_year_from_args(args, config, "start")
         last_test_year = _test_year_from_args(args, config, "end")
@@ -677,14 +610,6 @@ def _labeled_pvc_path(args: argparse.Namespace, config: dict) -> Path:
             "OPENING_STRENGTH_LABELED_PATH."
         )
     return Path(str(raw))
-
-
-def _cache_bool(config: dict, key: str, default: bool) -> bool:
-    return _bool_config(config, "cache", key, default)
-
-
-def _cache_timeout_seconds(config: dict) -> int:
-    return _int_config(config, "cache", "lock_timeout_seconds", 21_600)
 
 
 def _cache_lock_done_path(lock_path: Path) -> Path:
@@ -903,11 +828,11 @@ def _build_clickhouse_labeled_frame(
 
     start_date, end_date = _clickhouse_date_bounds(args, config)
     dates = [str(date.date()) for date in pd.date_range(start_date, end_date, freq="D")]
-    use_universe = _bool_config(config, "universe", "enabled", True)
-    symbols_file = _str_config(config, "universe", "symbols_file", "")
+    use_universe = config_bool(config, "universe", "enabled", True)
+    symbols_file = config_str(config, "universe", "symbols_file", "")
     symbols = sorted(load_symbol_list(symbols_file)) if use_universe and symbols_file else None
     symbol_regex = (
-        _str_config(config, "universe", "symbol_regex", DEFAULT_A_SHARE_SYMBOL_REGEX)
+        config_str(config, "universe", "symbol_regex", DEFAULT_A_SHARE_SYMBOL_REGEX)
         if use_universe
         else None
     )
@@ -971,10 +896,10 @@ def _load_clickhouse_labeled_frame(
     args: argparse.Namespace,
     config: dict,
 ) -> pd.DataFrame:
-    cache_enabled = _cache_bool(config, "enabled", False)
+    cache_enabled = config_bool(config, "cache", "enabled", False)
     cache_path = _cache_path(config) if cache_enabled else None
-    cache_read = _cache_bool(config, "read", True)
-    cache_write = _cache_bool(config, "write", True)
+    cache_read = config_bool(config, "cache", "read", True)
+    cache_write = config_bool(config, "cache", "write", True)
 
     if cache_path and cache_read and cache_path.exists():
         print_mapping("labeled_cache", {"action": "read", "path": str(cache_path)})
@@ -987,7 +912,7 @@ def _load_clickhouse_labeled_frame(
         )
 
     lock_path = Path(f"{cache_path}.lock")
-    timeout_seconds = _cache_timeout_seconds(config)
+    timeout_seconds = config_int(config, "cache", "lock_timeout_seconds", 21_600)
     lock_status = _acquire_cache_lock(
         lock_path,
         timeout_seconds,
@@ -1059,12 +984,12 @@ def _test_year_from_args(args: argparse.Namespace, config: dict, key: str) -> in
         if args.test_start_year is not None:
             return args.test_start_year
         test_date = args.test_start_date or config_value(config, "window", "test_start_date", None)
-        explicit = _optional_int_config(config, "window", "test_start_year", None)
+        explicit = config_optional_int(config, "window", "test_start_year", None)
     else:
         if args.test_end_year is not None:
             return args.test_end_year
         test_date = args.test_end_date or config_value(config, "window", "test_end_date", None)
-        explicit = _optional_int_config(config, "window", "test_end_year", None)
+        explicit = config_optional_int(config, "window", "test_end_year", None)
     if explicit is not None:
         return explicit
     return int(pd.Timestamp(test_date).year) if test_date else None
@@ -1078,7 +1003,7 @@ def _date_splits(labeled: pd.DataFrame, args: argparse.Namespace, config: dict):
             train_months=(
                 args.train_months
                 if args.train_months is not None
-                else _int_config(config, "window", "train_months", 12)
+                else config_int(config, "window", "train_months", 12)
             ),
             first_test_month=args.test_start_month
             or config_value(config, "window", "test_start_month", None),
@@ -1091,11 +1016,11 @@ def _date_splits(labeled: pd.DataFrame, args: argparse.Namespace, config: dict):
             train_start_year=(
                 args.train_start_year
                 if args.train_start_year is not None
-                else _optional_int_config(config, "window", "train_start_year", None)
+                else config_optional_int(config, "window", "train_start_year", None)
             ),
             first_test_year=_test_year_from_args(args, config, "start"),
             last_test_year=_test_year_from_args(args, config, "end"),
-            min_train_years=_int_config(config, "window", "min_train_years", 1),
+            min_train_years=config_int(config, "window", "min_train_years", 1),
         )
     return [
         chronological_date_split(
@@ -1104,13 +1029,13 @@ def _date_splits(labeled: pd.DataFrame, args: argparse.Namespace, config: dict):
             or config_value(config, "window", "test_start_date", None),
             test_end_date=args.test_end_date
             or config_value(config, "window", "test_end_date", None),
-            train_fraction=_float_config(config, "window", "train_fraction", 0.8),
+            train_fraction=config_float(config, "window", "train_fraction", 0.8),
         )
     ]
 
 
 def _resolved_window_mode(args: argparse.Namespace, config: dict) -> str:
-    window_mode = args.split_mode or _str_config(config, "window", "mode", "chronological")
+    window_mode = args.split_mode or config_str(config, "window", "mode", "chronological")
     if args.rolling_monthly:
         return "rolling_monthly"
     if args.rolling_annual:
@@ -1119,9 +1044,9 @@ def _resolved_window_mode(args: argparse.Namespace, config: dict) -> str:
 
 
 def _evaluation_settings(config: dict, args: argparse.Namespace) -> dict[str, object]:
-    bucket_mode = _str_config(config, "evaluation", "bucket_mode", "daily")
-    selection_mode = _str_config(config, "evaluation", "selection_mode", "symbol_day")
-    ic_mode = _str_config(config, "evaluation", "ic_mode", bucket_mode)
+    bucket_mode = config_str(config, "evaluation", "bucket_mode", "daily")
+    selection_mode = config_str(config, "evaluation", "selection_mode", "symbol_day")
+    ic_mode = config_str(config, "evaluation", "ic_mode", bucket_mode)
     bucket_group_cols = group_cols_for_mode(bucket_mode)
     selection_group_cols = group_cols_for_mode(selection_mode)
     ic_group_cols = group_cols_for_mode(ic_mode)
@@ -1135,9 +1060,9 @@ def _evaluation_settings(config: dict, args: argparse.Namespace) -> dict[str, ob
         "top_n": (
             args.top_n
             if args.top_n is not None
-            else _int_config(config, "evaluation", "top_n", 20)
+            else config_int(config, "evaluation", "top_n", 20)
         ),
-        "score_bins": _int_config(config, "evaluation", "score_bins", 5),
+        "score_bins": config_int(config, "evaluation", "score_bins", 5),
         "_bucket_group_cols": bucket_group_cols,
         "_selection_group_cols": selection_group_cols,
         "_ic_group_cols": ic_group_cols,
@@ -1151,7 +1076,7 @@ def _fit_prediction_model(
     config: dict,
     alpha: float,
 ):
-    model_name = _str_config(config, "model", "name", "ridge").strip().lower()
+    model_name = config_str(config, "model", "name", "ridge").strip().lower()
     feature_limit = _feature_limit(args, config)
     if model_name == "ridge":
         return fit_ridge_frame(train, alpha=alpha, feature_limit=feature_limit)
@@ -1159,35 +1084,35 @@ def _fit_prediction_model(
         return fit_gbm_frame(
             train,
             feature_limit=feature_limit,
-            max_iter=_int_config(config, "model", "max_iter", 100),
-            learning_rate=_float_config(config, "model", "learning_rate", 0.05),
-            max_leaf_nodes=_int_config(config, "model", "max_leaf_nodes", 31),
-            l2_regularization=_float_config(
+            max_iter=config_int(config, "model", "max_iter", 100),
+            learning_rate=config_float(config, "model", "learning_rate", 0.05),
+            max_leaf_nodes=config_int(config, "model", "max_leaf_nodes", 31),
+            l2_regularization=config_float(
                 config,
                 "model",
                 "l2_regularization",
                 0.0,
             ),
-            random_state=_int_config(config, "model", "random_state", 7),
+            random_state=config_int(config, "model", "random_state", 7),
         )
     if model_name in {"lightgbm", "lgbm"}:
         return fit_lightgbm_frame(
             train,
             feature_limit=feature_limit,
-            n_estimators=_int_config(config, "model", "n_estimators", 300),
-            learning_rate=_float_config(config, "model", "learning_rate", 0.03),
-            num_leaves=_int_config(config, "model", "num_leaves", 63),
-            max_depth=_int_config(config, "model", "max_depth", -1),
-            min_child_samples=_int_config(config, "model", "min_child_samples", 200),
-            subsample=_float_config(config, "model", "subsample", 1.0),
-            colsample_bytree=_float_config(config, "model", "colsample_bytree", 1.0),
-            reg_alpha=_float_config(config, "model", "reg_alpha", 0.0),
-            reg_lambda=_float_config(config, "model", "reg_lambda", 0.0),
-            random_state=_int_config(config, "model", "random_state", 7),
-            n_jobs=_int_config(config, "model", "n_jobs", -1),
-            device_type=_str_config(config, "model", "device_type", "cpu"),
-            max_bin=_optional_int_config(config, "model", "max_bin", None),
-            gpu_use_dp=_bool_config(config, "model", "gpu_use_dp", False),
+            n_estimators=config_int(config, "model", "n_estimators", 300),
+            learning_rate=config_float(config, "model", "learning_rate", 0.03),
+            num_leaves=config_int(config, "model", "num_leaves", 63),
+            max_depth=config_int(config, "model", "max_depth", -1),
+            min_child_samples=config_int(config, "model", "min_child_samples", 200),
+            subsample=config_float(config, "model", "subsample", 1.0),
+            colsample_bytree=config_float(config, "model", "colsample_bytree", 1.0),
+            reg_alpha=config_float(config, "model", "reg_alpha", 0.0),
+            reg_lambda=config_float(config, "model", "reg_lambda", 0.0),
+            random_state=config_int(config, "model", "random_state", 7),
+            n_jobs=config_int(config, "model", "n_jobs", -1),
+            device_type=config_str(config, "model", "device_type", "cpu"),
+            max_bin=config_optional_int(config, "model", "max_bin", None),
+            gpu_use_dp=config_bool(config, "model", "gpu_use_dp", False),
         )
     raise SystemExit(
         f"unsupported model.name={model_name!r}; expected ridge, gbm, or lightgbm"
@@ -1195,40 +1120,40 @@ def _fit_prediction_model(
 
 
 def _model_json(config: dict, alpha: float) -> dict[str, object]:
-    model_name = _str_config(config, "model", "name", "ridge").strip().lower()
+    model_name = config_str(config, "model", "name", "ridge").strip().lower()
     if model_name == "ridge":
         return {"name": "ridge", "alpha": alpha}
     if model_name in {"gbm", "hist_gbm", "hist_gradient_boosting"}:
         return {
             "name": "gbm",
-            "max_iter": _int_config(config, "model", "max_iter", 100),
-            "learning_rate": _float_config(config, "model", "learning_rate", 0.05),
-            "max_leaf_nodes": _int_config(config, "model", "max_leaf_nodes", 31),
-            "l2_regularization": _float_config(
+            "max_iter": config_int(config, "model", "max_iter", 100),
+            "learning_rate": config_float(config, "model", "learning_rate", 0.05),
+            "max_leaf_nodes": config_int(config, "model", "max_leaf_nodes", 31),
+            "l2_regularization": config_float(
                 config,
                 "model",
                 "l2_regularization",
                 0.0,
             ),
-            "random_state": _int_config(config, "model", "random_state", 7),
+            "random_state": config_int(config, "model", "random_state", 7),
         }
     if model_name in {"lightgbm", "lgbm"}:
         return {
             "name": "lightgbm",
-            "device_type": _str_config(config, "model", "device_type", "cpu"),
-            "n_estimators": _int_config(config, "model", "n_estimators", 300),
-            "learning_rate": _float_config(config, "model", "learning_rate", 0.03),
-            "num_leaves": _int_config(config, "model", "num_leaves", 63),
-            "max_depth": _int_config(config, "model", "max_depth", -1),
-            "min_child_samples": _int_config(config, "model", "min_child_samples", 200),
-            "subsample": _float_config(config, "model", "subsample", 1.0),
-            "colsample_bytree": _float_config(config, "model", "colsample_bytree", 1.0),
-            "reg_alpha": _float_config(config, "model", "reg_alpha", 0.0),
-            "reg_lambda": _float_config(config, "model", "reg_lambda", 0.0),
-            "random_state": _int_config(config, "model", "random_state", 7),
-            "n_jobs": _int_config(config, "model", "n_jobs", -1),
-            "max_bin": _optional_int_config(config, "model", "max_bin", None),
-            "gpu_use_dp": _bool_config(config, "model", "gpu_use_dp", False),
+            "device_type": config_str(config, "model", "device_type", "cpu"),
+            "n_estimators": config_int(config, "model", "n_estimators", 300),
+            "learning_rate": config_float(config, "model", "learning_rate", 0.03),
+            "num_leaves": config_int(config, "model", "num_leaves", 63),
+            "max_depth": config_int(config, "model", "max_depth", -1),
+            "min_child_samples": config_int(config, "model", "min_child_samples", 200),
+            "subsample": config_float(config, "model", "subsample", 1.0),
+            "colsample_bytree": config_float(config, "model", "colsample_bytree", 1.0),
+            "reg_alpha": config_float(config, "model", "reg_alpha", 0.0),
+            "reg_lambda": config_float(config, "model", "reg_lambda", 0.0),
+            "random_state": config_int(config, "model", "random_state", 7),
+            "n_jobs": config_int(config, "model", "n_jobs", -1),
+            "max_bin": config_optional_int(config, "model", "max_bin", None),
+            "gpu_use_dp": config_bool(config, "model", "gpu_use_dp", False),
         }
     return {"name": model_name}
 
@@ -1304,83 +1229,11 @@ def _fit_predict_split(
     return predictions, metrics_row, train_stats
 
 
-def _metrics_by_year_from_windows(metrics: pd.DataFrame) -> pd.DataFrame:
-    if metrics.empty or metrics["test_year"].is_unique:
-        return metrics.copy()
-
-    rows = []
-    weighted_mean_cols = {
-        "model_test_r2",
-        "overall_ic",
-        "overall_rank_ic",
-        "group_ic_mean",
-        "group_ic_std",
-        "group_ic_ir",
-        "group_rank_ic_mean",
-        "group_rank_ic_std",
-        "group_rank_ic_ir",
-        "daily_ic_mean",
-        "daily_ic_std",
-        "daily_ic_ir",
-        "daily_rank_ic_mean",
-        "daily_rank_ic_std",
-        "daily_rank_ic_ir",
-        "mean_label",
-        "win_rate",
-        "top_score_mean_return",
-        "top_score_median_return",
-        "top_score_win_rate",
-        "top_score_return_std",
-    }
-    sum_cols = {
-        "test_rows",
-        "test_dates",
-        "rows",
-        "dates",
-        "ic_groups",
-        "top_score_trades",
-        "top_score_groups",
-    }
-    max_cols = {"train_rows", "train_dates", "train_symbols", "test_symbols", "symbols"}
-
-    for year, group in metrics.groupby("test_year", sort=True):
-        row: dict[str, object] = {
-            "run_id": group["run_id"].iloc[0],
-            "test_year": int(year),
-            "test_month": f"{int(year)}",
-            "train_start_date": group["train_start_date"].min(),
-            "train_end_date": group["train_end_date"].max(),
-            "test_start_date": group["test_start_date"].min(),
-            "test_end_date": group["test_end_date"].max(),
-        }
-        weights = group["test_rows"].astype("float64").clip(lower=1.0)
-        for column in group.columns:
-            if column in row or column == "test_year":
-                continue
-            if column in sum_cols and pd.api.types.is_numeric_dtype(group[column]):
-                row[column] = group[column].sum()
-            elif column in max_cols and pd.api.types.is_numeric_dtype(group[column]):
-                row[column] = group[column].max()
-            elif column in weighted_mean_cols and pd.api.types.is_numeric_dtype(group[column]):
-                valid = group[column].notna()
-                row[column] = (
-                    float(np.average(group.loc[valid, column], weights=weights.loc[valid]))
-                    if valid.any()
-                    else float("nan")
-                )
-            elif pd.api.types.is_numeric_dtype(group[column]):
-                row[column] = group[column].iloc[0]
-            else:
-                row[column] = group[column].iloc[0]
-        rows.append(row)
-    return pd.DataFrame(rows)
-
-
 def train_from_args(args: argparse.Namespace) -> None:
     config = load_run_config(args.config)
     tick_path = (
         args.input
-        or _str_config(config, "data", "tick_path", "")
+        or config_str(config, "data", "tick_path", "")
         or os.environ.get("OPENING_STRENGTH_TICK_PATH", "")
     )
     data_source = _resolved_data_source(args, config, tick_path)
@@ -1393,7 +1246,7 @@ def train_from_args(args: argparse.Namespace) -> None:
     run_name = run_id(config, args.config) if args.config else "local_ridge_opening"
     output_dir = Path(
         args.output_dir
-        or _str_config(config, "output", "local_dir", f"output/local/{run_name}")
+        or config_str(config, "output", "local_dir", f"output/local/{run_name}")
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1408,7 +1261,7 @@ def train_from_args(args: argparse.Namespace) -> None:
     alpha = (
         args.alpha
         if args.alpha is not None
-        else _float_config(config, "model", "alpha", 1.0)
+        else config_float(config, "model", "alpha", 1.0)
     )
     evaluation_settings = _evaluation_settings(config, args)
     splits = _date_splits(labeled, args, config)
@@ -1462,7 +1315,7 @@ def train_from_args(args: argparse.Namespace) -> None:
     combined_buckets.to_csv(output_dir / "score_buckets.csv", index=False)
 
     metrics_by_window = pd.DataFrame(metric_rows)
-    metrics_by_year = _metrics_by_year_from_windows(metrics_by_window)
+    metrics_by_year = metrics_by_year_from_windows(metrics_by_window)
     metrics_by_year.to_csv(output_dir / "metrics_by_year.csv", index=False)
     metrics_by_year.to_parquet(output_dir / "metrics_by_year.parquet", index=False)
     if not metrics_by_window["test_month"].is_unique or len(metrics_by_window) != len(metrics_by_year):

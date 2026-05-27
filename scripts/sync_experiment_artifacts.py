@@ -13,7 +13,7 @@ from opening_strength_fit.config import load_toml
 from opening_strength_fit.k8s import DEFAULT_IMAGE, RunSpec
 from opening_strength_fit.k8s import command_succeeds, delete_temp_pod, ensure_temp_pod
 from opening_strength_fit.k8s import load_run_spec, run_command
-from opening_strength_fit.training import _metrics_by_year_from_windows
+from opening_strength_fit.reports import metrics_by_year_from_windows
 
 
 METRICS_SUFFIX = "_metrics_by_year.csv"
@@ -170,7 +170,7 @@ def combine_metric_frames(
         month_path = output_dir / f"{run_id}_metrics_by_month.csv"
         metrics.to_csv(month_path, index=False)
         pulled.append(month_path)
-        metrics = _metrics_by_year_from_windows(metrics)
+        metrics = metrics_by_year_from_windows(metrics)
     elif "test_year" in metrics.columns:
         metrics = metrics.sort_values("test_year")
     year_path = output_dir / f"{run_id}_metrics_by_year.csv"

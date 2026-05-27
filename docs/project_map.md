@@ -4,12 +4,12 @@
 
 - `README.md`: project entrypoint and current spine.
 - `Dockerfile`: CPU training image; default command is `scripts/run_experiment.py --help`.
-- `requirements.txt`: Python runtime dependencies.
+- `pyproject.toml`: package metadata, runtime dependencies, and test settings.
 - `.env.example`: local ClickHouse/tick path variables.
 
 ## Library: `src/opening_strength_fit/`
 
-- `config.py`: TOML loading, config lookup, run id, and slug helpers.
+- `config.py`: TOML loading, typed config lookup, run id, and slug helpers.
 - `schema.py`: canonical column names, depth levels, time filters, and standardization.
 - `clickhouse_ticks.py`: ClickHouse `stock.tick` query and normalization.
 - `io.py`: parquet/csv read/write helpers.
@@ -25,7 +25,7 @@
 - `evaluation.py`: score buckets and top-score summaries.
 - `rolling.py`: chronological, annual, and monthly split helpers.
 - `training.py`: unified training pipeline, configured feature transforms, and output writer.
-- `reports.py`: compact dataset and metrics reporting.
+- `reports.py`: compact dataset summaries, metrics reporting, and yearly aggregation.
 - `k8s.py`: RunSpec, PVC helper pod, and kubectl wrappers.
 - `__init__.py`: package marker.
 

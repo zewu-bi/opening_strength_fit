@@ -9,7 +9,13 @@ import numpy as np
 import pandas as pd
 
 import _bootstrap  # noqa: F401
-from opening_strength_fit.config import config_value, run_id
+from opening_strength_fit.config import (
+    config_bool,
+    config_float,
+    config_int,
+    config_str,
+    run_id,
+)
 from opening_strength_fit.evaluation import (
     group_cols_for_mode,
     resolve_group_cols,
@@ -23,14 +29,12 @@ from opening_strength_fit.training import (
     _date_splits,
     _evaluation_settings,
     _fit_prediction_model,
-    _float_config,
     _load_clickhouse_labeled_frame,
     _load_labeled_pvc_frame,
     _load_training_frame,
     _model_json,
     _resolved_data_source,
     _resolved_window_mode,
-    _str_config,
     build_training_parser,
     load_run_config,
 )
@@ -140,7 +144,7 @@ def _feature_group_name(feature: str, groups: list[FeatureGroup]) -> str:
 def _load_labeled(args, config: dict) -> pd.DataFrame:
     tick_path = (
         args.input
-        or _str_config(config, "data", "tick_path", "")
+        or config_str(config, "data", "tick_path", "")
         or os.environ.get("OPENING_STRENGTH_TICK_PATH", "")
     )
     data_source = _resolved_data_source(args, config, tick_path)
@@ -302,21 +306,6 @@ def _shuffle_feature_columns(
     return out
 
 
-def _feature_audit_int(config: dict, key: str, default: int) -> int:
-    return int(config_value(config, "feature_audit", key, default))
-
-
-def _feature_audit_bool(config: dict, key: str, default: bool) -> bool:
-    value = config_value(config, "feature_audit", key, default)
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
-    return bool(value)
-
-
-def _feature_audit_str(config: dict, key: str, default: str) -> str:
-    return str(config_value(config, "feature_audit", key, default))
-
-
 def main() -> None:
     parser = build_training_parser(
         "Audit opening-strength feature dependence with grouped importance, "
@@ -331,7 +320,7 @@ def main() -> None:
     run_name = run_id(config, args.config) if args.config else "local_feature_audit"
     output_dir = Path(
         args.output_dir
-        or _str_config(config, "output", "local_dir", f"output/local/{run_name}")
+        or config_str(config, "output", "local_dir", f"output/local/{run_name}")
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -341,7 +330,7 @@ def main() -> None:
     alpha = (
         args.alpha
         if args.alpha is not None
-        else _float_config(config, "model", "alpha", 1.0)
+        else config_float(config, "model", "alpha", 1.0)
     )
     evaluation_settings = _evaluation_settings(config, args)
     splits = _date_splits(labeled, args, config)
@@ -350,20 +339,22 @@ def main() -> None:
         "feature_audit_settings",
         {
             "groups": [group.name for group in groups],
-            "permutation_repeats": _feature_audit_int(
+            "permutation_repeats": config_int(
                 config,
+                "feature_audit",
                 "permutation_repeats",
                 1,
             ),
-            "permutation_mode": _feature_audit_str(
+            "permutation_mode": config_str(
                 config,
+                "feature_audit",
                 "permutation_mode",
                 "cross_section",
             ),
             "ablation": not args.skip_ablation
-            and _feature_audit_bool(config, "run_ablation", True),
+            and config_bool(config, "feature_audit", "run_ablation", True),
             "permutation": not args.skip_permutation
-            and _feature_audit_bool(config, "run_permutation", True),
+            and config_bool(config, "feature_audit", "run_permutation", True),
             "write_predictions": args.write_predictions,
             "window_mode": _resolved_window_mode(args, config),
         },
@@ -417,15 +408,26 @@ def main() -> None:
             for group in groups
         }
 
-        if not args.skip_permutation and _feature_audit_bool(
+        if not args.skip_permutation and config_bool(
             config,
+            "feature_audit",
             "run_permutation",
             True,
         ):
-            repeat_count = _feature_audit_int(config, "permutation_repeats", 1)
-            mode = _feature_audit_str(config, "permutation_mode", "cross_section")
+            repeat_count = config_int(
+                config,
+                "feature_audit",
+                "permutation_repeats",
+                1,
+            )
+            mode = config_str(
+                config,
+                "feature_audit",
+                "permutation_mode",
+                "cross_section",
+            )
             permutation_group_cols = group_cols_for_mode(mode)
-            seed = _feature_audit_int(config, "random_state", 7)
+            seed = config_int(config, "feature_audit", "random_state", 7)
             for repeat in range(repeat_count):
                 rng = np.random.default_rng(seed + repeat)
                 for group_name, columns in group_columns.items():
@@ -454,7 +456,12 @@ def main() -> None:
                     row["permuted_features"] = len(columns)
                     permutation_rows.append(row)
 
-        if not args.skip_ablation and _feature_audit_bool(config, "run_ablation", True):
+        if not args.skip_ablation and config_bool(
+            config,
+            "feature_audit",
+            "run_ablation",
+            True,
+        ):
             for group_name, columns in group_columns.items():
                 if not columns:
                     continue
