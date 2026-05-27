@@ -30,7 +30,10 @@ from opening_strength_fit.evaluation import (
     summarize_trades,
     top_score_trades,
 )
-from opening_strength_fit.features import add_postopen_decision_features
+from opening_strength_fit.features import (
+    add_postopen_decision_features,
+    add_postopen_v2_decision_features,
+)
 from opening_strength_fit.io import read_frame, write_frame
 from opening_strength_fit.model import (
     evaluate_prediction_frame,
@@ -244,6 +247,22 @@ def _apply_feature_transforms_from_config(
                 "features",
                 "postopen_decision_windows",
                 (1, 3, 5),
+            ),
+        )
+    if _bool_config(config, "features", "include_postopen_v2", False):
+        labeled = add_postopen_v2_decision_features(
+            labeled,
+            windows=_int_tuple_config(
+                config,
+                "features",
+                "postopen_v2_windows",
+                (1, 2, 3, 5),
+            ),
+            depth_levels=_int_tuple_config(
+                config,
+                "features",
+                "postopen_v2_depth_levels",
+                (3, 5, 10),
             ),
         )
     labeled = _drop_feature_prefixes_from_config(labeled, config)

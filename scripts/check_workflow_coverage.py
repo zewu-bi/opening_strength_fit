@@ -12,6 +12,7 @@ DIRECT_SCRIPT_EXEMPTIONS = {"_bootstrap.py"}
 K8S_JOB_ENTRYPOINTS = (
     "scripts/run_experiment.py",
     "scripts/materialize_labeled_caches.py",
+    "scripts/audit_feature_dependence.py",
 )
 REQUIRED_DIRS = (
     "src/opening_strength_fit",
@@ -126,7 +127,7 @@ def main() -> None:
     check_run_configs(files, errors)
 
     for job in [path for path in files if path.startswith("experiments/jobs/")]:
-        if job.endswith("_job.yaml") and "reader_job" not in job:
+        if job.endswith("_job.yaml"):
             text = read(job)
             if not any(entrypoint in text for entrypoint in K8S_JOB_ENTRYPOINTS):
                 allowed = ", ".join(K8S_JOB_ENTRYPOINTS)

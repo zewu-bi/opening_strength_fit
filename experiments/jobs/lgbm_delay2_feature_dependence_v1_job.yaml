@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: opening-strength-materialize-delay1-2013-2024
+  name: opening-strength-lgbm-delay2-feature-dependence-v1
   namespace: bizewu
 spec:
   backoffLimit: 0
@@ -15,9 +15,10 @@ spec:
         - name: opening-strength-output
           persistentVolumeClaim:
             claimName: bizewu-private-data
+
       containers:
-        - name: materialize-labeled-cache
-          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260522-full-delay1-cache-v1
+        - name: opening-strength-fit
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260527-postopen-v2
           imagePullPolicy: Always
           envFrom:
             - secretRef:
@@ -25,16 +26,20 @@ spec:
           workingDir: /app/opening_strength_fit
           command:
             - python
-            - scripts/materialize_labeled_caches.py
+            - scripts/audit_feature_dependence.py
             - --config
-            - experiments/runs/materialize_opening_2013_2024_delay1_cache.toml
+            - experiments/runs/lgbm_delay2_feature_dependence_v1.toml
+            - --output-dir
+            - /mnt/output/opening_strength_fit/lgbm_delay2_feature_dependence_v1
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output
           resources:
             requests:
               cpu: "8"
-              memory: 96Gi
+              memory: 128Gi
+
             limits:
               cpu: "16"
-              memory: 160Gi
+              memory: 192Gi
+

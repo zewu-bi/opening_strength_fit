@@ -21,6 +21,8 @@ def training_script(config: dict) -> str:
     run_kind = str(get(config, "run", "kind", "experiment")).strip().lower()
     if run_kind == "cache":
         return "scripts/materialize_labeled_caches.py"
+    if run_kind == "feature_audit":
+        return "scripts/audit_feature_dependence.py"
     model_name = str(get(config, "model", "name", "ridge")).strip().lower()
     if model_name in {
         "ridge",
@@ -311,56 +313,6 @@ def render_materialize_job(config_path: Path, config: dict, image: str) -> str:
     )
 
 
-def render_reader_job(config_path: Path, config: dict, image: str) -> str:
-    run_id_value = run_id(config, config_path)
-    job_name = f"opening-strength-read-{slug(run_id_value)}"
-    namespace = get(config, "k8s", "namespace", "bizewu")
-    pull_secret = get(config, "k8s", "image_pull_secret", "highfort")
-    pvc = get(config, "k8s", "pvc", "bizewu-private-data")
-    mount_path = get(config, "k8s", "mount_path", "/mnt/output")
-    output_dir = get(
-        config,
-        "output",
-        "k8s_dir",
-        f"{mount_path}/opening_strength_fit/{run_id_value}",
-    )
-
-    return textwrap.dedent(
-        f"""\
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          name: {job_name}
-          namespace: {namespace}
-        spec:
-          backoffLimit: 0
-          ttlSecondsAfterFinished: 3600
-          template:
-            spec:
-              restartPolicy: Never
-              imagePullSecrets:
-                - name: {pull_secret}
-              volumes:
-                - name: opening-strength-output
-                  persistentVolumeClaim:
-                    claimName: {pvc}
-              containers:
-                - name: reader
-                  image: {image}
-                  imagePullPolicy: Always
-                  workingDir: /app/opening_strength_fit
-                  command:
-                    - python
-                    - scripts/summarize_opening_results.py
-                    - --input-dir
-                    - {output_dir}
-                  volumeMounts:
-                    - name: opening-strength-output
-                      mountPath: {mount_path}
-        """
-    )
-
-
 def render_sharded_training_job(config_path: Path, config: dict, image: str) -> str:
     run_id_value = run_id(config, config_path)
     job_name = f"opening-strength-{slug(run_id_value)}-sharded"
@@ -526,202 +478,6 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
     )
 
 
-def render_sharded_reader_job(config_path: Path, config: dict, image: str) -> str:
-    run_id_value = run_id(config, config_path)
-    job_name = f"opening-strength-read-{slug(run_id_value)}-sharded"
-    namespace = get(config, "k8s", "namespace", "bizewu")
-    pull_secret = get(config, "k8s", "image_pull_secret", "highfort")
-    pvc = get(config, "k8s", "pvc", "bizewu-private-data")
-    mount_path = get(config, "k8s", "mount_path", "/mnt/output")
-    output_dir = get(
-        config,
-        "output",
-        "k8s_dir",
-        f"{mount_path}/opening_strength_fit/{run_id_value}",
-    )
-    if _window_mode(config) == "rolling_monthly":
-        return textwrap.dedent(
-            f"""\
-            apiVersion: batch/v1
-            kind: Job
-            metadata:
-              name: {job_name}
-              namespace: {namespace}
-            spec:
-              backoffLimit: 0
-              ttlSecondsAfterFinished: 3600
-              template:
-                spec:
-                  restartPolicy: Never
-                  imagePullSecrets:
-                    - name: {pull_secret}
-                  volumes:
-                    - name: opening-strength-output
-                      persistentVolumeClaim:
-                        claimName: {pvc}
-                  containers:
-                    - name: reader
-                      image: {image}
-                      imagePullPolicy: Always
-                      workingDir: /app/opening_strength_fit
-                      command:
-                        - /bin/bash
-                        - -lc
-                        - |
-                          set -euo pipefail
-                          ROOT={output_dir}
-                          python - <<'PY'
-                          from pathlib import Path
-                          import pandas as pd
-                          from opening_strength_fit.training import _metrics_by_year_from_windows
-
-                          root = Path("{output_dir}")
-                          metric_frames = []
-                          prediction_frames = []
-                          missing_metrics = []
-                          missing_predictions = []
-
-                          for shard in sorted(root.glob("month_*")):
-                              month = shard.name.removeprefix("month_")
-                              metrics_path = shard / "metrics_by_year.csv"
-                              prediction_path = shard / f"predictions_{{month}}.parquet"
-                              if not prediction_path.exists():
-                                  prediction_path = shard / "predictions.parquet"
-
-                              if metrics_path.exists():
-                                  metric_frames.append(pd.read_csv(metrics_path))
-                              else:
-                                  missing_metrics.append(month)
-
-                              if prediction_path.exists():
-                                  prediction_frames.append(pd.read_parquet(prediction_path))
-                              else:
-                                  missing_predictions.append(month)
-
-                          if metric_frames:
-                              metrics_month = pd.concat(metric_frames, ignore_index=True).sort_values(["test_year", "test_month"])
-                              metrics_month.to_csv(root / "metrics_by_month.csv", index=False)
-                              metrics_month.to_parquet(root / "metrics_by_month.parquet", index=False)
-                              metrics = _metrics_by_year_from_windows(metrics_month)
-                              metrics.to_csv(root / "metrics_by_year.csv", index=False)
-                              metrics.to_parquet(root / "metrics_by_year.parquet", index=False)
-                              print(f"combined_monthly_metrics: {{root / 'metrics_by_month.csv'}}")
-                              print(f"combined_metrics: {{root / 'metrics_by_year.csv'}}")
-                          else:
-                              print("no shard metrics found")
-
-                          if prediction_frames:
-                              predictions = pd.concat(prediction_frames, ignore_index=True)
-                              sort_cols = [c for c in ["date", "symbol", "timestamp"] if c in predictions.columns]
-                              if sort_cols:
-                                  predictions = predictions.sort_values(sort_cols)
-                              predictions.to_parquet(root / "predictions_all.parquet", index=False)
-                              print(f"combined_predictions: {{root / 'predictions_all.parquet'}}")
-                          else:
-                              print("no shard predictions found")
-
-                          if missing_metrics:
-                              print(f"missing_metric_months: {{missing_metrics}}")
-                          if missing_predictions:
-                              print(f"missing_prediction_months: {{missing_predictions}}")
-                          PY
-                          python scripts/summarize_opening_results.py --input-dir "${{ROOT}}"
-                      volumeMounts:
-                        - name: opening-strength-output
-                          mountPath: {mount_path}
-            """
-        )
-    test_start_year = _year_from_config(config, "test_start_date")
-    test_end_year = _year_from_config(config, "test_end_date")
-
-    return textwrap.dedent(
-        f"""\
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          name: {job_name}
-          namespace: {namespace}
-        spec:
-          backoffLimit: 0
-          ttlSecondsAfterFinished: 3600
-          template:
-            spec:
-              restartPolicy: Never
-              imagePullSecrets:
-                - name: {pull_secret}
-              volumes:
-                - name: opening-strength-output
-                  persistentVolumeClaim:
-                    claimName: {pvc}
-              containers:
-                - name: reader
-                  image: {image}
-                  imagePullPolicy: Always
-                  workingDir: /app/opening_strength_fit
-                  command:
-                    - /bin/bash
-                    - -lc
-                    - |
-                      set -euo pipefail
-                      ROOT={output_dir}
-                      python - <<'PY'
-                      from pathlib import Path
-                      import pandas as pd
-
-                      root = Path("{output_dir}")
-                      metric_frames = []
-                      prediction_frames = []
-                      missing_metrics = []
-                      missing_predictions = []
-
-                      for year in range({test_start_year}, {test_end_year + 1}):
-                          shard = root / f"year_{{year}}"
-                          metrics_path = shard / "metrics_by_year.csv"
-                          prediction_path = shard / f"predictions_{{year}}.parquet"
-                          if not prediction_path.exists():
-                              prediction_path = shard / "predictions.parquet"
-
-                          if metrics_path.exists():
-                              metric_frames.append(pd.read_csv(metrics_path))
-                          else:
-                              missing_metrics.append(year)
-
-                          if prediction_path.exists():
-                              prediction_frames.append(pd.read_parquet(prediction_path))
-                          else:
-                              missing_predictions.append(year)
-
-                      if metric_frames:
-                          metrics = pd.concat(metric_frames, ignore_index=True).sort_values("test_year")
-                          metrics.to_csv(root / "metrics_by_year.csv", index=False)
-                          metrics.to_parquet(root / "metrics_by_year.parquet", index=False)
-                          print(f"combined_metrics: {{root / 'metrics_by_year.csv'}}")
-                      else:
-                          print("no shard metrics found")
-
-                      if prediction_frames:
-                          predictions = pd.concat(prediction_frames, ignore_index=True)
-                          sort_cols = [c for c in ["date", "symbol", "timestamp"] if c in predictions.columns]
-                          if sort_cols:
-                              predictions = predictions.sort_values(sort_cols)
-                          predictions.to_parquet(root / "predictions_all.parquet", index=False)
-                          print(f"combined_predictions: {{root / 'predictions_all.parquet'}}")
-                      else:
-                          print("no shard predictions found")
-
-                      if missing_metrics:
-                          print(f"missing_metric_years: {{missing_metrics}}")
-                      if missing_predictions:
-                          print(f"missing_prediction_years: {{missing_predictions}}")
-                      PY
-                      python scripts/summarize_opening_results.py --input-dir "${{ROOT}}"
-                  volumeMounts:
-                    - name: opening-strength-output
-                      mountPath: {mount_path}
-        """
-    )
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True, help="TOML run config.")
@@ -738,7 +494,7 @@ def main() -> None:
     parser.add_argument(
         "--sharded",
         action="store_true",
-        help="Render sequential per-year training and shard-combining reader jobs.",
+        help="Render a sequential per-year or per-month training job.",
     )
     args = parser.parse_args()
 
@@ -750,7 +506,6 @@ def main() -> None:
 
     suffix = "_sharded" if args.sharded else ""
     training_path = output_dir / f"{run_id_value}{suffix}_job.yaml"
-    reader_path = output_dir / f"{run_id_value}{suffix}_reader_job.yaml"
     if is_cache_run(config):
         if args.sharded:
             raise SystemExit("--sharded is only supported for training experiments")
@@ -766,23 +521,14 @@ def main() -> None:
             render_sharded_training_job(config_path, config, args.image),
             encoding="utf-8",
         )
-        reader_path.write_text(
-            render_sharded_reader_job(config_path, config, args.image),
-            encoding="utf-8",
-        )
     else:
         training_path.write_text(
             render_training_job(config_path, config, args.image),
             encoding="utf-8",
         )
-        reader_path.write_text(
-            render_reader_job(config_path, config, args.image),
-            encoding="utf-8",
-        )
 
     print("rendered_k8s_jobs:")
     print(f"  training: {training_path}")
-    print(f"  reader: {reader_path}")
 
 
 if __name__ == "__main__":

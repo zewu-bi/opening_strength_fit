@@ -1,7 +1,7 @@
 # Experiment Log
 
-本文件是实验事实源；README 和 project brief 只保留摘要。当前项目保留正式归档实验、active
-cache/materialization 任务和 active feature exploration 三类记录。
+本文件是实验事实源；README 和 project brief 只保留摘要。当前项目保留正式归档实验和 active
+feature exploration 两类记录。
 
 正式归档实验：
 
@@ -16,9 +16,10 @@ Active 非归档任务：
 
 | task | kind | status | output |
 | --- | --- | --- | --- |
-| `materialize_opening_2013_2024_delay1_cache` | cache | running | `/mnt/output/opening_strength_fit/cache/opening_2013_2024_delay1_labeled.parquet` |
 | `lgbm_delay2_postopen_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_v1/` |
 | `lgbm_delay2_postopen_no_preopen_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_no_preopen_v1/` |
+| `lgbm_delay2_postopen_v2` | exploration | running | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_v2/` |
+| `lgbm_delay2_feature_dependence_v1` | feature_audit | running | `/mnt/output/opening_strength_fit/lgbm_delay2_feature_dependence_v1/` |
 
 ## Run 索引
 
@@ -37,6 +38,8 @@ Active 非归档任务：
 | `lgbm_opening_1y_next_month_strong_delay0` | completed | CPU LightGBM strong delay0；group rank IC = 0.1729，Top20 mean = +29.28 bps。 |
 | `lgbm_opening_1y_next_month_strong_delay1` | completed | CPU LightGBM strong delay1；group rank IC = 0.1389，Top20 mean = +17.17 bps。 |
 | `lgbm_opening_1y_next_month_strong_delay2` | completed | CPU LightGBM strong delay2；group rank IC = 0.1298，Top20 mean = +12.60 bps。 |
+| `lgbm_delay2_postopen_v2` | running | post-open v1 plus v2 queue/depth-shape/trade-impact features；Top100 evaluation。 |
+| `lgbm_delay2_feature_dependence_v1` | running | grouped feature importance、permutation 和 drop-retrain ablation。 |
 
 ## Output 索引
 
@@ -44,7 +47,7 @@ Active 非归档任务：
 
 | local path | source |
 | --- | --- |
-| `output/predictions/<run_id>/predictions_all.parquet` | 对应 `experiments/runs/<run_id>.toml` 和 K8s training/reader job。 |
+| `output/predictions/<run_id>/predictions_all.parquet` | 对应 `experiments/runs/<run_id>.toml`、K8s training job 和 sync 记录。 |
 | `output/k8s/metrics/<run_id>_metrics_by_year.csv` | 从对应 PVC run output 拉回的 raw metrics。 |
 | `output/reports/opening_1m3d_*` | 小窗 Ridge/GBM 归档实验对比和校正指标。 |
 | `output/reports/opening_1y_next_month_*` | 一年训练、次月测试 Ridge/GBM 归档实验对比和校正指标。 |
@@ -62,7 +65,7 @@ delay0/1/2 one-year labeled cache 已在 PVC 完整落盘：
 ```
 
 三份 cache 均为 12,308,573 行，并包含 `entry_delay_seconds`、`entry_max_tick_gap_seconds` 和
-`entry_delay_ticks`。六个 CPU LightGBM 训练 Job 和 reader Job 已完成，metrics 已归档到
+`entry_delay_ticks`。六个 CPU LightGBM 训练 Job 已完成，metrics 已归档到
 `experiments/results/metrics/`，predictions 已拉回到 `output/predictions/<run_id>/predictions_all.parquet`。
 
 年度 metrics：
@@ -227,6 +230,19 @@ next-close 两条线略好。逐分钟看，去掉 preopen 后 `09:30` 明显变
 Top100 excess 仍多数高于旧 baseline。结论：完全删除 `preopen_*` 不是更强的短期方案，但后续分钟没有
 崩掉，说明开盘后盘口动态本身有独立信息；下一步不应一刀切删除集合竞价，而应做轻降权/特征组 ablation
 或加强 tick-level post-open 特征。
+
+## 2026-05-27 Post-Open v2 and Feature Audit Setup
+
+已提交两条 running 任务，均继续使用 delay2 labeled cache 和 Top100 evaluation：
+
+- `lgbm_delay2_postopen_v2`：在 `postopen_v1` 上追加 `postopen_v2_` 特征，包括 top3/top5/top10 深度、
+  depth concentration、gap slope/curve、相对开盘的队列/深度/价差轨迹、短 tick trade-vs-depth 和
+  trade-vwap impact。
+- `lgbm_delay2_feature_dependence_v1`：同一套 v1+v2 特征上做 grouped feature importance、
+  cross-section permutation，以及 drop-retrain ablation。默认组包括 `preopen`、`postopen_v1`、
+  `postopen_v2`、raw cumulative trade、trade flow、orderbook depth 和 momentum。
+
+这两项已创建 K8s job，尚未产出 metrics；完成后需要同步 PVC 输出并把结果补进本日志。
 
 ## 2026-05-21 1y Next-Month Baseline
 

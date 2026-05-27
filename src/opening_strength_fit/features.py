@@ -235,6 +235,327 @@ def add_postopen_decision_features(
     return out
 
 
+def _column_values(df: pd.DataFrame, column: str) -> pd.Series:
+    if column not in df.columns:
+        return pd.Series(np.nan, index=df.index, dtype="float64")
+    return _numeric_series(df[column])
+
+
+def _sum_present_columns(df: pd.DataFrame, columns: list[str]) -> pd.Series:
+    present = [column for column in columns if column in df.columns]
+    return _sum_columns(df, present)
+
+
+def _weighted_mean(
+    values: pd.DataFrame,
+    weights: pd.DataFrame,
+) -> pd.Series:
+    weighted = values.astype("float64") * weights.astype("float64")
+    return safe_divide(
+        weighted.sum(axis=1, min_count=1),
+        weights.sum(axis=1, min_count=1),
+    )
+
+
+def add_postopen_v2_decision_features(
+    frame: pd.DataFrame,
+    *,
+    windows: tuple[int, ...] = (1, 2, 3, 5),
+    depth_levels: tuple[int, ...] = (3, 5, 10),
+) -> pd.DataFrame:
+    """Add richer post-open state, trajectory, and trade-impact features.
+
+    The input is still a decision-row frame, so every feature uses only the
+    current row and earlier decision rows within the same symbol/day.
+    """
+
+    out = ensure_timestamp_columns(frame)
+    time_col = (
+        "decision_target_timestamp"
+        if "decision_target_timestamp" in out.columns
+        else "timestamp"
+    )
+    out = out.sort_values(["date", "symbol", time_col]).reset_index(drop=True)
+    group_keys = [out["date"], out["symbol"]]
+    new_columns: dict[str, pd.Series] = {}
+
+    def has_column(column: str) -> bool:
+        return column in out.columns or column in new_columns
+
+    def as_series(values) -> pd.Series:
+        if isinstance(values, pd.Series):
+            return values.reset_index(drop=True)
+        return pd.Series(values, index=out.index)
+
+    def add_column(name: str, values) -> None:
+        new_columns[name] = as_series(values)
+
+    def column_series(column: str) -> pd.Series:
+        if column in new_columns:
+            return new_columns[column]
+        return out[column]
+
+    def numeric_column(column: str) -> pd.Series:
+        return pd.to_numeric(column_series(column), errors="coerce").astype("float64")
+
+    def shifted(column: str, window: int) -> pd.Series:
+        return numeric_column(column).groupby(group_keys, sort=False).shift(window)
+
+    def first_value(column: str) -> pd.Series:
+        return numeric_column(column).groupby(group_keys, sort=False).transform("first")
+
+    levels = available_depth_levels(out)
+    for depth in depth_levels:
+        present_levels = [level for level in levels if level <= depth]
+        if not present_levels:
+            continue
+        ask_volume_columns = [ask_volume_col(level) for level in present_levels]
+        bid_volume_columns = [bid_volume_col(level) for level in present_levels]
+        ask_depth = _sum_present_columns(out, ask_volume_columns)
+        bid_depth = _sum_present_columns(out, bid_volume_columns)
+        add_column(f"postopen_v2_ask_depth_{depth}", ask_depth)
+        add_column(f"postopen_v2_bid_depth_{depth}", bid_depth)
+        add_column(
+            f"postopen_v2_depth_imbalance_{depth}",
+            safe_divide(
+                bid_depth - ask_depth,
+                bid_depth + ask_depth,
+            ),
+        )
+        if "ask_volume_1" in out.columns:
+            add_column(
+                f"postopen_v2_ask1_share_depth_{depth}",
+                safe_divide(out["ask_volume_1"], ask_depth),
+            )
+        if "bid_volume_1" in out.columns:
+            add_column(
+                f"postopen_v2_bid1_share_depth_{depth}",
+                safe_divide(out["bid_volume_1"], bid_depth),
+            )
+
+        ask_gap_columns = [
+            f"ask_gap_{level}_bps"
+            for level in present_levels
+            if level > 1 and f"ask_gap_{level}_bps" in out.columns
+        ]
+        bid_gap_columns = [
+            f"bid_gap_{level}_bps"
+            for level in present_levels
+            if level > 1 and f"bid_gap_{level}_bps" in out.columns
+        ]
+        if ask_gap_columns:
+            ask_pairs = [
+                (column, ask_volume_col(int(column.split("_")[2])))
+                for column in ask_gap_columns
+                if ask_volume_col(int(column.split("_")[2])) in out.columns
+            ]
+            if ask_pairs:
+                ask_gap_values = out[[column for column, _ in ask_pairs]].apply(
+                    pd.to_numeric,
+                    errors="coerce",
+                )
+                ask_gap_weights = out[[column for _, column in ask_pairs]].apply(
+                    pd.to_numeric,
+                    errors="coerce",
+                )
+                add_column(
+                    f"postopen_v2_ask_gap_weighted_{depth}_bps",
+                    _weighted_mean(ask_gap_values, ask_gap_weights),
+                )
+            add_column(
+                f"postopen_v2_ask_gap_max_{depth}_bps",
+                out[ask_gap_columns]
+                .apply(pd.to_numeric, errors="coerce")
+                .max(axis=1),
+            )
+        if bid_gap_columns:
+            bid_pairs = [
+                (column, bid_volume_col(int(column.split("_")[2])))
+                for column in bid_gap_columns
+                if bid_volume_col(int(column.split("_")[2])) in out.columns
+            ]
+            if bid_pairs:
+                bid_gap_values = out[[column for column, _ in bid_pairs]].apply(
+                    pd.to_numeric,
+                    errors="coerce",
+                )
+                bid_gap_weights = out[[column for _, column in bid_pairs]].apply(
+                    pd.to_numeric,
+                    errors="coerce",
+                )
+                add_column(
+                    f"postopen_v2_bid_gap_weighted_{depth}_bps",
+                    _weighted_mean(bid_gap_values, bid_gap_weights),
+                )
+            add_column(
+                f"postopen_v2_bid_gap_max_{depth}_bps",
+                out[bid_gap_columns]
+                .apply(pd.to_numeric, errors="coerce")
+                .max(axis=1),
+            )
+
+    if has_column("postopen_v2_ask_depth_3") and has_column("postopen_v2_ask_depth_10"):
+        add_column(
+            "postopen_v2_ask_depth_concentration_3_10",
+            safe_divide(
+                column_series("postopen_v2_ask_depth_3"),
+                column_series("postopen_v2_ask_depth_10"),
+            ),
+        )
+    if has_column("postopen_v2_bid_depth_3") and has_column("postopen_v2_bid_depth_10"):
+        add_column(
+            "postopen_v2_bid_depth_concentration_3_10",
+            safe_divide(
+                column_series("postopen_v2_bid_depth_3"),
+                column_series("postopen_v2_bid_depth_10"),
+            ),
+        )
+    if (
+        has_column("postopen_v2_bid_depth_concentration_3_10")
+        and has_column("postopen_v2_ask_depth_concentration_3_10")
+    ):
+        add_column(
+            "postopen_v2_depth_concentration_imbalance_3_10",
+            column_series("postopen_v2_bid_depth_concentration_3_10")
+            - column_series("postopen_v2_ask_depth_concentration_3_10"),
+        )
+
+    for depth in depth_levels:
+        ask_gap = f"ask_gap_{depth}_bps"
+        bid_gap = f"bid_gap_{depth}_bps"
+        if depth > 1 and ask_gap in out.columns:
+            add_column(
+                f"postopen_v2_ask_gap_slope_{depth}_bps",
+                safe_divide(out[ask_gap], depth - 1),
+            )
+        if depth > 1 and bid_gap in out.columns:
+            add_column(
+                f"postopen_v2_bid_gap_slope_{depth}_bps",
+                safe_divide(out[bid_gap], depth - 1),
+            )
+    if "ask_gap_2_bps" in out.columns and "ask_gap_10_bps" in out.columns:
+        add_column(
+            "postopen_v2_ask_gap_curve_2_10_bps",
+            _numeric_series(out["ask_gap_10_bps"]) - _numeric_series(out["ask_gap_2_bps"]),
+        )
+    if "bid_gap_2_bps" in out.columns and "bid_gap_10_bps" in out.columns:
+        add_column(
+            "postopen_v2_bid_gap_curve_2_10_bps",
+            _numeric_series(out["bid_gap_10_bps"]) - _numeric_series(out["bid_gap_2_bps"]),
+        )
+
+    for ticks in (1, 3, 10, 30):
+        volume_col_name = f"volume_diff_{ticks}t"
+        turnover_col_name = f"turnover_diff_{ticks}t"
+        vwap_col_name = f"trade_vwap_{ticks}t"
+        if volume_col_name in out.columns:
+            volume = _numeric_series(out[volume_col_name])
+            add_column(
+                f"postopen_v2_trade_volume_to_ask1_{ticks}t",
+                safe_divide(volume, _column_values(out, "ask_volume_1")),
+            )
+            add_column(
+                f"postopen_v2_trade_volume_to_bid1_{ticks}t",
+                safe_divide(volume, _column_values(out, "bid_volume_1")),
+            )
+            add_column(
+                f"postopen_v2_trade_volume_to_ask_depth10_{ticks}t",
+                safe_divide(volume, _column_values(out, "ask_depth_10")),
+            )
+            add_column(
+                f"postopen_v2_trade_volume_to_bid_depth10_{ticks}t",
+                safe_divide(volume, _column_values(out, "bid_depth_10")),
+            )
+        if turnover_col_name in out.columns:
+            turnover = _numeric_series(out[turnover_col_name])
+            add_column(
+                f"postopen_v2_trade_turnover_to_depth_notional_{ticks}t",
+                safe_divide(
+                    turnover,
+                    _column_values(out, "ask_depth_10") * _column_values(out, "ask_price_1"),
+                ),
+            )
+        if vwap_col_name in out.columns:
+            vwap = _numeric_series(out[vwap_col_name])
+            if "mid_price" in out.columns:
+                add_column(
+                    f"postopen_v2_trade_vwap_vs_mid_{ticks}t_bps",
+                    safe_divide(vwap - _numeric_series(out["mid_price"]), out["mid_price"])
+                    * 10_000,
+                )
+            if "ask_price_1" in out.columns:
+                add_column(
+                    f"postopen_v2_trade_vwap_vs_ask1_{ticks}t_bps",
+                    safe_divide(vwap - _numeric_series(out["ask_price_1"]), out["ask_price_1"])
+                    * 10_000,
+                )
+
+    trajectory_columns = [
+        column
+        for column in (
+            "ask_volume_1",
+            "bid_volume_1",
+            "ask_depth_10",
+            "bid_depth_10",
+            "depth_imbalance_1",
+            "depth_imbalance_10",
+            "spread_bps",
+            "mid_price",
+            "ask_price_1",
+            "bid_price_1",
+            "volume",
+            "turnover",
+            "postopen_v2_ask_depth_3",
+            "postopen_v2_bid_depth_3",
+            "postopen_v2_depth_imbalance_3",
+            "postopen_v2_ask_depth_concentration_3_10",
+            "postopen_v2_bid_depth_concentration_3_10",
+        )
+        if has_column(column)
+    ]
+    for column in trajectory_columns:
+        values = numeric_column(column)
+        first = first_value(column)
+        add_column(f"postopen_v2_{column}_from_open_diff", values - first)
+        add_column(
+            f"postopen_v2_{column}_from_open_rel",
+            safe_divide(values - first, first.abs()),
+        )
+        for window in windows:
+            lagged = shifted(column, window)
+            diff = values - lagged
+            add_column(f"postopen_v2_{column}_diff_{window}m", diff)
+            add_column(
+                f"postopen_v2_{column}_rel_{window}m",
+                safe_divide(diff, lagged.abs()),
+            )
+
+    if has_column("postopen_v2_ask_volume_1_diff_1m") and "volume_diff_1t" in out.columns:
+        add_column(
+            "postopen_v2_ask1_queue_replenish_vs_trade_1m",
+            safe_divide(
+                column_series("postopen_v2_ask_volume_1_diff_1m"),
+                _column_values(out, "volume_diff_1t").abs(),
+            ),
+        )
+    if has_column("postopen_v2_bid_volume_1_diff_1m") and "volume_diff_1t" in out.columns:
+        add_column(
+            "postopen_v2_bid1_queue_replenish_vs_trade_1m",
+            safe_divide(
+                column_series("postopen_v2_bid_volume_1_diff_1m"),
+                _column_values(out, "volume_diff_1t").abs(),
+            ),
+        )
+    if has_column("postopen_v2_spread_bps_diff_1m"):
+        add_column(
+            "postopen_v2_spread_compression_1m",
+            -column_series("postopen_v2_spread_bps_diff_1m"),
+        )
+    if not new_columns:
+        return out
+    return pd.concat([out, pd.DataFrame(new_columns, index=out.index)], axis=1)
+
+
 def build_preopen_features(
     ticks: pd.DataFrame,
     *,

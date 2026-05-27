@@ -9,9 +9,7 @@ from opening_strength_fit.config import load_toml
 
 
 JOB_SUFFIXES = (
-    ("_sharded_reader_job.yaml", "sharded_reader"),
     ("_sharded_job.yaml", "sharded_training"),
-    ("_reader_job.yaml", "reader"),
     ("_job.yaml", "training"),
 )
 ACTIVE_STATUSES = {"queued", "running"}
@@ -91,12 +89,8 @@ def has_training_job(kinds: set[str]) -> bool:
     return bool({"training", "sharded_training"} & kinds)
 
 
-def has_reader_job(kinds: set[str]) -> bool:
-    return bool({"reader", "sharded_reader"} & kinds)
-
-
 def is_artifact_run(record: RunRecord) -> bool:
-    return record.kind == "cache"
+    return record.kind in {"cache", "feature_audit"}
 
 
 def is_exploration_run(record: RunRecord) -> bool:
@@ -155,9 +149,7 @@ def main() -> None:
         job_kinds = jobs.get(run_id, set())
         is_cache = is_artifact_run(record)
         is_exploration = is_exploration_run(record)
-        has_jobs = has_training_job(job_kinds) and (
-            is_cache or is_exploration or has_reader_job(job_kinds)
-        )
+        has_jobs = has_training_job(job_kinds)
         has_metrics = run_id in metrics
         is_running = record.status in ACTIVE_STATUSES
         is_completed = record.status == COMPLETED_STATUS
@@ -165,7 +157,7 @@ def main() -> None:
             if is_cache:
                 errors.append(f"{run_id}: missing materialize job yaml")
             else:
-                errors.append(f"{run_id}: missing training or reader job yaml")
+                errors.append(f"{run_id}: missing training job yaml")
 
         if record.status not in KNOWN_STATUSES:
             warnings.append(
@@ -185,7 +177,7 @@ def main() -> None:
         if not has_metrics and is_completed and not (is_cache or is_exploration):
             errors.append(f"{run_id}: missing metrics csv")
         if has_metrics and is_cache:
-            errors.append(f"{run_id}: cache run should not have metrics csv")
+            errors.append(f"{run_id}: artifact run should not have metrics csv")
 
         records.append(
             {

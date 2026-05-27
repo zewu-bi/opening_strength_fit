@@ -5,7 +5,6 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 import shutil
-import subprocess
 
 import pandas as pd
 
@@ -13,10 +12,10 @@ import _bootstrap  # noqa: F401
 from opening_strength_fit.config import load_toml
 from opening_strength_fit.k8s import DEFAULT_IMAGE, RunSpec
 from opening_strength_fit.k8s import command_succeeds, delete_temp_pod, ensure_temp_pod
-from opening_strength_fit.k8s import load_run_spec, manifest_job_name, run_command
+from opening_strength_fit.k8s import load_run_spec, run_command
+from opening_strength_fit.training import _metrics_by_year_from_windows
 
 
-METRICS_FILES = ("metrics_by_year.csv", "metrics_by_month.csv")
 METRICS_SUFFIX = "_metrics_by_year.csv"
 
 
@@ -42,7 +41,6 @@ def ad_hoc_run_spec(label: str, pvc_dir: str, namespace: str) -> RunSpec:
         image=DEFAULT_IMAGE,
         test_start_year=0,
         test_end_year=0,
-        combine_manifest=None,
     )
 
 
@@ -62,44 +60,6 @@ def validate_specs(specs: list[RunSpec]) -> None:
                 "All synced runs must share namespace, pvc, mount_path, "
                 "image_pull_secret, and helper image."
             )
-
-
-def run_combine_job(hfcli: str, spec: RunSpec, timeout: str, dry_run: bool) -> None:
-    if not spec.combine_manifest:
-        return
-    job_name = manifest_job_name(spec.combine_manifest)
-    delete_command = [
-        hfcli,
-        "kubectl",
-        "delete",
-        "job",
-        job_name,
-        "-n",
-        spec.namespace,
-        "--ignore-not-found",
-    ]
-    apply_command = [hfcli, "kubectl", "apply", "-f", spec.combine_manifest]
-    wait_command = [
-        hfcli,
-        "kubectl",
-        "wait",
-        "--for=condition=complete",
-        f"job/{job_name}",
-        "-n",
-        spec.namespace,
-        f"--timeout={timeout}",
-    ]
-    print("combine_job:")
-    print(f"  run_id: {spec.run_id}")
-    print(f"  manifest: {spec.combine_manifest}")
-    if dry_run:
-        print(f"  delete: {' '.join(delete_command)}")
-        print(f"  apply: {' '.join(apply_command)}")
-        print(f"  wait: {' '.join(wait_command)}")
-        return
-    run_command(delete_command)
-    run_command(apply_command)
-    run_command(wait_command)
 
 
 def remote_file_exists(
@@ -147,6 +107,124 @@ def fetch_binary_file(
         run_command(command, stdout=file)
 
 
+def fetch_remote_file_if_exists(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    remote_path: str,
+    local_path: Path,
+) -> bool:
+    if not remote_file_exists(hfcli, spec.namespace, pod_name, remote_path):
+        return False
+    print(f"fetching {remote_path} -> {local_path}")
+    fetch_binary_file(hfcli, spec.namespace, pod_name, remote_path, local_path)
+    return True
+
+
+def pull_root_metrics(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    output_dir: Path,
+) -> list[Path]:
+    pulled: list[Path] = []
+    year_path = output_dir / f"{spec.run_id}_metrics_by_year.csv"
+    if not fetch_remote_file_if_exists(
+        hfcli,
+        spec,
+        pod_name,
+        f"{spec.pvc_dir}/metrics_by_year.csv",
+        year_path,
+    ):
+        return pulled
+    pulled.append(year_path)
+    month_path = output_dir / f"{spec.run_id}_metrics_by_month.csv"
+    if fetch_remote_file_if_exists(
+        hfcli,
+        spec,
+        pod_name,
+        f"{spec.pvc_dir}/metrics_by_month.csv",
+        month_path,
+    ):
+        pulled.append(month_path)
+    return pulled
+
+
+def combine_metric_frames(
+    frames: list[pd.DataFrame],
+    *,
+    monthly: bool,
+    run_id: str,
+    output_dir: Path,
+) -> list[Path]:
+    if not frames:
+        raise SystemExit(f"{run_id}: no shard metric CSVs found")
+    pulled: list[Path] = []
+    metrics = pd.concat(frames, ignore_index=True)
+    if monthly:
+        sort_columns = [
+            column for column in ("test_year", "test_month") if column in metrics.columns
+        ]
+        if sort_columns:
+            metrics = metrics.sort_values(sort_columns)
+        month_path = output_dir / f"{run_id}_metrics_by_month.csv"
+        metrics.to_csv(month_path, index=False)
+        pulled.append(month_path)
+        metrics = _metrics_by_year_from_windows(metrics)
+    elif "test_year" in metrics.columns:
+        metrics = metrics.sort_values("test_year")
+    year_path = output_dir / f"{run_id}_metrics_by_year.csv"
+    metrics.to_csv(year_path, index=False)
+    return [year_path, *pulled]
+
+
+def pull_shard_metrics(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    output_dir: Path,
+) -> list[Path]:
+    raw_dir = output_dir / spec.run_id / "raw_metrics"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    frames: list[pd.DataFrame] = []
+    missing: list[str] = []
+    if spec.test_start_month and spec.test_end_month:
+        for month in month_periods(spec.test_start_month, spec.test_end_month):
+            remote_path = f"{spec.pvc_dir}/month_{month}/metrics_by_year.csv"
+            local_path = raw_dir / f"metrics_by_year_{month}.csv"
+            if fetch_remote_file_if_exists(hfcli, spec, pod_name, remote_path, local_path):
+                frames.append(pd.read_csv(local_path))
+            else:
+                missing.append(month)
+        if missing:
+            raise SystemExit(f"{spec.run_id}: missing shard metrics for months {missing}")
+        return combine_metric_frames(
+            frames,
+            monthly=True,
+            run_id=spec.run_id,
+            output_dir=output_dir,
+        )
+    if spec.test_start_year > 0 and spec.test_end_year > 0:
+        for year in range(spec.test_start_year, spec.test_end_year + 1):
+            remote_path = f"{spec.pvc_dir}/year_{year}/metrics_by_year.csv"
+            local_path = raw_dir / f"metrics_by_year_{year}.csv"
+            if fetch_remote_file_if_exists(hfcli, spec, pod_name, remote_path, local_path):
+                frames.append(pd.read_csv(local_path))
+            else:
+                missing.append(str(year))
+        if missing:
+            raise SystemExit(f"{spec.run_id}: missing shard metrics for years {missing}")
+        return combine_metric_frames(
+            frames,
+            monthly=False,
+            run_id=spec.run_id,
+            output_dir=output_dir,
+        )
+    raise SystemExit(
+        f"{spec.run_id}: no root metrics found and config has no shard date range"
+    )
+
+
 def pull_metrics(
     hfcli: str,
     spec: RunSpec,
@@ -154,31 +232,10 @@ def pull_metrics(
     output_dir: Path,
 ) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    pulled: list[Path] = []
-    for name in METRICS_FILES:
-        output_path = output_dir / f"{spec.run_id}_{name}"
-        command = [
-            hfcli,
-            "kubectl",
-            "exec",
-            "-n",
-            spec.namespace,
-            pod_name,
-            "--",
-            "sh",
-            "-lc",
-            f"test -f {spec.pvc_dir}/{name} && cat {spec.pvc_dir}/{name}",
-        ]
-        try:
-            with output_path.open("wb") as file:
-                run_command(command, stdout=file)
-            pulled.append(output_path)
-        except subprocess.CalledProcessError:
-            if output_path.exists():
-                output_path.unlink()
-            if name == "metrics_by_year.csv":
-                raise
-    return pulled
+    pulled = pull_root_metrics(hfcli, spec, pod_name, output_dir)
+    if pulled:
+        return pulled
+    return pull_shard_metrics(hfcli, spec, pod_name, output_dir)
 
 
 def summarize_predictions(path: Path) -> dict[str, object]:
@@ -352,7 +409,6 @@ def main() -> None:
     parser.add_argument("--predictions", action="store_true", help="Fetch prediction parquet.")
     parser.add_argument("--record", action="store_true", help="Archive fetched metrics.")
     parser.add_argument("--all", action="store_true", help="Fetch metrics, fetch predictions, and archive metrics.")
-    parser.add_argument("--skip-combine", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -369,10 +425,6 @@ def main() -> None:
     fetch_metrics_flag = args.all or args.metrics or no_action
     fetch_predictions_flag = args.all or args.predictions or no_action
     record_flag = args.all or args.record or no_action
-
-    if not args.skip_combine and (fetch_metrics_flag or fetch_predictions_flag):
-        for spec in specs:
-            run_combine_job(args.hfcli, spec, args.timeout, args.dry_run)
 
     metrics_dir = Path(args.metrics_dir)
     predictions_root = Path(args.predictions_root)

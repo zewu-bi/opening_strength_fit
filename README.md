@@ -105,8 +105,7 @@ python scripts/render_k8s_job.py \
   --image registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG}
 
 hfcli kubectl --cluster research apply -f experiments/jobs/<run_id>_job.yaml
-hfcli kubectl --cluster research logs -f job/opening-strength-<run-slug> -n bizewu
-hfcli kubectl --cluster research apply -f experiments/jobs/<run_id>_reader_job.yaml
+hfcli kubectl --cluster research wait --for=condition=complete job/opening-strength-<run-slug> -n bizewu --timeout=24h
 
 python scripts/sync_experiment_artifacts.py --config experiments/runs/<run_id>.toml --all
 python scripts/audit_experiments.py

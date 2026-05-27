@@ -25,16 +25,10 @@ class RunSpec:
     test_end_year: int
     test_start_month: str = ""
     test_end_month: str = ""
-    combine_manifest: str | None = None
 
     @property
     def job_name(self) -> str:
         return slug(f"opening-strength-{self.run_id}")
-
-
-def sharded_reader_manifest(run_id_value: str) -> str | None:
-    path = Path("experiments/jobs") / f"{run_id_value}_sharded_reader_job.yaml"
-    return str(path) if path.exists() else None
 
 
 def _year_from_date(value: object, default: int) -> int:
@@ -87,7 +81,6 @@ def load_run_spec(path: str | Path) -> RunSpec:
         test_end_year=end_year,
         test_start_month=test_start_month,
         test_end_month=test_end_month,
-        combine_manifest=sharded_reader_manifest(run_id_value),
     )
 
 
@@ -111,14 +104,6 @@ def run_command(
 def command_succeeds(command: list[str]) -> bool:
     result = subprocess.run(command, check=False, capture_output=True, text=True)
     return result.returncode == 0
-
-
-def manifest_job_name(path: str) -> str:
-    for line in Path(path).read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if stripped.startswith("name:"):
-            return stripped.split(":", 1)[1].strip()
-    raise SystemExit(f"could not find metadata.name in {path}")
 
 
 def ensure_temp_pod(

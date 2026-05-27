@@ -16,7 +16,7 @@
 - `dataset.py`: raw tick loading and labeled feature frame construction.
 - `universe.py`: A-share symbol filtering and symbol-list loading.
 - `sampling.py`: decision-point sampling helpers.
-- `features.py`: preopen, orderbook, post-open decision, trade-flow, and momentum features.
+- `features.py`: preopen, orderbook, post-open v1/v2 decision, trade-flow, and momentum features.
 - `labels.py`: entry-delay buy price, sell VWAP, label, and replay context columns.
 - `candidates.py`: visible-information opening candidate filters.
 - `label_audit.py`: label validity and distribution summaries.
@@ -32,9 +32,10 @@
 ## Commands: `scripts/`
 
 - `run_experiment.py`: train/evaluate a configured experiment.
+- `audit_feature_dependence.py`: run grouped feature importance, permutation, and drop-retrain ablation audits.
 - `materialize_labeled_caches.py`: build reusable labeled PVC caches.
-- `render_k8s_job.py`: render training, cache, reader, and sharded K8s manifests.
-- `sync_experiment_artifacts.py`: pull metrics/predictions from PVC and archive lightweight metrics.
+- `render_k8s_job.py`: render training, cache, and sharded K8s manifests.
+- `sync_experiment_artifacts.py`: pull metrics/predictions from PVC, combine shard metrics, and archive lightweight metrics.
 - `audit_experiments.py`: check config/job/metrics alignment.
 - `check_workflow_coverage.py`: check script/module/doc/job coverage.
 - `probe_clickhouse_data.py`: inspect ClickHouse schema and opening-window coverage.
@@ -59,7 +60,8 @@
 
 - `experiments/runs/*.toml`: run configs. `run.id` must match the filename.
 - `experiments/jobs/*.yaml`: rendered K8s jobs. Training jobs use
-  `scripts/run_experiment.py`; cache jobs use `scripts/materialize_labeled_caches.py`.
+  `scripts/run_experiment.py`; cache jobs use `scripts/materialize_labeled_caches.py`;
+  feature-audit jobs use `scripts/audit_feature_dependence.py`.
 - `experiments/results/metrics/`: tracked metrics CSV evidence.
 - `experiments/results/backtests/`: tracked replay and horizon-decay summaries.
 

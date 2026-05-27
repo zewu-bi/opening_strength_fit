@@ -51,17 +51,19 @@ Every formal experiment has:
 ```text
 experiments/runs/<run_id>.toml
 experiments/jobs/<run_id>_job.yaml
-experiments/jobs/<run_id>_reader_job.yaml
 experiments/results/metrics/<run_id>_metrics_by_year.csv
 ```
 
 Exceptions:
 
 - `[run].kind = "cache"` materializes reusable PVC cache files and has no metrics.
-- `[run].kind = "exploration"` may be active/running without reader or metrics until
-  it graduates into a formal archived experiment.
+- `[run].kind = "feature_audit"` runs grouped importance, permutation, and
+  drop-retrain ablations and writes audit CSVs under the run output dir.
+- `[run].kind = "exploration"` may be active/running without metrics until it
+  graduates into a formal archived experiment.
 - Post-open signal experiments use the normal `scripts/run_experiment.py` path with
-  `[features].include_postopen_decision = true`.
+  `[features].include_postopen_decision = true`; richer v2 feature experiments add
+  `[features].include_postopen_v2 = true`.
 
 PVC convention:
 
@@ -88,15 +90,7 @@ python scripts/render_k8s_job.py \
 hfcli kubectl --cluster research apply --dry-run=client -f experiments/jobs/<run_id>_job.yaml
 hfcli kubectl --cluster research delete job opening-strength-<run-slug> --ignore-not-found -n bizewu
 hfcli kubectl --cluster research apply -f experiments/jobs/<run_id>_job.yaml
-hfcli kubectl --cluster research logs -f job/opening-strength-<run-slug> -n bizewu
-```
-
-For cache materialization:
-
-```bash
-python scripts/render_k8s_job.py \
-  --config experiments/runs/materialize_opening_2013_2024_delay1_cache.toml \
-  --image registry.corp.highfortfunds.com/bizewu/opening-strength-fit:<tag>
+hfcli kubectl --cluster research wait --for=condition=complete job/opening-strength-<run-slug> -n bizewu --timeout=24h
 ```
 
 CPU LightGBM + PVC labeled cache is the default path. GPU is used only when
@@ -104,13 +98,10 @@ CPU LightGBM + PVC labeled cache is the default path. GPU is used only when
 
 ## 5. Sync Artifacts
 
-Reader, metrics pull, predictions pull, and lightweight archive now use one
-interface:
+Metrics pull, predictions pull, shard metric combination, and lightweight archive
+use one interface:
 
 ```bash
-hfcli kubectl --cluster research apply -f experiments/jobs/<run_id>_reader_job.yaml
-hfcli kubectl --cluster research wait --for=condition=complete job/opening-strength-read-<run-slug> -n bizewu --timeout=300s
-
 python scripts/sync_experiment_artifacts.py \
   --config experiments/runs/<run_id>.toml \
   --all
@@ -158,6 +149,14 @@ python scripts/run_alpha_horizon_decay.py \
   --clickhouse-close-labels \
   --allow-missing-horizons \
   --output-root output/reports/opening_alpha_horizon_decay_delay2_clickhouse_point_0930_selected
+```
+
+Feature dependence audit:
+
+```bash
+python scripts/audit_feature_dependence.py \
+  --config experiments/runs/lgbm_delay2_feature_dependence_v1.toml \
+  --output-dir output/local/lgbm_delay2_feature_dependence_v1
 ```
 
 ## 7. Troubleshooting
