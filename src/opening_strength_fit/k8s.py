@@ -27,6 +27,7 @@ class RunSpec:
     test_end_year: int
     test_start_month: str = ""
     test_end_month: str = ""
+    kind: str = "experiment"
 
     @property
     def job_name(self) -> str:
@@ -83,6 +84,7 @@ def load_run_spec(path: str | Path) -> RunSpec:
         test_end_year=end_year,
         test_start_month=test_start_month,
         test_end_month=test_end_month,
+        kind=str(config_value(config, "run", "kind", "experiment")),
     )
 
 

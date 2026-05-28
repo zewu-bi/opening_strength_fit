@@ -10,7 +10,8 @@
 - `09:30-09:40` 是项目主窗口；当前优化子域是实验后确定的 `09:31-09:40`。
 - raw-label post-open baseline 继续作为 alpha 主干。
 - clean target / risk-shrunk target 暂停作为主 alpha target，只保留为诊断和对照。
-- 下一轮做 `baseline alpha + learned risk layer / reranker`。
+- learned risk layer v1 已完成：两层打分方向有效，但 `bad_tail` v1 太像 next-close selector。
+- 下一步优先做 conditional reversal-risk，只扣短期强势候选里容易回吐的部分。
 - 手工 `next_flip_guard_10t` 和 dirty-risk penalty 是 teacher / baseline，不是最终规则。
 
 核心对照：
@@ -20,14 +21,16 @@
 | baseline raw alpha | +22.21 | -32.21 | 0 / 10 |
 | baseline + manual `risk_penalty_075` | +10.91 | +1.99 | 6 / 10 |
 | baseline + hard `next_flip_guard_10t` | +6.77 | +11.88 | 9 / 10 |
+| baseline + learned `guard_teacher_penalty_050` | +9.05 | +3.28 | 6 / 10 |
+| baseline + learned `bad_tail_penalty_025` | +8.13 | +21.05 | 10 / 10 |
 | `guard_shrunk_target_050_v1` | +14.55 | -20.98 | 0 / 10 |
 | `guard_shrunk_target_075_v1` | +6.21 | +0.07 | 5 / 10 |
 | `guard_risk_shrunk_target_100_v1` | +18.80 | -16.87 | 1 / 10 |
 
 定位方式：
 
-- 当前路线和解释：看 `2026-05-28 Clean Target and Risk Sweep` 以及
-  `2026-05-28 Next Direction: Learned Risk Layer`。
+- 当前路线和解释：看 `2026-05-28 Clean Target and Risk Sweep`、
+  `2026-05-28 Learned Risk Layer v1` 和 `2026-05-28 Next Direction: Conditional Risk Layer`。
 - 查某个 run 是否完成：看下面的 `Run 索引`。
 - 查历史演进：从对应日期小节读；越靠近文件底部越旧。
 
@@ -79,6 +82,9 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `build_guard_risk_shrunk_target_100_v1` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_guard_risk_shrunk_target_100_v1_labeled.parquet` |
 | `guard_risk_shrunk_target_100_v1` | exploration | completed | `/mnt/output/opening_strength_fit/guard_risk_shrunk_target_100_v1/` |
 | `score_risk_sweep_guard_shrunk_v1` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_risk_sweep_guard_shrunk_v1/` |
+| `learned_risk_layer_guard_teacher_v1` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/learned_risk_layer_guard_teacher_v1/` |
+| `learned_risk_layer_bad_tail_v1` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/learned_risk_layer_bad_tail_v1/` |
+| `score_learned_risk_sweep_v1` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_learned_risk_sweep_v1/` |
 
 ## Run 索引
 
@@ -126,6 +132,9 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `build_guard_risk_shrunk_target_100_v1` | completed | 生成连续 dirty-risk shrink `target_label` cache：lambda = 1.00。 |
 | `guard_risk_shrunk_target_100_v1` | completed | 连续 risk-shrunk target 训练；short Top100 excess = +18.80 bps，next Top100 excess = -16.87 bps。 |
 | `score_risk_sweep_guard_shrunk_v1` | completed | 对 baseline、guard_shrunk_050、guard_shrunk_075 的 score 做 alpha-rank minus dirty-risk penalty 和 hard-gate sweep。 |
+| `learned_risk_layer_guard_teacher_v1` | completed | 学手工 dirty-risk teacher；group rank IC = 0.9768，说明手工风险形态可被可见特征平滑复现。 |
+| `learned_risk_layer_bad_tail_v1` | completed | 学 short-rank 高且 next-rank 低的 bad-tail risk；group rank IC = 0.1028，learnable 但不强。 |
+| `score_learned_risk_sweep_v1` | completed | baseline `alpha_rank - lambda * learned_risk_rank` sweep；guard teacher 较平衡，bad_tail v1 太像 next-close selector。 |
 
 ## Output 索引
 
@@ -141,6 +150,7 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `output/reports/opening_intraday_lgbm_delay_replays` | LightGBM delay0/1/2 标准 replay，对应 `opening_intraday_lgbm_delay_replays_*` 归档摘要。 |
 | `output/reports/opening_alpha_horizon_decay_delay2_*` | delay2 horizon decay，对应 `opening_alpha_horizon_decay_delay2_*` 归档摘要。 |
 | `output/reports/opening_delay2_signal_baseline` | delay2 保守 baseline 的分钟四曲线，用于当前 feature-strengthening 门槛。 |
+| `output/local/score_learned_risk_sweep_v1` | learned-risk sweep artifact；轻量 summary 归档到 `experiments/results/backtests/score_learned_risk_sweep_v1_summary.csv`。 |
 
 ## 2026-05-26 CPU LightGBM Delay
 
@@ -707,11 +717,12 @@ guard_risk_shrunk:
 
 结论：manual dirty-risk penalty 叠在 baseline score 上，已经能把 next-close 从系统性负值拉到小正，同时 short
 excess 仍保留约 +10 bps；hard gate 更干净但 short 更弱。这个结果不是最终策略，因为 risk 还是手工公式，
-但它强烈支持下一步做 baseline alpha + learned risk layer，而不是继续把 alpha target 洗得越来越保守。
+但它支持下一步优先验证 baseline alpha + learned risk layer；clean target / risk-shrunk target 暂时作为
+诊断和对照，不继续作为主 alpha target 扩大。
 
-## 2026-05-28 Next Direction: Learned Risk Layer
+## 2026-05-28 Learned Risk Layer v1
 
-下一轮实验目标固定为两层：
+本轮按 runbook 在集群完成三步：
 
 ```text
 alpha_model = raw short-label post-open baseline
@@ -719,29 +730,93 @@ risk_model  = learned dirty-risk / next-flip layer
 final_score = alpha_score - lambda * risk_score
 ```
 
-建模原则：
+新增能力：
 
-- alpha 模型继续用 raw short label，目标是把 1-2 分钟信号做强；不把 next-close label 混进 alpha target。
-- risk 模型单独处理“短正长负”的 tail。它可以用 next-close / bad-tail label 作为监督目标，因为它的职责
-  就是风险层；但 inference features 仍只允许 decision point 当时及以前可见的信息。
-- `next_flip_guard_10t` 只作为 teacher、weak label 和 sanity baseline。最终希望 learned risk 比手工 guard
-  更完整，能学到非线性组合和遗漏的风险形态。
+- 新增 `scripts/run_learned_risk_layer.py`，训练只用 decision point 当时及以前可见特征的 risk model。
+- `scripts/run_score_risk_sweep.py` 支持外部 learned-risk predictions，并可对 risk score 做 group rank transform。
+- `scripts/sync_experiment_artifacts.py` 支持 `score_risk_sweep` artifact sync，不再需要临时拉取脚本。
 
-建议实验顺序：
+三个 run：
+
+| run | kind | result artifact |
+| --- | --- | --- |
+| `learned_risk_layer_guard_teacher_v1` | learned_risk_layer | `experiments/results/metrics/learned_risk_layer_guard_teacher_v1_metrics_by_year.csv` |
+| `learned_risk_layer_bad_tail_v1` | learned_risk_layer | `experiments/results/metrics/learned_risk_layer_bad_tail_v1_metrics_by_year.csv` |
+| `score_learned_risk_sweep_v1` | score_risk_sweep | `experiments/results/backtests/score_learned_risk_sweep_v1_summary.csv` |
+
+Risk-model metrics：
+
+| run | target | group rank IC | overall rank IC | note |
+| --- | --- | ---: | ---: | --- |
+| `learned_risk_layer_guard_teacher_v1` | `target_dirty_risk` | 0.9768 | 0.9733 | 几乎完整复现手工 dirty-risk teacher。 |
+| `learned_risk_layer_bad_tail_v1` | `target_bad_tail_risk` | 0.1028 | 0.1014 | learnable，但只是弱到中等强度。 |
+
+`target_bad_tail_risk` 的定义：
+
+```text
+short_rank = rank(label | date, decision_time)
+next_rank  = rank(alpha_return_next_close | date, decision_time)
+bad_tail   = max((short_rank - 0.50) / 0.50, 0)
+           * max((0.50 - next_rank) / 0.50, 0)
+```
+
+`score_learned_risk_sweep_v1` 的关键结果：
+
+| score variant | short Top100 excess bps | next Top100 excess bps | next positive minutes |
+| --- | ---: | ---: | ---: |
+| `alpha_rank` | +22.21 | -32.21 | 0 / 10 |
+| `guard_teacher_penalty_025` | +11.13 | -2.21 | 4 / 10 |
+| `guard_teacher_penalty_050` | +9.05 | +3.28 | 6 / 10 |
+| `guard_teacher_penalty_075` | +8.23 | +6.45 | 8 / 10 |
+| `guard_teacher_penalty_100` | +7.57 | +7.85 | 9 / 10 |
+| `bad_tail_penalty_025` | +8.13 | +21.05 | 10 / 10 |
+| `bad_tail_penalty_050` | +6.00 | +28.74 | 10 / 10 |
+| `bad_tail_penalty_075` | +5.13 | +31.51 | 10 / 10 |
+| `bad_tail_penalty_100` | +4.67 | +34.87 | 10 / 10 |
+
+辅助诊断：
+
+- group Spearman：`alpha_score` vs short label = +0.1360，vs next close = -0.0260。
+- group Spearman：`bad_tail_score` vs short label = +0.0476，vs next close = -0.1080。
+- group Spearman：`alpha_score` vs `bad_tail_score` = +0.4725，说明 dirty-tail risk 和 raw alpha 有明显重叠。
+- baseline Top100 内按 `bad_tail_score` 分 5 桶，最低风险桶 short = +11.62 bps、next = +8.50 bps；
+  最高风险桶 short = +46.15 bps、next = -104.70 bps。这个结果只说明 Top100 里脏尾集中，
+  不能把低风险桶当作完整 Top100 模型比较。
+- 小 lambda 诊断显示 `bad_tail` 只有 0.15 到 0.20 附近可能接近可用 tradeoff；lambda 0.25
+  已经让 next = +21.05 bps、short = +8.13 bps，过于 next-close 化。
+
+结论：
+
+- 两层公式方向有效：`alpha_rank - lambda * learned_risk_rank` 可以把 baseline 的 next tail 拉回。
+- `guard_teacher` 是比较平衡的 learned risk baseline，但它主要是在复现手工规则。
+- `bad_tail` v1 证明有一部分 short-positive / next-negative 成分可被学习，但不能证明“短期强 alpha 能隔夜”。
+  它更像在学哪些开盘后盘口和成交状态对应更好的 next close。
+- 因此下一步不应奖励 B 类“next-close 好”的股票，而应在 A 类短期强势中扣掉更容易回吐的那部分。
+
+## 2026-05-28 Next Direction: Conditional Risk Layer
+
+下一步实验要把 bad-tail 从全样本 next-close selector 改成条件反转风险层：
+
+```text
+candidate = high_alpha or high_short_rank
+risk      = reversal_risk among candidate rows
+final     = alpha_rank - lambda * conditional_risk_rank
+```
+
+建议任务：
 
 | step | run direction | purpose |
 | --- | --- | --- |
-| 1 | `learned_risk_layer_guard_teacher_v1` | 先用手工 guard / dirty-risk 作为 teacher，训练一个只用可见特征的 risk model，验证能否复现并平滑手工规则。 |
-| 2 | `learned_risk_layer_bad_tail_v1` | 在 high-alpha 或 short-positive 样本上，用 next-close underperformance / bad-tail 作为风险标签，学习 guard 之外的回吐形态。 |
-| 3 | `score_learned_risk_sweep_v1` | 对 baseline alpha 做 `alpha_rank - lambda * learned_risk` sweep，并和 manual risk sweep 同表比较。 |
-| 4 | rolling / cross-month validation | 跨月份验证 guard、manual risk 和 learned risk 是否稳定，避免 2022-01 post-hoc。 |
+| 1 | `conditional_bad_tail_risk_v1` | 只在 alpha Top 分位或 short-rank 高分位候选里训练 risk；非候选样本排除或降权。 |
+| 2 | `score_conditional_risk_sweep_v1` | 小 lambda sweep：0.05、0.10、0.15、0.20、0.25；同时看 Top20 / Top50 / Top100 和 two-stage gate。 |
+| 3 | `rolling_conditional_risk_validation_v1` | 跨月验证 dirty tail 和 conditional risk 是否稳定，避免 2022-01 post-hoc。 |
 
-第一轮 gate：
+下一轮 gate：
 
-- baseline short Top100 excess 不能从 +22 bps 直接掉到 +5 bps 以下；优先看是否能保住约 +10 bps 以上。
-- next-close Top100 excess 从 -32 bps 明显收敛，最好接近 0 或转正。
-- Top100 guard-pass count 要显著高于 baseline，但不追求 100/100 的硬 gate 形态。
-- clean target 暂停作为主 alpha target，只保留作对照组，避免与 risk layer 重复惩罚同一类 dirty tail。
+- short Top100 excess 保住约 +10 bps 以上。
+- next-close Top100 excess 从 -32 bps 明显收敛，目标是接近 0 或小正，不追求 next 远大于 short。
+- risk 层只扣“短期强势且容易回吐”的 A 类 dirty tail；B 类 next-close 好不是 final score 的奖励项。
+- learned risk 至少接近 manual risk penalty 的 short/next tradeoff，并在小 lambda 区间更平滑。
 
 ## 2026-05-21 1y Next-Month Baseline
 

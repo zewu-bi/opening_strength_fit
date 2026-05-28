@@ -57,6 +57,7 @@
 - `plot_signal_baseline_panels.py`: render delay2 short/next-close baseline panels.
 - `run_score_tail_guards.py`: sweep visible-information TopN guard rules over an existing score file.
 - `run_score_risk_sweep.py`: sweep alpha-rank minus dirty-risk penalties and hard gates over existing score files.
+- `run_learned_risk_layer.py`: train learned dirty-risk / next-flip risk layers for later score sweeps.
 - `_bootstrap.py`: makes `python scripts/<name>.py` import `src/`.
 
 ## Experiments
@@ -65,7 +66,8 @@
 - `experiments/jobs/*.yaml`: rendered K8s jobs. Training jobs use
   `scripts/run_experiment.py`; feature-audit jobs use
   `scripts/audit_feature_dependence.py`; cache-transform jobs use
-  `scripts/build_target_label_cache.py`; score-risk sweep jobs use
+  `scripts/build_target_label_cache.py`; learned-risk jobs use
+  `scripts/run_learned_risk_layer.py`; score-risk sweep jobs use
   `scripts/run_score_risk_sweep.py`.
 - `experiments/results/metrics/`: tracked metrics CSV evidence.
 - `experiments/results/backtests/`: tracked replay and horizon-decay summaries.

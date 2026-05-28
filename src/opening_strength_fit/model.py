@@ -45,6 +45,7 @@ NON_FEATURE_COLUMNS = {
     "sell_vwap",
     "sell_volume",
     "sell_turnover",
+    "alpha_return_next_close",
     "prediction",
     "sample_weight",
 }

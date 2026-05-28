@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -11,7 +12,9 @@ SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
+from opening_strength_fit.k8s import RunSpec  # noqa: E402
 from sync_experiment_artifacts import combine_metric_frames  # noqa: E402
+from sync_experiment_artifacts import pull_score_risk_artifacts  # noqa: E402
 
 
 def _metric_row(month: str, rows: int, top_return: float) -> dict[str, object]:
@@ -68,6 +71,45 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
         self.assertEqual(monthly["test_month"].tolist(), ["2022-01", "2022-02"])
         self.assertEqual(int(yearly.loc[0, "test_rows"]), 4)
         self.assertAlmostEqual(float(yearly.loc[0, "top_score_mean_return"]), 0.04)
+
+    def test_score_risk_artifacts_are_pulled_to_local_run_dir(self) -> None:
+        spec = RunSpec(
+            run_id="score_learned_risk_sweep_v1",
+            pvc_dir="/mnt/output/opening_strength_fit/score_learned_risk_sweep_v1",
+            namespace="bizewu",
+            pvc="bizewu-private-data",
+            mount_path="/mnt/output",
+            pull_secret="highfort",
+            image="image",
+            test_start_year=0,
+            test_end_year=0,
+            kind="score_risk_sweep",
+        )
+
+        def fake_fetch(_hfcli, _spec, _pod, remote_path, local_path):
+            if remote_path.endswith("clickhouse_next_close_labels.parquet"):
+                return False
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            local_path.write_text("artifact\n", encoding="utf-8")
+            return True
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch(
+                "sync_experiment_artifacts.fetch_remote_file_if_exists",
+                side_effect=fake_fetch,
+            ):
+                paths = pull_score_risk_artifacts(
+                    "hfcli",
+                    spec,
+                    "helper-pod",
+                    Path(directory),
+                )
+            output_dir = Path(directory) / spec.run_id
+
+            self.assertIn(output_dir / "score_risk_summary.csv", paths)
+            self.assertTrue((output_dir / "score_risk_trace.json").exists())
+            self.assertTrue((output_dir / "artifact_fetch_trace.json").exists())
+            self.assertFalse((output_dir / "clickhouse_next_close_labels.parquet").exists())
 
 
 if __name__ == "__main__":

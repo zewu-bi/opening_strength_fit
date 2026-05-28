@@ -17,6 +17,13 @@ from opening_strength_fit.reports import metrics_by_year_from_windows
 
 
 METRICS_SUFFIX = "_metrics_by_year.csv"
+SCORE_RISK_ARTIFACTS = (
+    "score_risk_summary.csv",
+    "score_risk_minute_summary.csv",
+    "score_risk_group_metrics.csv",
+    "score_risk_trace.json",
+    "clickhouse_next_close_labels.parquet",
+)
 
 
 def parse_run(value: str) -> tuple[str, str]:
@@ -41,6 +48,7 @@ def ad_hoc_run_spec(label: str, pvc_dir: str, namespace: str) -> RunSpec:
         image=DEFAULT_IMAGE,
         test_start_year=0,
         test_end_year=0,
+        kind="ad_hoc",
     )
 
 
@@ -119,6 +127,47 @@ def fetch_remote_file_if_exists(
     print(f"fetching {remote_path} -> {local_path}")
     fetch_binary_file(hfcli, spec.namespace, pod_name, remote_path, local_path)
     return True
+
+
+def is_score_risk_sweep(spec: RunSpec) -> bool:
+    return spec.kind == "score_risk_sweep"
+
+
+def pull_score_risk_artifacts(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    output_root: Path,
+) -> list[Path]:
+    output_dir = output_root / spec.run_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+    pulled: list[Path] = []
+    missing: list[str] = []
+    for name in SCORE_RISK_ARTIFACTS:
+        remote_path = f"{spec.pvc_dir}/{name}"
+        local_path = output_dir / name
+        if fetch_remote_file_if_exists(hfcli, spec, pod_name, remote_path, local_path):
+            pulled.append(local_path)
+        else:
+            missing.append(name)
+    if not pulled:
+        raise SystemExit(
+            f"{spec.run_id}: no score-risk artifacts found under {spec.pvc_dir}"
+        )
+    trace = {
+        "fetched_at_utc": datetime.now(UTC).isoformat(),
+        "run_id": spec.run_id,
+        "namespace": spec.namespace,
+        "pvc_dir": spec.pvc_dir,
+        "local_output_dir": str(output_dir),
+        "files": [str(path) for path in pulled],
+        "missing": missing,
+    }
+    (output_dir / "artifact_fetch_trace.json").write_text(
+        json.dumps(trace, indent=2),
+        encoding="utf-8",
+    )
+    return pulled
 
 
 def pull_root_metrics(
@@ -403,10 +452,16 @@ def main() -> None:
     parser.add_argument("--timeout", default="300s")
     parser.add_argument("--metrics-dir", default="output/k8s/metrics")
     parser.add_argument("--predictions-root", default="output/predictions")
+    parser.add_argument("--artifacts-root", default="output/local")
     parser.add_argument("--records-dir", default="experiments/results")
     parser.add_argument("--runs-dir", default="experiments/runs")
     parser.add_argument("--metrics", action="store_true", help="Fetch metrics CSVs.")
     parser.add_argument("--predictions", action="store_true", help="Fetch prediction parquet.")
+    parser.add_argument(
+        "--artifacts",
+        action="store_true",
+        help="Fetch non-standard artifact files, currently score-risk sweep outputs.",
+    )
     parser.add_argument("--record", action="store_true", help="Archive fetched metrics.")
     parser.add_argument("--all", action="store_true", help="Fetch metrics, fetch predictions, and archive metrics.")
     parser.add_argument("--dry-run", action="store_true")
@@ -421,15 +476,19 @@ def main() -> None:
         raise SystemExit("pass at least one --config or --run")
     validate_specs(specs)
 
-    no_action = not (args.metrics or args.predictions or args.record or args.all)
+    no_action = not (
+        args.metrics or args.predictions or args.artifacts or args.record or args.all
+    )
     fetch_metrics_flag = args.all or args.metrics or no_action
     fetch_predictions_flag = args.all or args.predictions or no_action
+    fetch_artifacts_flag = args.all or args.artifacts or no_action
     record_flag = args.all or args.record or no_action
 
     metrics_dir = Path(args.metrics_dir)
     predictions_root = Path(args.predictions_root)
+    artifacts_root = Path(args.artifacts_root)
     records_dir = Path(args.records_dir)
-    needs_pod = fetch_metrics_flag or fetch_predictions_flag
+    needs_pod = fetch_metrics_flag or fetch_predictions_flag or fetch_artifacts_flag
     pod_name = args.pod
     created_temp_pod = False
     if needs_pod and not pod_name:
@@ -447,6 +506,7 @@ def main() -> None:
         print(f"  pod: {pod_name or '<none>'}")
         print(f"  metrics: {fetch_metrics_flag}")
         print(f"  predictions: {fetch_predictions_flag}")
+        print(f"  artifacts: {fetch_artifacts_flag}")
         print(f"  record: {record_flag}")
         for spec in specs:
             print(f"  {spec.run_id}: {spec.pvc_dir}")
@@ -457,13 +517,33 @@ def main() -> None:
         if fetch_metrics_flag:
             print("pulled_metrics:")
             for spec in specs:
+                if is_score_risk_sweep(spec) and not args.metrics:
+                    print(f"  {spec.run_id}: skipped metrics for score_risk_sweep")
+                    continue
                 paths = pull_metrics(args.hfcli, spec, pod_name, metrics_dir)
                 print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
         if fetch_predictions_flag:
             print("pulled_predictions:")
             for spec in specs:
+                if is_score_risk_sweep(spec) and not args.predictions:
+                    print(f"  {spec.run_id}: skipped predictions for score_risk_sweep")
+                    continue
                 path = fetch_predictions(args.hfcli, spec, pod_name, predictions_root)
                 print(f"  {spec.run_id}: {path}")
+        if fetch_artifacts_flag:
+            print("pulled_artifacts:")
+            for spec in specs:
+                if not is_score_risk_sweep(spec):
+                    if args.artifacts:
+                        print(f"  {spec.run_id}: no artifact sync configured")
+                    continue
+                paths = pull_score_risk_artifacts(
+                    args.hfcli,
+                    spec,
+                    pod_name,
+                    artifacts_root,
+                )
+                print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
     finally:
         if created_temp_pod:
             delete_temp_pod(args.hfcli, specs[0].namespace, pod_name)
@@ -477,6 +557,8 @@ def main() -> None:
                 print(f"  {spec.run_id}: {path}")
                 if status and status != "completed":
                     print(f"  {spec.run_id}: config status is {status!r}; confirm before final archive")
+            elif is_score_risk_sweep(spec) and not args.metrics:
+                print(f"  {spec.run_id}: no metrics to record for score_risk_sweep")
             else:
                 print(f"  {spec.run_id}: missing {metrics_dir / f'{spec.run_id}{METRICS_SUFFIX}'}")
 

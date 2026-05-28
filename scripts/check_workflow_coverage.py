@@ -13,6 +13,7 @@ K8S_JOB_ENTRYPOINTS = (
     "scripts/run_experiment.py",
     "scripts/audit_feature_dependence.py",
     "scripts/build_target_label_cache.py",
+    "scripts/run_learned_risk_layer.py",
     "scripts/run_score_risk_sweep.py",
 )
 REQUIRED_DIRS = (

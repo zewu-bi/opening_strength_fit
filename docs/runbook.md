@@ -59,6 +59,8 @@ experiments/results/metrics/<run_id>_metrics_by_year.csv
   audit CSV 写到 run output dir。
 - `[run].kind = "cache_transform"` 或 `"target_cache"`：运行 target-label cache 构建，
   output 通常是 `/mnt/output/opening_strength_fit/cache/*.parquet`。
+- `[run].kind = "learned_risk_layer"`：训练 learned dirty-risk / next-flip risk model，
+  输出 risk predictions，供后续 score-risk sweep 读取。
 - `[run].kind = "score_risk_sweep"`：对已有 prediction 做 score/risk penalty 或 hard gate 扫描，
   不训练新模型。
 - `[run].kind = "exploration"`：可以先保持 active/running，不要求立刻有 metrics；确认后再归档成正式实验。
@@ -114,6 +116,15 @@ python scripts/check_workflow_coverage.py
 output/k8s/metrics/<run_id>_metrics_by_year.csv
 output/predictions/<run_id>/predictions_all.parquet
 experiments/results/metrics/<run_id>_metrics_by_year.csv
+```
+
+`score_risk_sweep` run 没有标准 metrics/predictions；`--all` 会改为拉取 sweep artifact：
+
+```text
+output/local/<run_id>/score_risk_summary.csv
+output/local/<run_id>/score_risk_minute_summary.csv
+output/local/<run_id>/score_risk_group_metrics.csv
+output/local/<run_id>/score_risk_trace.json
 ```
 
 ## 6. 分析命令

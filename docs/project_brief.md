@@ -60,7 +60,12 @@ label      = sell_vwap / buy_price - 1 - fee_bps / 10000
 - 可见信息 guard 能显著改善 next tail，说明当前时点已经能看到一部分回吐风险形态。
 - sample weight、显式 guard feature、硬 feature core 都没有自然把 Top100 推到干净池子里。
 - clean target 能把 guard 信息压进模型，但 penalty 越强 short alpha 掉得越多；它现在更适合作诊断和对照。
-- 下一轮主线是 `baseline raw short-alpha + learned risk layer / reranker`，而不是继续把 alpha target 洗得更保守。
+- learned risk layer v1 证明两层打分方向可行：`guard_teacher` 能复现手工风险，`bad_tail` 能学到一部分
+  short-positive / next-negative 成分。
+- 但 `bad_tail` v1 不是可直接部署的 overnight-alpha 证据。它太像 next-close selector，强扣之后
+  next 远大于 short，说明它混入了“哪些开盘状态第二天收盘更好”的 B 成分。
+- 下一步要把 risk 重新定义为 conditional reversal-risk：只在短期强势候选里学习哪些更容易回吐，
+  不是奖励纯 next-close 好的股票。
 
 当前工作分解：
 
@@ -108,7 +113,7 @@ final_score = alpha_score - lambda * risk_score
 | hard `next_flip_guard_10t` | +6.77 | +11.88 | 9 / 10 |
 
 这说明 risk penalty 已经能把 next 从系统性负值拉到接近 0 或小正，同时保留一部分 short alpha。
-手工公式不是最终策略，但它是下一轮 learned risk layer 的 teacher / baseline。
+手工公式不是最终策略，但它仍是 learned risk layer 的 teacher / baseline。
 
 ### Clean Target
 
@@ -150,29 +155,59 @@ target_label = label - lambda * dirty_risk * max(label - group_median, 0)
 结论：连续 risk target 比二元 clean target 温和，能保住 short alpha，但没有足够改变 Top100 风险结构。
 它更像 target 正则，不像完整风险层。
 
-## 下一轮实验
+### Learned Risk Layer v1
 
-下一轮目标是让 alpha 模型继续寻找短周期强势，让 risk 模型单独学习哪些强势容易隔夜回吐。
+第一轮 learned-risk 三个 run 已按 runbook 上集群跑完：
+
+| run | target / score | key result |
+| --- | --- | --- |
+| `learned_risk_layer_guard_teacher_v1` | 学手工 dirty-risk teacher | group rank IC = 0.9768，几乎完整复现手工规则。 |
+| `learned_risk_layer_bad_tail_v1` | 学 `short_rank` 高且 `next_rank` 低的 bad tail | group rank IC = 0.1028，能学到但强度不高。 |
+| `score_learned_risk_sweep_v1` | `alpha_rank - lambda * learned_risk_rank` | risk penalty 能把 baseline next tail 从 -32.21 bps 拉回。 |
+
+`score_learned_risk_sweep_v1` 的关键 Top100 excess：
+
+| score | short bps | next bps | next positive minutes |
+| --- | ---: | ---: | ---: |
+| baseline `alpha_rank` | +22.21 | -32.21 | 0 / 10 |
+| learned `guard_teacher`, lambda 0.50 | +9.05 | +3.28 | 6 / 10 |
+| learned `guard_teacher`, lambda 1.00 | +7.57 | +7.85 | 9 / 10 |
+| learned `bad_tail`, lambda 0.25 | +8.13 | +21.05 | 10 / 10 |
+| learned `bad_tail`, lambda 1.00 | +4.67 | +34.87 | 10 / 10 |
+
+解读：
+
+- `guard_teacher` 是平衡但保守的风险层；它证明手工 guard 可以被模型平滑复现，但没有新增信息。
+- `bad_tail` 能识别 dirty tail，但当前标签太靠近 next-close 选择器。lambda 稍大就变成低 short、高 next，
+  不像“保留可隔夜的短期特征”。
+- baseline Top100 内最高 `bad_tail` 桶的确是最脏部分，short 很强但 next 很差；最低 `bad_tail` 桶更干净，
+  但它只是 Top100 内的一个窄切片，不能直接和完整 Top100 主模型比较。
+- 结论不是“短期强 alpha 能自然隔夜”，而是“短期强势里有可见的回吐风险，需要作为条件风险扣掉”。
+
+## 下一步任务
+
+下一步目标是让 alpha 模型继续寻找短周期强势，让 risk 模型只惩罚强势候选里的回吐概率。
+这不是永久排除后续继续改进 alpha target，而是先把 risk layer 的职责定义清楚。
 
 | step | run direction | purpose |
 | --- | --- | --- |
-| 1 | `learned_risk_layer_guard_teacher_v1` | 用手工 guard / dirty-risk 当 teacher，训练只用可见信息的 risk model，确认模型能复现并平滑手工规则。 |
-| 2 | `learned_risk_layer_bad_tail_v1` | 在 high-alpha 或 short-positive 样本上，用 next-close underperformance / bad-tail 做风险标签，学习 guard 之外的回吐形态。 |
-| 3 | `score_learned_risk_sweep_v1` | 对 baseline alpha 做 `alpha_rank - lambda * learned_risk` sweep，和 manual risk sweep 同表比较。 |
-| 4 | rolling validation | 跨月份验证 guard、manual risk、learned risk 是否稳定，避免 2022-01 post-hoc。 |
+| 1 | `conditional_bad_tail_risk_v1` | 只在 high-alpha 或 high-short 候选里定义 reversal risk，非候选样本排除或降权，避免训练成纯 next-close selector。 |
+| 2 | `score_conditional_risk_sweep_v1` | 做小 lambda sweep，例如 0.05、0.10、0.15、0.20、0.25，同时看 Top20 / Top50 / Top100 和两阶段 gate。 |
+| 3 | `rolling_conditional_risk_validation_v1` | 跨月验证 dirty tail 和 conditional risk 是否稳定，避免只解释 2022-01。 |
 
-第一轮 gate：
+下一轮 gate：
 
 - short Top100 excess 不要从 +22 bps 直接掉到 +5 bps 以下，优先保住约 +10 bps 以上。
-- next-close Top100 excess 从 -32 bps 明显收敛，最好接近 0 或转正。
-- Top100 guard-pass count 显著高于 baseline，但不追求 hard gate 式 100/100。
-- learned risk 至少接近 manual risk penalty 的 short/next tradeoff，并争取更平滑、更完整。
+- next-close Top100 excess 从 -32 bps 明显收敛，目标是接近 0 或小正，而不是 next 远大于 short。
+- risk 层只扣“短期强势且容易回吐”的 A 类 dirty tail；纯 next-close 更好的 B 类不作为额外奖励。
+- learned risk 至少接近 manual risk penalty 的 short/next tradeoff，并在小 lambda 区间更平滑。
 
 ## 建模边界
 
 当前不做：
 
 - 不把 next-close label 混进 alpha model。next-close 可以监督 risk layer，因为 risk layer 的职责就是识别回吐风险。
+- 不把 bad-tail risk 当作 next-close reward；final score 的被减数必须是 conditional reversal-risk。
 - 不优化 fee/slippage、多档容量、同股冷却或 T+1 overlay。
 - 不围绕特殊 `09:30` opening snapshot 做主优化。
 - 不继续叠加 clean target 和 risk penalty，避免重复惩罚同一类 dirty tail。
