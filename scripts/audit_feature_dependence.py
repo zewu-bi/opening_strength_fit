@@ -231,6 +231,22 @@ def _final_estimator(model):
     return model.pipeline.steps[-1][1]
 
 
+def _estimator_feature_names(model) -> list[str]:
+    imputer = model.pipeline.named_steps.get("imputer")
+    if imputer is not None and hasattr(imputer, "get_feature_names_out"):
+        try:
+            return [str(name) for name in imputer.get_feature_names_out(model.features)]
+        except Exception:
+            pass
+    return list(model.features)
+
+
+def _indexed_value(values, index: int) -> float:
+    if values is None or index >= len(values):
+        return np.nan
+    return float(values[index])
+
+
 def _importance_rows(
     *,
     model,
@@ -238,6 +254,7 @@ def _importance_rows(
     groups: list[FeatureGroup],
 ) -> list[dict[str, object]]:
     estimator = _final_estimator(model)
+    features = _estimator_feature_names(model)
     rows: list[dict[str, object]] = []
     split_importance = getattr(estimator, "feature_importances_", None)
     gain_importance = None
@@ -249,26 +266,14 @@ def _importance_rows(
             gain_importance = None
     coefficients = getattr(estimator, "coef_", None)
 
-    for index, feature in enumerate(model.features):
+    for index, feature in enumerate(features):
         row = {
             "split": split_label,
             "feature": feature,
             "group": _feature_group_name(feature, groups),
-            "importance_split": (
-                float(split_importance[index])
-                if split_importance is not None
-                else np.nan
-            ),
-            "importance_gain": (
-                float(gain_importance[index])
-                if gain_importance is not None
-                else np.nan
-            ),
-            "coefficient": (
-                float(coefficients[index])
-                if coefficients is not None
-                else np.nan
-            ),
+            "importance_split": _indexed_value(split_importance, index),
+            "importance_gain": _indexed_value(gain_importance, index),
+            "coefficient": _indexed_value(coefficients, index),
         }
         row["abs_coefficient"] = (
             abs(row["coefficient"]) if not pd.isna(row["coefficient"]) else np.nan

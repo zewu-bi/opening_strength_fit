@@ -25,12 +25,25 @@ microstructure proxy，不是 A 股 T+1 下的可交易收益。当前阶段只�
 
 - opening high-frequency proxy signal 存在，且在 2022-01 单月上有稳定横截面排序能力。
 - 当前阶段唯一主目标是把 opening signal 做强；交易约束、容量扩展和日频 overlay 暂不重要。
+- mentor 反馈后，主线更准确地表述为：先把 short-horizon label / target 做强，尤其是排除特殊
+  `09:30` 后的 `09:31-09:40` post-open decision points；特征裁剪、执行 replay、tick-window v3
+  都是服务于这个目标的辅助项。
 - 主评估改为 Rank IC 和 Top100 选股收益；Top20 不再作为主评估。
 - 容量只保留 ask1 口径；多档 sweep、fee/slippage、同股冷却等不进入当前实验目标。
 - 特征重点转向开盘后的盘口信息和 ask/bid 档位。集合竞价会随时间衰弱，可以保留但应轻微削弱，
   不能成为主要依赖。
 - 手工 strong candidate filter 没有提升 alpha density，更适合作为候选/约束诊断。
 - short-horizon alpha discovery 与 horizon decay 均可归档，下一步不应直接扩大 tick-level replay 资金规模。
+- 最新 tail-guard 诊断显示，`09:31-09:40` baseline 的 next-close 负 Top100 tail 可以通过可见的
+  spread / turnover-flow / chase / depth-balance guard 明显翻转；但这是同一测试月的 post-hoc sweep，
+  需要跨月验证后才可进入训练或交易规则。
+- clean target 验证了 guard 信息确实有效：二元 guard-shrunk target 的 penalty 越强，Top100 guard-pass
+  越高、next-close 负值越收敛；但 short Top100 excess 同步下滑，说明把 risk 直接洗进 short label
+  会牺牲一部分核心短周期 alpha。
+- 连续 risk-shrunk target 保住了 short Rank IC / Top100，但没有让 Top100 进入足够干净的 guard 区间，
+  next-close 仍偏负。它更像温和 target 正则，不像完整的 tail 风险建模。
+- 当前下一条主线确定为：保留 baseline / raw-label 模型专心做强 short alpha，另建 learned risk layer
+  或 reranker，在建模层面学习“短正长负”的 dirty risk，而不是继续叠加 clean target 和手工后处理。
 
 ## 当前 Baseline
 
@@ -85,6 +98,23 @@ raw score = 能延续的开盘强势 + 短时间的交易拥挤
 
 这个表不是最终策略，只是定位问题：raw score 里确实有一组“短期正、隔夜回吐”的 price / turnover
 暴露。下一步不是放弃短期训练，而是把 score 做得更干净：保留能延续的开盘强势，削弱短时间交易拥挤。
+mentor 反馈也支持这个方向：事后真正的 short winner 并不必然隔夜反转，winner 里仍有一批能隔夜延续。
+所以机会不在于把 short label 和 overnight label 立刻混合，而在于让模型少学“短期被追买推上去、隔夜回吐”
+的部分，多学真正强的 short signal。
+
+## Mentor Feedback
+
+2026-05-27 补充约束：
+
+- ClickHouse 里偶尔出现 6 秒间隔，并不表示中间 tick 缺失；它通常表示上一条 3 秒 tick 的所有字段都没有变化。
+  当前不应把这种间隔当作 stale/missing 数据剔除。以后做 raw tick window 时，可以把“长时间未变化”看成盘口稳定性信息。
+- 真实交易不是简单 `entry_tick_delay`：如果价格已经涨上去，挂在原位置的买单可能不会成交。当前阶段不建模这个执行约束。
+- 以后可以考虑 short label + overnight label 的复合目标，但当前不做，避免过早把问题切到日频 overlay。
+- 当前主线仍是把 label 做强，而不是先做更复杂的 tick window 或执行 replay。
+- 如果 `09:30` 真的是特殊 opening snapshot 区间，就先不围绕它优化。这个区间容量小，主要信号应从
+  `09:31-09:40` post-open decision points 里找。
+- 当前分数看起来依赖“短期正、隔夜负”的反转类信号，但历史诊断也显示真正的短期赢家仍可能隔夜为正。
+  因此目标不是放弃 short label，而是构造更干净的 short target，让模型少奖励纯交易拥挤，多奖励可延续的强势。
 
 ## 09:30 机制解释
 
@@ -139,8 +169,8 @@ raw score = 能延续的开盘强势 + 短时间的交易拥挤
 
 当前工作结论：`09:30` 强，主要因为开盘事件特殊。它混合了集合竞价结果、第一张开盘盘口快照、
 以及一些开盘 tick 历史特征；它不是干净证据，不能直接说明开盘后路径特征解释了 alpha。
-后续机制测试应把 `09:30` 开盘快照模型和 `09:31-09:40` 开盘后路径模型分开，并且需要消融显式
-`preopen_*`、隐式开盘印记特征、短 tick 回看和时间/区间字段。
+当前主线不再围绕它优化。若以后需要机制复盘，再把 `09:30` 开盘快照模型和 `09:31-09:40`
+开盘后路径模型分开，并消融显式 `preopen_*`、隐式开盘印记特征、短 tick 回看和时间/区间字段。
 
 `09:38` 的 short Rank IC 有一次回升，可能是另一个微观结构或样本现象；但 Top100 超额没有超过
 `09:30`，所以主故事仍然是 `09:30` 这个开盘事件特殊。
@@ -149,13 +179,34 @@ raw score = 能延续的开盘强势 + 短时间的交易拥挤
 
 | 路线 | 优先级 | 口径 |
 | --- | --- | --- |
-| `09:30` 区间拆分 | active | 把 `09:30` opening snapshot 和 `09:31-09:40` post-open path 分开评估。 |
-| 去时间坐标机制测试 | active | 去掉 `exch_time_offset_us`，确认 `09:30` 不是靠显式时间坐标被模型单独路由。 |
-| Heat-neutral / residual score | active | 对 `09:31-09:40` 削弱 price / turnover / opening-impact 暴露，同时保留 short Rank IC 和 Top100 超额。 |
-| Feature dependence audit | active | 评估 `preopen_*`、累计成交字段和盘口特征贡献；集合竞价可以有贡献，但应削弱且不能是主要依赖。 |
-| 开盘后盘口特征增强 | active | 加强 ask/bid 档位 gap、深度斜率、ask1/bid1 queue 变化、depth imbalance 变化和成交冲击比例。 |
-| 训练目标增强 | secondary | 尝试横截面 demean/zscore label 或排序目标，让训练目标更贴近 Rank IC 和 Top100。 |
-| Next close sanity check | secondary | 不作为当前优化目标，只检查增强后的高频信号是否完全牺牲长期表现。 |
+| Baseline short-alpha spine | active | 以 `lgbm_delay2_postopen_0931_0940_baseline_v1` / raw-label post-open 模型作为 alpha 主干，继续衡量 short Rank IC 和 Top100 excess。 |
+| Learned risk layer / reranker | active next | 单独训练 dirty-risk / next-flip 风险层，输入仍只用 decision point 当时可见信息；最终分数用 `alpha_score - penalty * learned_risk` 或 TopK rerank。 |
+| Cross-month guard/risk validation | active next | 把 `next_flip_guard_10t` 和 dirty-risk proxy 放到滚动月份验证，确认不是 2022-01 单月 post-hoc。 |
+| Post-open label baseline | completed | `09:31-09:40` 训练/评估口径已完成；同域上 Rank IC 和 Top100 raw mean 小幅好于旧统一模型。 |
+| Heat-neutral target label | completed / mixed | 50% shrink 保住 short Top100，并收敛 next-close Rank IC，但 short Rank IC 下降、next-close Top100 更差，不能直接通过 gate。 |
+| Post-open clean-score check | completed / mixed | 当前 cleaner target 和 hard feature core 都没有同时改善 short 与 next-close Top100。 |
+| Feature core辅助实验 | completed / failed gate | 242 个核心特征降低了复杂度，但 short Rank IC/Top100 和 next-close 表现均弱于 `09:31-09:40` baseline。 |
+| Top-tail guard sweep | completed / needs validation | `next_flip_guard_10t` 使 next-close Top100 excess 在 10 个分钟全正，但 short excess 降到约 +6 bps，需跨月验证。 |
+| Heat-neutral target v2 | completed / modest improvement | 更温和、窄暴露 heat-neutral target 的 short Rank IC/Top100 略好于 baseline，next-close Top100 负值有所收敛但未翻正。 |
+| Strong regularization | completed / failed gate | raw-label 强正则 LGBM 没有改善 short 或 next-close Top100。 |
+| Clean target / risk-shrunk target | parked as diagnostic | 可作为 guard 有效性的证据保留；当前不继续作为主 alpha 模型目标，避免和 risk layer 重复惩罚。 |
+| `09:30` 机制测试 | parked | 如果 `09:30` 确认是特殊 opening snapshot，就不作为主优化目标。 |
+| True tick-window v3 | parked | 之后再把 raw tick 回看窗口嵌入 cache 构建；当前先不做。 |
+| Short + overnight composite label | parked | 之后可考虑复合目标；当前只作为 sanity check，不进训练目标。 |
+
+下一轮实验的工作定义：
+
+```text
+alpha_model = raw short-label post-open baseline
+risk_model  = learned dirty-risk / next-flip layer
+final_score = alpha_score - lambda * risk_score
+```
+
+第一版先把 alpha 和 risk 明确拆开。alpha 模型继续只服务 short-horizon signal strength；risk 模型使用同一时点
+可见的 spread、turnover-flow、return-chase、depth、imbalance 以及模型分数上下文，学习哪些 short winner
+更像隔夜会回吐的 dirty tail。手工 guard 只作为 weak label / teacher / validation baseline，不作为最终规则。
+成功标准不是把 short Top100 压成保守池，而是在 short excess 保留明显强度的同时，让 Top100 guard-pass、
+next-close Top100 excess 和跨月稳定性同步改善。
 
 ## 数据和 Label
 
@@ -166,6 +217,9 @@ ClickHouse: ch.db.prod.highfortfunds.com / stock.tick
 window: 09:15:00 - 09:45:00
 sample: 09:30:00 - 09:40:00 integer-minute decision points
 ```
+
+`09:40` 是正式 decision point；它的 60s proxy label 使用到约 `09:41-09:42` 的 VWAP 是预期口径，
+不是 label 出界或数据问题。后续若排除特殊开盘快照，应排除 `09:30`，不应默认排除 `09:40`。
 
 关键字段包括 `TradingDay`、`Symbol`、`ExchTimeOffsetUs`、`Volume`、`Turnover`、
 `AskPrice1..10`、`BidPrice1..10`、`AskVolume1..10`、`BidVolume1..10` 和 `Status`。
@@ -182,9 +236,13 @@ sell_vwap = VWAP(entry_t + 60s, entry_t + 120s)
 label = sell_vwap / buy_price - 1 - fee_bps / 10000
 ```
 
-已归档 Ridge/GBM baseline 使用旧 `entry_tick_delay = 0`；LightGBM 主执行口径是
-`entry_tick_delay = 1`，delay0/2 只用于执行敏感性。更长周期衰减检查采用 delay2 opening score
-作为保守口径。
+已归档 Ridge/GBM baseline 使用旧 `entry_tick_delay = 0`；LightGBM 主执行口径经历过
+delay0/1/2 对比，近期 post-open 主线使用 delay2 作为保守 proxy。`entry_tick_delay` 只是研究 label
+代理，不等价于真实成交：若价格上行，真实挂单可能无法成交。当前阶段暂不把这个执行条件放进训练或 replay。
+
+ClickHouse 原始 tick 偶尔存在 6 秒间隔时，不默认视为数据缺失；mentor 反馈指出这通常表示上一条 3 秒 tick
+所有字段均无变化。当前 label 构造按可见 tick 序列处理，后续 raw tick window 可以把这种“不变化时长”
+作为稳定性特征，而不是缺失修补问题。
 
 ## 特征和约束
 

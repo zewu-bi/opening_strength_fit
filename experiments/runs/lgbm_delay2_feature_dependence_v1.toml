@@ -1,8 +1,8 @@
 [run]
 id = "lgbm_delay2_feature_dependence_v1"
 kind = "feature_audit"
-description = "Grouped feature dependence audit for delay2 LightGBM with post-open v1/v2 features."
-status = "running"
+description = "Lightweight grouped feature dependence audit for delay2 LightGBM with post-open v1/v2 features; runs importance and permutation, skipping drop-retrain ablation."
+status = "completed"
 
 [data]
 source = "labeled_pvc"
@@ -76,7 +76,7 @@ colsample_bytree = 1.0
 reg_alpha = 0.0
 reg_lambda = 0.0
 random_state = 7
-n_jobs = -1
+n_jobs = 8
 max_bin = 63
 
 [evaluation]
@@ -88,7 +88,7 @@ top_n = 100
 
 [feature_audit]
 run_permutation = true
-run_ablation = true
+run_ablation = false
 permutation_repeats = 1
 permutation_mode = "cross_section"
 random_state = 7
@@ -104,8 +104,11 @@ pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 
+[k8s.node_selector]
+"kubernetes.io/hostname" = "node8"
+
 [k8s.resources]
 cpu_request = "8"
 cpu_limit = "16"
-memory_request = "128Gi"
-memory_limit = "192Gi"
+memory_request = "192Gi"
+memory_limit = "256Gi"

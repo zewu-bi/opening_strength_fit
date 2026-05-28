@@ -20,7 +20,10 @@ from opening_strength_fit.clickhouse_ticks import (
     normalize_clickhouse_ticks,
     query_tick_day_window,
 )
-from opening_strength_fit.candidates import filter_opening_candidates
+from opening_strength_fit.candidates import (
+    filter_opening_candidates,
+    opening_candidate_mask,
+)
 from opening_strength_fit.config import (
     config_bool,
     config_clock_list,
@@ -65,8 +68,12 @@ from opening_strength_fit.rolling import (
     chronological_date_split,
     monthly_rolling_date_splits,
 )
-from opening_strength_fit.sampling import DEFAULT_DECISION_TIMES
-from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns
+from opening_strength_fit.sampling import DEFAULT_DECISION_TIMES, parse_clock_times
+from opening_strength_fit.schema import (
+    ensure_timestamp_columns,
+    normalize_clock_time,
+    standardize_columns,
+)
 from opening_strength_fit.universe import (
     DEFAULT_A_SHARE_SYMBOL_REGEX,
     filter_symbol_universe,
@@ -153,15 +160,35 @@ def build_training_parser(description: str) -> argparse.ArgumentParser:
     return parser
 
 
-def _drop_feature_prefixes_from_config(
+def _feature_filters_from_config(config: dict) -> dict[str, tuple[str, ...]]:
+    return {
+        "include_columns": tuple(
+            config_list(config, "features", "include_feature_columns", [])
+        ),
+        "include_prefixes": tuple(
+            config_list(config, "features", "include_feature_prefixes", [])
+        ),
+        "include_patterns": tuple(
+            config_list(config, "features", "include_feature_regexes", [])
+        ),
+        "drop_columns": tuple(config_list(config, "features", "drop_feature_columns", [])),
+        "drop_prefixes": tuple(config_list(config, "features", "drop_feature_prefixes", [])),
+        "drop_patterns": tuple(config_list(config, "features", "drop_feature_regexes", [])),
+    }
+
+
+def _drop_features_from_config(
     labeled: pd.DataFrame,
     config: dict,
 ) -> pd.DataFrame:
     prefixes = tuple(config_list(config, "features", "drop_feature_prefixes", []))
-    if not prefixes:
+    columns = tuple(config_list(config, "features", "drop_feature_columns", []))
+    if not prefixes and not columns:
         return labeled
     drop_columns = [
-        column for column in labeled.columns if column.startswith(prefixes)
+        column
+        for column in labeled.columns
+        if column in columns or (prefixes and column.startswith(prefixes))
     ]
     if not drop_columns:
         return labeled
@@ -198,7 +225,7 @@ def _apply_feature_transforms_from_config(
                 (3, 5, 10),
             ),
         )
-    labeled = _drop_feature_prefixes_from_config(labeled, config)
+    labeled = _drop_features_from_config(labeled, config)
     return labeled
 
 
@@ -217,13 +244,138 @@ def _apply_candidate_filter_from_config(
             "candidate_filter",
             "rank_min",
         ),
+        rank_max_values=config_float_mapping(
+            config,
+            "candidate_filter",
+            "rank_max",
+        ),
         rank_group_cols=config_list(
             config,
             "candidate_filter",
             "rank_group_cols",
             ["date", "decision_target_timestamp"],
         ),
+        rank_method=config_str(config, "candidate_filter", "rank_method", "first"),
     )
+
+
+def _apply_sample_weight_from_config(
+    frame: pd.DataFrame,
+    config: dict,
+) -> pd.DataFrame:
+    if not config_bool(config, "sample_weight", "enabled", False):
+        return frame
+    output_col = config_str(config, "sample_weight", "output_col", "sample_weight")
+    pass_weight = config_float(config, "sample_weight", "pass_weight", 1.0)
+    fail_weight = config_float(config, "sample_weight", "fail_weight", 0.25)
+    mask = opening_candidate_mask(
+        frame,
+        min_values=config_float_mapping(config, "sample_weight", "min"),
+        max_values=config_float_mapping(config, "sample_weight", "max"),
+        rank_min_values=config_float_mapping(config, "sample_weight", "rank_min"),
+        rank_max_values=config_float_mapping(config, "sample_weight", "rank_max"),
+        rank_group_cols=config_list(
+            config,
+            "sample_weight",
+            "rank_group_cols",
+            ["date", "decision_target_timestamp"],
+        ),
+        rank_method=config_str(config, "sample_weight", "rank_method", "first"),
+    )
+    out = frame.copy()
+    out[output_col] = np.where(mask.to_numpy(), pass_weight, fail_weight)
+    return out
+
+
+def _apply_guard_features_from_config(
+    frame: pd.DataFrame,
+    config: dict,
+) -> pd.DataFrame:
+    if not config_bool(config, "guard_features", "enabled", False):
+        return frame
+    rank_columns = tuple(config_list(config, "guard_features", "rank_columns", []))
+    pass_col = config_str(config, "guard_features", "pass_col", "guard_pass")
+    prefix = config_str(config, "guard_features", "prefix", "guard_")
+    rank_group_cols = config_list(
+        config,
+        "guard_features",
+        "rank_group_cols",
+        ["date", "decision_target_timestamp"],
+    )
+    rank_method = config_str(config, "guard_features", "rank_method", "average")
+
+    out = frame.copy()
+    group_cols = [column for column in rank_group_cols if column in out.columns]
+    if rank_columns and not group_cols:
+        raise SystemExit("guard feature ranks need at least one available group column")
+    for column in rank_columns:
+        if column not in out.columns:
+            raise SystemExit(f"guard feature missing required column: {column}")
+        values = pd.to_numeric(out[column], errors="coerce").replace(
+            [np.inf, -np.inf],
+            np.nan,
+        )
+        out[f"{prefix}{column}_rank_pct"] = values.groupby(
+            [out[col] for col in group_cols]
+        ).rank(method=rank_method, pct=True)
+
+    if pass_col:
+        mask = opening_candidate_mask(
+            out,
+            min_values=config_float_mapping(config, "guard_features", "min"),
+            max_values=config_float_mapping(config, "guard_features", "max"),
+            rank_min_values=config_float_mapping(config, "guard_features", "rank_min"),
+            rank_max_values=config_float_mapping(config, "guard_features", "rank_max"),
+            rank_group_cols=rank_group_cols,
+            rank_method=rank_method,
+        )
+        out[pass_col] = mask.astype("int8")
+    return out
+
+
+def _clock_from_series(series: pd.Series) -> pd.Series:
+    extracted = (
+        series.astype(str)
+        .str.extract(r"(\d{1,2}:\d{2}(?::\d{2})?)", expand=False)
+        .fillna("")
+    )
+    return extracted.map(lambda value: normalize_clock_time(value) if value else "")
+
+
+def _filter_labeled_sample_from_config(
+    labeled: pd.DataFrame,
+    config: dict,
+) -> pd.DataFrame:
+    mode = config_str(config, "sample", "mode", "")
+    normalized_mode = str(mode).strip().lower()
+    if normalized_mode not in {"decision", "decision_point", "decision_points"}:
+        return labeled
+
+    decision_times = parse_clock_times(
+        config_value(config, "sample", "decision_times", DEFAULT_DECISION_TIMES)
+    )
+    if not decision_times:
+        raise SystemExit("decision point sampling needs at least one decision time")
+
+    if "decision_time" in labeled.columns:
+        clock = _clock_from_series(labeled["decision_time"])
+    else:
+        time_col = (
+            "decision_target_timestamp"
+            if "decision_target_timestamp" in labeled.columns
+            else "timestamp"
+        )
+        clock = pd.to_datetime(labeled[time_col], errors="coerce").dt.strftime(
+            "%H:%M:%S"
+        )
+    mask = clock.isin(set(decision_times))
+
+    max_lag = config_value(config, "sample", "decision_max_lag_seconds", None)
+    if max_lag not in (None, "") and "decision_lag_seconds" in labeled.columns:
+        lag = pd.to_numeric(labeled["decision_lag_seconds"], errors="coerce")
+        mask &= lag.ge(0.0) & lag.le(float(max_lag))
+
+    return labeled.loc[mask].copy()
 
 
 def _json_default(value):
@@ -270,13 +422,14 @@ def _test_year(value: str) -> int:
     return int(pd.Timestamp(value).year)
 
 
-def _prediction_r2(predictions: pd.DataFrame) -> float:
+def _prediction_r2(predictions: pd.DataFrame, *, target_col: str = "label") -> float:
+    target_col = target_col if target_col in predictions.columns else "label"
     frame = predictions.loc[
-        predictions["label"].notna() & predictions["prediction"].notna()
+        predictions[target_col].notna() & predictions["prediction"].notna()
     ]
     if len(frame) < 2:
         return float("nan")
-    y = frame["label"].astype("float64").to_numpy()
+    y = frame[target_col].astype("float64").to_numpy()
     y_hat = frame["prediction"].astype("float64").to_numpy()
     total = float(np.square(y - y.mean()).sum())
     if total == 0.0:
@@ -296,6 +449,7 @@ def _metrics_row(
     model_name: str,
     alpha: float,
     feature_count: int,
+    target_col: str,
     evaluation_settings: dict[str, object],
 ) -> dict[str, object]:
     row: dict[str, object] = {
@@ -315,7 +469,8 @@ def _metrics_row(
         "features": int(feature_count),
         "model_name": model_name,
         "alpha": float(alpha),
-        "model_test_r2": _prediction_r2(predictions),
+        "model_target_col": target_col,
+        "model_test_r2": _prediction_r2(predictions, target_col=target_col),
         "ic_mode": str(evaluation_settings["ic_mode"]),
         "selection_mode": str(evaluation_settings["selection_mode"]),
         "top_n": int(evaluation_settings["top_n"]),
@@ -433,6 +588,7 @@ def _filter_labeled_frame(labeled: pd.DataFrame, config: dict) -> pd.DataFrame:
             ),
             symbols=load_symbol_list(symbols_file) if symbols_file else None,
         )
+    labeled = _filter_labeled_sample_from_config(labeled, config)
     labeled = _apply_feature_transforms_from_config(labeled, config)
     return _apply_candidate_filter_from_config(labeled, config)
 
@@ -1078,12 +1234,22 @@ def _fit_prediction_model(
 ):
     model_name = config_str(config, "model", "name", "ridge").strip().lower()
     feature_limit = _feature_limit(args, config)
+    target_col = config_str(config, "model", "target_col", "label")
+    feature_filters = _feature_filters_from_config(config)
     if model_name == "ridge":
-        return fit_ridge_frame(train, alpha=alpha, feature_limit=feature_limit)
+        return fit_ridge_frame(
+            train,
+            alpha=alpha,
+            feature_limit=feature_limit,
+            target_col=target_col,
+            feature_filters=feature_filters,
+        )
     if model_name in {"gbm", "hist_gbm", "hist_gradient_boosting"}:
         return fit_gbm_frame(
             train,
             feature_limit=feature_limit,
+            target_col=target_col,
+            feature_filters=feature_filters,
             max_iter=config_int(config, "model", "max_iter", 100),
             learning_rate=config_float(config, "model", "learning_rate", 0.05),
             max_leaf_nodes=config_int(config, "model", "max_leaf_nodes", 31),
@@ -1099,6 +1265,9 @@ def _fit_prediction_model(
         return fit_lightgbm_frame(
             train,
             feature_limit=feature_limit,
+            target_col=target_col,
+            sample_weight_col=config_str(config, "model", "sample_weight_col", ""),
+            feature_filters=feature_filters,
             n_estimators=config_int(config, "model", "n_estimators", 300),
             learning_rate=config_float(config, "model", "learning_rate", 0.03),
             num_leaves=config_int(config, "model", "num_leaves", 63),
@@ -1121,11 +1290,13 @@ def _fit_prediction_model(
 
 def _model_json(config: dict, alpha: float) -> dict[str, object]:
     model_name = config_str(config, "model", "name", "ridge").strip().lower()
+    target_col = config_str(config, "model", "target_col", "label")
     if model_name == "ridge":
-        return {"name": "ridge", "alpha": alpha}
+        return {"name": "ridge", "alpha": alpha, "target_col": target_col}
     if model_name in {"gbm", "hist_gbm", "hist_gradient_boosting"}:
         return {
             "name": "gbm",
+            "target_col": target_col,
             "max_iter": config_int(config, "model", "max_iter", 100),
             "learning_rate": config_float(config, "model", "learning_rate", 0.05),
             "max_leaf_nodes": config_int(config, "model", "max_leaf_nodes", 31),
@@ -1140,6 +1311,7 @@ def _model_json(config: dict, alpha: float) -> dict[str, object]:
     if model_name in {"lightgbm", "lgbm"}:
         return {
             "name": "lightgbm",
+            "target_col": target_col,
             "device_type": config_str(config, "model", "device_type", "cpu"),
             "n_estimators": config_int(config, "model", "n_estimators", 300),
             "learning_rate": config_float(config, "model", "learning_rate", 0.03),
@@ -1154,6 +1326,7 @@ def _model_json(config: dict, alpha: float) -> dict[str, object]:
             "n_jobs": config_int(config, "model", "n_jobs", -1),
             "max_bin": config_optional_int(config, "model", "max_bin", None),
             "gpu_use_dp": config_bool(config, "model", "gpu_use_dp", False),
+            "sample_weight_col": config_str(config, "model", "sample_weight_col", ""),
         }
     return {"name": model_name}
 
@@ -1218,6 +1391,7 @@ def _fit_predict_split(
         model_name=model.model_name,
         alpha=alpha,
         feature_count=len(model.features),
+        target_col=model.target_col,
         evaluation_settings=evaluation_settings,
     )
     print_mapping(f"train_stats[{prediction_period}]", train_stats)
@@ -1256,6 +1430,8 @@ def train_from_args(args: argparse.Namespace) -> None:
         labeled = _load_labeled_pvc_frame(args, config)
     else:
         labeled = _load_training_frame(tick_path, args, config)
+    labeled = _apply_guard_features_from_config(labeled, config)
+    labeled = _apply_sample_weight_from_config(labeled, config)
     print_mapping("dataset", dataset_summary(labeled))
 
     alpha = (

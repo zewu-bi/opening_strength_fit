@@ -5,9 +5,9 @@ ClickHouse `stock.tick` 或本地 tick parquet 构造
 `date x symbol x opening decision time` 样本，只使用 decision point 当时及以前可见的信息，
 预测一个约 60 秒的 buy-at-ask / sell-VWAP return proxy。
 
-当前结论：opening proxy signal 真实存在，但它不是完整 T+1 策略。下一阶段主线是信号增强：
-提高开盘后横截面 Rank IC 和 Top100 excess，重点检查 post-open orderbook、队列深度变化、
-成交冲击和价格/成交热度暴露。
+当前结论：opening proxy signal 真实存在，但 `09:31-09:40` raw short-alpha 里混有明显
+“短正长负”的 dirty tail。下一阶段主线是两层建模：baseline / raw-label 模型继续把短周期信号做强，
+另建 learned risk layer 或 reranker，在只使用当时可见信息的前提下扣掉拥挤追涨、低深度和失衡 tail。
 
 ```text
 ClickHouse / local ticks

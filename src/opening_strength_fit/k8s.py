@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -10,6 +11,7 @@ from opening_strength_fit.config import config_value, load_toml, run_id, slug
 
 
 DEFAULT_IMAGE = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:latest"
+KUBERNETES_NAME_LIMIT = 63
 
 
 @dataclass(frozen=True)
@@ -76,7 +78,7 @@ def load_run_spec(path: str | Path) -> RunSpec:
         pvc=str(config_value(config, "k8s", "pvc", "bizewu-private-data")),
         mount_path=mount_path,
         pull_secret=str(config_value(config, "k8s", "image_pull_secret", "highfort")),
-        image=DEFAULT_IMAGE,
+        image=str(config_value(config, "k8s", "helper_image", DEFAULT_IMAGE)),
         test_start_year=start_year,
         test_end_year=end_year,
         test_start_month=test_start_month,
@@ -106,6 +108,21 @@ def command_succeeds(command: list[str]) -> bool:
     return result.returncode == 0
 
 
+def temporary_pod_name(pod_prefix: str, run_id_value: str) -> str:
+    prefix = slug(pod_prefix)
+    run_slug = slug(run_id_value)
+    candidate = f"{prefix}-{run_slug}".strip("-")
+    if len(candidate) <= KUBERNETES_NAME_LIMIT:
+        return candidate
+
+    digest = hashlib.sha1(candidate.encode("utf-8")).hexdigest()[:8]
+    keep = KUBERNETES_NAME_LIMIT - len(prefix) - len(digest) - 2
+    if keep < 1:
+        prefix_keep = KUBERNETES_NAME_LIMIT - len(digest) - 1
+        return f"{prefix[:prefix_keep].rstrip('-')}-{digest}"
+    return f"{prefix}-{run_slug[:keep].rstrip('-')}-{digest}"
+
+
 def ensure_temp_pod(
     hfcli: str,
     spec: RunSpec,
@@ -114,7 +131,7 @@ def ensure_temp_pod(
     *,
     dry_run: bool = False,
 ) -> str:
-    pod_name = f"{pod_prefix}-{slug(spec.run_id)}"
+    pod_name = temporary_pod_name(pod_prefix, spec.run_id)
     overrides = {
         "apiVersion": "v1",
         "spec": {

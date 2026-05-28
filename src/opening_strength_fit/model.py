@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 import numpy as np
 import pandas as pd
@@ -32,6 +33,12 @@ NON_FEATURE_COLUMNS = {
     "entry_lag_seconds",
     "entry_status",
     "label",
+    "label_raw",
+    "label_xs_mean",
+    "label_xs_std",
+    "label_xs_count",
+    "label_xs_rank_pct",
+    "target_label",
     "gross_label",
     "valid_label",
     "buy_price",
@@ -39,8 +46,11 @@ NON_FEATURE_COLUMNS = {
     "sell_volume",
     "sell_turnover",
     "prediction",
+    "sample_weight",
 }
 LEAKY_PREFIXES = (
+    "label_xs_",
+    "target_",
     "timestamp_sell_",
     "volume_sell_",
     "turnover_sell_",
@@ -100,15 +110,51 @@ class RidgePredictionModel:
     alpha: float
     pipeline: Pipeline
     model_name: str = "ridge"
+    target_col: str = "label"
 
 
-def feature_columns(df: pd.DataFrame, limit: int | None = None) -> list[str]:
+def _match_patterns(column: str, patterns: tuple[str, ...]) -> bool:
+    return any(re.search(pattern, column) for pattern in patterns)
+
+
+def _match_prefixes(column: str, prefixes: tuple[str, ...]) -> bool:
+    return bool(prefixes) and column.startswith(prefixes)
+
+
+def feature_columns(
+    df: pd.DataFrame,
+    limit: int | None = None,
+    *,
+    include_columns: tuple[str, ...] = (),
+    include_prefixes: tuple[str, ...] = (),
+    include_patterns: tuple[str, ...] = (),
+    drop_columns: tuple[str, ...] = (),
+    drop_prefixes: tuple[str, ...] = (),
+    drop_patterns: tuple[str, ...] = (),
+) -> list[str]:
     numeric_columns = df.select_dtypes(include=[np.number, "bool"]).columns
+    include_columns_set = set(include_columns)
+    drop_columns_set = set(drop_columns)
+    has_include_filter = bool(
+        include_columns_set or include_prefixes or include_patterns
+    )
     features = []
     for column in numeric_columns:
         if column in NON_FEATURE_COLUMNS:
             continue
         if any(column.startswith(prefix) for prefix in LEAKY_PREFIXES):
+            continue
+        if column in drop_columns_set:
+            continue
+        if _match_prefixes(str(column), drop_prefixes):
+            continue
+        if drop_patterns and _match_patterns(str(column), drop_patterns):
+            continue
+        if has_include_filter and not (
+            column in include_columns_set
+            or _match_prefixes(str(column), include_prefixes)
+            or _match_patterns(str(column), include_patterns)
+        ):
             continue
         features.append(str(column))
     if limit is not None:
@@ -116,14 +162,21 @@ def feature_columns(df: pd.DataFrame, limit: int | None = None) -> list[str]:
     return features
 
 
-def _clean_xy(df: pd.DataFrame, features: list[str]) -> tuple[pd.DataFrame, pd.Series]:
-    frame = df.loc[df["label"].notna()].copy()
+def _clean_xy(
+    df: pd.DataFrame,
+    features: list[str],
+    *,
+    target_col: str = "label",
+) -> tuple[pd.DataFrame, pd.Series]:
+    if target_col not in df.columns:
+        raise SystemExit(f"missing model target column: {target_col}")
+    frame = df.loc[df[target_col].notna()].copy()
     if "valid_label" in frame.columns:
         frame = frame.loc[frame["valid_label"]].copy()
     if frame.empty:
         raise SystemExit("empty labeled frame after filtering valid labels")
     x = frame[features].replace([np.inf, -np.inf], np.nan)
-    y = frame["label"].astype("float64")
+    y = frame[target_col].astype("float64")
     return x, y
 
 
@@ -132,12 +185,14 @@ def fit_ridge_frame(
     *,
     alpha: float = 1.0,
     feature_limit: int | None = None,
+    target_col: str = "label",
+    feature_filters: dict[str, tuple[str, ...]] | None = None,
 ) -> tuple[RidgePredictionModel, dict[str, int]]:
-    features = feature_columns(train, feature_limit)
+    features = feature_columns(train, feature_limit, **(feature_filters or {}))
     if not features:
         raise SystemExit("no numeric feature columns found")
 
-    x, y = _clean_xy(train, features)
+    x, y = _clean_xy(train, features, target_col=target_col)
     pipeline = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="constant", fill_value=0.0)),
@@ -158,6 +213,7 @@ def fit_ridge_frame(
             alpha=alpha,
             pipeline=pipeline,
             model_name="ridge",
+            target_col=target_col,
         ),
         stats,
     )
@@ -167,17 +223,19 @@ def fit_gbm_frame(
     train: pd.DataFrame,
     *,
     feature_limit: int | None = None,
+    target_col: str = "label",
+    feature_filters: dict[str, tuple[str, ...]] | None = None,
     max_iter: int = 100,
     learning_rate: float = 0.05,
     max_leaf_nodes: int = 31,
     l2_regularization: float = 0.0,
     random_state: int = 7,
 ) -> tuple[RidgePredictionModel, dict[str, int]]:
-    features = feature_columns(train, feature_limit)
+    features = feature_columns(train, feature_limit, **(feature_filters or {}))
     if not features:
         raise SystemExit("no numeric feature columns found")
 
-    x, y = _clean_xy(train, features)
+    x, y = _clean_xy(train, features, target_col=target_col)
     pipeline = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="constant", fill_value=0.0)),
@@ -206,6 +264,7 @@ def fit_gbm_frame(
             alpha=float("nan"),
             pipeline=pipeline,
             model_name="gbm",
+            target_col=target_col,
         ),
         stats,
     )
@@ -215,6 +274,9 @@ def fit_lightgbm_frame(
     train: pd.DataFrame,
     *,
     feature_limit: int | None = None,
+    target_col: str = "label",
+    sample_weight_col: str = "",
+    feature_filters: dict[str, tuple[str, ...]] | None = None,
     n_estimators: int = 300,
     learning_rate: float = 0.03,
     num_leaves: int = 63,
@@ -238,11 +300,21 @@ def fit_lightgbm_frame(
             "Install project dependencies or rebuild the training image."
         ) from exc
 
-    features = feature_columns(train, feature_limit)
+    features = feature_columns(train, feature_limit, **(feature_filters or {}))
     if not features:
         raise SystemExit("no numeric feature columns found")
 
-    x, y = _clean_xy(train, features)
+    x, y = _clean_xy(train, features, target_col=target_col)
+    sample_weight = None
+    if sample_weight_col:
+        if sample_weight_col not in train.columns:
+            raise SystemExit(f"missing sample weight column: {sample_weight_col}")
+        sample_weight = (
+            pd.to_numeric(train.loc[x.index, sample_weight_col], errors="coerce")
+            .replace([np.inf, -np.inf], np.nan)
+            .fillna(0.0)
+            .clip(lower=0.0)
+        )
     lightgbm_params = {
         "objective": "regression",
         "n_estimators": int(n_estimators),
@@ -272,19 +344,28 @@ def fit_lightgbm_frame(
             ("lightgbm", LGBMRegressor(**lightgbm_params)),
         ]
     )
-    pipeline.fit(x, y)
+    fit_params = (
+        {"lightgbm__sample_weight": sample_weight.to_numpy(dtype="float64")}
+        if sample_weight is not None
+        else {}
+    )
+    pipeline.fit(x, y, **fit_params)
     stats = {
         "rows": len(x),
         "dates": int(train.loc[x.index, "date"].nunique()),
         "symbols": int(train.loc[x.index, "symbol"].nunique()),
         "features": len(features),
     }
+    if sample_weight is not None:
+        stats["sample_weight_mean"] = float(sample_weight.mean())
+        stats["sample_weight_zero_rate"] = float((sample_weight <= 0.0).mean())
     return (
         RidgePredictionModel(
             features=features,
             alpha=float("nan"),
             pipeline=pipeline,
             model_name=f"lightgbm_{device_type or 'cpu'}",
+            target_col=target_col,
         ),
         stats,
     )
@@ -305,9 +386,11 @@ def predict_frame(model: RidgePredictionModel, frame: pd.DataFrame) -> pd.DataFr
             "decision_target_timestamp",
             "decision_lag_seconds",
             "label",
+            model.target_col,
         )
         if column in frame
     ]
+    columns = list(dict.fromkeys(columns))
     columns.extend(
         column
         for column in PREDICTION_CONTEXT_COLUMNS

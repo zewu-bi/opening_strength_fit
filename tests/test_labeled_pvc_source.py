@@ -39,6 +39,54 @@ class LabeledPvcSourceTest(unittest.TestCase):
         self.assertIn("label", labeled.columns)
         self.assertEqual(str(labeled.loc[0, "symbol"]), "000001.SZ")
 
+    def test_labeled_pvc_source_filters_configured_decision_times(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "labeled.parquet"
+            pd.DataFrame(
+                [
+                    {
+                        "date": "2022-01-04",
+                        "symbol": "000001.SZ",
+                        "timestamp": pd.Timestamp("2022-01-04 09:30:00"),
+                        "decision_time": "09:30:00",
+                        "decision_target_timestamp": pd.Timestamp(
+                            "2022-01-04 09:30:00"
+                        ),
+                        "decision_lag_seconds": 0.0,
+                        "label": 0.01,
+                        "valid_label": True,
+                    },
+                    {
+                        "date": "2022-01-04",
+                        "symbol": "000001.SZ",
+                        "timestamp": pd.Timestamp("2022-01-04 09:31:01"),
+                        "decision_time": "09:31:00",
+                        "decision_target_timestamp": pd.Timestamp(
+                            "2022-01-04 09:31:00"
+                        ),
+                        "decision_lag_seconds": 1.0,
+                        "label": 0.02,
+                        "valid_label": True,
+                    },
+                ]
+            ).to_parquet(path, index=False)
+
+            args = argparse.Namespace(labeled_input=None)
+            config = {
+                "data": {"source": "labeled_pvc", "labeled_path": str(path)},
+                "universe": {"enabled": False},
+                "sample": {
+                    "mode": "decision_points",
+                    "decision_times": ["09:31:00"],
+                    "decision_max_lag_seconds": 5,
+                },
+            }
+
+            labeled = _load_labeled_pvc_frame(args, config)
+
+        self.assertEqual(len(labeled), 1)
+        self.assertEqual(labeled.iloc[0]["decision_time"], "09:31:00")
+
     def test_labeled_pvc_is_explicit_data_source(self) -> None:
         args = argparse.Namespace(input=None, labeled_input=None, data_source=None)
         config = {"data": {"source": "labeled_pvc"}}

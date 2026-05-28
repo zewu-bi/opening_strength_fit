@@ -2,7 +2,7 @@
 id = "lgbm_delay2_postopen_v2"
 kind = "exploration"
 description = "Delay2 LightGBM with post-open v1 plus richer post-open v2 orderbook, queue, depth-shape, and trade-impact features."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"

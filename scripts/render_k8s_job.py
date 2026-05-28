@@ -21,6 +21,10 @@ def training_script(config: dict) -> str:
     run_kind = str(get(config, "run", "kind", "experiment")).strip().lower()
     if run_kind == "feature_audit":
         return "scripts/audit_feature_dependence.py"
+    if run_kind in {"cache_transform", "target_cache"}:
+        return "scripts/build_target_label_cache.py"
+    if run_kind == "score_risk_sweep":
+        return "scripts/run_score_risk_sweep.py"
     if run_kind not in {"experiment", "exploration"}:
         raise SystemExit(f"Unsupported run.kind for k8s rendering: {run_kind}")
     model_name = str(get(config, "model", "name", "ridge")).strip().lower()

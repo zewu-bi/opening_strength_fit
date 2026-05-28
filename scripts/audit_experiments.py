@@ -87,7 +87,12 @@ def has_training_job(kinds: set[str]) -> bool:
 
 
 def is_artifact_run(record: RunRecord) -> bool:
-    return record.kind == "feature_audit"
+    return record.kind in {
+        "feature_audit",
+        "cache_transform",
+        "target_cache",
+        "score_risk_sweep",
+    }
 
 
 def is_exploration_run(record: RunRecord) -> bool:

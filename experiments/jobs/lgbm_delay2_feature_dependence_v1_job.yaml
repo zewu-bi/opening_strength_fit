@@ -15,10 +15,11 @@ spec:
         - name: opening-strength-output
           persistentVolumeClaim:
             claimName: bizewu-private-data
-
+      nodeSelector:
+        kubernetes.io/hostname: "node8"
       containers:
         - name: opening-strength-fit
-          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260527-postopen-v2
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260527-feature-audit-fix
           imagePullPolicy: Always
           envFrom:
             - secretRef:
@@ -31,15 +32,16 @@ spec:
             - experiments/runs/lgbm_delay2_feature_dependence_v1.toml
             - --output-dir
             - /mnt/output/opening_strength_fit/lgbm_delay2_feature_dependence_v1
+            - --skip-ablation
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output
           resources:
             requests:
               cpu: "8"
-              memory: 128Gi
+              memory: 192Gi
 
             limits:
               cpu: "16"
-              memory: 192Gi
+              memory: 256Gi
 

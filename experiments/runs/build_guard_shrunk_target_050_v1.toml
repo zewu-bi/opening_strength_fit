@@ -1,0 +1,55 @@
+[run]
+id = "build_guard_shrunk_target_050_v1"
+kind = "cache_transform"
+description = "Build a derived delay2 labeled cache with guard-shrunk target_label: next_flip_guard_10t dirty positive excess shrunk by 50%."
+status = "completed"
+
+[target_cache]
+input_path = "/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_labeled.parquet"
+output_path = "/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_guard_shrunk_target_050_v1_labeled.parquet"
+mode = "guard_shrunk"
+group_cols = ["date", "decision_target_timestamp"]
+label_col = "label"
+target_col = "target_label"
+raw_label_col = "label_raw"
+min_group_size = 50
+guard_shrink_penalty = 0.50
+guard_pass_col = ""
+guard_rank_group_cols = ["date", "decision_target_timestamp"]
+guard_rank_method = "average"
+
+[target_cache.guard_rank_min]
+turnover_diff_10t = 0.10
+return_10t = 0.20
+ask_depth_10 = 0.40
+depth_imbalance_10 = 0.20
+
+[target_cache.guard_rank_max]
+spread_bps = 0.80
+turnover_diff_10t = 0.80
+return_10t = 0.70
+depth_imbalance_10 = 0.70
+
+[data]
+source = "labeled_pvc"
+labeled_path = "/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_labeled.parquet"
+
+[output]
+local_dir = "output/local/build_guard_shrunk_target_050_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/cache_builds/build_guard_shrunk_target_050_v1"
+
+[k8s]
+namespace = "bizewu"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260528-guard-shrunk-target-v1"
+
+[k8s.node_selector]
+"kubernetes.io/hostname" = "node8"
+
+[k8s.resources]
+cpu_request = "4"
+cpu_limit = "8"
+memory_request = "96Gi"
+memory_limit = "160Gi"

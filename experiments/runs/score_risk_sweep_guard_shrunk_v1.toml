@@ -1,0 +1,44 @@
+[run]
+id = "score_risk_sweep_guard_shrunk_v1"
+kind = "score_risk_sweep"
+description = "Sweep alpha-rank minus dirty-risk penalties and hard gates over baseline, guard_shrunk_target_050_v1, and guard_shrunk_target_075_v1 scores."
+status = "completed"
+
+[risk_sweep]
+score_col = "prediction"
+top_n = 100
+start_clock = "09:31"
+end_clock = "09:40"
+
+[[risk_sweep.inputs]]
+run_id = "lgbm_delay2_postopen_0931_0940_baseline_v1"
+prediction_path = "/mnt/output/opening_strength_fit/lgbm_delay2_postopen_0931_0940_baseline_v1/predictions.parquet"
+
+[[risk_sweep.inputs]]
+run_id = "guard_shrunk_target_050_v1"
+prediction_path = "/mnt/output/opening_strength_fit/guard_shrunk_target_050_v1/predictions.parquet"
+
+[[risk_sweep.inputs]]
+run_id = "guard_shrunk_target_075_v1"
+prediction_path = "/mnt/output/opening_strength_fit/guard_shrunk_target_075_v1/predictions.parquet"
+
+[output]
+local_dir = "output/local/score_risk_sweep_guard_shrunk_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/score_risk_sweep_guard_shrunk_v1"
+
+[k8s]
+namespace = "bizewu"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+clickhouse_secret = "opening-strength-clickhouse"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260528-clean-risk-v1"
+
+[k8s.node_selector]
+"kubernetes.io/hostname" = "node8"
+
+[k8s.resources]
+cpu_request = "4"
+cpu_limit = "8"
+memory_request = "64Gi"
+memory_limit = "128Gi"

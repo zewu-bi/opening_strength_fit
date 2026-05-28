@@ -57,6 +57,10 @@ experiments/results/metrics/<run_id>_metrics_by_year.csv
 
 - `[run].kind = "feature_audit"`：运行 grouped importance、permutation 和 drop-retrain ablation，
   audit CSV 写到 run output dir。
+- `[run].kind = "cache_transform"` 或 `"target_cache"`：运行 target-label cache 构建，
+  output 通常是 `/mnt/output/opening_strength_fit/cache/*.parquet`。
+- `[run].kind = "score_risk_sweep"`：对已有 prediction 做 score/risk penalty 或 hard gate 扫描，
+  不训练新模型。
 - `[run].kind = "exploration"`：可以先保持 active/running，不要求立刻有 metrics；确认后再归档成正式实验。
 - Post-open 实验仍走 `scripts/run_experiment.py`；`[features].include_postopen_decision = true`
   打开 post-open decision 特征，v2 特征再加 `[features].include_postopen_v2 = true`。
@@ -143,6 +147,30 @@ python scripts/run_alpha_horizon_decay.py \
   --clickhouse-close-labels \
   --allow-missing-horizons \
   --output-root output/reports/opening_alpha_horizon_decay_delay2_clickhouse_point_0930_selected
+```
+
+Target-label cache build:
+
+```bash
+python scripts/build_target_label_cache.py \
+  --config experiments/runs/<build_target_run_id>.toml
+```
+
+Existing-score TopN guard sweep:
+
+```bash
+python scripts/run_score_tail_guards.py \
+  --input output/predictions/lgbm_delay2_postopen_0931_0940_baseline_v1/predictions_all.parquet \
+  --next-close-label-input output/reports/lgbm_delay2_postopen_0931_0940_baseline_v1_four_panel/clickhouse_next_close_labels.parquet \
+  --output-dir output/reports/lgbm_delay2_postopen_tail_guards_v1
+```
+
+Existing-score risk penalty sweep:
+
+```bash
+python scripts/run_score_risk_sweep.py \
+  --config experiments/runs/score_risk_sweep_guard_shrunk_v1.toml \
+  --output-dir output/local/score_risk_sweep_guard_shrunk_v1
 ```
 
 Feature dependence audit：

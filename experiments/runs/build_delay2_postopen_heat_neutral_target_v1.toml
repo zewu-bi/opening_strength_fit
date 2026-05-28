@@ -1,0 +1,72 @@
+[run]
+id = "build_delay2_postopen_heat_neutral_target_v1"
+kind = "cache_transform"
+description = "Build a derived delay2 labeled cache with a heat-neutral shrink target_label while preserving raw label for evaluation."
+status = "completed"
+
+[target_cache]
+input_path = "/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_labeled.parquet"
+output_path = "/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_postopen_heat_neutral_labeled.parquet"
+mode = "heat_neutral"
+group_cols = ["date", "decision_target_timestamp"]
+label_col = "label"
+target_col = "target_label"
+raw_label_col = "label_raw"
+min_group_size = 50
+neutralization_strength = 0.5
+neutralization_ridge_alpha = 10.0
+neutralization_transform = "rank_centered"
+min_neutralize_cols = 4
+neutralize_cols = [
+  "ask_price_1",
+  "bid_price_1",
+  "mid_price",
+  "spread_bps",
+  "ask1_to_limit_up_bps",
+  "return_vs_prev_close",
+  "return_vs_open",
+  "preopen_return_vs_prev_close",
+  "return_1t",
+  "return_3t",
+  "return_10t",
+  "return_30t",
+  "volume",
+  "turnover",
+  "preopen_volume",
+  "preopen_turnover",
+  "volume_diff_1t",
+  "turnover_diff_1t",
+  "volume_diff_3t",
+  "turnover_diff_3t",
+  "volume_diff_10t",
+  "turnover_diff_10t",
+  "volume_diff_30t",
+  "turnover_diff_30t",
+  "trade_vwap_1t",
+  "trade_vwap_3t",
+  "trade_vwap_10t",
+  "trade_vwap_30t",
+]
+
+[data]
+source = "labeled_pvc"
+labeled_path = "/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_labeled.parquet"
+
+[output]
+local_dir = "output/local/build_delay2_postopen_heat_neutral_target_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/cache_builds/build_delay2_postopen_heat_neutral_target_v1"
+
+[k8s]
+namespace = "bizewu"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+
+[k8s.node_selector]
+"kubernetes.io/hostname" = "node8"
+
+[k8s.resources]
+cpu_request = "4"
+cpu_limit = "8"
+memory_request = "96Gi"
+memory_limit = "160Gi"

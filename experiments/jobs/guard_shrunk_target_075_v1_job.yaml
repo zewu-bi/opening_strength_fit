@@ -1,0 +1,54 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: opening-strength-guard-shrunk-target-075-v1
+  namespace: bizewu
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      volumes:
+        - name: opening-strength-output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+      nodeSelector:
+        kubernetes.io/hostname: "node8"
+      containers:
+        - name: opening-strength-fit
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260528-guard-shrunk-target-v1
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: opening-strength-clickhouse
+          workingDir: /app/opening_strength_fit
+          command:
+            - /bin/bash
+            - -lc
+            - |
+              set -euo pipefail
+              CACHE=/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_guard_shrunk_target_075_v1_labeled.parquet
+              if [ -f "${CACHE}" ]; then
+                echo "target cache exists, skipping build: ${CACHE}"
+              else
+                python scripts/build_target_label_cache.py \
+                  --config experiments/runs/build_guard_shrunk_target_075_v1.toml \
+                  --output-dir /mnt/output/opening_strength_fit/cache_builds/build_guard_shrunk_target_075_v1
+              fi
+              exec python scripts/run_experiment.py \
+                --config experiments/runs/guard_shrunk_target_075_v1.toml \
+                --output-dir /mnt/output/opening_strength_fit/guard_shrunk_target_075_v1
+          volumeMounts:
+            - name: opening-strength-output
+              mountPath: /mnt/output
+          resources:
+            requests:
+              cpu: "8"
+              memory: 192Gi
+
+            limits:
+              cpu: "16"
+              memory: 256Gi
