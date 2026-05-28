@@ -1,7 +1,39 @@
 # Experiment Log
 
-本文件是实验事实源；README 和 project brief 只保留摘要。当前项目保留正式归档实验、近期探索和
-辅助任务记录。
+本文件是实验事实源，适合查具体 run、数字、K8s 输出和配置。想先读当前判断，请看
+[project_brief.md](project_brief.md)；这个文件不适合从头顺读。
+
+## 当前路线摘要
+
+当前路线：
+
+- `09:30-09:40` 是项目主窗口；当前优化子域是实验后确定的 `09:31-09:40`。
+- raw-label post-open baseline 继续作为 alpha 主干。
+- clean target / risk-shrunk target 暂停作为主 alpha target，只保留为诊断和对照。
+- 下一轮做 `baseline alpha + learned risk layer / reranker`。
+- 手工 `next_flip_guard_10t` 和 dirty-risk penalty 是 teacher / baseline，不是最终规则。
+
+核心对照：
+
+| score / variant | short Top100 excess bps | next Top100 excess bps | next positive minutes |
+| --- | ---: | ---: | ---: |
+| baseline raw alpha | +22.21 | -32.21 | 0 / 10 |
+| baseline + manual `risk_penalty_075` | +10.91 | +1.99 | 6 / 10 |
+| baseline + hard `next_flip_guard_10t` | +6.77 | +11.88 | 9 / 10 |
+| `guard_shrunk_target_050_v1` | +14.55 | -20.98 | 0 / 10 |
+| `guard_shrunk_target_075_v1` | +6.21 | +0.07 | 5 / 10 |
+| `guard_risk_shrunk_target_100_v1` | +18.80 | -16.87 | 1 / 10 |
+
+定位方式：
+
+- 当前路线和解释：看 `2026-05-28 Clean Target and Risk Sweep` 以及
+  `2026-05-28 Next Direction: Learned Risk Layer`。
+- 查某个 run 是否完成：看下面的 `Run 索引`。
+- 查历史演进：从对应日期小节读；越靠近文件底部越旧。
+
+## 索引区
+
+下面的清单和表格是检索用，不是叙事正文。
 
 正式归档实验：
 
