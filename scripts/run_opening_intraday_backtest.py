@@ -15,6 +15,7 @@ import pandas as pd
 
 import _bootstrap  # noqa: F401
 from opening_strength_fit.dataset import build_labeled_feature_frame, load_ticks
+from opening_strength_fit.labels import safe_price_return
 
 
 DEFAULT_RUNS = (
@@ -419,8 +420,9 @@ def add_ask_depth_execution_columns(
     work["_sweep_buy_price"] = sweep_price
     if "buy_price" in work.columns:
         buy_price = pd.to_numeric(work["buy_price"], errors="coerce")
-        work["_depth_price_impact_bps"] = (
-            (pd.Series(sweep_price, index=work.index) / buy_price - 1.0) * 10_000.0
+        work["_depth_price_impact_bps"] = 10_000.0 * safe_price_return(
+            pd.Series(sweep_price, index=work.index),
+            buy_price,
         )
     return work
 

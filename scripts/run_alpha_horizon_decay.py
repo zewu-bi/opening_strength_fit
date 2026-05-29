@@ -30,6 +30,7 @@ from opening_strength_fit.evaluation import (
     top_score_trades,
 )
 from opening_strength_fit.io import read_frame, write_frame
+from opening_strength_fit.labels import safe_price_return
 from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns
 
 
@@ -696,8 +697,8 @@ def future_vwap_labels(
         denominator = sell_volume * float(volume_unit_multiplier)
         sell_vwap = sell_turnover / denominator.replace(0, np.nan)
         buy_price = pd.to_numeric(samples.loc[common, "buy_price"], errors="coerce")
-        label = sell_vwap / buy_price - 1.0 - float(fee_bps) / 10_000.0
-        valid = sell_volume.gt(0) & sell_turnover.gt(0) & buy_price.gt(0)
+        label = safe_price_return(sell_vwap, buy_price, fee_bps=fee_bps)
+        valid = sell_volume.gt(0) & sell_turnover.gt(0) & label.notna()
         out.loc[common[valid.to_numpy()]] = label.loc[valid].to_numpy()
 
     return out
@@ -781,8 +782,8 @@ def price_exit_labels(
             continue
         exit_price = pd.to_numeric(merged[price_col], errors="coerce")
         buy_price = pd.to_numeric(samples.loc[merged.index, "buy_price"], errors="coerce")
-        label = exit_price / buy_price - 1.0 - float(fee_bps) / 10_000.0
-        valid = exit_price.gt(0) & buy_price.gt(0)
+        label = safe_price_return(exit_price, buy_price, fee_bps=fee_bps)
+        valid = label.notna()
         out.loc[merged.index[valid.to_numpy()]] = label.loc[valid].to_numpy()
 
     return out
@@ -967,8 +968,7 @@ def compute_sampled_intraday_labels(
         )
         exit_price = pd.to_numeric(merged["_exit_price"], errors="coerce")
         buy_price = pd.to_numeric(merged["buy_price"], errors="coerce")
-        label = exit_price / buy_price - 1.0 - float(fee_bps) / 10_000.0
-        label = label.where((exit_price > 0) & (buy_price > 0))
+        label = safe_price_return(exit_price, buy_price, fee_bps=fee_bps)
         aligned = pd.Series(label.to_numpy(), index=merged["_row"].to_numpy())
         output[target_col] = output["_row"].map(aligned)
 
@@ -1177,11 +1177,10 @@ def compute_clickhouse_intraday_labels(
         on=["date", "symbol", "target_offset_us"],
         how="left",
     )
-    merged["label"] = (
-        pd.to_numeric(merged["exit_mid_price"], errors="coerce")
-        / pd.to_numeric(merged["buy_price"], errors="coerce")
-        - 1.0
-        - float(fee_bps) / 10_000.0
+    merged["label"] = safe_price_return(
+        merged["exit_mid_price"],
+        merged["buy_price"],
+        fee_bps=fee_bps,
     )
     labels_wide = merged.pivot_table(
         index="_row",
@@ -1311,11 +1310,18 @@ def compute_clickhouse_close_labels(
     }
     close_by_key = close_prices.set_index(["date", "symbol"])["close_price"]
     sample_index = pd.MultiIndex.from_frame(sample[["date", "symbol"]])
+    buy_price = sample["buy_price"].to_numpy(dtype="float64")
+
+    def close_label(exit_price_values: np.ndarray) -> np.ndarray:
+        exit_price = pd.to_numeric(
+            pd.Series(exit_price_values),
+            errors="coerce",
+        ).to_numpy(dtype="float64")
+        return safe_price_return(exit_price, buy_price, fee_bps=fee_bps).to_numpy()
 
     if "close" in close_horizons:
         close_price = close_by_key.reindex(sample_index).to_numpy()
-        label = close_price / sample["buy_price"].to_numpy(dtype="float64") - 1.0
-        output[label_column_name("close")] = label - float(fee_bps) / 10_000.0
+        output[label_column_name("close")] = close_label(close_price)
 
     if "next_close" in close_horizons:
         next_keys = pd.MultiIndex.from_arrays(
@@ -1326,8 +1332,7 @@ def compute_clickhouse_close_labels(
             names=["date", "symbol"],
         )
         next_close_price = close_by_key.reindex(next_keys).to_numpy()
-        label = next_close_price / sample["buy_price"].to_numpy(dtype="float64") - 1.0
-        output[label_column_name("next_close")] = label - float(fee_bps) / 10_000.0
+        output[label_column_name("next_close")] = close_label(next_close_price)
 
     return output.drop_duplicates(key_cols)
 

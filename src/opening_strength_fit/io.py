@@ -5,16 +5,52 @@ from pathlib import Path
 import pandas as pd
 
 
-def _read_frame_file(path: Path, columns: list[str] | None = None) -> pd.DataFrame:
+FrameFilters = list[tuple[str, str, object]]
+
+
+def _filter_frame(frame: pd.DataFrame, filters: FrameFilters | None) -> pd.DataFrame:
+    if not filters:
+        return frame
+    mask = pd.Series(True, index=frame.index)
+    for column, op, value in filters:
+        if column not in frame.columns:
+            raise SystemExit(f"filter column is missing from input frame: {column}")
+        values = frame[column]
+        if op == "==":
+            mask &= values == value
+        elif op == "!=":
+            mask &= values != value
+        elif op == ">=":
+            mask &= values >= value
+        elif op == ">":
+            mask &= values > value
+        elif op == "<=":
+            mask &= values <= value
+        elif op == "<":
+            mask &= values < value
+        else:
+            raise SystemExit(f"unsupported frame filter operator: {op}")
+    return frame.loc[mask].copy()
+
+
+def _read_frame_file(
+    path: Path,
+    columns: list[str] | None = None,
+    filters: FrameFilters | None = None,
+) -> pd.DataFrame:
     suffixes = "".join(path.suffixes[-2:]).lower()
     if path.suffix.lower() == ".parquet":
-        return pd.read_parquet(path, columns=columns)
+        return pd.read_parquet(path, columns=columns, filters=filters)
     if path.suffix.lower() == ".csv" or suffixes == ".csv.gz":
-        return pd.read_csv(path, usecols=columns)
+        return _filter_frame(pd.read_csv(path, usecols=columns), filters)
     raise SystemExit(f"unsupported input format: {path.suffix}")
 
 
-def read_frame(path: str | Path, columns: list[str] | None = None) -> pd.DataFrame:
+def read_frame(
+    path: str | Path,
+    columns: list[str] | None = None,
+    filters: FrameFilters | None = None,
+) -> pd.DataFrame:
     path = Path(path)
     if not path.exists():
         raise SystemExit(f"input path does not exist: {path}")
@@ -25,10 +61,10 @@ def read_frame(path: str | Path, columns: list[str] | None = None) -> pd.DataFra
             files = sorted(path.rglob("*.csv")) + sorted(path.rglob("*.csv.gz"))
         if not files:
             raise SystemExit(f"no parquet/csv files found under directory: {path}")
-        frames = [_read_frame_file(file, columns=columns) for file in files]
+        frames = [_read_frame_file(file, columns=columns, filters=filters) for file in files]
         return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
-    return _read_frame_file(path, columns=columns)
+    return _read_frame_file(path, columns=columns, filters=filters)
 
 
 def write_frame(df: pd.DataFrame, path: str | Path, *, index: bool = False) -> None:

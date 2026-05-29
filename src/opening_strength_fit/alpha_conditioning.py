@@ -12,6 +12,7 @@ from opening_strength_fit.config import (
     config_str,
     config_value,
 )
+from opening_strength_fit.labels import finite_numeric_series
 from opening_strength_fit.model import RidgePredictionModel, fit_lightgbm_frame
 from opening_strength_fit.training import _feature_filters_from_config, _feature_limit
 
@@ -152,12 +153,10 @@ def alpha_conditioned_reversal_risk(
         raise SystemExit("alpha-conditioned target requires candidate_alpha_rank")
 
     groupers = [labeled["date"], labeled["decision_target_timestamp"]]
-    alpha_rank = pd.to_numeric(labeled["candidate_alpha_rank"], errors="coerce")
-    next_rank = (
-        pd.to_numeric(labeled["alpha_return_next_close"], errors="coerce")
-        .groupby(groupers)
-        .rank(method="average", pct=True)
-    )
+    alpha_rank = finite_numeric_series(labeled["candidate_alpha_rank"])
+    next_rank = finite_numeric_series(labeled["alpha_return_next_close"]).groupby(
+        groupers
+    ).rank(method="average", pct=True)
     candidate_min = (
         config_float(config, "risk_layer", "candidate_alpha_rank_min", 0.80)
         if candidate_alpha_rank_min is None

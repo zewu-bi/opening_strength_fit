@@ -5,11 +5,13 @@ from collections.abc import Sequence
 
 import pandas as pd
 
+from opening_strength_fit.labels import finite_numeric_series
+
 
 def _numeric_column(frame: pd.DataFrame, column: str) -> pd.Series:
     if column not in frame.columns:
         raise SystemExit(f"candidate filter missing required column: {column}")
-    return pd.to_numeric(frame[column], errors="coerce")
+    return finite_numeric_series(frame[column])
 
 
 def _float_map(values: Mapping[str, object] | None) -> dict[str, float]:

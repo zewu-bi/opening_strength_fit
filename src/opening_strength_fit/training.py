@@ -824,6 +824,55 @@ def _labeled_pvc_path(args: argparse.Namespace, config: dict) -> Path:
     return Path(str(raw))
 
 
+def _arg_value(args: argparse.Namespace, name: str, default=None):
+    return getattr(args, name, default)
+
+
+def _rolling_monthly_date_bounds(
+    args: argparse.Namespace,
+    config: dict,
+) -> tuple[str, str] | None:
+    train_months = (
+        _arg_value(args, "train_months")
+        if _arg_value(args, "train_months") is not None
+        else config_int(config, "window", "train_months", 12)
+    )
+    first_test_month = _arg_value(args, "test_start_month") or config_value(
+        config,
+        "window",
+        "test_start_month",
+        None,
+    )
+    last_test_month = _arg_value(args, "test_end_month") or config_value(
+        config,
+        "window",
+        "test_end_month",
+        None,
+    )
+    if not first_test_month or not last_test_month:
+        return None
+    first_period = pd.Period(first_test_month, freq="M")
+    last_period = pd.Period(last_test_month, freq="M")
+    start_period = first_period - int(train_months)
+    return str(start_period.to_timestamp().date()), _period_end_date(last_period)
+
+
+def _labeled_pvc_date_filters(
+    args: argparse.Namespace,
+    config: dict,
+) -> tuple[list[tuple[str, str, object]] | None, dict[str, str]]:
+    if _resolved_window_mode(args, config) != "rolling_monthly":
+        return None, {}
+    bounds = _rolling_monthly_date_bounds(args, config)
+    if not bounds:
+        return None, {}
+    start_date, end_date = bounds
+    return [
+        ("date", ">=", start_date),
+        ("date", "<=", end_date),
+    ], {"date_start": start_date, "date_end": end_date}
+
+
 def _cache_lock_done_path(lock_path: Path) -> Path:
     return Path(f"{lock_path}.done")
 
@@ -1187,8 +1236,12 @@ def _load_labeled_pvc_frame(
     config: dict,
 ) -> pd.DataFrame:
     path = _labeled_pvc_path(args, config)
-    print_mapping("labeled_pvc", {"action": "read", "path": str(path)})
-    return _filter_labeled_frame(read_frame(path), config)
+    filters, filter_summary = _labeled_pvc_date_filters(args, config)
+    print_mapping(
+        "labeled_pvc",
+        {"action": "read", "path": str(path), **filter_summary},
+    )
+    return _filter_labeled_frame(read_frame(path, filters=filters), config)
 
 
 def _test_year_from_args(args: argparse.Namespace, config: dict, key: str) -> int | None:
@@ -1247,10 +1300,15 @@ def _date_splits(labeled: pd.DataFrame, args: argparse.Namespace, config: dict):
 
 
 def _resolved_window_mode(args: argparse.Namespace, config: dict) -> str:
-    window_mode = args.split_mode or config_str(config, "window", "mode", "chronological")
-    if args.rolling_monthly:
+    window_mode = _arg_value(args, "split_mode") or config_str(
+        config,
+        "window",
+        "mode",
+        "chronological",
+    )
+    if _arg_value(args, "rolling_monthly", False):
         return "rolling_monthly"
-    if args.rolling_annual:
+    if _arg_value(args, "rolling_annual", False):
         return "rolling_annual"
     return window_mode
 

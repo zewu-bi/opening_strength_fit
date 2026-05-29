@@ -16,6 +16,68 @@ from opening_strength_fit.schema import (
 )
 
 
+def finite_numeric_series(
+    values: object,
+    *,
+    index: pd.Index | None = None,
+) -> pd.Series:
+    """Coerce numeric values and mask all non-finite values as NaN."""
+    if isinstance(values, pd.Series):
+        out = pd.to_numeric(values, errors="coerce")
+        if index is not None and not out.index.equals(index):
+            out = out.reindex(index)
+    else:
+        out = pd.to_numeric(pd.Series(values, index=index), errors="coerce")
+    return out.astype("float64").replace([np.inf, -np.inf], np.nan)
+
+
+def safe_price_return(
+    exit_price: object,
+    buy_price: object,
+    *,
+    fee_bps: float = 0.0,
+) -> pd.Series:
+    """Return exit / buy - 1 with one shared validity rule for all labels."""
+    exit_values = finite_numeric_series(exit_price)
+    buy_values = finite_numeric_series(buy_price, index=exit_values.index)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        returns = exit_values / buy_values - 1.0 - float(fee_bps) / 10_000.0
+    valid = (
+        np.isfinite(returns)
+        & exit_values.gt(0)
+        & buy_values.gt(0)
+    )
+    return returns.where(valid, np.nan)
+
+
+def normalize_return_label_frame(
+    frame: pd.DataFrame,
+    *,
+    key_columns: Sequence[str],
+    label_col: str,
+) -> pd.DataFrame:
+    """Normalize an external return-label frame using the same finite rule."""
+    required = [*key_columns, label_col]
+    missing = [column for column in required if column not in frame.columns]
+    if missing:
+        raise SystemExit(f"return label input missing columns: {missing}")
+    out = frame[required].copy()
+    if "date" in out.columns:
+        out["date"] = out["date"].astype(str)
+    if "symbol" in out.columns:
+        out["symbol"] = out["symbol"].astype(str)
+    if "decision_target_timestamp" in out.columns:
+        out["decision_target_timestamp"] = pd.to_datetime(
+            out["decision_target_timestamp"],
+            errors="coerce",
+        )
+    out[label_col] = finite_numeric_series(out[label_col])
+    drop_subset = [label_col]
+    if "decision_target_timestamp" in out.columns:
+        drop_subset.append("decision_target_timestamp")
+    return out.dropna(subset=drop_subset).drop_duplicates(list(key_columns))
+
+
 def _future_values(
     frame: pd.DataFrame,
     *,
@@ -286,11 +348,7 @@ def build_trade_labels(
         work["sell_turnover"] / denominator,
         np.nan,
     )
-    work["gross_label"] = np.where(
-        work["buy_price"] > 0,
-        work["sell_vwap"] / work["buy_price"] - 1.0,
-        np.nan,
-    )
+    work["gross_label"] = safe_price_return(work["sell_vwap"], work["buy_price"])
     work["label"] = work["gross_label"] - float(fee_bps) / 10_000.0
     work["valid_label"] = (
         work["label"].notna()

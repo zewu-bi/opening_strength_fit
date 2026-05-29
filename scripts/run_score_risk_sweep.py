@@ -23,6 +23,7 @@ from opening_strength_fit.config import (
     run_id,
 )
 from opening_strength_fit.io import read_frame
+from opening_strength_fit.labels import normalize_return_label_frame
 from run_alpha_horizon_decay import HorizonSpec, compute_clickhouse_close_labels
 
 
@@ -298,18 +299,11 @@ def load_risk_predictions(
 
 
 def normalize_next_close_labels(frame: pd.DataFrame) -> pd.DataFrame:
-    required = [*KEY_COLUMNS, "alpha_return_next_close"]
-    missing = [column for column in required if column not in frame.columns]
-    if missing:
-        raise SystemExit(f"next-close label input missing columns: {missing}")
-    out = frame[required].copy()
-    out["date"] = out["date"].astype(str)
-    out["symbol"] = out["symbol"].astype(str)
-    out["decision_target_timestamp"] = pd.to_datetime(
-        out["decision_target_timestamp"],
-        errors="coerce",
+    return normalize_return_label_frame(
+        frame,
+        key_columns=KEY_COLUMNS,
+        label_col="alpha_return_next_close",
     )
-    return out.dropna(subset=["decision_target_timestamp"]).drop_duplicates(list(KEY_COLUMNS))
 
 
 def load_or_fetch_next_close_labels(

@@ -245,7 +245,9 @@ hfcli kubectl --cluster research wait --for=condition=complete job/opening-stren
 默认正式路径是 CPU LightGBM + PVC labeled cache。GPU 只在显式设置
 `[model].device_type = "gpu"` 和 `[k8s.resources].gpu_limit` 时使用。
 
-rolling monthly 或长窗口任务如果单 Job 内存压力过大，使用 sharded Job：
+rolling monthly 或长窗口任务如果单 Job 内存压力过大，使用 sharded Job。
+monthly sharded manifest 使用 Kubernetes Indexed Job，每个月一个独立 Pod，默认
+`parallelism=1`；如需并行且节点内存足够，可在 `[k8s]` 设 `shard_parallelism`。
 
 ```bash
 python scripts/render_k8s_job.py \

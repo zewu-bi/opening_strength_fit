@@ -175,13 +175,14 @@ def _clean_xy(
 ) -> tuple[pd.DataFrame, pd.Series]:
     if target_col not in df.columns:
         raise SystemExit(f"missing model target column: {target_col}")
-    frame = df.loc[df[target_col].notna()].copy()
-    if "valid_label" in frame.columns:
-        frame = frame.loc[frame["valid_label"]].copy()
-    if frame.empty:
+    target = pd.to_numeric(df[target_col], errors="coerce")
+    mask = target.notna() & np.isfinite(target)
+    if "valid_label" in df.columns:
+        mask &= df["valid_label"].fillna(False).astype(bool)
+    if not bool(mask.any()):
         raise SystemExit("empty labeled frame after filtering valid labels")
-    x = frame[features].replace([np.inf, -np.inf], np.nan)
-    y = frame[target_col].astype("float64")
+    x = df.loc[mask, features].replace([np.inf, -np.inf], np.nan)
+    y = target.loc[mask].astype("float64")
     return x, y
 
 

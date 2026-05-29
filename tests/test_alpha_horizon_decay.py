@@ -4,7 +4,9 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
+import numpy as np
 import pandas as pd
 
 
@@ -15,6 +17,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 from run_alpha_horizon_decay import (  # noqa: E402
     HorizonSpec,
     build_summary_tables,
+    compute_clickhouse_close_labels,
     compute_sampled_intraday_labels,
     compute_tick_horizon_labels,
     horizon_specs,
@@ -159,6 +162,44 @@ class AlphaHorizonDecayTest(unittest.TestCase):
         self.assertEqual(len(summary), 1)
         self.assertAlmostEqual(summary.loc[0, "mean_alpha_return_bps"], 200.0)
         self.assertFalse(buckets.empty)
+
+    def test_clickhouse_close_labels_mask_non_positive_buy_price(self) -> None:
+        predictions = _prediction_frame()
+        predictions.loc[1, "buy_price"] = 0.0
+
+        with (
+            patch("run_alpha_horizon_decay.get_tick_client", return_value=object()),
+            patch(
+                "run_alpha_horizon_decay.query_trading_dates",
+                return_value=["2022-01-04", "2022-01-05"],
+            ),
+            patch(
+                "run_alpha_horizon_decay.query_close_prices",
+                return_value=pd.DataFrame(
+                    {
+                        "date": ["2022-01-05", "2022-01-05"],
+                        "symbol": ["000001.SZ", "000002.SZ"],
+                        "close_price": [11.0, 12.0],
+                    }
+                ),
+            ),
+        ):
+            labels = compute_clickhouse_close_labels(
+                predictions,
+                [HorizonSpec(name="next_close", label="next close", seconds=None)],
+                host="localhost",
+                port=8123,
+                username="user",
+                password="pass",
+                table="stock.tick",
+                close_offset_us=54_000_000_000,
+                close_lookback_seconds=1_800,
+                calendar_days_after=10,
+                fee_bps=0.0,
+            )
+
+        self.assertAlmostEqual(labels.loc[0, "alpha_return_next_close"], 0.1)
+        self.assertTrue(np.isnan(labels.loc[1, "alpha_return_next_close"]))
 
 
 if __name__ == "__main__":

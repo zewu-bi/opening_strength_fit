@@ -172,24 +172,35 @@ def _month_range_from_config(config: dict) -> list[str]:
     return [str(month) for month in pd.period_range(str(start), str(end), freq="M")]
 
 
+def _shard_parallelism(config: dict, resources: dict) -> int:
+    raw = get(config, "k8s", "shard_parallelism", resources.get("shard_parallelism", 1))
+    return max(1, int(raw or 1))
+
+
 def _window_mode(config: dict) -> str:
     return str(get(config, "window", "mode", "chronological"))
 
 
-def _k8s_job_name(prefix: str, run_id_value: str, suffix: str = "") -> str:
+def _k8s_job_name(
+    prefix: str,
+    run_id_value: str,
+    suffix: str = "",
+    *,
+    max_length: int = KUBERNETES_NAME_LIMIT,
+) -> str:
     parts = [prefix, slug(run_id_value)]
     if suffix:
         parts.append(suffix)
     candidate = "-".join(part.strip("-") for part in parts if part)
-    if len(candidate) <= KUBERNETES_NAME_LIMIT:
+    if len(candidate) <= max_length:
         return candidate
 
     digest = hashlib.sha1(candidate.encode("utf-8")).hexdigest()[:8]
     tail = f"-{suffix}-{digest}" if suffix else f"-{digest}"
     head = f"{prefix.strip('-')}-"
-    keep = KUBERNETES_NAME_LIMIT - len(head) - len(tail)
+    keep = max_length - len(head) - len(tail)
     if keep < 1:
-        keep = KUBERNETES_NAME_LIMIT - len(tail) - 1
+        keep = max_length - len(tail) - 1
         head = ""
     return f"{head}{slug(run_id_value)[:keep].rstrip('-')}{tail}"
 
@@ -307,7 +318,16 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
     opencl_bootstrap = _gpu_opencl_bootstrap_yaml(resources, indent=26)
     if _window_mode(config) == "rolling_monthly":
         env_from = _clickhouse_env_from(config, indent=22)
-        months = " ".join(_month_range_from_config(config))
+        months_list = _month_range_from_config(config)
+        months = " ".join(months_list)
+        index_suffix_chars = 1 + len(str(len(months_list) - 1))
+        job_name = _k8s_job_name(
+            "opening-strength",
+            run_id_value,
+            "sharded",
+            max_length=KUBERNETES_NAME_LIMIT - index_suffix_chars,
+        )
+        shard_parallelism = _shard_parallelism(config, resources)
         train_months = int(get(config, "window", "train_months", 12))
         done_file = (
             "rolling_summary.csv"
@@ -324,6 +344,9 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
               namespace: {namespace}
             spec:
               backoffLimit: 0
+              completionMode: Indexed
+              completions: {len(months_list)}
+              parallelism: {shard_parallelism}
               ttlSecondsAfterFinished: 86400
               template:
                 spec:
@@ -340,6 +363,11 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
                       image: {image}
                       imagePullPolicy: Always
 {env_from}                      workingDir: /app/opening_strength_fit
+                      env:
+                        - name: JOB_COMPLETION_INDEX
+                          valueFrom:
+                            fieldRef:
+                              fieldPath: "metadata.annotations['batch.kubernetes.io/job-completion-index']"
                       command:
                         - /bin/bash
                         - -lc
@@ -348,26 +376,35 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
 {opencl_bootstrap.rstrip()}
                           ROOT={output_dir}
                           mkdir -p "${{ROOT}}"
+                          MONTHS=({months})
+                          INDEX="${{JOB_COMPLETION_INDEX:-}}"
+                          if [ -z "${{INDEX}}" ]; then
+                            echo "missing JOB_COMPLETION_INDEX for indexed shard job" >&2
+                            exit 1
+                          fi
+                          if [ "${{INDEX}}" -lt 0 ] || [ "${{INDEX}}" -ge "${{#MONTHS[@]}}" ]; then
+                            echo "JOB_COMPLETION_INDEX out of range: ${{INDEX}}" >&2
+                            exit 1
+                          fi
 
-                          for MONTH in {months}; do
-                            OUT="${{ROOT}}/month_${{MONTH}}"
-                            if [ -f "${{OUT}}/{done_file}" ]; then
-                              echo "month ${{MONTH}}: metrics already exist, skipping ${{OUT}}"
-                              continue
-                            fi
+                          MONTH="${{MONTHS[${{INDEX}}]}}"
+                          OUT="${{ROOT}}/month_${{MONTH}}"
+                          if [ -f "${{OUT}}/{done_file}" ]; then
+                            echo "month ${{MONTH}}: metrics already exist, skipping ${{OUT}}"
+                            exit 0
+                          fi
 
-                            echo
-                            echo "running {run_id_value} shard month=${{MONTH}}"
-                            echo "output_dir=${{OUT}}"
+                          echo
+                          echo "running {run_id_value} shard month=${{MONTH}} index=${{INDEX}}"
+                          echo "output_dir=${{OUT}}"
 
-                            python {script} \\
-                              --config {config_path.as_posix()} \\
-                              --rolling-monthly \\
-                              --train-months {train_months} \\
-                              --test-start-month "${{MONTH}}" \\
-                              --test-end-month "${{MONTH}}" \\
-                              --output-dir "${{OUT}}"
-                          done
+                          python {script} \\
+                            --config {config_path.as_posix()} \\
+                            --rolling-monthly \\
+                            --train-months {train_months} \\
+                            --test-start-month "${{MONTH}}" \\
+                            --test-end-month "${{MONTH}}" \\
+                            --output-dir "${{OUT}}"
                       volumeMounts:
                         - name: opening-strength-output
                           mountPath: {mount_path}

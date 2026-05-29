@@ -90,6 +90,33 @@ def variant_specs(config: dict) -> list[dict[str, object]]:
     return [spec for spec in specs if spec["variant"]]
 
 
+def finite_mean(series: pd.Series) -> float:
+    values = (
+        pd.to_numeric(series, errors="coerce")
+        .replace([np.inf, -np.inf], np.nan)
+        .dropna()
+    )
+    return float(values.mean()) if len(values) else float("nan")
+
+
+def positive_rate(series: pd.Series) -> float:
+    values = (
+        pd.to_numeric(series, errors="coerce")
+        .replace([np.inf, -np.inf], np.nan)
+        .dropna()
+    )
+    return float((values > 0).mean()) if len(values) else float("nan")
+
+
+def positive_count(series: pd.Series) -> int:
+    values = (
+        pd.to_numeric(series, errors="coerce")
+        .replace([np.inf, -np.inf], np.nan)
+        .dropna()
+    )
+    return int((values > 0).sum())
+
+
 def score_variants(
     test: pd.DataFrame,
     *,
@@ -118,12 +145,14 @@ def score_variants(
                 test["date"].eq(date) & test["decision_target_timestamp"].eq(timestamp)
             ]
             selected = group.sort_values("final_score", ascending=False).head(top_n)
-            short_mean = float(selected["label"].mean()) if len(selected) else float("nan")
+            short_mean = finite_mean(selected["label"]) if len(selected) else float("nan")
+            full_short_mean = finite_mean(full_group["label"])
             next_mean = (
-                float(selected["alpha_return_next_close"].mean())
+                finite_mean(selected["alpha_return_next_close"])
                 if len(selected)
                 else float("nan")
             )
+            full_next_mean = finite_mean(full_group["alpha_return_next_close"])
             rows.append(
                 {
                     "test_month": month,
@@ -138,15 +167,9 @@ def score_variants(
                     "candidate_rows": int(len(group)),
                     "selected_rows": int(len(selected)),
                     "short_top_mean_bps": short_mean * 10_000.0,
-                    "short_top_excess_bps": (
-                        short_mean - float(full_group["label"].mean())
-                    )
-                    * 10_000.0,
+                    "short_top_excess_bps": (short_mean - full_short_mean) * 10_000.0,
                     "next_top_mean_bps": next_mean * 10_000.0,
-                    "next_top_excess_bps": (
-                        next_mean - float(full_group["alpha_return_next_close"].mean())
-                    )
-                    * 10_000.0,
+                    "next_top_excess_bps": (next_mean - full_next_mean) * 10_000.0,
                     "selected_gap_risk_rank": (
                         float(selected["gap_risk_rank"].mean())
                         if len(selected) and "gap_risk_rank" in selected
@@ -174,7 +197,7 @@ def summarize_group_metrics(group_metrics: pd.DataFrame) -> tuple[pd.DataFrame, 
             short_top_excess_bps=("short_top_excess_bps", "mean"),
             next_top_mean_bps=("next_top_mean_bps", "mean"),
             next_top_excess_bps=("next_top_excess_bps", "mean"),
-            next_excess_positive_rate=("next_top_excess_bps", lambda s: float((s > 0).mean())),
+            next_excess_positive_rate=("next_top_excess_bps", positive_rate),
             selected_gap_risk_rank=("selected_gap_risk_rank", "mean"),
             selected_binary_risk_rank=("selected_binary_risk_rank", "mean"),
         )
@@ -185,12 +208,12 @@ def summarize_group_metrics(group_metrics: pd.DataFrame) -> tuple[pd.DataFrame, 
         .mean()
         .reset_index()
         .groupby(keys)["next_top_excess_bps"]
-        .apply(lambda s: int((s > 0).sum()))
+        .apply(positive_count)
         .reset_index(name="next_positive_minute_count")
     )
     monthly_positive = (
         month_summary.groupby(keys)["next_top_excess_bps"]
-        .apply(lambda s: int((s > 0).sum()))
+        .apply(positive_count)
         .reset_index(name="next_positive_month_count")
     )
     summary = (
@@ -204,7 +227,7 @@ def summarize_group_metrics(group_metrics: pd.DataFrame) -> tuple[pd.DataFrame, 
             short_top_excess_bps=("short_top_excess_bps", "mean"),
             next_top_mean_bps=("next_top_mean_bps", "mean"),
             next_top_excess_bps=("next_top_excess_bps", "mean"),
-            next_excess_positive_rate=("next_top_excess_bps", lambda s: float((s > 0).mean())),
+            next_excess_positive_rate=("next_top_excess_bps", positive_rate),
             selected_gap_risk_rank=("selected_gap_risk_rank", "mean"),
             selected_binary_risk_rank=("selected_binary_risk_rank", "mean"),
         )
@@ -234,6 +257,21 @@ def main() -> None:
     )
     labeled = labeled.merge(labels, on=list(KEY_COLUMNS), how="inner")
     labeled["decision_target_timestamp"] = pd.to_datetime(labeled["decision_target_timestamp"])
+    before_label_filter = len(labeled)
+    for column in ("label", "alpha_return_next_close"):
+        labeled[column] = (
+            pd.to_numeric(labeled[column], errors="coerce")
+            .replace([np.inf, -np.inf], np.nan)
+        )
+    labeled = labeled.dropna(subset=["label", "alpha_return_next_close"]).copy()
+    print_mapping(
+        "rolling_label_filter",
+        {
+            "rows_before": before_label_filter,
+            "rows_after": len(labeled),
+            "dropped_non_finite": before_label_filter - len(labeled),
+        },
+    )
     print_mapping("rolling_dataset", dataset_summary(labeled))
 
     splits = _date_splits(labeled, args, config)
@@ -268,10 +306,12 @@ def main() -> None:
         )
         train["candidate_alpha_score"] = predict_model_score(alpha_model, train)
         test["candidate_alpha_score"] = predict_model_score(alpha_model, test)
+        del alpha_model
+        gc.collect()
         train = add_group_rank(train, "candidate_alpha_score", "candidate_alpha_rank")
         test = add_group_rank(test, "candidate_alpha_score", "candidate_alpha_rank")
 
-        risk_train = add_alpha_conditioned_risk_targets(train, config)
+        risk_train = add_alpha_conditioned_risk_targets(train, config, copy_frame=False)
         gap_model, gap_stats = fit_lgbm_config_section(
             risk_train,
             args=args,
@@ -281,6 +321,10 @@ def main() -> None:
             sample_weight_col="risk_sample_weight",
             random_state_default=config_int(config, "model", "random_state", 43),
         )
+        test["gap_risk_prediction"] = np.clip(predict_model_score(gap_model, test), 0.0, 1.0)
+        del gap_model
+        gc.collect()
+
         binary_model, binary_stats = fit_lgbm_config_section(
             risk_train,
             args=args,
@@ -290,9 +334,9 @@ def main() -> None:
             sample_weight_col="risk_sample_weight",
             random_state_default=config_int(config, "model", "random_state", 44),
         )
-
-        test["gap_risk_prediction"] = np.clip(predict_model_score(gap_model, test), 0.0, 1.0)
         test["binary_risk_prediction"] = np.clip(predict_model_score(binary_model, test), 0.0, 1.0)
+        del binary_model
+        gc.collect()
         test = add_group_rank(test, "gap_risk_prediction", "gap_risk_rank")
         test = add_group_rank(test, "binary_risk_prediction", "binary_risk_rank")
 
@@ -339,9 +383,6 @@ def main() -> None:
             train,
             test,
             risk_train,
-            alpha_model,
-            gap_model,
-            binary_model,
             group_metrics,
             shard_month_summary,
             shard_summary,

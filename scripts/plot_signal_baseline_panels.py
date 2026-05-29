@@ -15,6 +15,7 @@ import pandas as pd
 
 import _bootstrap  # noqa: F401
 from opening_strength_fit.clickhouse_ticks import DEFAULT_CLICKHOUSE_TICK_TABLE
+from opening_strength_fit.labels import normalize_return_label_frame
 from opening_strength_fit.model import corr
 from run_alpha_horizon_decay import HorizonSpec, compute_clickhouse_close_labels
 
@@ -123,24 +124,10 @@ def load_predictions(path: Path, clocks: list[str]) -> pd.DataFrame:
 
 
 def normalize_next_close_labels(frame: pd.DataFrame) -> pd.DataFrame:
-    required = [
-        "date",
-        "symbol",
-        "decision_target_timestamp",
-        "alpha_return_next_close",
-    ]
-    missing = [column for column in required if column not in frame.columns]
-    if missing:
-        raise SystemExit(f"next-close label input missing columns: {missing}")
-    out = frame[required].copy()
-    out["date"] = out["date"].astype(str)
-    out["symbol"] = out["symbol"].astype(str)
-    out["decision_target_timestamp"] = pd.to_datetime(
-        out["decision_target_timestamp"],
-        errors="coerce",
-    )
-    return out.dropna(subset=["decision_target_timestamp"]).drop_duplicates(
-        ["date", "symbol", "decision_target_timestamp"]
+    return normalize_return_label_frame(
+        frame,
+        key_columns=("date", "symbol", "decision_target_timestamp"),
+        label_col="alpha_return_next_close",
     )
 
 

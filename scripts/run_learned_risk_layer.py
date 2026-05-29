@@ -31,6 +31,10 @@ from opening_strength_fit.config import (
     run_id,
 )
 from opening_strength_fit.io import read_frame, write_frame
+from opening_strength_fit.labels import (
+    finite_numeric_series,
+    normalize_return_label_frame,
+)
 from opening_strength_fit.model import evaluate_prediction_frame
 from opening_strength_fit.model import fit_lightgbm_frame, predict_frame
 from opening_strength_fit.reports import dataset_summary, metrics_by_year_from_windows
@@ -119,18 +123,11 @@ def manual_dirty_risk(frame: pd.DataFrame, config: dict) -> pd.Series:
 
 
 def normalize_next_close_labels(frame: pd.DataFrame) -> pd.DataFrame:
-    required = [*KEY_COLUMNS, "alpha_return_next_close"]
-    missing = [column for column in required if column not in frame.columns]
-    if missing:
-        raise SystemExit(f"next-close label input missing columns: {missing}")
-    out = frame[required].copy()
-    out["date"] = out["date"].astype(str)
-    out["symbol"] = out["symbol"].astype(str)
-    out["decision_target_timestamp"] = pd.to_datetime(
-        out["decision_target_timestamp"],
-        errors="coerce",
+    return normalize_return_label_frame(
+        frame,
+        key_columns=KEY_COLUMNS,
+        label_col="alpha_return_next_close",
     )
-    return out.dropna(subset=["decision_target_timestamp"]).drop_duplicates(list(KEY_COLUMNS))
 
 
 def load_or_fetch_next_close_labels(
@@ -216,15 +213,13 @@ def bad_tail_risk(labeled: pd.DataFrame, config: dict) -> pd.Series:
     short_rank_min = config_float(config, "risk_layer", "short_rank_min", 0.50)
     next_rank_max = config_float(config, "risk_layer", "next_rank_max", 0.50)
     groupers = [labeled["date"], labeled["decision_target_timestamp"]]
-    short_rank = pd.to_numeric(labeled["label"], errors="coerce").groupby(groupers).rank(
+    short_rank = finite_numeric_series(labeled["label"]).groupby(groupers).rank(
         method="average",
         pct=True,
     )
-    next_rank = (
-        pd.to_numeric(labeled["alpha_return_next_close"], errors="coerce")
-        .groupby(groupers)
-        .rank(method="average", pct=True)
-    )
+    next_rank = finite_numeric_series(labeled["alpha_return_next_close"]).groupby(
+        groupers
+    ).rank(method="average", pct=True)
     short_component = ((short_rank - short_rank_min) / (1.0 - short_rank_min)).clip(
         lower=0.0,
         upper=1.0,
@@ -395,15 +390,13 @@ def conditional_bad_tail_risk(
     if "alpha_return_next_close" not in labeled.columns:
         raise SystemExit("conditional bad-tail target requires alpha_return_next_close")
     groupers = [labeled["date"], labeled["decision_target_timestamp"]]
-    short_rank = pd.to_numeric(labeled["label"], errors="coerce").groupby(groupers).rank(
+    short_rank = finite_numeric_series(labeled["label"]).groupby(groupers).rank(
         method="average",
         pct=True,
     )
-    next_rank = (
-        pd.to_numeric(labeled["alpha_return_next_close"], errors="coerce")
-        .groupby(groupers)
-        .rank(method="average", pct=True)
-    )
+    next_rank = finite_numeric_series(labeled["alpha_return_next_close"]).groupby(
+        groupers
+    ).rank(method="average", pct=True)
 
     candidate = pd.Series(False, index=labeled.index)
     if config_bool(config, "risk_layer", "candidate_use_short_rank", True):

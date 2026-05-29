@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+import numpy as np
 import pandas as pd
 
 from opening_strength_fit.candidates import (
@@ -34,6 +35,20 @@ class CandidateGuardTest(unittest.TestCase):
         )
 
         self.assertEqual(filtered["heat"].tolist(), [2, 3, 4])
+
+    def test_candidate_filter_treats_inf_as_missing(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "date": ["2022-01-04"] * 3,
+                "decision_target_timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 3,
+                "symbol": ["000001.SZ", "000002.SZ", "000003.SZ"],
+                "return_10t": [0.01, np.inf, 0.02],
+            }
+        )
+
+        mask = opening_candidate_mask(frame, min_values={"return_10t": 0.0})
+
+        self.assertEqual(mask.tolist(), [True, False, True])
 
     def test_sample_weight_config_uses_candidate_mask(self) -> None:
         frame = pd.DataFrame(

@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 import _bootstrap  # noqa: F401
+from opening_strength_fit.labels import normalize_return_label_frame
 
 
 DEFAULT_INPUT = (
@@ -106,18 +107,10 @@ def load_predictions(path: Path, clocks: list[str], score_col: str) -> pd.DataFr
 def load_next_close_labels(path: Path) -> pd.DataFrame:
     required = [*KEY_COLUMNS, "alpha_return_next_close"]
     labels = read_frame(path, columns=required)
-    missing = [column for column in required if column not in labels.columns]
-    if missing:
-        raise SystemExit(f"next-close label input missing columns: {missing}")
-    labels = labels[required].copy()
-    labels["date"] = labels["date"].astype(str)
-    labels["symbol"] = labels["symbol"].astype(str)
-    labels["decision_target_timestamp"] = pd.to_datetime(
-        labels["decision_target_timestamp"],
-        errors="coerce",
-    )
-    return labels.dropna(subset=["decision_target_timestamp"]).drop_duplicates(
-        list(KEY_COLUMNS)
+    return normalize_return_label_frame(
+        labels,
+        key_columns=KEY_COLUMNS,
+        label_col="alpha_return_next_close",
     )
 
 

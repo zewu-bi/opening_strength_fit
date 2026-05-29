@@ -1038,6 +1038,10 @@ Rescue note:
   `rolling_summary.csv`。
 - 救援镜像：`registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260529-rolling-sharded-rescue`。
 - Job YAML：`experiments/jobs/rolling_alpha_conditioned_top100_validation_v1_sharded_job.yaml`。
+- 二次 OOM 复盘：上述 sharded YAML 仍是单 Pod 内的 shell loop，2021-08 shard 完成后同一 cgroup 进入
+  2021-09，再次读全量 18m cache（约 15.2M 行、490 列）并训练，最终在 256Gi limit 下 OOMKilled。
+  后续修正为 Kubernetes Indexed Job，每个月一个 Pod；PVC labeled cache 对 rolling 月份按 train+test
+  日期范围做 parquet filter，并减少训练阶段的大 DataFrame copy。
 
 ## 2026-05-21 1y Next-Month Baseline
 
