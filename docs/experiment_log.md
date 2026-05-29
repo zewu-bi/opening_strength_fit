@@ -1028,6 +1028,17 @@ Rolling 通过标准：
 - next Top100 excess 相比 raw alpha baseline 大幅收敛，最好多数月份为正。
 - 如果只在 2022-01 有效，说明 v3 是单月 post-hoc；回到 target 定义，不继续扩大 score sweep。
 
+Rescue note:
+
+- 第一版单 Job 在跑完 `2021-08`、进入 `2021-09` 后被 `OOMKilled`，原因是 6 个 rolling window 在同一
+  Python 进程里串行训练，峰值/累积内存超过 256Gi。
+- 采用 `xy_fit` 的 sharded 思路重渲染为 monthly shard：每个月独立 Python 子进程写
+  `month_YYYY-MM/rolling_*.csv` 和 `month_YYYY-MM/predictions.parquet`，root 目录保留共享
+  `clickhouse_next_close_labels.parquet`；`sync_experiment_artifacts.py --all` 负责拉取并本地合并 root-level
+  `rolling_summary.csv`。
+- 救援镜像：`registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260529-rolling-sharded-rescue`。
+- Job YAML：`experiments/jobs/rolling_alpha_conditioned_top100_validation_v1_sharded_job.yaml`。
+
 ## 2026-05-21 1y Next-Month Baseline
 
 四个 2021 训练、2022-01 测试实验已从 K8s PVC 拉回 metrics 和 predictions。由于旧镜像原始 metrics

@@ -1,5 +1,6 @@
 import argparse
 from datetime import date
+import hashlib
 import textwrap
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from opening_strength_fit.config import load_toml, run_id, slug
 
 
 DEFAULT_IMAGE = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:latest"
+KUBERNETES_NAME_LIMIT = 63
 
 
 def load_config(path: Path) -> dict:
@@ -174,6 +176,24 @@ def _window_mode(config: dict) -> str:
     return str(get(config, "window", "mode", "chronological"))
 
 
+def _k8s_job_name(prefix: str, run_id_value: str, suffix: str = "") -> str:
+    parts = [prefix, slug(run_id_value)]
+    if suffix:
+        parts.append(suffix)
+    candidate = "-".join(part.strip("-") for part in parts if part)
+    if len(candidate) <= KUBERNETES_NAME_LIMIT:
+        return candidate
+
+    digest = hashlib.sha1(candidate.encode("utf-8")).hexdigest()[:8]
+    tail = f"-{suffix}-{digest}" if suffix else f"-{digest}"
+    head = f"{prefix.strip('-')}-"
+    keep = KUBERNETES_NAME_LIMIT - len(head) - len(tail)
+    if keep < 1:
+        keep = KUBERNETES_NAME_LIMIT - len(tail) - 1
+        head = ""
+    return f"{head}{slug(run_id_value)[:keep].rstrip('-')}{tail}"
+
+
 def _clickhouse_env_from(config: dict, indent: int = 18) -> str:
     secret = str(get(config, "k8s", "clickhouse_secret", "") or "")
     if not secret:
@@ -264,7 +284,7 @@ def render_training_job(config_path: Path, config: dict, image: str) -> str:
 
 def render_sharded_training_job(config_path: Path, config: dict, image: str) -> str:
     run_id_value = run_id(config, config_path)
-    job_name = f"opening-strength-{slug(run_id_value)}-sharded"
+    job_name = _k8s_job_name("opening-strength", run_id_value, "sharded")
     namespace = get(config, "k8s", "namespace", "bizewu")
     pull_secret = get(config, "k8s", "image_pull_secret", "highfort")
     pvc = get(config, "k8s", "pvc", "bizewu-private-data")
@@ -289,6 +309,12 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
         env_from = _clickhouse_env_from(config, indent=22)
         months = " ".join(_month_range_from_config(config))
         train_months = int(get(config, "window", "train_months", 12))
+        done_file = (
+            "rolling_summary.csv"
+            if str(get(config, "run", "kind", "")).strip().lower()
+            == "alpha_conditioned_rolling_validation"
+            else "metrics_by_year.csv"
+        )
         return textwrap.dedent(
             f"""\
             apiVersion: batch/v1
@@ -325,7 +351,7 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
 
                           for MONTH in {months}; do
                             OUT="${{ROOT}}/month_${{MONTH}}"
-                            if [ -f "${{OUT}}/metrics_by_year.csv" ]; then
+                            if [ -f "${{OUT}}/{done_file}" ]; then
                               echo "month ${{MONTH}}: metrics already exist, skipping ${{OUT}}"
                               continue
                             fi

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import math
 from pathlib import Path
@@ -247,8 +248,8 @@ def main() -> None:
     top_n = args.top_n or config_int(config, "score", "top_n", 100)
     variants = variant_specs(config)
 
-    prediction_frames = []
     group_metric_frames = []
+    prediction_paths = []
     train_stats = {}
     for split in splits:
         month = str(pd.Timestamp(split.test_start_date).to_period("M"))
@@ -308,7 +309,15 @@ def main() -> None:
             "binary_risk_prediction",
             "binary_risk_rank",
         ]
-        prediction_frames.append(test[prediction_columns].copy())
+        shard_output_dir = output_dir / f"month_{month}" if len(splits) > 1 else output_dir
+        shard_output_dir.mkdir(parents=True, exist_ok=True)
+        prediction_path = shard_output_dir / "predictions.parquet"
+        write_frame(test[prediction_columns].copy(), prediction_path)
+        prediction_paths.append(str(prediction_path))
+        shard_month_summary, shard_summary = summarize_group_metrics(group_metrics)
+        group_metrics.to_csv(shard_output_dir / "rolling_group_metrics.csv", index=False)
+        shard_month_summary.to_csv(shard_output_dir / "rolling_month_summary.csv", index=False)
+        shard_summary.to_csv(shard_output_dir / "rolling_summary.csv", index=False)
         train_stats[month] = {
             "train_start_date": split.train_start_date,
             "train_end_date": split.train_end_date,
@@ -326,11 +335,21 @@ def main() -> None:
                 "groups": int(group_metrics[["date", "decision_target_timestamp"]].drop_duplicates().shape[0]),
             },
         )
+        del (
+            train,
+            test,
+            risk_train,
+            alpha_model,
+            gap_model,
+            binary_model,
+            group_metrics,
+            shard_month_summary,
+            shard_summary,
+        )
+        gc.collect()
 
-    predictions = pd.concat(prediction_frames, ignore_index=True)
     group_metrics = pd.concat(group_metric_frames, ignore_index=True)
     month_summary, summary = summarize_group_metrics(group_metrics)
-    write_frame(predictions, output_dir / "predictions.parquet")
     group_metrics.to_csv(output_dir / "rolling_group_metrics.csv", index=False)
     month_summary.to_csv(output_dir / "rolling_month_summary.csv", index=False)
     summary.to_csv(output_dir / "rolling_summary.csv", index=False)
@@ -343,7 +362,7 @@ def main() -> None:
         "windows": len(splits),
         "rows": int(len(labeled)),
         "outputs": {
-            "predictions": str(output_dir / "predictions.parquet"),
+            "predictions_by_window": prediction_paths,
             "group_metrics": str(output_dir / "rolling_group_metrics.csv"),
             "month_summary": str(output_dir / "rolling_month_summary.csv"),
             "summary": str(output_dir / "rolling_summary.csv"),

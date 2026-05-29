@@ -211,8 +211,9 @@ def add_alpha_conditioned_risk_targets(
     binary_target_col: str = "target_alpha_conditioned_binary_risk",
     sample_weight_col: str = "risk_sample_weight",
     candidate_col: str = "target_alpha_conditioned_candidate",
+    copy_frame: bool = True,
 ) -> pd.DataFrame:
-    out = train.copy()
+    out = train.copy() if copy_frame else train
     candidate_min = config_float(config, "risk_layer", "candidate_alpha_rank_min", 0.80)
     gap_rank_max = config_float(config, "risk_layer", "gap_next_rank_max", 0.50)
     binary_rank_max = config_float(config, "risk_layer", "binary_next_rank_max", 0.40)

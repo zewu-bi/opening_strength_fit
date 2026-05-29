@@ -60,6 +60,7 @@ candidate_weight = 1.0
 calendar_days_after = 10
 close_offset_us = 54000000000
 close_lookback_seconds = 1800
+next_close_label_input = "/mnt/output/opening_strength_fit/rolling_alpha_conditioned_top100_validation_v1/clickhouse_next_close_labels.parquet"
 
 [clickhouse]
 host = "ch.db.prod.highfortfunds.com"

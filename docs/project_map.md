@@ -73,7 +73,7 @@
   `scripts/build_target_label_cache.py`; learned-risk jobs use
   `scripts/run_learned_risk_layer.py`; alpha-conditioned rolling jobs use
   `scripts/run_alpha_conditioned_rolling_validation.py`; score-risk sweep jobs use
-  `scripts/run_score_risk_sweep.py`.
+  `scripts/run_score_risk_sweep.py`. `*_sharded_job.yaml` runs monthly/yearly shards.
 - `experiments/results/metrics/`: tracked metrics CSV evidence.
 - `experiments/results/backtests/`: tracked replay and horizon-decay summaries.
 

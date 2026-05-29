@@ -101,6 +101,23 @@ hfcli kubectl --cluster research wait --for=condition=complete job/opening-stren
 默认正式路径是 CPU LightGBM + PVC labeled cache。GPU 只在显式设置
 `[model].device_type = "gpu"` 和 `[k8s.resources].gpu_limit` 时使用。
 
+rolling monthly 或长窗口任务如果单 Job 内存压力过大，使用 sharded Job：
+
+```bash
+python scripts/render_k8s_job.py \
+  --config experiments/runs/<run_id>.toml \
+  --sharded \
+  --image registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG}
+
+hfcli kubectl --cluster research delete job opening-strength-<run-slug>-sharded --ignore-not-found -n bizewu
+hfcli kubectl --cluster research apply -f experiments/jobs/<run_id>_sharded_job.yaml
+hfcli kubectl --cluster research wait --for=condition=complete job/<rendered-sharded-job-name> -n bizewu --timeout=24h
+```
+
+`alpha_conditioned_rolling_validation` 的 sharded Job 按月写
+`month_YYYY-MM/rolling_*.csv` 和 `month_YYYY-MM/predictions.parquet`。训练完成后直接运行
+`sync_experiment_artifacts.py --all`；sync 会在 root summary 缺失时自动拉取月度 shard 并本地合并。
+
 ## 5. 同步产物
 
 metrics 拉回、predictions 拉回、shard metrics 合并和轻量归档统一使用：

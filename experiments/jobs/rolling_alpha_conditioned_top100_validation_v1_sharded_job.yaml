@@ -1,0 +1,67 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: opening-strength-rolling-alpha-conditioned-top-sharded-36699656
+  namespace: bizewu
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      volumes:
+        - name: opening-strength-output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+      nodeSelector:
+        kubernetes.io/hostname: "node8"
+      containers:
+        - name: opening-strength-fit
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260529-rolling-sharded-rescue
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: opening-strength-clickhouse
+          workingDir: /app/opening_strength_fit
+          command:
+            - /bin/bash
+            - -lc
+            - |
+              set -euo pipefail
+
+              ROOT=/mnt/output/opening_strength_fit/rolling_alpha_conditioned_top100_validation_v1
+              mkdir -p "${ROOT}"
+
+              for MONTH in 2021-08 2021-09 2021-10 2021-11 2021-12 2022-01; do
+                OUT="${ROOT}/month_${MONTH}"
+                if [ -f "${OUT}/rolling_summary.csv" ]; then
+                  echo "month ${MONTH}: metrics already exist, skipping ${OUT}"
+                  continue
+                fi
+
+                echo
+                echo "running rolling_alpha_conditioned_top100_validation_v1 shard month=${MONTH}"
+                echo "output_dir=${OUT}"
+
+                python scripts/run_alpha_conditioned_rolling_validation.py \
+                  --config experiments/runs/rolling_alpha_conditioned_top100_validation_v1.toml \
+                  --rolling-monthly \
+                  --train-months 12 \
+                  --test-start-month "${MONTH}" \
+                  --test-end-month "${MONTH}" \
+                  --output-dir "${OUT}"
+              done
+          volumeMounts:
+            - name: opening-strength-output
+              mountPath: /mnt/output
+          resources:
+            requests:
+              cpu: "8"
+              memory: 192Gi
+
+            limits:
+              cpu: "16"
+              memory: 256Gi
+

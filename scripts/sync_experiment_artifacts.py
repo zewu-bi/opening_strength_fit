@@ -14,6 +14,9 @@ from opening_strength_fit.k8s import DEFAULT_IMAGE, RunSpec
 from opening_strength_fit.k8s import command_succeeds, delete_temp_pod, ensure_temp_pod
 from opening_strength_fit.k8s import load_run_spec, run_command
 from opening_strength_fit.reports import metrics_by_year_from_windows
+from run_alpha_conditioned_rolling_validation import (
+    summarize_group_metrics as summarize_rolling_group_metrics,
+)
 
 
 METRICS_SUFFIX = "_metrics_by_year.csv"
@@ -30,6 +33,12 @@ ROLLING_VALIDATION_ARTIFACTS = (
     "rolling_group_metrics.csv",
     "rolling_trace.json",
     "clickhouse_next_close_labels.parquet",
+)
+ROLLING_VALIDATION_SHARD_ARTIFACTS = (
+    "rolling_group_metrics.csv",
+    "rolling_month_summary.csv",
+    "rolling_summary.csv",
+    "rolling_trace.json",
 )
 
 
@@ -198,6 +207,31 @@ def pull_rolling_validation_artifacts(
             pulled.append(local_path)
         else:
             missing.append(name)
+
+    if (output_dir / "rolling_summary.csv").exists():
+        trace = {
+            "fetched_at_utc": datetime.now(UTC).isoformat(),
+            "run_id": spec.run_id,
+            "namespace": spec.namespace,
+            "pvc_dir": spec.pvc_dir,
+            "local_output_dir": str(output_dir),
+            "files": [str(path) for path in pulled],
+            "missing": missing,
+        }
+        (output_dir / "artifact_fetch_trace.json").write_text(
+            json.dumps(trace, indent=2),
+            encoding="utf-8",
+        )
+        return pulled
+
+    shard_paths = pull_rolling_validation_shards(
+        hfcli,
+        spec,
+        pod_name,
+        output_dir,
+    )
+    if shard_paths:
+        pulled.extend(shard_paths)
     if not pulled:
         raise SystemExit(
             f"{spec.run_id}: no rolling-validation artifacts found under {spec.pvc_dir}"
@@ -216,6 +250,84 @@ def pull_rolling_validation_artifacts(
         encoding="utf-8",
     )
     return pulled
+
+
+def combine_rolling_validation_shards(
+    output_dir: Path,
+    *,
+    months: list[str],
+    missing_months: list[str],
+) -> list[Path]:
+    group_frames = []
+    for month in months:
+        path = output_dir / f"month_{month}" / "rolling_group_metrics.csv"
+        if path.exists():
+            group_frames.append(pd.read_csv(path))
+    if not group_frames:
+        return []
+
+    group_metrics = pd.concat(group_frames, ignore_index=True)
+    group_metrics["risk_model"] = group_metrics["risk_model"].fillna("").astype(str)
+    month_summary, summary = summarize_rolling_group_metrics(group_metrics)
+
+    group_path = output_dir / "rolling_group_metrics.csv"
+    month_path = output_dir / "rolling_month_summary.csv"
+    summary_path = output_dir / "rolling_summary.csv"
+    trace_path = output_dir / "rolling_trace.json"
+    group_metrics.to_csv(group_path, index=False)
+    month_summary.to_csv(month_path, index=False)
+    summary.to_csv(summary_path, index=False)
+    trace_path.write_text(
+        json.dumps(
+            {
+                "combined_at_utc": datetime.now(UTC).isoformat(),
+                "months": months,
+                "missing_months": missing_months,
+                "outputs": {
+                    "group_metrics": str(group_path),
+                    "month_summary": str(month_path),
+                    "summary": str(summary_path),
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return [group_path, month_path, summary_path, trace_path]
+
+
+def pull_rolling_validation_shards(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    output_dir: Path,
+) -> list[Path]:
+    if not spec.test_start_month or not spec.test_end_month:
+        return []
+
+    pulled: list[Path] = []
+    missing_months: list[str] = []
+    months = month_periods(spec.test_start_month, spec.test_end_month)
+    for month in months:
+        shard_dir = output_dir / f"month_{month}"
+        shard_dir.mkdir(parents=True, exist_ok=True)
+        found = False
+        for name in ROLLING_VALIDATION_SHARD_ARTIFACTS:
+            remote_path = f"{spec.pvc_dir}/month_{month}/{name}"
+            local_path = shard_dir / name
+            if fetch_remote_file_if_exists(hfcli, spec, pod_name, remote_path, local_path):
+                pulled.append(local_path)
+                found = True
+        if not found:
+            missing_months.append(month)
+
+    combined = combine_rolling_validation_shards(
+        output_dir,
+        months=months,
+        missing_months=missing_months,
+    )
+    return [*pulled, *combined]
 
 
 def pull_root_metrics(

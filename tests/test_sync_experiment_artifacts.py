@@ -13,7 +13,9 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 from opening_strength_fit.k8s import RunSpec  # noqa: E402
+from sync_experiment_artifacts import combine_rolling_validation_shards  # noqa: E402
 from sync_experiment_artifacts import combine_metric_frames  # noqa: E402
+from sync_experiment_artifacts import pull_rolling_validation_shards  # noqa: E402
 from sync_experiment_artifacts import pull_score_risk_artifacts  # noqa: E402
 
 
@@ -110,6 +112,121 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
             self.assertTrue((output_dir / "score_risk_trace.json").exists())
             self.assertTrue((output_dir / "artifact_fetch_trace.json").exists())
             self.assertFalse((output_dir / "clickhouse_next_close_labels.parquet").exists())
+
+    def test_rolling_validation_shards_are_combined_locally(self) -> None:
+        rows = [
+            {
+                "test_month": "2021-08",
+                "variant": "alpha_rank",
+                "risk_model": "",
+                "penalty": 0.0,
+                "candidate_alpha_rank_min": 0.0,
+                "date": "2021-08-02",
+                "clock": "09:31",
+                "candidate_rows": 100,
+                "selected_rows": 100,
+                "short_top_mean_bps": 1.0,
+                "short_top_excess_bps": 2.0,
+                "next_top_mean_bps": -1.0,
+                "next_top_excess_bps": -2.0,
+                "selected_gap_risk_rank": 0.1,
+                "selected_binary_risk_rank": 0.2,
+            },
+            {
+                "test_month": "2021-09",
+                "variant": "alpha_rank",
+                "risk_model": "",
+                "penalty": 0.0,
+                "candidate_alpha_rank_min": 0.0,
+                "date": "2021-09-01",
+                "clock": "09:31",
+                "candidate_rows": 100,
+                "selected_rows": 100,
+                "short_top_mean_bps": 3.0,
+                "short_top_excess_bps": 4.0,
+                "next_top_mean_bps": 5.0,
+                "next_top_excess_bps": 6.0,
+                "selected_gap_risk_rank": 0.3,
+                "selected_binary_risk_rank": 0.4,
+            },
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for row in rows:
+                shard_dir = root / f"month_{row['test_month']}"
+                shard_dir.mkdir(parents=True)
+                pd.DataFrame([row]).to_csv(
+                    shard_dir / "rolling_group_metrics.csv",
+                    index=False,
+                )
+
+            paths = combine_rolling_validation_shards(
+                root,
+                months=["2021-08", "2021-09"],
+                missing_months=[],
+            )
+            summary = pd.read_csv(root / "rolling_summary.csv")
+
+        self.assertIn(root / "rolling_summary.csv", paths)
+        self.assertEqual(int(summary.loc[0, "months"]), 2)
+        self.assertAlmostEqual(float(summary.loc[0, "short_top_excess_bps"]), 3.0)
+        self.assertAlmostEqual(float(summary.loc[0, "next_top_excess_bps"]), 2.0)
+
+    def test_rolling_validation_artifacts_can_be_pulled_from_month_shards(self) -> None:
+        spec = RunSpec(
+            run_id="rolling_alpha_conditioned_top100_validation_v1",
+            pvc_dir="/mnt/output/opening_strength_fit/rolling_alpha_conditioned_top100_validation_v1",
+            namespace="bizewu",
+            pvc="bizewu-private-data",
+            mount_path="/mnt/output",
+            pull_secret="highfort",
+            image="image",
+            test_start_year=2021,
+            test_end_year=2021,
+            test_start_month="2021-08",
+            test_end_month="2021-08",
+            kind="alpha_conditioned_rolling_validation",
+        )
+        row = {
+            "test_month": "2021-08",
+            "variant": "alpha_rank",
+            "risk_model": "",
+            "penalty": 0.0,
+            "candidate_alpha_rank_min": 0.0,
+            "date": "2021-08-02",
+            "clock": "09:31",
+            "candidate_rows": 100,
+            "selected_rows": 100,
+            "short_top_mean_bps": 1.0,
+            "short_top_excess_bps": 2.0,
+            "next_top_mean_bps": -1.0,
+            "next_top_excess_bps": -2.0,
+            "selected_gap_risk_rank": 0.1,
+            "selected_binary_risk_rank": 0.2,
+        }
+
+        def fake_fetch(_hfcli, _spec, _pod, remote_path, local_path):
+            if not remote_path.endswith("rolling_group_metrics.csv"):
+                return False
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            pd.DataFrame([row]).to_csv(local_path, index=False)
+            return True
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch(
+                "sync_experiment_artifacts.fetch_remote_file_if_exists",
+                side_effect=fake_fetch,
+            ):
+                paths = pull_rolling_validation_shards(
+                    "hfcli",
+                    spec,
+                    "helper-pod",
+                    root,
+                )
+
+            self.assertTrue((root / "rolling_summary.csv").exists())
+            self.assertIn(root / "month_2021-08" / "rolling_group_metrics.csv", paths)
 
 
 if __name__ == "__main__":
