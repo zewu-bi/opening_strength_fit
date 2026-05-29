@@ -5,7 +5,7 @@
 - `README.md`: project entrypoint and current spine.
 - `Dockerfile`: CPU training image; default command is `scripts/run_experiment.py --help`.
 - `pyproject.toml`: package metadata, runtime dependencies, and test settings.
-- `.env.example`: local ClickHouse/tick path variables.
+- `.env.example`: local ClickHouse, tick path, and Ceph S3 stock-pool variables.
 
 ## Library: `src/opening_strength_fit/`
 
@@ -15,6 +15,7 @@
 - `io.py`: parquet/csv read/write helpers.
 - `dataset.py`: raw tick loading and labeled feature frame construction.
 - `universe.py`: A-share symbol filtering and symbol-list loading.
+- `stock_pool.py`: Ceph/local `date x symbol` bool stock-pool loading, membership masks, and selection summaries.
 - `sampling.py`: decision-point sampling helpers.
 - `features.py`: preopen, orderbook, post-open v1/v2 decision, trade-flow, and momentum features.
 - `labels.py`: entry-delay buy price, sell VWAP, label, and replay context columns.

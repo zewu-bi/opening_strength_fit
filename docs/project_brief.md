@@ -27,6 +27,10 @@ current optimization slice: 09:31:00 - 09:40:00
 ClickHouse 原始 tick 偶尔出现 6 秒间隔时，不默认视为中间 tick 缺失；这通常表示上一条 3 秒 tick
 所有字段没有变化，后续可作为盘口稳定性信息处理。
 
+外部候选股池目前来自 `lml.bzw@ssd/data/pool_{L,M,S}.parquet`，和隔壁 `xy_fit` 的
+`X.parquet` / `Y.parquet` 同目录。三份文件都是 `date x symbol` bool 宽表，`True` 表示当天入池；
+当前观察是嵌套池 `pool_S ⊂ pool_M ⊂ pool_L`，不是互斥分组。访问方法见 [runbook](runbook.md#2-外部股池)。
+
 short-horizon proxy label：
 
 ```text

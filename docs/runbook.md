@@ -15,7 +15,151 @@ python scripts/check_workflow_coverage.py
 python scripts/probe_clickhouse_data.py --schema --field-notes
 ```
 
-## 2. 本地 Smoke
+## 2. 外部股池
+
+mentor 发来的股池和隔壁 `xy_fit` 项目的 `X.parquet` / `Y.parquet` 在同一个 Ceph S3 目录：
+
+```text
+bucket:   lml.bzw@ssd
+endpoint: http://ceph-s3-ssd.prod.highfortfunds.com
+prefix:   data/
+
+data/pool_L.parquet
+data/pool_M.parquet
+data/pool_S.parquet
+```
+
+本地读取需要司令部 LDAP 凭据。把真实值写在项目根目录的 `.env`，不要提交；`.gitignore` 已忽略
+`.env`。
+
+```bash
+CEPH_LDAP_ID='your_headquarter_username'
+CEPH_LDAP_KEY='your_headquarter_password'
+```
+
+读取前加载环境变量：
+
+```bash
+cd /home/hefu/projects/opening_strength_fit
+set -a; . ./.env; set +a
+```
+
+项目原生支持读取 `bucket@ssd/path.parquet` 形式的股池路径。新环境安装依赖后可以直接在 run config
+里启用；如果当前本地 venv 还没重装依赖，也可以临时复用隔壁 `xy_fit` 的 venv 快速核对：
+
+```bash
+cd /home/hefu/projects/xy_fit
+set -a; . /home/hefu/projects/opening_strength_fit/.env; set +a
+
+.venv/bin/python - <<'PY'
+from xyfit.io import build_client
+
+client = build_client()
+resp = client.list_objects_v2(Bucket="lml.bzw", Prefix="data/")
+for item in sorted(resp.get("Contents", []), key=lambda x: x["LastModified"], reverse=True):
+    print(item["LastModified"], item["Size"], item["Key"])
+PY
+```
+
+推荐先把股池作为 TopN selection mask，不改变训练 universe。日常快速试验可以直接用 CLI：
+
+```bash
+python scripts/run_experiment.py \
+  --config experiments/runs/lgbm_delay2_postopen_0931_0940_baseline_v1.toml \
+  --pool S \
+  --output-dir output/local/lgbm_delay2_postopen_pool_s_selection
+```
+
+`--pool S|M|L` 会自动映射到：
+
+```text
+S -> lml.bzw@ssd/data/pool_S.parquet
+M -> lml.bzw@ssd/data/pool_M.parquet
+L -> lml.bzw@ssd/data/pool_L.parquet
+```
+
+默认语义是 `filter_train=false`、`filter_selection=true`：模型仍在 full universe 上训练和打分，
+最终 TopN 只从池内候选里选。保守无未来检验可以加：
+
+```bash
+--pool S --pool-date-lag-sessions 1
+```
+
+如果要第二阶段试“只在池内训练”，再显式加：
+
+```bash
+--pool S --pool-filter-train
+```
+
+正式实验归档时，把同样口径落进 TOML：
+
+```toml
+[stock_pool]
+enabled = true
+path = "lml.bzw@ssd/data/pool_S.parquet"
+name = "pool_S"
+
+# 推荐第一阶段：训练仍用 full universe，最终 TopN 只在股池里选。
+filter_train = false
+filter_selection = true
+
+# 如果确认股池当日盘前可知，用 0；如果不确定生成时点，先用 1 做保守无未来检验。
+date_lag_sessions = 0
+
+# 输出预测文件里会带这个 0/1 列，方便 audit。
+membership_col = "stock_pool_member"
+annotate_predictions = true
+
+# 只有想让模型显式使用“是否在股池”这个特征时才打开。
+add_feature = false
+```
+
+开启 `filter_selection=true` 后，`metrics_by_year.csv` 的 TopN 汇总使用池内候选行；
+`predictions*.parquet` 会保留全 universe 打分并额外写出 `stock_pool_member`，方便事后比较。
+同时会额外输出池内分桶文件：
+
+```text
+score_buckets_<period>_stock_pool.csv
+score_buckets_stock_pool.csv
+```
+
+三份股池文件都是 `date x symbol` 的 bool 宽表：
+
+- index 是交易日，范围 `2020-01-02` 到 `2025-12-31`，共 `1455` 天。
+- columns 是股票代码，当前共 `5420` 列，例如 `000001.SZ`。
+- cell 为 `True` 表示该股票当天在对应池子里。
+- `pool_S`、`pool_M`、`pool_L` 不是互斥分组；当前看起来是嵌套候选池：`pool_S ⊂ pool_M ⊂ pool_L`。
+- 2025-12-31 当天大约有 `pool_S=1497`、`pool_M=2494`、`pool_L=3491` 只股票入池。
+
+快速 inspection 命令：
+
+```bash
+cd /home/hefu/projects/xy_fit
+set -a; . /home/hefu/projects/opening_strength_fit/.env; set +a
+
+.venv/bin/python - <<'PY'
+from io import BytesIO
+
+import numpy as np
+import pyarrow.parquet as pq
+from xyfit.io import build_client
+
+client = build_client()
+for key in ("data/pool_L.parquet", "data/pool_M.parquet", "data/pool_S.parquet"):
+    body = client.get_object(Bucket="lml.bzw", Key=key)["Body"].read()
+    df = pq.ParquetFile(BytesIO(body)).read().to_pandas()
+    counts = df.to_numpy(dtype=bool, copy=False).sum(axis=1)
+    print(
+        key,
+        "shape=", df.shape,
+        "date_range=", (df.index.min(), df.index.max()),
+        "members_median=", float(np.median(counts)),
+        "members_last=", int(counts[-1]),
+    )
+PY
+```
+
+## 3. 本地 Smoke
 
 ```bash
 python scripts/inspect_dataset.py \
@@ -43,7 +187,7 @@ python scripts/summarize_opening_results.py \
 
 不要在本地构造多月或一年级别 labeled dataset；正式长窗口使用已有 PVC cache 或专门训练任务。
 
-## 3. 实验配置
+## 4. 实验配置
 
 每个正式实验至少对应：
 
@@ -81,7 +225,7 @@ local pull: output/predictions/<run_id>/predictions_all.parquet
 
 `*.tmp.parquet`、`*.parquet.lock` 和 heartbeat 文件都是运行中状态，不能当训练输入。
 
-## 4. 构建和 K8s
+## 5. 构建和 K8s
 
 ```bash
 TAG=opening-strength-fit-$(date +%Y%m%d)-lgbm-cpu-v1
@@ -118,7 +262,7 @@ hfcli kubectl --cluster research wait --for=condition=complete job/<rendered-sha
 `month_YYYY-MM/rolling_*.csv` 和 `month_YYYY-MM/predictions.parquet`。训练完成后直接运行
 `sync_experiment_artifacts.py --all`；sync 会在 root summary 缺失时自动拉取月度 shard 并本地合并。
 
-## 5. 同步产物
+## 6. 同步产物
 
 metrics 拉回、predictions 拉回、shard metrics 合并和轻量归档统一使用：
 
@@ -148,7 +292,7 @@ output/local/<run_id>/score_risk_group_metrics.csv
 output/local/<run_id>/score_risk_trace.json
 ```
 
-## 6. 分析命令
+## 7. 分析命令
 
 Metrics：
 

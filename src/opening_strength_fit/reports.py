@@ -148,6 +148,7 @@ def metrics_by_year_from_windows(metrics: pd.DataFrame) -> pd.DataFrame:
         "top_score_median_return",
         "top_score_win_rate",
         "top_score_return_std",
+        "top_score_stock_pool_candidate_row_fraction",
     }
     sum_cols = {
         "test_rows",
@@ -157,8 +158,17 @@ def metrics_by_year_from_windows(metrics: pd.DataFrame) -> pd.DataFrame:
         "ic_groups",
         "top_score_trades",
         "top_score_groups",
+        "top_score_stock_pool_candidate_rows",
+        "top_score_stock_pool_candidate_dates",
     }
-    max_cols = {"train_rows", "train_dates", "train_symbols", "test_symbols", "symbols"}
+    max_cols = {
+        "train_rows",
+        "train_dates",
+        "train_symbols",
+        "test_symbols",
+        "symbols",
+        "top_score_stock_pool_candidate_symbols",
+    }
 
     for year, group in metrics.groupby("test_year", sort=True):
         row: dict[str, object] = {

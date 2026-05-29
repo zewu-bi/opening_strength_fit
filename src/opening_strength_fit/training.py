@@ -74,6 +74,17 @@ from opening_strength_fit.schema import (
     normalize_clock_time,
     standardize_columns,
 )
+from opening_strength_fit.stock_pool import (
+    StockPoolConfig,
+    add_configured_stock_pool_feature,
+    apply_stock_pool_cli_overrides,
+    configured_stock_pool_selection_frame,
+    filter_configured_stock_pool_train,
+    load_configured_stock_pool,
+    stock_pool_config_from_mapping,
+    stock_pool_evaluation_settings,
+    stock_pool_runtime_summary,
+)
 from opening_strength_fit.universe import (
     DEFAULT_A_SHARE_SYMBOL_REGEX,
     filter_symbol_universe,
@@ -157,6 +168,36 @@ def build_training_parser(description: str) -> argparse.ArgumentParser:
     parser.add_argument("--clickhouse-table", default=None)
     parser.add_argument("--start-offset-us", type=int, default=None)
     parser.add_argument("--end-offset-us", type=int, default=None)
+    parser.add_argument(
+        "--pool",
+        choices=["L", "M", "S", "l", "m", "s"],
+        default=None,
+        help=(
+            "Use mentor stock pool L/M/S as a selection mask. "
+            "By default this keeps full-universe training and restricts TopN selection."
+        ),
+    )
+    parser.add_argument(
+        "--pool-path",
+        default=None,
+        help="Explicit stock-pool parquet path, e.g. lml.bzw@ssd/data/pool_S.parquet.",
+    )
+    parser.add_argument(
+        "--pool-date-lag-sessions",
+        type=int,
+        default=None,
+        help="Use the pool from this many prior pool sessions; set 1 for conservative no-lookahead checks.",
+    )
+    parser.add_argument(
+        "--pool-filter-train",
+        action="store_true",
+        help="Also restrict training rows to the selected stock pool. Default only restricts TopN selection.",
+    )
+    parser.add_argument(
+        "--pool-add-feature",
+        action="store_true",
+        help="Add stock_pool_member as a model feature. Default only annotates predictions.",
+    )
     return parser
 
 
@@ -474,6 +515,21 @@ def _metrics_row(
         "ic_mode": str(evaluation_settings["ic_mode"]),
         "selection_mode": str(evaluation_settings["selection_mode"]),
         "top_n": int(evaluation_settings["top_n"]),
+        "stock_pool_enabled": bool(evaluation_settings.get("stock_pool_enabled", False)),
+        "stock_pool_name": str(evaluation_settings.get("stock_pool_name", "")),
+        "stock_pool_path": str(evaluation_settings.get("stock_pool_path", "")),
+        "stock_pool_date_lag_sessions": int(
+            evaluation_settings.get("stock_pool_date_lag_sessions", 0)
+        ),
+        "stock_pool_filter_train": bool(
+            evaluation_settings.get("stock_pool_filter_train", False)
+        ),
+        "stock_pool_filter_selection": bool(
+            evaluation_settings.get("stock_pool_filter_selection", False)
+        ),
+        "stock_pool_add_feature": bool(
+            evaluation_settings.get("stock_pool_add_feature", False)
+        ),
     }
     row.update(metrics)
     for key, value in top_summary.items():
@@ -1206,7 +1262,7 @@ def _evaluation_settings(config: dict, args: argparse.Namespace) -> dict[str, ob
     bucket_group_cols = group_cols_for_mode(bucket_mode)
     selection_group_cols = group_cols_for_mode(selection_mode)
     ic_group_cols = group_cols_for_mode(ic_mode)
-    return {
+    settings = {
         "score_bucket_mode": bucket_mode,
         "score_bucket_group_cols": format_group_cols(bucket_group_cols),
         "selection_mode": selection_mode,
@@ -1223,6 +1279,10 @@ def _evaluation_settings(config: dict, args: argparse.Namespace) -> dict[str, ob
         "_selection_group_cols": selection_group_cols,
         "_ic_group_cols": ic_group_cols,
     }
+    settings.update(
+        stock_pool_evaluation_settings(stock_pool_config_from_mapping(config))
+    )
+    return settings
 
 
 def _fit_prediction_model(
@@ -1341,9 +1401,13 @@ def _fit_predict_split(
     config: dict,
     alpha: float,
     evaluation_settings: dict[str, object],
+    stock_pool_settings: StockPoolConfig | None = None,
+    stock_pool: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, dict[str, object], dict[str, int]]:
+    stock_pool_settings = stock_pool_settings or stock_pool_config_from_mapping(config)
     train = labeled.loc[labeled["date"].isin(split.train_dates)].copy()
     test = labeled.loc[labeled["date"].isin(split.test_dates)].copy()
+    train = filter_configured_stock_pool_train(train, stock_pool_settings, stock_pool)
     model, train_stats = _fit_prediction_model(
         train,
         args=args,
@@ -1353,6 +1417,11 @@ def _fit_predict_split(
     predictions = predict_frame(model, test)
     if "valid_label" in predictions.columns:
         predictions = predictions.loc[predictions["valid_label"]].copy()
+    predictions, selection_predictions, stock_pool_summary = configured_stock_pool_selection_frame(
+        predictions,
+        stock_pool_settings,
+        stock_pool,
+    )
 
     metrics = evaluate_prediction_frame(
         predictions,
@@ -1364,7 +1433,7 @@ def _fit_predict_split(
         group_cols=evaluation_settings["_bucket_group_cols"],
     )
     top_trades = top_score_trades(
-        predictions,
+        selection_predictions,
         top_n=int(evaluation_settings["top_n"]),
         group_cols=evaluation_settings["_selection_group_cols"],
     )
@@ -1372,6 +1441,7 @@ def _fit_predict_split(
         top_trades,
         group_cols=evaluation_settings["_selection_group_cols"],
     )
+    top_summary.update(stock_pool_summary)
 
     prediction_year = _test_year(split.test_start_date)
     prediction_period = (
@@ -1381,6 +1451,16 @@ def _fit_predict_split(
     )
     write_frame(predictions, output_dir / f"predictions_{prediction_period}.parquet")
     buckets.to_csv(output_dir / f"score_buckets_{prediction_period}.csv", index=False)
+    if stock_pool is not None and stock_pool_settings.filter_selection:
+        pool_buckets = score_bucket_returns(
+            selection_predictions,
+            bins=int(evaluation_settings["score_bins"]),
+            group_cols=evaluation_settings["_bucket_group_cols"],
+        )
+        pool_buckets.to_csv(
+            output_dir / f"score_buckets_{prediction_period}_stock_pool.csv",
+            index=False,
+        )
     metrics_row = _metrics_row(
         run_name=run_name,
         split=split,
@@ -1400,11 +1480,15 @@ def _fit_predict_split(
         f"top_score_summary[{prediction_period},top_n={evaluation_settings['top_n']}]",
         top_summary,
     )
+    if stock_pool_summary:
+        print_mapping(f"stock_pool_summary[{prediction_period}]", stock_pool_summary)
     return predictions, metrics_row, train_stats
 
 
 def train_from_args(args: argparse.Namespace) -> None:
     config = load_run_config(args.config)
+    config = apply_stock_pool_cli_overrides(config, args)
+    stock_pool_settings = stock_pool_config_from_mapping(config)
     tick_path = (
         args.input
         or config_str(config, "data", "tick_path", "")
@@ -1432,6 +1516,14 @@ def train_from_args(args: argparse.Namespace) -> None:
         labeled = _load_training_frame(tick_path, args, config)
     labeled = _apply_guard_features_from_config(labeled, config)
     labeled = _apply_sample_weight_from_config(labeled, config)
+    stock_pool = load_configured_stock_pool(stock_pool_settings)
+    if stock_pool is not None:
+        print_mapping("stock_pool", stock_pool_runtime_summary(stock_pool_settings, stock_pool))
+        labeled = add_configured_stock_pool_feature(
+            labeled,
+            stock_pool_settings,
+            stock_pool,
+        )
     print_mapping("dataset", dataset_summary(labeled))
 
     alpha = (
@@ -1464,6 +1556,8 @@ def train_from_args(args: argparse.Namespace) -> None:
             config=config,
             alpha=alpha,
             evaluation_settings=evaluation_settings,
+            stock_pool_settings=stock_pool_settings,
+            stock_pool=stock_pool,
         )
         prediction_frames.append(predictions)
         metric_rows.append(metrics_row)
@@ -1489,6 +1583,21 @@ def train_from_args(args: argparse.Namespace) -> None:
         group_cols=evaluation_settings["_bucket_group_cols"],
     )
     combined_buckets.to_csv(output_dir / "score_buckets.csv", index=False)
+    if stock_pool is not None and stock_pool_settings.filter_selection:
+        _, combined_pool_predictions, _ = configured_stock_pool_selection_frame(
+            combined_predictions,
+            stock_pool_settings,
+            stock_pool,
+        )
+        combined_pool_buckets = score_bucket_returns(
+            combined_pool_predictions,
+            bins=int(evaluation_settings["score_bins"]),
+            group_cols=evaluation_settings["_bucket_group_cols"],
+        )
+        combined_pool_buckets.to_csv(
+            output_dir / "score_buckets_stock_pool.csv",
+            index=False,
+        )
 
     metrics_by_window = pd.DataFrame(metric_rows)
     metrics_by_year = metrics_by_year_from_windows(metrics_by_window)
