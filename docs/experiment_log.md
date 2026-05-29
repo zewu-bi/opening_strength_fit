@@ -11,7 +11,10 @@
 - raw-label post-open baseline 继续作为 alpha 主干。
 - clean target / risk-shrunk target 暂停作为主 alpha target，只保留为诊断和对照。
 - learned risk layer v1 已完成：两层打分方向有效，但 `bad_tail` v1 太像 next-close selector。
-- 下一步优先做 conditional reversal-risk，只扣短期强势候选里容易回吐的部分。
+- conditional risk v1 已否定：真实 `short_rank` 条件会让 risk 学成 short-alpha proxy。
+- alpha-conditioned risk v2/v3 当前最优：用 alpha-score 定义候选，再学习候选里的 next underperformance；
+  Top100 `gap penalty 0.30/0.35` 是 rolling 验证对象。
+- 下一步不再在 2022-01 单月调参，优先做 18m cache 上的 6 个月 rolling validation。
 - 手工 `next_flip_guard_10t` 和 dirty-risk penalty 是 teacher / baseline，不是最终规则。
 
 核心对照：
@@ -23,6 +26,8 @@
 | baseline + hard `next_flip_guard_10t` | +6.77 | +11.88 | 9 / 10 |
 | baseline + learned `guard_teacher_penalty_050` | +9.05 | +3.28 | 6 / 10 |
 | baseline + learned `bad_tail_penalty_025` | +8.13 | +21.05 | 10 / 10 |
+| alpha-conditioned `gap_penalty_030_p80` | +16.79 | +4.49 | 7 / 10 |
+| alpha-conditioned `gap_penalty_035_p80` | +13.24 | +17.86 | 10 / 10 |
 | `guard_shrunk_target_050_v1` | +14.55 | -20.98 | 0 / 10 |
 | `guard_shrunk_target_075_v1` | +6.21 | +0.07 | 5 / 10 |
 | `guard_risk_shrunk_target_100_v1` | +18.80 | -16.87 | 1 / 10 |
@@ -30,7 +35,8 @@
 定位方式：
 
 - 当前路线和解释：看 `2026-05-28 Clean Target and Risk Sweep`、
-  `2026-05-28 Learned Risk Layer v1` 和 `2026-05-28 Next Direction: Conditional Risk Layer`。
+  `2026-05-28 Learned Risk Layer v1`、`2026-05-29 Alpha-Conditioned Risk v2 Results`
+  和 `2026-05-29 Rolling Validation v1`。
 - 查某个 run 是否完成：看下面的 `Run 索引`。
 - 查历史演进：从对应日期小节读；越靠近文件底部越旧。
 
@@ -85,6 +91,17 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `learned_risk_layer_guard_teacher_v1` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/learned_risk_layer_guard_teacher_v1/` |
 | `learned_risk_layer_bad_tail_v1` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/learned_risk_layer_bad_tail_v1/` |
 | `score_learned_risk_sweep_v1` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_learned_risk_sweep_v1/` |
+| `conditional_bad_tail_risk_v1` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/conditional_bad_tail_risk_v1/` |
+| `conditional_bad_tail_binary_risk_v1` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/conditional_bad_tail_binary_risk_v1/` |
+| `score_conditional_risk_sweep_v1` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_conditional_risk_sweep_v1/` |
+| `build_delay2_18m_cache_v1` | labeled_cache | completed | `/mnt/output/opening_strength_fit/cache/opening_18m_202008_202201_delay2_labeled.parquet` |
+| `alpha_conditioned_reversal_binary_risk_v2` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/alpha_conditioned_reversal_binary_risk_v2/` |
+| `alpha_conditioned_reversal_gap_risk_v2` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/alpha_conditioned_reversal_gap_risk_v2/` |
+| `score_alpha_conditioned_risk_gate_v2` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_alpha_conditioned_risk_gate_v2/` |
+| `score_alpha_conditioned_top100_sweep_v3_p80` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_alpha_conditioned_top100_sweep_v3_p80/` |
+| `score_alpha_conditioned_top100_sweep_v3_p85` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_alpha_conditioned_top100_sweep_v3_p85/` |
+| `score_alpha_conditioned_top100_sweep_v3_p90` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_alpha_conditioned_top100_sweep_v3_p90/` |
+| `rolling_alpha_conditioned_top100_validation_v1` | alpha_conditioned_rolling_validation | running | `/mnt/output/opening_strength_fit/rolling_alpha_conditioned_top100_validation_v1/` |
 
 ## Run 索引
 
@@ -135,6 +152,17 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `learned_risk_layer_guard_teacher_v1` | completed | 学手工 dirty-risk teacher；group rank IC = 0.9768，说明手工风险形态可被可见特征平滑复现。 |
 | `learned_risk_layer_bad_tail_v1` | completed | 学 short-rank 高且 next-rank 低的 bad-tail risk；group rank IC = 0.1028，learnable 但不强。 |
 | `score_learned_risk_sweep_v1` | completed | baseline `alpha_rank - lambda * learned_risk_rank` sweep；guard teacher 较平衡，bad_tail v1 太像 next-close selector。 |
+| `conditional_bad_tail_risk_v1` | completed | 条件 rank-gap reversal risk：short-rank >= p70 候选内学习 `max(short_rank - next_rank, 0)`；group rank IC = 0.6901。 |
+| `conditional_bad_tail_binary_risk_v1` | completed | 条件 hard reversal risk：short-rank >= p80 且 next-rank <= p50；group rank IC = 0.4023。 |
+| `score_conditional_risk_sweep_v1` | completed | alpha p80 候选池内扫 Top20/50/100 与 lambda 0.05-0.30；结果未通过，risk penalty 吃掉 short alpha 且未改善 Top100 next tail。 |
+| `build_delay2_18m_cache_v1` | completed | 从 ClickHouse 构造 2020-08 至 2022-01 的 18 个月 delay2 labeled cache，供后续 6 个月 rolling 用。 |
+| `alpha_conditioned_reversal_binary_risk_v2` | completed | alpha p80 候选内学习 `next_rank <= p40` 的 hard reversal risk；group rank IC = 0.4121。 |
+| `alpha_conditioned_reversal_gap_risk_v2` | completed | alpha p80 候选内学习 bottom-half next-rank severity；group rank IC = 0.4276。 |
+| `score_alpha_conditioned_risk_gate_v2` | completed | Top20/50 有强信号；Top100 需要更细 soft-penalty sweep，hard gate 不是主线。 |
+| `score_alpha_conditioned_top100_sweep_v3_p80` | completed | Top100-only p80 fine sweep；`gap penalty 0.30` short/next excess = +16.79 / +4.49 bps。 |
+| `score_alpha_conditioned_top100_sweep_v3_p85` | completed | Top100-only p85 fine sweep；`gap penalty 0.30` short/next excess = +16.82 / +3.25 bps。 |
+| `score_alpha_conditioned_top100_sweep_v3_p90` | completed | Top100-only p90 fine sweep；`gap penalty 0.30` short/next excess = +17.68 / +0.72 bps。 |
+| `rolling_alpha_conditioned_top100_validation_v1` | running | 18m cache 上做 2021-08 至 2022-01 rolling validation；固定验证 gap 0.30/0.35、binary 0.35 和 alpha baseline。 |
 
 ## Output 索引
 
@@ -817,6 +845,188 @@ final     = alpha_rank - lambda * conditional_risk_rank
 - next-close Top100 excess 从 -32 bps 明显收敛，目标是接近 0 或小正，不追求 next 远大于 short。
 - risk 层只扣“短期强势且容易回吐”的 A 类 dirty tail；B 类 next-close 好不是 final score 的奖励项。
 - learned risk 至少接近 manual risk penalty 的 short/next tradeoff，并在小 lambda 区间更平滑。
+
+## 2026-05-28 Conditional Risk Jobs and 18m Cache
+
+按 conditional risk 路线挂起新一轮 K8s jobs，镜像 tag：
+
+```text
+registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260528-conditional-risk-v1
+```
+
+已提交 job：
+
+| run | kind | purpose |
+| --- | --- | --- |
+| `conditional_bad_tail_risk_v1` | learned_risk_layer | continuous rank-gap conditional risk；非候选样本权重 0.05。 |
+| `conditional_bad_tail_binary_risk_v1` | learned_risk_layer | stricter binary conditional risk；非候选样本权重 0.05。 |
+| `score_conditional_risk_sweep_v1` | score_risk_sweep | 在 alpha p80 候选池内做 Top20/50/100 和 lambda 0.05-0.30 sweep；等待两个 risk prediction 输入。 |
+| `build_delay2_18m_cache_v1` | labeled_cache | 纯 ClickHouse -> labeled cache，不训练模型；输出 18 个月 delay2 cache。 |
+
+rolling validation 暂不挂。原因是当前正式 cache 只有 2021-01 至 2022-01，样本长度不适合 6 个月 rolling；
+先补 2020-08 至 2022-01 的 18 个月 cache，再做 `rolling_conditional_risk_validation_v1`。
+
+## 2026-05-29 Conditional Risk v1 Results
+
+三项 conditional risk 任务已完成并同步到本地：
+
+```text
+experiments/results/metrics/conditional_bad_tail_risk_v1_metrics_by_year.csv
+experiments/results/metrics/conditional_bad_tail_binary_risk_v1_metrics_by_year.csv
+experiments/results/backtests/score_conditional_risk_sweep_v1_summary.csv
+```
+
+Risk-model metrics：
+
+| run | target | group rank IC | overall rank IC | mean target |
+| --- | --- | ---: | ---: | ---: |
+| `conditional_bad_tail_risk_v1` | conditional rank gap | 0.6901 | 0.6897 | 0.0981 |
+| `conditional_bad_tail_binary_risk_v1` | conditional binary | 0.4023 | 0.4021 | 0.0880 |
+
+分数层结果没有通过。`score_conditional_risk_sweep_v1` 在 `alpha_rank >= p80` 候选池内评估：
+
+| TopK | best acceptable? | baseline alpha short / next excess bps | best conditional observation |
+| ---: | --- | ---: | --- |
+| 20 | no | +50.96 / -69.43 | `conditional_binary_penalty_030` 把 next 拉到 -40.25，但 short 变成 -23.97。 |
+| 50 | no | +31.55 / -50.08 | `conditional_binary_penalty_030` next 为 -47.84，short 变成 -21.73。 |
+| 100 | no | +22.21 / -32.21 | baseline 本身已经是 best next；所有 conditional variants next <= -40.85，short 多数为负。 |
+
+诊断：
+
+- `conditional_gap_score` 在 alpha Top100 内 vs short label 的 group Spearman 约 `+0.7544`，vs next close 约 `+0.0587`。
+- `conditional_binary_score` 在 alpha Top100 内 vs short label 的 group Spearman 约 `+0.7463`，vs next close 约 `+0.0584`。
+- 这说明 conditional risk v1 主要学到了“短期赢家强度”，不是“短期强势中的回吐风险”。扣它会删除 short alpha，
+  但不会把组合推向 next 更干净的区域。
+
+下一步判断：
+
+- 不继续沿用真实 `short_rank` 条件风险标签。即使 target IC 很高，也只是证明短期赢家形态可学，不代表风险层可用。
+- 先等 `build_delay2_18m_cache_v1` 完成，再做 6 个月 rolling，避免继续在单个 2022-01 测试月上调参。
+- 新 risk label 应该以 alpha-score / OOF-alpha 为条件，而不是以真实 short label 为条件。候选可以是
+  `oof_alpha_rank >= p80`，风险可以是 `next_rank <= p40/p50`、`next residual` 或
+  `next_rank - expected_next_rank(alpha_bucket)` 的负残差。
+- 评估时增加一条硬门槛：risk score 在 alpha Top100 内与 raw short label 的 Spearman 不能接近
+  `+0.7`；否则说明它在惩罚 alpha 本体。
+
+18 个月 cache 随后完成，实际覆盖 `2020-08-03` 至 `2022-01-28`，365 个交易日、16,748,169 行。
+
+## 2026-05-29 Alpha-Conditioned Risk v2 Jobs
+
+用户指出当前仍在找规律阶段，rolling 只是验证；因此 discovery 不等待 18m cache，继续在
+`opening_1y_next_month_delay2_labeled.parquet` 上做 2021 train -> 2022-01 test。
+
+这轮改动：
+
+- `run_learned_risk_layer.py` 新增 `alpha_conditioned_reversal` target。
+- target 先在 2021 train 上拟合一个 raw short-label alpha model，再给 2021 train 和 2022-01 test 打
+  `candidate_alpha_score` / `candidate_alpha_rank`。
+- risk target 不再用真实 `short_rank` 定义候选，只用 `candidate_alpha_rank >= p80`。
+- risk model 训练时排除 `candidate_alpha_score`、`candidate_alpha_rank` 和 sample-weight 辅助列，避免把候选定义或权重列当成特征。
+
+已挂起镜像：
+
+```text
+registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260529-alpha-conditioned-risk-v2
+```
+
+Jobs：
+
+| run | kind | status | purpose |
+| --- | --- | --- | --- |
+| `alpha_conditioned_reversal_binary_risk_v2` | learned_risk_layer | completed | alpha p80 候选内学习 `next_rank <= p40` 的 hard reversal risk。 |
+| `alpha_conditioned_reversal_gap_risk_v2` | learned_risk_layer | completed | alpha p80 候选内学习 bottom-half next-rank severity。 |
+| `score_alpha_conditioned_risk_gate_v2` | score_risk_sweep | completed | 等待两个 risk prediction 后，在 alpha p80 候选池内做 Top20/50/100、risk gate 0.60/0.70/0.80/0.90 和 lambda 0.05-0.25 sweep。 |
+
+期望看到：
+
+- alpha baseline 仍是参照：Top100 short / next excess 约 `+22.21 / -32.21 bps`。
+- 合格结果应保住 Top100 short 至少约 `+10 bps`，同时把 next tail 明显从 `-32 bps` 拉向 0。
+- 如果 next 明显转正但 short 被打到接近 0 或负数，说明又变成 next-close selector。
+- 如果 risk score 在 alpha Top100 内与 short label 相关接近 conditional v1 的 `+0.7`，说明它仍在扣 alpha 本体。
+
+## 2026-05-29 Alpha-Conditioned Risk v2 Results
+
+Artifacts:
+
+```text
+experiments/results/metrics/alpha_conditioned_reversal_binary_risk_v2_metrics_by_year.csv
+experiments/results/metrics/alpha_conditioned_reversal_gap_risk_v2_metrics_by_year.csv
+experiments/results/backtests/score_alpha_conditioned_risk_gate_v2_summary.csv
+experiments/results/backtests/score_alpha_conditioned_top100_sweep_v3_summary.csv
+```
+
+Risk-model metrics:
+
+| run | target | group rank IC | overall rank IC |
+| --- | --- | ---: | ---: |
+| `alpha_conditioned_reversal_binary_risk_v2` | alpha-conditioned binary next-low | 0.4121 | 0.4106 |
+| `alpha_conditioned_reversal_gap_risk_v2` | alpha-conditioned next-rank gap | 0.4276 | 0.4260 |
+
+风险分数诊断：
+
+- 在全市场里 risk score 与 alpha prediction 仍较相关，但这是因为 alpha-conditioned target 只在 alpha 候选内激活。
+- 限制到 alpha Top100/50/20 后，risk score 与 raw short label 的 group Spearman 只有约 `0.04-0.07`，
+  与 next close label 稳定负相关约 `-0.10` 至 `-0.12`。
+- 这与 conditional v1 明显不同；v2 不再主要惩罚 short-alpha 本体。
+
+`score_alpha_conditioned_risk_gate_v2` 先看 Top20/50/100，结论是 Top20/50 信号很强，但策略判断应回到
+Top100；hard gate 可以把 next 拉正，但会让 short 掉得过多。
+
+Top100-only v3 随后只扫 Top100，候选池 p80/p85/p90，soft penalty 0.25-0.45，hard gate 只作对照。
+关键 Top100 excess：
+
+| score | short excess bps | next excess bps | next positive minutes |
+| --- | ---: | ---: | ---: |
+| raw alpha baseline | +22.21 | -32.21 | 0 / 10 |
+| heat-neutral v2 + `mid_heat_10t` | +9.15 | +2.10 | 8 / 10 |
+| `gap penalty 0.30`, p80 | +16.79 | +4.49 | 7 / 10 |
+| `gap penalty 0.35`, p80 | +13.24 | +17.86 | 10 / 10 |
+| `gap penalty 0.30`, p90 | +17.68 | +0.72 | 6 / 10 |
+| `binary penalty 0.35`, p80 | +19.49 | -2.04 | 4 / 10 |
+
+结论：
+
+- 当前阶段主看 excess frontier，不用 actual 否定 discovery 结果；actual 留到交易成本/容量阶段。
+- `gap risk + soft penalty` 是主线，`0.30` 平衡，`0.35` 防守；两者都优于简单 guard frontier。
+- `binary` risk 更保 short，但 next 还没有稳定过零，只保留为 rolling 对照。
+- hard gate 不是主线。
+- 不再在 2022-01 单月继续调参；下一步固定参数做 rolling。
+
+## 2026-05-29 Rolling Validation v1
+
+18m cache 已完成：
+
+```text
+/mnt/output/opening_strength_fit/cache/opening_18m_202008_202201_delay2_labeled.parquet
+date_min: 2020-08-03
+date_max: 2022-01-28
+rows: 16,748,169
+valid_labels: 16,545,004
+```
+
+新增 rolling 入口：
+
+```text
+scripts/run_alpha_conditioned_rolling_validation.py
+experiments/runs/rolling_alpha_conditioned_top100_validation_v1.toml
+experiments/jobs/rolling_alpha_conditioned_top100_validation_v1_job.yaml
+```
+
+Validation design:
+
+- Test months: `2021-08` 至 `2022-01`，共 6 个月。
+- Each window: 前 12 个月训练 alpha model、gap risk model、binary risk model。
+- Risk target: alpha p80 候选内的 next underperformance；gap 用 `next_rank <= p50` severity，
+  binary 用 `next_rank <= p40`。
+- Fixed Top100 variants:
+  `alpha_rank`、`gap_penalty_030_p80`、`gap_penalty_035_p80`、
+  `gap_penalty_030_p90`、`binary_penalty_035_p80`。
+
+Rolling 通过标准：
+
+- `gap_penalty_030_p80` 或 `gap_penalty_035_p80` 的 short Top100 excess 多数月份仍显著为正。
+- next Top100 excess 相比 raw alpha baseline 大幅收敛，最好多数月份为正。
+- 如果只在 2022-01 有效，说明 v3 是单月 post-hoc；回到 target 定义，不继续扩大 score sweep。
 
 ## 2026-05-21 1y Next-Month Baseline
 

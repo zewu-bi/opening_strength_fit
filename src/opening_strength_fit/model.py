@@ -46,8 +46,12 @@ NON_FEATURE_COLUMNS = {
     "sell_volume",
     "sell_turnover",
     "alpha_return_next_close",
+    "candidate_alpha_score",
+    "candidate_alpha_rank",
+    "alpha_conditioning_prediction",
     "prediction",
     "sample_weight",
+    "risk_sample_weight",
 }
 LEAKY_PREFIXES = (
     "label_xs_",
@@ -225,6 +229,7 @@ def fit_gbm_frame(
     *,
     feature_limit: int | None = None,
     target_col: str = "label",
+    sample_weight_col: str = "",
     feature_filters: dict[str, tuple[str, ...]] | None = None,
     max_iter: int = 100,
     learning_rate: float = 0.05,
@@ -233,6 +238,8 @@ def fit_gbm_frame(
     random_state: int = 7,
 ) -> tuple[RidgePredictionModel, dict[str, int]]:
     features = feature_columns(train, feature_limit, **(feature_filters or {}))
+    if sample_weight_col:
+        features = [column for column in features if column != sample_weight_col]
     if not features:
         raise SystemExit("no numeric feature columns found")
 

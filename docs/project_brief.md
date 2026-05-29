@@ -64,8 +64,14 @@ label      = sell_vwap / buy_price - 1 - fee_bps / 10000
   short-positive / next-negative 成分。
 - 但 `bad_tail` v1 不是可直接部署的 overnight-alpha 证据。它太像 next-close selector，强扣之后
   next 远大于 short，说明它混入了“哪些开盘状态第二天收盘更好”的 B 成分。
-- 下一步要把 risk 重新定义为 conditional reversal-risk：只在短期强势候选里学习哪些更容易回吐，
-  不是奖励纯 next-close 好的股票。
+- `conditional_bad_tail` v1 也不是可用风险层。它在训练标签里直接用了真实 `short_rank` 定义候选和
+  risk gap，模型最终主要学到“短期赢家强度”，不是“短期强势里的回吐风险”。扣它会删掉 short alpha
+  本体，next tail 也没有改善。
+- `alpha_conditioned_reversal` v2 改为用 alpha-score 定义候选，再学习候选里的 next underperformance。
+  Top100 v3 细扫显示 soft penalty 是主线：`gap penalty 0.30` 在保留约 `+16.8 bps` short excess 的同时，
+  把 next excess 从 `-32.2 bps` 拉到 `+3~4.5 bps`。
+- 下一步不继续在单个 2022-01 上调参；用 18 个月 cache 做 6 个月 rolling validation，固定验证
+  `gap penalty 0.30/0.35`、`binary penalty 0.35` 和 alpha baseline。
 
 当前工作分解：
 
@@ -184,23 +190,82 @@ target_label = label - lambda * dirty_risk * max(label - group_median, 0)
   但它只是 Top100 内的一个窄切片，不能直接和完整 Top100 主模型比较。
 - 结论不是“短期强 alpha 能自然隔夜”，而是“短期强势里有可见的回吐风险，需要作为条件风险扣掉”。
 
+### Conditional Risk v1
+
+`conditional_bad_tail_risk_v1` 和 `conditional_bad_tail_binary_risk_v1` 原本想把问题收窄成：
+只在短期强势候选中识别回吐风险，避免 `bad_tail` v1 变成全样本 next-close selector。
+
+标签：
+
+```text
+gap risk    = 1[short_rank >= p70] * max(short_rank - next_rank, 0)
+binary risk = 1[short_rank >= p80 and next_rank <= p50]
+```
+
+结果：
+
+| run / score | key result |
+| --- | --- |
+| `conditional_bad_tail_risk_v1` | risk target group rank IC = 0.6901。 |
+| `conditional_bad_tail_binary_risk_v1` | risk target group rank IC = 0.4023。 |
+| `score_conditional_risk_sweep_v1` | Top20/50/100 均未通过；risk penalty 吃掉 short alpha，Top100 next tail 还更差。 |
+
+诊断：
+
+- 在 alpha Top100 内，`conditional_gap_score` vs short label 的 group Spearman 约 `+0.7544`，
+  vs next close 约 `+0.0587`。
+- `conditional_binary_score` vs short label 约 `+0.7463`，vs next close 约 `+0.0584`。
+- 因此模型学到的是“短期赢家强度”。这类标签虽然可学，但不是可扣的回吐风险；它会把 alpha 本体当作 risk。
+
+### Alpha-Conditioned Risk v2/v3
+
+v2 改掉 conditional v1 的核心问题：候选不再由真实 `short_rank` 定义，而是先拟合 raw short-label
+alpha model，再用 `candidate_alpha_rank >= p80` 定义候选；risk target 只看候选里的 next underperformance。
+
+Risk target 可学但不再明显变成 short-alpha proxy：
+
+| run | target | group rank IC |
+| --- | --- | ---: |
+| `alpha_conditioned_reversal_binary_risk_v2` | candidate 内 `next_rank <= p40` | 0.4121 |
+| `alpha_conditioned_reversal_gap_risk_v2` | candidate 内 bottom-half next severity | 0.4276 |
+
+Top100 v3 细扫结果，以 excess 为主：
+
+| score | short Top100 excess bps | next Top100 excess bps | next positive minutes |
+| --- | ---: | ---: | ---: |
+| raw alpha baseline | +22.21 | -32.21 | 0 / 10 |
+| heat-neutral v2 + `mid_heat_10t` | +9.15 | +2.10 | 8 / 10 |
+| `gap penalty 0.30`, p80 | +16.79 | +4.49 | 7 / 10 |
+| `gap penalty 0.35`, p80 | +13.24 | +17.86 | 10 / 10 |
+| `binary penalty 0.35`, p80 | +19.49 | -2.04 | 4 / 10 |
+
+结论：
+
+- Top100 应看 excess frontier；actual 只作为后续交易成本 sanity check。
+- `gap` risk soft penalty 明显优于 hard gate，`0.30` 是当前 rolling 的主候选，`0.35` 是更防守的候选。
+- `binary` risk 能更保 short，但 next 尚未稳定拉正，只作为对照。
+- hard gate 不再作为主路线。
+
 ## 下一步任务
 
-下一步目标是让 alpha 模型继续寻找短周期强势，让 risk 模型只惩罚强势候选里的回吐概率。
-这不是永久排除后续继续改进 alpha target，而是先把 risk layer 的职责定义清楚。
+下一步目标仍是让 alpha 模型继续寻找短周期强势，让 risk 模型只惩罚强势候选里的回吐概率。
+但 conditional v1 已经说明：不能用真实 `short_rank` 直接构造 risk 强度，否则 risk layer 会学习
+short alpha 本身。
 
 | step | run direction | purpose |
 | --- | --- | --- |
-| 1 | `conditional_bad_tail_risk_v1` | 只在 high-alpha 或 high-short 候选里定义 reversal risk，非候选样本排除或降权，避免训练成纯 next-close selector。 |
-| 2 | `score_conditional_risk_sweep_v1` | 做小 lambda sweep，例如 0.05、0.10、0.15、0.20、0.25，同时看 Top20 / Top50 / Top100 和两阶段 gate。 |
-| 3 | `rolling_conditional_risk_validation_v1` | 跨月验证 dirty tail 和 conditional risk 是否稳定，避免只解释 2022-01。 |
+| 1 | `rolling_alpha_conditioned_top100_validation_v1` | 每个测试月用前 12 个月重新训练 alpha、gap risk、binary risk，固定验证 Top100 penalty frontier。 |
+| 2 | rolling 结果复盘 | 看 6 个测试月中 short/next excess 是否稳定，不再按 2022-01 单月继续调参。 |
+| 3 | 若 rolling 通过 | 再进入交易约束：成本、成交、容量、同股冷却和日频 overlay。 |
+| 4 | 若 rolling 不通过 | 回到 risk target：候选定义、next residual、OOF alpha conditioning，而不是继续扩大 score sweep。 |
 
 下一轮 gate：
 
 - short Top100 excess 不要从 +22 bps 直接掉到 +5 bps 以下，优先保住约 +10 bps 以上。
 - next-close Top100 excess 从 -32 bps 明显收敛，目标是接近 0 或小正，而不是 next 远大于 short。
-- risk 层只扣“短期强势且容易回吐”的 A 类 dirty tail；纯 next-close 更好的 B 类不作为额外奖励。
+- risk 层只扣 alpha-score 强势候选中 next residual 差的 A 类 dirty tail；纯 next-close 更好的 B 类不作为额外奖励。
 - learned risk 至少接近 manual risk penalty 的 short/next tradeoff，并在小 lambda 区间更平滑。
+- risk score 与 short label 的相关不能过高；若 alpha Top100 内 Spearman 接近 `+0.7`，基本就是在扣 alpha 本体。
 
 ## 建模边界
 
@@ -208,6 +273,7 @@ target_label = label - lambda * dirty_risk * max(label - group_median, 0)
 
 - 不把 next-close label 混进 alpha model。next-close 可以监督 risk layer，因为 risk layer 的职责就是识别回吐风险。
 - 不把 bad-tail risk 当作 next-close reward；final score 的被减数必须是 conditional reversal-risk。
+- 不再用真实 `short_rank` 直接作为 learned risk 的候选或强度来源；它太容易把 risk 学成 short-alpha proxy。
 - 不优化 fee/slippage、多档容量、同股冷却或 T+1 overlay。
 - 不围绕特殊 `09:30` opening snapshot 做主优化。
 - 不继续叠加 clean target 和 risk penalty，避免重复惩罚同一类 dirty tail。

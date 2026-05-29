@@ -1,0 +1,45 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: opening-strength-score-alpha-conditioned-risk-gate-v2
+  namespace: bizewu
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      volumes:
+        - name: opening-strength-output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+      nodeSelector:
+        kubernetes.io/hostname: "node8"
+      containers:
+        - name: opening-strength-fit
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260529-alpha-conditioned-risk-v2
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: opening-strength-clickhouse
+          workingDir: /app/opening_strength_fit
+          command:
+            - python
+            - scripts/run_score_risk_sweep.py
+            - --config
+            - experiments/runs/score_alpha_conditioned_risk_gate_v2.toml
+            - --output-dir
+            - /mnt/output/opening_strength_fit/score_alpha_conditioned_risk_gate_v2
+          volumeMounts:
+            - name: opening-strength-output
+              mountPath: /mnt/output
+          resources:
+            requests:
+              cpu: "4"
+              memory: 64Gi
+
+            limits:
+              cpu: "8"
+              memory: 128Gi

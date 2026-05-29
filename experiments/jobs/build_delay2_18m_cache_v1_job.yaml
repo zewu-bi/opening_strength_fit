@@ -1,0 +1,45 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: opening-strength-build-delay2-18m-cache-v1
+  namespace: bizewu
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      volumes:
+        - name: opening-strength-output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+      nodeSelector:
+        kubernetes.io/hostname: "node8"
+      containers:
+        - name: opening-strength-fit
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260528-conditional-risk-v1
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: opening-strength-clickhouse
+          workingDir: /app/opening_strength_fit
+          command:
+            - python
+            - scripts/build_labeled_cache.py
+            - --config
+            - experiments/runs/build_delay2_18m_cache_v1.toml
+            - --output-dir
+            - /mnt/output/opening_strength_fit/build_delay2_18m_cache_v1
+          volumeMounts:
+            - name: opening-strength-output
+              mountPath: /mnt/output
+          resources:
+            requests:
+              cpu: "8"
+              memory: 192Gi
+
+            limits:
+              cpu: "16"
+              memory: 256Gi

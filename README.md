@@ -10,9 +10,10 @@ ClickHouse `stock.tick` 或本地 tick parquet 构造
 这只是当前建模子域，不是改变项目定义。
 
 当前结论：opening proxy signal 真实存在，但 `09:31-09:40` raw short-alpha 里混有明显
-“短正长负”的 dirty tail。第一轮 learned-risk 验证说明两层打分方向可行，但 `bad_tail` v1
-更像在筛 next-close profile，不能直接证明拿到了可隔夜的短期特征。下一步主线是 conditional
-reversal-risk：raw-label baseline 继续把短周期信号做强，risk layer 只在短期强势候选里学习哪些更容易回吐。
+“短正长负”的 dirty tail。`bad_tail` v1 太像 next-close selector；`conditional_bad_tail` v1
+又学成了 short-alpha 强度 proxy。最新 `alpha_conditioned_reversal` v2/v3 用 alpha-score 定义候选，
+再只在候选里学习 next underperformance；Top100 excess frontier 已优于简单 guard，下一步是用
+18m cache 做 6 个月 rolling validation。
 
 ```text
 alpha_model = raw short-label post-open model

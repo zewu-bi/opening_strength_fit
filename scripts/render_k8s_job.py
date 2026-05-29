@@ -23,8 +23,12 @@ def training_script(config: dict) -> str:
         return "scripts/audit_feature_dependence.py"
     if run_kind in {"cache_transform", "target_cache"}:
         return "scripts/build_target_label_cache.py"
+    if run_kind in {"labeled_cache", "clickhouse_labeled_cache"}:
+        return "scripts/build_labeled_cache.py"
     if run_kind == "learned_risk_layer":
         return "scripts/run_learned_risk_layer.py"
+    if run_kind == "alpha_conditioned_rolling_validation":
+        return "scripts/run_alpha_conditioned_rolling_validation.py"
     if run_kind == "score_risk_sweep":
         return "scripts/run_score_risk_sweep.py"
     if run_kind not in {"experiment", "exploration"}:

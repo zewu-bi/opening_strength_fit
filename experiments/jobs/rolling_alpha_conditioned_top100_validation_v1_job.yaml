@@ -1,0 +1,51 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: opening-strength-rolling-alpha-conditioned-top100-validation-v
+  namespace: bizewu
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      volumes:
+        - name: opening-strength-output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+        - name: rolling-validation-v1-config
+          configMap:
+            name: opening-strength-rolling-validation-v1
+      nodeSelector:
+        kubernetes.io/hostname: "node8"
+      containers:
+        - name: opening-strength-fit
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260529-alpha-conditioned-risk-v2
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: opening-strength-clickhouse
+          workingDir: /app/opening_strength_fit
+          command:
+            - python
+            - /mnt/config/run_alpha_conditioned_rolling_validation.py
+            - --config
+            - /mnt/config/rolling_alpha_conditioned_top100_validation_v1.toml
+            - --output-dir
+            - /mnt/output/opening_strength_fit/rolling_alpha_conditioned_top100_validation_v1
+          volumeMounts:
+            - name: opening-strength-output
+              mountPath: /mnt/output
+            - name: rolling-validation-v1-config
+              mountPath: /mnt/config
+              readOnly: true
+          resources:
+            requests:
+              cpu: "8"
+              memory: 192Gi
+
+            limits:
+              cpu: "16"
+              memory: 256Gi

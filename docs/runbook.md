@@ -57,10 +57,14 @@ experiments/results/metrics/<run_id>_metrics_by_year.csv
 
 - `[run].kind = "feature_audit"`：运行 grouped importance、permutation 和 drop-retrain ablation，
   audit CSV 写到 run output dir。
+- `[run].kind = "labeled_cache"`：从 ClickHouse 读取 tick、构造 labeled rows，并写出单个 PVC cache，
+  不训练模型。
 - `[run].kind = "cache_transform"` 或 `"target_cache"`：运行 target-label cache 构建，
   output 通常是 `/mnt/output/opening_strength_fit/cache/*.parquet`。
 - `[run].kind = "learned_risk_layer"`：训练 learned dirty-risk / next-flip risk model，
   输出 risk predictions，供后续 score-risk sweep 读取。
+- `[run].kind = "alpha_conditioned_rolling_validation"`：每个测试月用前 N 个月重新训练
+  alpha 和 alpha-conditioned risk model，并固定评估 Top100 penalty variants。
 - `[run].kind = "score_risk_sweep"`：对已有 prediction 做 score/risk penalty 或 hard gate 扫描，
   不训练新模型。
 - `[run].kind = "exploration"`：可以先保持 active/running，不要求立刻有 metrics；确认后再归档成正式实验。
@@ -163,6 +167,9 @@ python scripts/run_alpha_horizon_decay.py \
 Target-label cache build:
 
 ```bash
+python scripts/build_labeled_cache.py \
+  --config experiments/runs/<build_labeled_cache_run_id>.toml
+
 python scripts/build_target_label_cache.py \
   --config experiments/runs/<build_target_run_id>.toml
 ```

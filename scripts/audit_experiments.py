@@ -90,8 +90,11 @@ def is_artifact_run(record: RunRecord) -> bool:
     return record.kind in {
         "feature_audit",
         "cache_transform",
+        "labeled_cache",
+        "clickhouse_labeled_cache",
         "target_cache",
         "score_risk_sweep",
+        "alpha_conditioned_rolling_validation",
     }
 
 

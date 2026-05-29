@@ -42,6 +42,7 @@
 - `probe_clickhouse_data.py`: inspect ClickHouse schema and opening-window coverage.
 - `inspect_dataset.py`: local source inspection and small labeled sample generation.
 - `prepare_research_dataset.py`: partition labeled research datasets by date.
+- `build_labeled_cache.py`: build a single labeled cache from ClickHouse without training a model.
 - `fetch_clickhouse_ticks.py`: fetch one symbol/day tick window.
 - `concat_frames.py`: concatenate parquet/csv frames.
 - `build_labels.py`: build labeled rows from existing tick files.
@@ -58,6 +59,7 @@
 - `run_score_tail_guards.py`: sweep visible-information TopN guard rules over an existing score file.
 - `run_score_risk_sweep.py`: sweep alpha-rank minus dirty-risk penalties and hard gates over existing score files.
 - `run_learned_risk_layer.py`: train learned dirty-risk / next-flip risk layers for later score sweeps.
+- `run_alpha_conditioned_rolling_validation.py`: monthly rolling validation for alpha-conditioned Top100 risk-penalty scores.
 - `_bootstrap.py`: makes `python scripts/<name>.py` import `src/`.
 
 ## Experiments
@@ -65,9 +67,11 @@
 - `experiments/runs/*.toml`: run configs. `run.id` must match the filename.
 - `experiments/jobs/*.yaml`: rendered K8s jobs. Training jobs use
   `scripts/run_experiment.py`; feature-audit jobs use
-  `scripts/audit_feature_dependence.py`; cache-transform jobs use
+  `scripts/audit_feature_dependence.py`; labeled-cache jobs use
+  `scripts/build_labeled_cache.py`; cache-transform jobs use
   `scripts/build_target_label_cache.py`; learned-risk jobs use
-  `scripts/run_learned_risk_layer.py`; score-risk sweep jobs use
+  `scripts/run_learned_risk_layer.py`; alpha-conditioned rolling jobs use
+  `scripts/run_alpha_conditioned_rolling_validation.py`; score-risk sweep jobs use
   `scripts/run_score_risk_sweep.py`.
 - `experiments/results/metrics/`: tracked metrics CSV evidence.
 - `experiments/results/backtests/`: tracked replay and horizon-decay summaries.

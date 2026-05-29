@@ -18,6 +18,7 @@ from opening_strength_fit.config import (
     config_float,
     config_int,
     config_str,
+    config_value,
     load_toml,
     run_id,
 )
@@ -47,6 +48,30 @@ RISK_RANK_MAX = {
 }
 PENALTIES = (0.25, 0.50, 0.75, 1.00)
 RISK_GATES = (0.25, 0.50, 0.75)
+
+
+def _float_sequence(config: dict, section: str, key: str, default: tuple[float, ...]) -> tuple[float, ...]:
+    value = config_value(config, section, key, default)
+    if value in (None, ""):
+        return default
+    if isinstance(value, str):
+        raw = value.replace(",", " ").split()
+    else:
+        raw = list(value)
+    parsed = tuple(float(item) for item in raw if str(item).strip())
+    return parsed or default
+
+
+def _int_sequence(config: dict, section: str, key: str, default: tuple[int, ...]) -> tuple[int, ...]:
+    value = config_value(config, section, key, default)
+    if value in (None, ""):
+        return default
+    if isinstance(value, str):
+        raw = value.replace(",", " ").split()
+    else:
+        raw = list(value)
+    parsed = tuple(int(item) for item in raw if str(item).strip())
+    return parsed or default
 
 
 def parse_args() -> argparse.Namespace:
@@ -412,6 +437,9 @@ def variant_specs(
     include_alpha_rank: bool = True,
     include_manual_risk: bool = True,
     include_hard_gates: bool = True,
+    penalties: tuple[float, ...] = PENALTIES,
+    risk_gates: tuple[float, ...] = RISK_GATES,
+    learned_risk_gates: tuple[float, ...] = (),
 ) -> list[dict[str, object]]:
     specs: list[dict[str, object]] = []
     if include_alpha_rank:
@@ -424,7 +452,7 @@ def variant_specs(
             }
         )
     if include_manual_risk:
-        for penalty in PENALTIES:
+        for penalty in penalties:
             specs.append(
                 {
                     "variant": f"risk_penalty_{int(penalty * 100):03d}",
@@ -442,7 +470,7 @@ def variant_specs(
                 "risk_col": "dirty_risk",
             }
         )
-        for threshold in RISK_GATES:
+        for threshold in risk_gates:
             specs.append(
                 {
                     "variant": f"hard_gate_risk_le_{int(threshold * 100):03d}",
@@ -453,12 +481,25 @@ def variant_specs(
             )
     for learned in learned_risks or []:
         risk_name = safe_suffix(learned["risk_id"])
-        for penalty in PENALTIES:
+        for penalty in penalties:
             specs.append(
                 {
                     "variant": f"{risk_name}_penalty_{int(penalty * 100):03d}",
                     "penalty": penalty,
                     "gate": None,
+                    "risk_col": learned["column"],
+                }
+            )
+        for threshold in learned_risk_gates:
+            specs.append(
+                {
+                    "variant": f"{risk_name}_gate_le_{int(threshold * 100):03d}",
+                    "penalty": 0.0,
+                    "gate": {
+                        "type": "risk_le",
+                        "risk_col": learned["column"],
+                        "threshold": threshold,
+                    },
                     "risk_col": learned["column"],
                 }
             )
@@ -468,29 +509,47 @@ def variant_specs(
 def summarize_selection(
     frame: pd.DataFrame,
     *,
-    top_n: int,
+    top_n_list: tuple[int, ...],
     learned_risks: list[dict[str, str]] | None = None,
     include_alpha_rank: bool = True,
     include_manual_risk: bool = True,
     include_hard_gates: bool = True,
+    penalties: tuple[float, ...] = PENALTIES,
+    risk_gates: tuple[float, ...] = RISK_GATES,
+    learned_risk_gates: tuple[float, ...] = (),
+    alpha_candidate_rank_min: float = 0.0,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     rows = []
+    base_frame = frame
+    if alpha_candidate_rank_min > 0.0:
+        base_frame = frame.loc[frame["alpha_rank"].ge(alpha_candidate_rank_min)].copy()
     for spec in variant_specs(
         learned_risks,
         include_alpha_rank=include_alpha_rank,
         include_manual_risk=include_manual_risk,
         include_hard_gates=include_hard_gates,
+        penalties=penalties,
+        risk_gates=risk_gates,
+        learned_risk_gates=learned_risk_gates,
     ):
         variant = str(spec["variant"])
         penalty = float(spec["penalty"])
         gate = spec["gate"]
         risk_col = str(spec["risk_col"])
-        work = frame.copy()
+        work = base_frame.copy()
         work["final_score"] = work["alpha_rank"] - penalty * work[risk_col]
         if gate == "guard":
             work = work.loc[work["next_flip_guard_10t_pass"]].copy()
         elif gate is not None:
-            work = work.loc[work["dirty_risk"].le(float(gate))].copy()
+            if isinstance(gate, dict):
+                gate_type = str(gate.get("type", ""))
+                if gate_type != "risk_le":
+                    raise SystemExit(f"unknown risk sweep gate type: {gate_type!r}")
+                gate_col = str(gate["risk_col"])
+                threshold = float(gate["threshold"])
+                work = work.loc[work[gate_col].le(threshold)].copy()
+            else:
+                work = work.loc[work["dirty_risk"].le(float(gate))].copy()
 
         for (run_name, date, timestamp), group in work.groupby(
             ["run_id", "date", "decision_target_timestamp"],
@@ -501,35 +560,49 @@ def summarize_selection(
                 & (frame["date"].eq(date))
                 & (frame["decision_target_timestamp"].eq(timestamp))
             ]
-            selected = group.sort_values("final_score", ascending=False).head(top_n)
             all_short = float(full_group["label"].mean())
             all_next = float(full_group["alpha_return_next_close"].mean())
-            short_mean = float(selected["label"].mean()) if len(selected) else float("nan")
-            next_mean = float(selected["alpha_return_next_close"].mean()) if len(selected) else float("nan")
-            rows.append(
-                {
-                    "run_id": run_name,
-                    "variant": variant,
-                    "penalty": penalty,
-                    "gate": "" if gate is None else str(gate),
-                    "date": str(date),
-                    "decision_target_timestamp": pd.Timestamp(timestamp),
-                    "clock": pd.Timestamp(timestamp).strftime("%H:%M"),
-                    "rows": int(len(full_group)),
-                    "candidate_rows": int(len(group)),
-                    "selected_rows": int(len(selected)),
-                    "short_top_mean_bps": short_mean * 10_000.0,
-                    "short_top_excess_bps": (short_mean - all_short) * 10_000.0,
-                    "next_top_mean_bps": next_mean * 10_000.0,
-                    "next_top_excess_bps": (next_mean - all_next) * 10_000.0,
-                    "selected_guard_pass_count": int(selected["next_flip_guard_10t_pass"].sum()),
-                    "selected_dirty_risk": float(selected[risk_col].mean()) if len(selected) else float("nan"),
-                }
-            )
+            ranked = group.sort_values("final_score", ascending=False)
+            for top_n in top_n_list:
+                selected = ranked.head(int(top_n))
+                short_mean = float(selected["label"].mean()) if len(selected) else float("nan")
+                next_mean = (
+                    float(selected["alpha_return_next_close"].mean())
+                    if len(selected)
+                    else float("nan")
+                )
+                rows.append(
+                    {
+                        "run_id": run_name,
+                        "variant": variant,
+                        "top_n": int(top_n),
+                        "penalty": penalty,
+                        "gate": "" if gate is None else str(gate),
+                        "alpha_candidate_rank_min": alpha_candidate_rank_min,
+                        "date": str(date),
+                        "decision_target_timestamp": pd.Timestamp(timestamp),
+                        "clock": pd.Timestamp(timestamp).strftime("%H:%M"),
+                        "rows": int(len(full_group)),
+                        "candidate_rows": int(len(group)),
+                        "selected_rows": int(len(selected)),
+                        "short_top_mean_bps": short_mean * 10_000.0,
+                        "short_top_excess_bps": (short_mean - all_short) * 10_000.0,
+                        "next_top_mean_bps": next_mean * 10_000.0,
+                        "next_top_excess_bps": (next_mean - all_next) * 10_000.0,
+                        "selected_guard_pass_count": int(
+                            selected["next_flip_guard_10t_pass"].sum()
+                        ),
+                        "selected_dirty_risk": (
+                            float(selected[risk_col].mean())
+                            if len(selected)
+                            else float("nan")
+                        ),
+                    }
+                )
 
     group_metrics = pd.DataFrame(rows)
     minute = (
-        group_metrics.groupby(["run_id", "variant", "clock"], as_index=False)
+        group_metrics.groupby(["run_id", "variant", "top_n", "clock"], as_index=False)
         .agg(
             groups=("date", "size"),
             candidate_rows=("candidate_rows", "mean"),
@@ -541,10 +614,10 @@ def summarize_selection(
             selected_guard_pass_count=("selected_guard_pass_count", "mean"),
             selected_dirty_risk=("selected_dirty_risk", "mean"),
         )
-        .sort_values(["run_id", "variant", "clock"])
+        .sort_values(["run_id", "variant", "top_n", "clock"])
     )
     summary = (
-        group_metrics.groupby(["run_id", "variant"], as_index=False)
+        group_metrics.groupby(["run_id", "variant", "top_n"], as_index=False)
         .agg(
             groups=("date", "size"),
             candidate_rows=("candidate_rows", "mean"),
@@ -557,14 +630,21 @@ def summarize_selection(
             selected_guard_pass_count=("selected_guard_pass_count", "mean"),
             selected_dirty_risk=("selected_dirty_risk", "mean"),
         )
-        .sort_values(["run_id", "next_top_excess_bps", "short_top_excess_bps"], ascending=[True, False, False])
+        .sort_values(
+            ["run_id", "top_n", "next_top_excess_bps", "short_top_excess_bps"],
+            ascending=[True, True, False, False],
+        )
     )
     next_positive_minutes = (
-        minute.groupby(["run_id", "variant"])["next_top_excess_bps"]
+        minute.groupby(["run_id", "variant", "top_n"])["next_top_excess_bps"]
         .apply(lambda s: int((s > 0).sum()))
         .reset_index(name="next_positive_minute_count")
     )
-    summary = summary.merge(next_positive_minutes, on=["run_id", "variant"], how="left")
+    summary = summary.merge(
+        next_positive_minutes,
+        on=["run_id", "variant", "top_n"],
+        how="left",
+    )
     return group_metrics, minute, summary
 
 
@@ -601,6 +681,25 @@ def main() -> None:
         "prediction",
     )
     top_n = int(args.top_n if args.top_n is not None else config_int(config, "risk_sweep", "top_n", 100))
+    top_n_list = (
+        (top_n,)
+        if args.top_n is not None
+        else _int_sequence(config, "risk_sweep", "top_n_list", (top_n,))
+    )
+    penalties = _float_sequence(config, "risk_sweep", "penalties", PENALTIES)
+    risk_gates = _float_sequence(config, "risk_sweep", "risk_gates", RISK_GATES)
+    learned_risk_gates = _float_sequence(
+        config,
+        "risk_sweep",
+        "learned_risk_gates",
+        (),
+    )
+    alpha_candidate_rank_min = config_float(
+        config,
+        "risk_sweep",
+        "alpha_candidate_rank_min",
+        0.0,
+    )
     start_clock = args.start_clock or config_str(config, "risk_sweep", "start_clock", "09:31")
     end_clock = args.end_clock or config_str(config, "risk_sweep", "end_clock", "09:40")
     clocks = clock_range(start_clock, end_clock)
@@ -641,11 +740,15 @@ def main() -> None:
 
     group_metrics, minute, summary = summarize_selection(
         frame,
-        top_n=top_n,
+        top_n_list=top_n_list,
         learned_risks=learned_risks,
         include_alpha_rank=include_alpha_rank,
         include_manual_risk=include_manual_risk,
         include_hard_gates=include_hard_gates,
+        penalties=penalties,
+        risk_gates=risk_gates,
+        learned_risk_gates=learned_risk_gates,
+        alpha_candidate_rank_min=alpha_candidate_rank_min,
     )
     group_metrics.to_csv(output_dir / "score_risk_group_metrics.csv", index=False)
     minute.to_csv(output_dir / "score_risk_minute_summary.csv", index=False)
@@ -658,7 +761,11 @@ def main() -> None:
         "learned_risks": learned_risks,
         "score_col": score_col,
         "risk_score_col": risk_score_col,
-        "top_n": top_n,
+        "top_n_list": list(top_n_list),
+        "penalties": list(penalties),
+        "risk_gates": list(risk_gates),
+        "learned_risk_gates": list(learned_risk_gates),
+        "alpha_candidate_rank_min": alpha_candidate_rank_min,
         "clocks": clocks,
         "rows": int(len(frame)),
         "groups": int(
@@ -689,6 +796,7 @@ def main() -> None:
             [
                 "run_id",
                 "variant",
+                "top_n",
                 "short_top_excess_bps",
                 "next_top_excess_bps",
                 "next_positive_minute_count",

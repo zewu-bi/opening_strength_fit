@@ -1,0 +1,59 @@
+[run]
+id = "score_alpha_conditioned_top100_sweep_v3_p90"
+kind = "score_risk_sweep"
+description = "Top100-only fine sweep for alpha-conditioned risk v2 with alpha p90 candidate pool."
+status = "completed"
+
+[risk_sweep]
+score_col = "prediction"
+risk_score_col = "prediction"
+risk_score_transform = "rank"
+top_n = 100
+top_n_list = [100]
+penalties = [0.25, 0.275, 0.30, 0.325, 0.35, 0.375, 0.40, 0.425, 0.45]
+learned_risk_gates = [0.95, 0.975, 0.99]
+alpha_candidate_rank_min = 0.90
+start_clock = "09:31"
+end_clock = "09:40"
+include_alpha_rank = true
+include_manual_risk = false
+include_hard_gates = false
+wait_for_inputs_seconds = 86400
+next_close_label_input = "/mnt/output/opening_strength_fit/score_risk_sweep_guard_shrunk_v1/clickhouse_next_close_labels.parquet"
+
+[[risk_sweep.inputs]]
+run_id = "lgbm_delay2_postopen_0931_0940_baseline_v1"
+prediction_path = "/mnt/output/opening_strength_fit/lgbm_delay2_postopen_0931_0940_baseline_v1/predictions.parquet"
+
+[[risk_sweep.risk_inputs]]
+risk_id = "alpha_cond_binary"
+prediction_path = "/mnt/output/opening_strength_fit/alpha_conditioned_reversal_binary_risk_v2/predictions.parquet"
+score_col = "prediction"
+score_transform = "rank"
+
+[[risk_sweep.risk_inputs]]
+risk_id = "alpha_cond_gap"
+prediction_path = "/mnt/output/opening_strength_fit/alpha_conditioned_reversal_gap_risk_v2/predictions.parquet"
+score_col = "prediction"
+score_transform = "rank"
+
+[output]
+local_dir = "output/local/score_alpha_conditioned_top100_sweep_v3_p90"
+k8s_dir = "/mnt/output/opening_strength_fit/score_alpha_conditioned_top100_sweep_v3_p90"
+
+[k8s]
+namespace = "bizewu"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+clickhouse_secret = "opening-strength-clickhouse"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260529-alpha-conditioned-risk-v2"
+
+[k8s.node_selector]
+"kubernetes.io/hostname" = "node8"
+
+[k8s.resources]
+cpu_request = "4"
+cpu_limit = "8"
+memory_request = "64Gi"
+memory_limit = "128Gi"

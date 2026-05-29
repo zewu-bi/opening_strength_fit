@@ -24,6 +24,13 @@ SCORE_RISK_ARTIFACTS = (
     "score_risk_trace.json",
     "clickhouse_next_close_labels.parquet",
 )
+ROLLING_VALIDATION_ARTIFACTS = (
+    "rolling_summary.csv",
+    "rolling_month_summary.csv",
+    "rolling_group_metrics.csv",
+    "rolling_trace.json",
+    "clickhouse_next_close_labels.parquet",
+)
 
 
 def parse_run(value: str) -> tuple[str, str]:
@@ -133,6 +140,10 @@ def is_score_risk_sweep(spec: RunSpec) -> bool:
     return spec.kind == "score_risk_sweep"
 
 
+def is_rolling_validation(spec: RunSpec) -> bool:
+    return spec.kind == "alpha_conditioned_rolling_validation"
+
+
 def pull_score_risk_artifacts(
     hfcli: str,
     spec: RunSpec,
@@ -153,6 +164,43 @@ def pull_score_risk_artifacts(
     if not pulled:
         raise SystemExit(
             f"{spec.run_id}: no score-risk artifacts found under {spec.pvc_dir}"
+        )
+    trace = {
+        "fetched_at_utc": datetime.now(UTC).isoformat(),
+        "run_id": spec.run_id,
+        "namespace": spec.namespace,
+        "pvc_dir": spec.pvc_dir,
+        "local_output_dir": str(output_dir),
+        "files": [str(path) for path in pulled],
+        "missing": missing,
+    }
+    (output_dir / "artifact_fetch_trace.json").write_text(
+        json.dumps(trace, indent=2),
+        encoding="utf-8",
+    )
+    return pulled
+
+
+def pull_rolling_validation_artifacts(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    output_root: Path,
+) -> list[Path]:
+    output_dir = output_root / spec.run_id
+    output_dir.mkdir(parents=True, exist_ok=True)
+    pulled: list[Path] = []
+    missing: list[str] = []
+    for name in ROLLING_VALIDATION_ARTIFACTS:
+        remote_path = f"{spec.pvc_dir}/{name}"
+        local_path = output_dir / name
+        if fetch_remote_file_if_exists(hfcli, spec, pod_name, remote_path, local_path):
+            pulled.append(local_path)
+        else:
+            missing.append(name)
+    if not pulled:
+        raise SystemExit(
+            f"{spec.run_id}: no rolling-validation artifacts found under {spec.pvc_dir}"
         )
     trace = {
         "fetched_at_utc": datetime.now(UTC).isoformat(),
@@ -517,8 +565,8 @@ def main() -> None:
         if fetch_metrics_flag:
             print("pulled_metrics:")
             for spec in specs:
-                if is_score_risk_sweep(spec) and not args.metrics:
-                    print(f"  {spec.run_id}: skipped metrics for score_risk_sweep")
+                if (is_score_risk_sweep(spec) or is_rolling_validation(spec)) and not args.metrics:
+                    print(f"  {spec.run_id}: skipped metrics for {spec.kind}")
                     continue
                 paths = pull_metrics(args.hfcli, spec, pod_name, metrics_dir)
                 print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
@@ -533,16 +581,24 @@ def main() -> None:
         if fetch_artifacts_flag:
             print("pulled_artifacts:")
             for spec in specs:
-                if not is_score_risk_sweep(spec):
+                if not (is_score_risk_sweep(spec) or is_rolling_validation(spec)):
                     if args.artifacts:
                         print(f"  {spec.run_id}: no artifact sync configured")
                     continue
-                paths = pull_score_risk_artifacts(
-                    args.hfcli,
-                    spec,
-                    pod_name,
-                    artifacts_root,
-                )
+                if is_score_risk_sweep(spec):
+                    paths = pull_score_risk_artifacts(
+                        args.hfcli,
+                        spec,
+                        pod_name,
+                        artifacts_root,
+                    )
+                else:
+                    paths = pull_rolling_validation_artifacts(
+                        args.hfcli,
+                        spec,
+                        pod_name,
+                        artifacts_root,
+                    )
                 print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
     finally:
         if created_temp_pod:
@@ -559,6 +615,8 @@ def main() -> None:
                     print(f"  {spec.run_id}: config status is {status!r}; confirm before final archive")
             elif is_score_risk_sweep(spec) and not args.metrics:
                 print(f"  {spec.run_id}: no metrics to record for score_risk_sweep")
+            elif is_rolling_validation(spec) and not args.metrics:
+                print(f"  {spec.run_id}: no metrics to record for {spec.kind}")
             else:
                 print(f"  {spec.run_id}: missing {metrics_dir / f'{spec.run_id}{METRICS_SUFFIX}'}")
 
