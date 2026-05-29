@@ -10,6 +10,14 @@ import numpy as np
 import pandas as pd
 
 import _bootstrap  # noqa: F401
+from opening_strength_fit.alpha_conditioning import (
+    KEY_COLUMNS,
+    add_group_rank,
+    alpha_conditioned_reversal_risk,
+    fit_lgbm_config_section,
+    predict_model_score,
+    section_str,
+)
 from opening_strength_fit.clickhouse_ticks import DEFAULT_CLICKHOUSE_TICK_TABLE
 from opening_strength_fit.config import (
     config_bool,
@@ -39,7 +47,6 @@ from run_alpha_horizon_decay import HorizonSpec, compute_clickhouse_close_labels
 
 DEFAULT_CLOSE_OFFSET_US = 54_000_000_000
 DEFAULT_CLOSE_LOOKBACK_SECONDS = 1_800
-KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
 RISK_RANK_MIN = {
     "ask_depth_10": 0.40,
     "depth_imbalance_10": 0.20,
@@ -256,63 +263,7 @@ def add_candidate_alpha_rank(labeled: pd.DataFrame, config: dict) -> pd.DataFram
     score_col = config_str(config, "risk_layer", "candidate_alpha_score_col", "prediction")
     alpha_scores = normalize_candidate_alpha_scores(read_frame(Path(path_raw)), score_col=score_col)
     out = labeled.merge(alpha_scores, on=list(KEY_COLUMNS), how="left")
-    groupers = [out["date"], out["decision_target_timestamp"]]
-    out["candidate_alpha_rank"] = (
-        pd.to_numeric(out["candidate_alpha_score"], errors="coerce")
-        .groupby(groupers)
-        .rank(method="average", pct=True)
-    )
-    return out
-
-
-def _section_value(config: dict, section: str, fallback_section: str, key: str, default):
-    return config_value(
-        config,
-        section,
-        key,
-        config_value(config, fallback_section, key, default),
-    )
-
-
-def _section_int(
-    config: dict,
-    section: str,
-    fallback_section: str,
-    key: str,
-    default: int,
-) -> int:
-    return int(_section_value(config, section, fallback_section, key, default))
-
-
-def _section_float(
-    config: dict,
-    section: str,
-    fallback_section: str,
-    key: str,
-    default: float,
-) -> float:
-    return float(_section_value(config, section, fallback_section, key, default))
-
-
-def _section_str(
-    config: dict,
-    section: str,
-    fallback_section: str,
-    key: str,
-    default: str,
-) -> str:
-    return str(_section_value(config, section, fallback_section, key, default))
-
-
-def _section_optional_int(
-    config: dict,
-    section: str,
-    fallback_section: str,
-    key: str,
-    default: int | None = None,
-) -> int | None:
-    value = _section_value(config, section, fallback_section, key, default)
-    return None if value in (None, "") else int(value)
+    return add_group_rank(out, "candidate_alpha_score", "candidate_alpha_rank")
 
 
 def add_fit_alpha_conditioning_rank(
@@ -333,65 +284,31 @@ def add_fit_alpha_conditioning_rank(
     train = labeled.loc[labeled["date"].isin(split.train_dates)].copy()
     score_dates = set(split.train_dates) | set(split.test_dates)
     score_frame = labeled.loc[labeled["date"].isin(score_dates)].copy()
-    alpha_model, alpha_stats = fit_lightgbm_frame(
+    alpha_model, alpha_stats = fit_lgbm_config_section(
         train,
-        feature_limit=_feature_limit(args, config),
+        args=args,
+        config=config,
+        section="alpha_conditioning",
         target_col="label",
-        sample_weight_col=_section_str(
+        sample_weight_col=section_str(
             config,
             "alpha_conditioning",
             "model",
             "sample_weight_col",
             "",
         ),
-        feature_filters=_feature_filters_from_config(config),
-        n_estimators=_section_int(config, "alpha_conditioning", "model", "n_estimators", 300),
-        learning_rate=_section_float(
-            config,
-            "alpha_conditioning",
-            "model",
-            "learning_rate",
-            0.03,
-        ),
-        num_leaves=_section_int(config, "alpha_conditioning", "model", "num_leaves", 63),
-        max_depth=_section_int(config, "alpha_conditioning", "model", "max_depth", -1),
-        min_child_samples=_section_int(
-            config,
-            "alpha_conditioning",
-            "model",
-            "min_child_samples",
-            200,
-        ),
-        subsample=_section_float(config, "alpha_conditioning", "model", "subsample", 1.0),
-        colsample_bytree=_section_float(
-            config,
-            "alpha_conditioning",
-            "model",
-            "colsample_bytree",
-            1.0,
-        ),
-        reg_alpha=_section_float(config, "alpha_conditioning", "model", "reg_alpha", 0.0),
-        reg_lambda=_section_float(config, "alpha_conditioning", "model", "reg_lambda", 0.0),
-        random_state=_section_int(
-            config,
-            "alpha_conditioning",
-            "model",
-            "random_state",
-            config_int(config, "model", "random_state", 7) + 1000,
-        ),
-        n_jobs=_section_int(config, "alpha_conditioning", "model", "n_jobs", -1),
-        device_type=_section_str(config, "alpha_conditioning", "model", "device_type", "cpu"),
-        max_bin=_section_optional_int(config, "alpha_conditioning", "model", "max_bin", None),
-        gpu_use_dp=False,
+        random_state_default=config_int(config, "model", "random_state", 7) + 1000,
     )
-    alpha_predictions = predict_frame(alpha_model, score_frame)
-    alpha_predictions["candidate_alpha_score"] = pd.to_numeric(
-        alpha_predictions["prediction"],
+    alpha_predictions = score_frame[
+        [column for column in [*KEY_COLUMNS, "label"] if column in score_frame.columns]
+    ].copy()
+    alpha_predictions["alpha_conditioning_prediction"] = pd.to_numeric(
+        predict_model_score(alpha_model, score_frame),
         errors="coerce",
     )
-    alpha_predictions = alpha_predictions.rename(
-        columns={"prediction": "alpha_conditioning_prediction"}
-    )
+    alpha_predictions["candidate_alpha_score"] = alpha_predictions[
+        "alpha_conditioning_prediction"
+    ]
     keep_columns = [
         column
         for column in [
@@ -410,12 +327,7 @@ def add_fit_alpha_conditioning_rank(
         on=list(KEY_COLUMNS),
         how="left",
     )
-    groupers = [out["date"], out["decision_target_timestamp"]]
-    out["candidate_alpha_rank"] = (
-        pd.to_numeric(out["candidate_alpha_score"], errors="coerce")
-        .groupby(groupers)
-        .rank(method="average", pct=True)
-    )
+    out = add_group_rank(out, "candidate_alpha_score", "candidate_alpha_rank")
     train_candidate_min = config_float(
         config,
         "risk_layer",
@@ -546,58 +458,6 @@ def conditional_bad_tail_risk(
         "risk_layer",
         "non_candidate_weight",
         1.0,
-    )
-    candidate_weight = config_float(config, "risk_layer", "candidate_weight", 1.0)
-    if non_candidate_weight != 1.0 or candidate_weight != 1.0:
-        sample_weight = pd.Series(
-            np.where(candidate, candidate_weight, non_candidate_weight),
-            index=labeled.index,
-            dtype="float64",
-        )
-    return risk, candidate.astype("bool"), sample_weight
-
-
-def alpha_conditioned_reversal_risk(
-    labeled: pd.DataFrame,
-    config: dict,
-) -> tuple[pd.Series, pd.Series, pd.Series | None]:
-    if "alpha_return_next_close" not in labeled.columns:
-        raise SystemExit("alpha-conditioned target requires alpha_return_next_close")
-    if "candidate_alpha_rank" not in labeled.columns:
-        raise SystemExit("alpha-conditioned target requires candidate_alpha_rank")
-    groupers = [labeled["date"], labeled["decision_target_timestamp"]]
-    alpha_rank = pd.to_numeric(labeled["candidate_alpha_rank"], errors="coerce")
-    next_rank = (
-        pd.to_numeric(labeled["alpha_return_next_close"], errors="coerce")
-        .groupby(groupers)
-        .rank(method="average", pct=True)
-    )
-    candidate = alpha_rank.ge(
-        config_float(config, "risk_layer", "candidate_alpha_rank_min", 0.80)
-    )
-
-    form = config_str(config, "risk_layer", "target_form", "binary_next_low").strip().lower()
-    next_rank_max = config_float(config, "risk_layer", "next_rank_max", 0.40)
-    if form in {"binary", "hard", "binary_next_low"}:
-        risk = next_rank.le(next_rank_max).astype("float64")
-    elif form in {"gap", "next_gap", "next_rank_gap"}:
-        risk = ((next_rank_max - next_rank) / next_rank_max).clip(
-            lower=0.0,
-            upper=1.0,
-        )
-    else:
-        raise SystemExit(
-            f"unknown [risk_layer].target_form={form!r}; expected binary_next_low or next_rank_gap"
-        )
-
-    risk = risk.where(candidate, 0.0).fillna(0.0).clip(lower=0.0, upper=1.0)
-
-    sample_weight: pd.Series | None = None
-    non_candidate_weight = config_float(
-        config,
-        "risk_layer",
-        "non_candidate_weight",
-        0.05,
     )
     candidate_weight = config_float(config, "risk_layer", "candidate_weight", 1.0)
     if non_candidate_weight != 1.0 or candidate_weight != 1.0:

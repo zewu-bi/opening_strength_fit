@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
 from pathlib import Path
 import sys
 
@@ -17,28 +16,29 @@ for path in (SCRIPT_DIR, REPO_SCRIPT_DIR):
         sys.path.insert(0, str(path))
 
 import _bootstrap  # noqa: F401,E402
+from opening_strength_fit.alpha_conditioning import (  # noqa: E402
+    KEY_COLUMNS,
+    add_alpha_conditioned_risk_targets,
+    add_group_rank,
+    fit_lgbm_config_section,
+    predict_model_score,
+)
 from opening_strength_fit.config import (  # noqa: E402
-    config_float,
     config_int,
-    config_optional_int,
     config_str,
     load_toml,
     run_id,
 )
 from opening_strength_fit.io import write_frame  # noqa: E402
-from opening_strength_fit.model import fit_lightgbm_frame  # noqa: E402
 from opening_strength_fit.reports import dataset_summary, print_mapping  # noqa: E402
 from opening_strength_fit.training import (  # noqa: E402
     _date_splits,
-    _feature_filters_from_config,
-    _feature_limit,
     _load_labeled_pvc_frame,
     build_training_parser,
 )
 from run_learned_risk_layer import load_or_fetch_next_close_labels  # noqa: E402
 
 
-KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
 DEFAULT_VARIANTS = (
     {"variant": "alpha_rank", "risk_model": "", "penalty": 0.0, "candidate_alpha_rank_min": 0.0},
     {"variant": "gap_penalty_030_p80", "risk_model": "gap", "penalty": 0.30, "candidate_alpha_rank_min": 0.80},
@@ -70,121 +70,6 @@ def json_safe(value):
         number = float(value)
         return number if math.isfinite(number) else None
     return value
-
-
-def _section_value(config: dict, section: str, fallback_section: str, key: str, default):
-    value = config.get(section, {}).get(key, None)
-    if value not in (None, ""):
-        return value
-    return config.get(fallback_section, {}).get(key, default)
-
-
-def _section_int(config: dict, section: str, fallback_section: str, key: str, default: int) -> int:
-    return int(_section_value(config, section, fallback_section, key, default))
-
-
-def _section_float(
-    config: dict,
-    section: str,
-    fallback_section: str,
-    key: str,
-    default: float,
-) -> float:
-    return float(_section_value(config, section, fallback_section, key, default))
-
-
-def _section_str(config: dict, section: str, fallback_section: str, key: str, default: str) -> str:
-    return str(_section_value(config, section, fallback_section, key, default))
-
-
-def _section_optional_int(
-    config: dict,
-    section: str,
-    fallback_section: str,
-    key: str,
-    default: int | None = None,
-) -> int | None:
-    value = _section_value(config, section, fallback_section, key, default)
-    return None if value in (None, "") else int(value)
-
-
-def predict_score(model, frame: pd.DataFrame) -> np.ndarray:
-    missing = set(model.features) - set(frame.columns)
-    if missing:
-        raise SystemExit(f"prediction frame is missing features: {sorted(missing)[:5]}")
-    x = frame[model.features].replace([np.inf, -np.inf], np.nan)
-    return model.pipeline.predict(x)
-
-
-def add_group_rank(frame: pd.DataFrame, score_col: str, rank_col: str) -> pd.DataFrame:
-    groupers = [frame["date"], frame["decision_target_timestamp"]]
-    frame[rank_col] = (
-        pd.to_numeric(frame[score_col], errors="coerce")
-        .groupby(groupers)
-        .rank(method="average", pct=True)
-    )
-    return frame
-
-
-def build_risk_targets(train: pd.DataFrame, config: dict) -> pd.DataFrame:
-    out = train.copy()
-    groupers = [out["date"], out["decision_target_timestamp"]]
-    next_rank = (
-        pd.to_numeric(out["alpha_return_next_close"], errors="coerce")
-        .groupby(groupers)
-        .rank(method="average", pct=True)
-    )
-    candidate_min = config_float(config, "risk_layer", "candidate_alpha_rank_min", 0.80)
-    candidate = pd.to_numeric(out["candidate_alpha_rank"], errors="coerce").ge(candidate_min)
-    gap_next_rank_max = config_float(config, "risk_layer", "gap_next_rank_max", 0.50)
-    binary_next_rank_max = config_float(config, "risk_layer", "binary_next_rank_max", 0.40)
-    out["target_alpha_conditioned_gap_risk"] = (
-        ((gap_next_rank_max - next_rank) / gap_next_rank_max)
-        .clip(lower=0.0, upper=1.0)
-        .where(candidate, 0.0)
-        .fillna(0.0)
-    )
-    out["target_alpha_conditioned_binary_risk"] = (
-        next_rank.le(binary_next_rank_max).astype("float64").where(candidate, 0.0).fillna(0.0)
-    )
-    candidate_weight = config_float(config, "risk_layer", "candidate_weight", 1.0)
-    non_candidate_weight = config_float(config, "risk_layer", "non_candidate_weight", 0.05)
-    out["risk_sample_weight"] = np.where(candidate, candidate_weight, non_candidate_weight)
-    out["target_alpha_conditioned_candidate"] = candidate.astype("bool")
-    return out
-
-
-def fit_lgbm_section(
-    train: pd.DataFrame,
-    *,
-    args: argparse.Namespace,
-    config: dict,
-    section: str,
-    target_col: str,
-    sample_weight_col: str = "",
-    random_state_default: int = 7,
-):
-    return fit_lightgbm_frame(
-        train,
-        feature_limit=_feature_limit(args, config),
-        target_col=target_col,
-        sample_weight_col=sample_weight_col,
-        feature_filters=_feature_filters_from_config(config),
-        n_estimators=_section_int(config, section, "model", "n_estimators", 300),
-        learning_rate=_section_float(config, section, "model", "learning_rate", 0.03),
-        num_leaves=_section_int(config, section, "model", "num_leaves", 63),
-        max_depth=_section_int(config, section, "model", "max_depth", -1),
-        min_child_samples=_section_int(config, section, "model", "min_child_samples", 200),
-        subsample=_section_float(config, section, "model", "subsample", 1.0),
-        colsample_bytree=_section_float(config, section, "model", "colsample_bytree", 1.0),
-        reg_alpha=_section_float(config, section, "model", "reg_alpha", 0.0),
-        reg_lambda=_section_float(config, section, "model", "reg_lambda", 0.0),
-        random_state=_section_int(config, section, "model", "random_state", random_state_default),
-        n_jobs=_section_int(config, section, "model", "n_jobs", -1),
-        device_type=_section_str(config, section, "model", "device_type", "cpu"),
-        max_bin=_section_optional_int(config, section, "model", "max_bin", None),
-        gpu_use_dp=False,
-    )
 
 
 def variant_specs(config: dict) -> list[dict[str, object]]:
@@ -371,7 +256,7 @@ def main() -> None:
         train = labeled.loc[labeled["date"].isin(split.train_dates)].copy()
         test = labeled.loc[labeled["date"].isin(split.test_dates)].copy()
 
-        alpha_model, alpha_stats = fit_lgbm_section(
+        alpha_model, alpha_stats = fit_lgbm_config_section(
             train,
             args=args,
             config=config,
@@ -380,13 +265,13 @@ def main() -> None:
             sample_weight_col=config_str(config, "alpha_conditioning", "sample_weight_col", ""),
             random_state_default=config_int(config, "model", "random_state", 7) + 1000,
         )
-        train["candidate_alpha_score"] = predict_score(alpha_model, train)
-        test["candidate_alpha_score"] = predict_score(alpha_model, test)
+        train["candidate_alpha_score"] = predict_model_score(alpha_model, train)
+        test["candidate_alpha_score"] = predict_model_score(alpha_model, test)
         train = add_group_rank(train, "candidate_alpha_score", "candidate_alpha_rank")
         test = add_group_rank(test, "candidate_alpha_score", "candidate_alpha_rank")
 
-        risk_train = build_risk_targets(train, config)
-        gap_model, gap_stats = fit_lgbm_section(
+        risk_train = add_alpha_conditioned_risk_targets(train, config)
+        gap_model, gap_stats = fit_lgbm_config_section(
             risk_train,
             args=args,
             config=config,
@@ -395,7 +280,7 @@ def main() -> None:
             sample_weight_col="risk_sample_weight",
             random_state_default=config_int(config, "model", "random_state", 43),
         )
-        binary_model, binary_stats = fit_lgbm_section(
+        binary_model, binary_stats = fit_lgbm_config_section(
             risk_train,
             args=args,
             config=config,
@@ -405,8 +290,8 @@ def main() -> None:
             random_state_default=config_int(config, "model", "random_state", 44),
         )
 
-        test["gap_risk_prediction"] = np.clip(predict_score(gap_model, test), 0.0, 1.0)
-        test["binary_risk_prediction"] = np.clip(predict_score(binary_model, test), 0.0, 1.0)
+        test["gap_risk_prediction"] = np.clip(predict_model_score(gap_model, test), 0.0, 1.0)
+        test["binary_risk_prediction"] = np.clip(predict_model_score(binary_model, test), 0.0, 1.0)
         test = add_group_rank(test, "gap_risk_prediction", "gap_risk_rank")
         test = add_group_rank(test, "binary_risk_prediction", "binary_risk_rank")
 

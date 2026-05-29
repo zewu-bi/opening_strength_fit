@@ -21,6 +21,7 @@
 - `candidates.py`: visible-information opening candidate filters.
 - `label_audit.py`: label validity and distribution summaries.
 - `targets.py`: cross-sectional demean/zscore/rank, heat-neutral, guard-shrunk, and risk-shrunk target-label transforms for derived training caches.
+- `alpha_conditioning.py`: shared alpha-conditioned risk target, section-scoped LightGBM fit, scoring, and group-rank helpers.
 - `rules.py`: non-ML baseline scores.
 - `model.py`: Ridge, sklearn GBM, LightGBM, prediction, configurable feature selection, and IC helpers.
 - `evaluation.py`: score buckets and top-score summaries.
