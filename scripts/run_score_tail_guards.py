@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 from typing import Callable
 
@@ -11,21 +12,22 @@ import _bootstrap  # noqa: F401
 from opening_strength_fit.analysis import (
     clock_range as shared_clock_range,
     load_next_close_label_file,
+    load_or_fetch_next_close_labels as shared_load_or_fetch_next_close_labels,
     selection_return_stats,
     write_json,
 )
+from opening_strength_fit.clickhouse_ticks import DEFAULT_CLICKHOUSE_TICK_TABLE
 from opening_strength_fit.io import frame_columns, read_frame as shared_read_frame
+from run_alpha_horizon_decay import HorizonSpec, compute_clickhouse_close_labels
 
 
 DEFAULT_INPUT = (
     "output/predictions/lgbm_delay2_postopen_0931_0940_baseline_v1/"
     "predictions_all.parquet"
 )
-DEFAULT_NEXT_CLOSE_LABELS = (
-    "output/reports/lgbm_delay2_postopen_0931_0940_baseline_v1_four_panel/"
-    "clickhouse_next_close_labels.parquet"
-)
 DEFAULT_OUTPUT_DIR = "output/reports/lgbm_delay2_postopen_tail_guards_v1"
+DEFAULT_CLOSE_OFFSET_US = 54_000_000_000
+DEFAULT_CLOSE_LOOKBACK_SECONDS = 1_800
 KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
 BASE_COLUMNS = (*KEY_COLUMNS, "prediction", "label")
 GUARD_COLUMNS = (
@@ -48,12 +50,34 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument("--input", default=DEFAULT_INPUT)
-    parser.add_argument("--next-close-label-input", default=DEFAULT_NEXT_CLOSE_LABELS)
+    parser.add_argument("--next-close-label-input", default="")
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--score-col", default="prediction")
     parser.add_argument("--top-n", type=int, default=100)
     parser.add_argument("--start-clock", default="09:31")
     parser.add_argument("--end-clock", default="09:40")
+    parser.add_argument("--clickhouse-host", default=os.environ.get("CLICKHOUSE_HOST", ""))
+    parser.add_argument(
+        "--clickhouse-port",
+        type=int,
+        default=int(os.environ.get("CLICKHOUSE_PORT", "8123")),
+    )
+    parser.add_argument("--clickhouse-user", default=os.environ.get("CLICKHOUSE_USER", ""))
+    parser.add_argument(
+        "--clickhouse-password",
+        default=os.environ.get("CLICKHOUSE_PASSWORD", ""),
+    )
+    parser.add_argument(
+        "--clickhouse-table",
+        default=os.environ.get("CLICKHOUSE_TICK_TABLE", DEFAULT_CLICKHOUSE_TICK_TABLE),
+    )
+    parser.add_argument("--close-offset-us", type=int, default=DEFAULT_CLOSE_OFFSET_US)
+    parser.add_argument(
+        "--close-lookback-seconds",
+        type=int,
+        default=DEFAULT_CLOSE_LOOKBACK_SECONDS,
+    )
+    parser.add_argument("--calendar-days-after", type=int, default=10)
     return parser.parse_args()
 
 
@@ -71,7 +95,11 @@ def existing_columns(path: Path) -> set[str]:
 
 def load_predictions(path: Path, clocks: list[str], score_col: str) -> pd.DataFrame:
     available = existing_columns(path)
-    requested = [column for column in (*BASE_COLUMNS, *GUARD_COLUMNS) if column in available]
+    requested = [
+        column
+        for column in (*BASE_COLUMNS, "buy_price", *GUARD_COLUMNS)
+        if column in available
+    ]
     missing = [column for column in (*BASE_COLUMNS, score_col) if column not in available]
     if missing:
         raise SystemExit(f"prediction input missing columns: {missing}")
@@ -95,6 +123,46 @@ def load_predictions(path: Path, clocks: list[str], score_col: str) -> pd.DataFr
 
 def load_next_close_labels(path: Path) -> pd.DataFrame:
     return load_next_close_label_file(path, key_columns=KEY_COLUMNS)
+
+
+def load_or_fetch_next_close_labels(
+    predictions: pd.DataFrame,
+    *,
+    args: argparse.Namespace,
+    output_dir: Path,
+) -> pd.DataFrame:
+    def _fetch(base: pd.DataFrame) -> pd.DataFrame:
+        if "buy_price" not in base.columns:
+            raise SystemExit(
+                "next-close labels not found and prediction input has no buy_price "
+                "column for ClickHouse label generation."
+            )
+        if not args.clickhouse_user or not args.clickhouse_password:
+            raise SystemExit(
+                "next-close labels not found. Pass --next-close-label-input or set "
+                "CLICKHOUSE_USER and CLICKHOUSE_PASSWORD."
+            )
+        return compute_clickhouse_close_labels(
+            base[["date", "symbol", "decision_target_timestamp", "buy_price"]].copy(),
+            [HorizonSpec(name="next_close", label="next close", seconds=None)],
+            host=args.clickhouse_host or "ch.db.prod.highfortfunds.com",
+            port=int(args.clickhouse_port),
+            username=args.clickhouse_user,
+            password=args.clickhouse_password,
+            table=args.clickhouse_table,
+            close_offset_us=int(args.close_offset_us),
+            close_lookback_seconds=int(args.close_lookback_seconds),
+            calendar_days_after=int(args.calendar_days_after),
+            fee_bps=0.0,
+        )
+
+    return shared_load_or_fetch_next_close_labels(
+        predictions,
+        output_dir=output_dir,
+        label_input=args.next_close_label_input,
+        fetch_labels=_fetch,
+        key_columns=KEY_COLUMNS,
+    )
 
 
 def add_group_ranks(frame: pd.DataFrame, columns: tuple[str, ...]) -> pd.DataFrame:
@@ -343,7 +411,11 @@ def main() -> None:
     clocks = clock_range(args.start_clock, args.end_clock)
 
     predictions = load_predictions(Path(args.input), clocks, args.score_col)
-    next_labels = load_next_close_labels(Path(args.next_close_label_input))
+    next_labels = load_or_fetch_next_close_labels(
+        predictions,
+        args=args,
+        output_dir=output_dir,
+    )
     frame = predictions.merge(next_labels, on=list(KEY_COLUMNS), how="inner")
     frame = frame.dropna(subset=["label", "prediction", "alpha_return_next_close"]).copy()
     frame = add_group_ranks(frame, GUARD_COLUMNS)

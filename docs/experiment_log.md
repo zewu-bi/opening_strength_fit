@@ -939,8 +939,8 @@ Rescue note:
   Python 进程里串行训练，峰值/累积内存超过 256Gi。
 - 采用 `xy_fit` 的 sharded 思路重渲染为 monthly shard：每个月独立 Python 子进程写
   `month_YYYY-MM/rolling_*.csv` 和 `month_YYYY-MM/predictions.parquet`，root 目录保留共享
-  `clickhouse_next_close_labels.parquet`；`sync_experiment_artifacts.py --all` 负责拉取并本地合并 root-level
-  `rolling_summary.csv`。
+  `clickhouse_next_close_labels.parquet`；`sync_experiment_artifacts.py --all` 负责拉取、合并 root-level
+  `rolling_summary.csv` / `rolling_month_summary.csv`，并把轻量 summary 归档到 `experiments/results/backtests/`。
 - 救援镜像：`registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260529-rolling-sharded-rescue`。
 - Job YAML：`experiments/jobs/rolling_alpha_conditioned_top100_validation_v1_sharded_job.yaml`。
 - 二次 OOM 复盘：上述 sharded YAML 仍是单 Pod 内的 shell loop，2021-08 shard 完成后同一 cgroup 进入
@@ -956,9 +956,9 @@ Rescue note:
 Artifacts:
 
 ```text
-output/local/rolling_alpha_conditioned_top100_validation_v1/rolling_summary.csv
-output/local/rolling_alpha_conditioned_top100_validation_v1/rolling_month_summary.csv
-output/local/rolling_alpha_conditioned_top100_validation_v1/rolling_group_metrics.csv
+experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1_summary.csv
+experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1_month_summary.csv
+experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1_trace.json
 output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw/predictions_2021-08.parquet
 ...
 output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw/predictions_2022-01.parquet
@@ -1026,10 +1026,12 @@ Risk-score diagnostic inside alpha Top100:
 Artifacts:
 
 ```text
-output/local/gap_risk_penalized_attribution_v1/gap_attribution_outcomes_overall.csv
-output/local/gap_risk_penalized_attribution_v1/gap_attribution_feature_exposure_overall.csv
-output/local/gap_risk_penalized_attribution_v1/gap_attribution_penalized_feature_delta.csv
-output/local/gap_risk_penalized_attribution_v1/gap_attribution_residual_penalized_vs_kept.csv
+experiments/results/backtests/gap_risk_penalized_attribution_v1_outcomes_by_month.csv
+experiments/results/backtests/gap_risk_penalized_attribution_v1_outcomes_overall.csv
+experiments/results/backtests/gap_risk_penalized_attribution_v1_feature_exposure_overall.csv
+experiments/results/backtests/gap_risk_penalized_attribution_v1_penalized_feature_delta.csv
+experiments/results/backtests/gap_risk_penalized_attribution_v1_residual_penalized_vs_kept.csv
+experiments/results/backtests/gap_risk_penalized_attribution_v1_trace.json
 ```
 
 Top100 replacement summary:
@@ -1248,6 +1250,7 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `output/reports/opening_alpha_horizon_decay_delay2_*` | delay2 horizon decay，对应 `opening_alpha_horizon_decay_delay2_*` 归档摘要。 |
 | `output/reports/opening_delay2_signal_baseline` | delay2 保守 baseline 的分钟四曲线，用于当前 feature-strengthening 门槛。 |
 | `output/local/score_learned_risk_sweep_v1` | learned-risk sweep artifact；轻量 summary 归档到 `experiments/results/backtests/score_learned_risk_sweep_v1_summary.csv`。 |
-| `output/local/rolling_alpha_conditioned_top100_validation_v1` | 18m rolling validation 合并汇总，包含 `rolling_summary.csv`、`rolling_month_summary.csv` 和 `rolling_group_metrics.csv`。 |
-| `output/local/gap_risk_penalized_attribution_v1` | rolling gap-risk Top100 替换归因，包含 outcome、feature exposure 和 residual-control CSV。 |
+| `experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1_*` | 18m rolling validation 的轻量 summary / month summary / trace；可重画 short-vs-next tradeoff 图。 |
+| `experiments/results/backtests/gap_risk_penalized_attribution_v1_*` | rolling gap-risk Top100 替换归因的 outcome、feature exposure 和 residual-control 证据。 |
+| `output/local/<run_id>` | ignored artifact-sync buffer；不再作为唯一证据位置。 |
 | `output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw` | 18m rolling 各测试月 prediction shard，用于 alpha Top100 内 risk/short/next 相关诊断。 |

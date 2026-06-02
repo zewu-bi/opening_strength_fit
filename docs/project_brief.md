@@ -111,6 +111,9 @@ learned risk layer 的经验是：两模型公式能工作，但解释成本高�
 `conditional_bad_tail` v1 学成了 short-alpha 强度 proxy；`alpha_conditioned_reversal` v2/v3 解决了部分问题，
 并在 18m rolling 中通过。后续 attribution 显示，被 risk penalty 踢出的原始 Top100 股票更偏高
 `preopen_turnover`、`preopen_volume` 和开盘成交增量，符合“开盘拥挤后 next 回吐”的 dirty-tail 画像。
+逐月 rolling short-vs-next 证据归档在
+`experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1_month_summary.csv`，可用
+`scripts/plot_rolling_validation_tradeoff.py` 重画报告图。
 复盘后，这条路线封存为“短+长目标有信息”的证据，而不是继续作为当前主实现。
 
 ## 当前不做

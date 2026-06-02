@@ -15,8 +15,10 @@ if str(SCRIPTS_DIR) not in sys.path:
 from opening_strength_fit.k8s import RunSpec  # noqa: E402
 from sync_experiment_artifacts import combine_rolling_validation_shards  # noqa: E402
 from sync_experiment_artifacts import combine_metric_frames  # noqa: E402
+from sync_experiment_artifacts import pull_gap_attribution_artifacts  # noqa: E402
 from sync_experiment_artifacts import pull_rolling_validation_shards  # noqa: E402
 from sync_experiment_artifacts import pull_score_risk_artifacts  # noqa: E402
+from sync_experiment_artifacts import record_lightweight_artifacts  # noqa: E402
 
 
 def _metric_row(month: str, rows: int, top_return: float) -> dict[str, object]:
@@ -88,9 +90,10 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
             kind="score_risk_sweep",
         )
 
+        fetched_remote_paths = []
+
         def fake_fetch(_hfcli, _spec, _pod, remote_path, local_path):
-            if remote_path.endswith("clickhouse_next_close_labels.parquet"):
-                return False
+            fetched_remote_paths.append(remote_path)
             local_path.parent.mkdir(parents=True, exist_ok=True)
             local_path.write_text("artifact\n", encoding="utf-8")
             return True
@@ -112,6 +115,60 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
             self.assertTrue((output_dir / "score_risk_trace.json").exists())
             self.assertTrue((output_dir / "artifact_fetch_trace.json").exists())
             self.assertFalse((output_dir / "clickhouse_next_close_labels.parquet").exists())
+            self.assertFalse(
+                any(
+                    "clickhouse_next_close_labels.parquet" in path
+                    for path in fetched_remote_paths
+                )
+            )
+
+    def test_lightweight_artifacts_record_summaries_only(self) -> None:
+        spec = RunSpec(
+            run_id="rolling_alpha_conditioned_top100_validation_v1",
+            pvc_dir="/mnt/output/opening_strength_fit/rolling_alpha_conditioned_top100_validation_v1",
+            namespace="bizewu",
+            pvc="bizewu-private-data",
+            mount_path="/mnt/output",
+            pull_secret="highfort",
+            image="image",
+            test_start_year=2021,
+            test_end_year=2021,
+            test_start_month="2021-08",
+            test_end_month="2021-09",
+            kind="alpha_conditioned_rolling_validation",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output_dir = root / "local" / spec.run_id
+            output_dir.mkdir(parents=True)
+            (output_dir / "rolling_summary.csv").write_text(
+                "summary\n",
+                encoding="utf-8",
+            )
+            (output_dir / "rolling_month_summary.csv").write_text(
+                "month\n",
+                encoding="utf-8",
+            )
+            (output_dir / "rolling_trace.json").write_text("{}\n", encoding="utf-8")
+            (output_dir / "rolling_group_metrics.csv").write_text(
+                "group\n",
+                encoding="utf-8",
+            )
+
+            paths = record_lightweight_artifacts(
+                spec,
+                root / "local",
+                root / "results",
+            )
+
+        self.assertEqual(
+            [path.name for path in paths],
+            [
+                "rolling_alpha_conditioned_top100_validation_v1_summary.csv",
+                "rolling_alpha_conditioned_top100_validation_v1_month_summary.csv",
+                "rolling_alpha_conditioned_top100_validation_v1_trace.json",
+            ],
+        )
 
     def test_rolling_validation_shards_are_combined_locally(self) -> None:
         rows = [
@@ -227,6 +284,51 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
 
             self.assertTrue((root / "rolling_summary.csv").exists())
             self.assertIn(root / "month_2021-08" / "rolling_group_metrics.csv", paths)
+
+    def test_gap_attribution_artifacts_are_pulled_without_group_metrics(self) -> None:
+        spec = RunSpec(
+            run_id="gap_risk_penalized_attribution_v1",
+            pvc_dir="/mnt/output/opening_strength_fit/gap_risk_penalized_attribution_v1",
+            namespace="bizewu",
+            pvc="bizewu-private-data",
+            mount_path="/mnt/output",
+            pull_secret="highfort",
+            image="image",
+            test_start_year=0,
+            test_end_year=0,
+            kind="gap_risk_attribution",
+        )
+        fetched_remote_paths = []
+
+        def fake_fetch(_hfcli, _spec, _pod, remote_path, local_path):
+            fetched_remote_paths.append(remote_path)
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            local_path.write_text("artifact\n", encoding="utf-8")
+            return True
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch(
+                "sync_experiment_artifacts.fetch_remote_file_if_exists",
+                side_effect=fake_fetch,
+            ):
+                paths = pull_gap_attribution_artifacts(
+                    "hfcli",
+                    spec,
+                    "helper-pod",
+                    root,
+                )
+
+            self.assertIn(
+                root / spec.run_id / "gap_attribution_outcomes_overall.csv",
+                paths,
+            )
+        self.assertFalse(
+            any(
+                "gap_attribution_group_metrics.csv" in path
+                for path in fetched_remote_paths
+            )
+        )
 
 
 if __name__ == "__main__":

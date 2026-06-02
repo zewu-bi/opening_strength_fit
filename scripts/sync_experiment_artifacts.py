@@ -29,20 +29,26 @@ SCORE_RISK_ARTIFACTS = (
     "score_risk_minute_summary.csv",
     "score_risk_group_metrics.csv",
     "score_risk_trace.json",
-    "clickhouse_next_close_labels.parquet",
 )
 ROLLING_VALIDATION_ARTIFACTS = (
     "rolling_summary.csv",
     "rolling_month_summary.csv",
     "rolling_group_metrics.csv",
     "rolling_trace.json",
-    "clickhouse_next_close_labels.parquet",
 )
 ROLLING_VALIDATION_SHARD_ARTIFACTS = (
     "rolling_group_metrics.csv",
     "rolling_month_summary.csv",
     "rolling_summary.csv",
     "rolling_trace.json",
+)
+GAP_ATTRIBUTION_ARTIFACTS = (
+    "gap_attribution_outcomes_by_month.csv",
+    "gap_attribution_outcomes_overall.csv",
+    "gap_attribution_feature_exposure_overall.csv",
+    "gap_attribution_penalized_feature_delta.csv",
+    "gap_attribution_residual_penalized_vs_kept.csv",
+    "gap_attribution_trace.json",
 )
 
 
@@ -157,6 +163,18 @@ def is_rolling_validation(spec: RunSpec) -> bool:
     return spec.kind == "alpha_conditioned_rolling_validation"
 
 
+def is_gap_attribution(spec: RunSpec) -> bool:
+    return spec.kind == "gap_risk_attribution"
+
+
+def is_non_standard_artifact_run(spec: RunSpec) -> bool:
+    return (
+        is_score_risk_sweep(spec)
+        or is_rolling_validation(spec)
+        or is_gap_attribution(spec)
+    )
+
+
 def pull_artifact_set(
     hfcli: str,
     spec: RunSpec,
@@ -245,6 +263,27 @@ def pull_rolling_validation_artifacts(
     if not pulled:
         raise SystemExit(
             f"{spec.run_id}: no rolling-validation artifacts found under {spec.pvc_dir}"
+        )
+    record_artifact_fetch(spec, output_dir, pulled, missing)
+    return pulled
+
+
+def pull_gap_attribution_artifacts(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    output_root: Path,
+) -> list[Path]:
+    output_dir, pulled, missing = pull_artifact_set(
+        hfcli,
+        spec,
+        pod_name,
+        output_root,
+        GAP_ATTRIBUTION_ARTIFACTS,
+    )
+    if not pulled:
+        raise SystemExit(
+            f"{spec.run_id}: no gap-attribution artifacts found under {spec.pvc_dir}"
         )
     record_artifact_fetch(spec, output_dir, pulled, missing)
     return pulled
@@ -591,6 +630,80 @@ def record_metrics(run_id: str, metrics_dir: Path, records_dir: Path) -> Path | 
     return destination
 
 
+def record_artifact_file(source: Path, destination: Path) -> Path | None:
+    if not source.exists():
+        return None
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+    return destination
+
+
+def record_lightweight_artifacts(
+    spec: RunSpec,
+    artifacts_root: Path,
+    records_dir: Path,
+) -> list[Path]:
+    output_dir = artifacts_root / spec.run_id
+    backtests_dir = records_dir / "backtests"
+    if is_score_risk_sweep(spec):
+        records = [
+            (
+                output_dir / "score_risk_summary.csv",
+                backtests_dir / f"{spec.run_id}_summary.csv",
+            ),
+        ]
+    elif is_rolling_validation(spec):
+        records = [
+            (
+                output_dir / "rolling_summary.csv",
+                backtests_dir / f"{spec.run_id}_summary.csv",
+            ),
+            (
+                output_dir / "rolling_month_summary.csv",
+                backtests_dir / f"{spec.run_id}_month_summary.csv",
+            ),
+            (
+                output_dir / "rolling_trace.json",
+                backtests_dir / f"{spec.run_id}_trace.json",
+            ),
+        ]
+    elif is_gap_attribution(spec):
+        records = [
+            (
+                output_dir / "gap_attribution_outcomes_by_month.csv",
+                backtests_dir / f"{spec.run_id}_outcomes_by_month.csv",
+            ),
+            (
+                output_dir / "gap_attribution_outcomes_overall.csv",
+                backtests_dir / f"{spec.run_id}_outcomes_overall.csv",
+            ),
+            (
+                output_dir / "gap_attribution_feature_exposure_overall.csv",
+                backtests_dir / f"{spec.run_id}_feature_exposure_overall.csv",
+            ),
+            (
+                output_dir / "gap_attribution_penalized_feature_delta.csv",
+                backtests_dir / f"{spec.run_id}_penalized_feature_delta.csv",
+            ),
+            (
+                output_dir / "gap_attribution_residual_penalized_vs_kept.csv",
+                backtests_dir / f"{spec.run_id}_residual_penalized_vs_kept.csv",
+            ),
+            (
+                output_dir / "gap_attribution_trace.json",
+                backtests_dir / f"{spec.run_id}_trace.json",
+            ),
+        ]
+    else:
+        return []
+
+    return [
+        path
+        for source, destination in records
+        if (path := record_artifact_file(source, destination)) is not None
+    ]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Sync K8s PVC metrics/predictions and archive lightweight records."
@@ -668,7 +781,7 @@ def main() -> None:
         if fetch_metrics_flag:
             print("pulled_metrics:")
             for spec in specs:
-                if (is_score_risk_sweep(spec) or is_rolling_validation(spec)) and not args.metrics:
+                if is_non_standard_artifact_run(spec) and not args.metrics:
                     print(f"  {spec.run_id}: skipped metrics for {spec.kind}")
                     continue
                 paths = pull_metrics(args.hfcli, spec, pod_name, metrics_dir)
@@ -676,15 +789,17 @@ def main() -> None:
         if fetch_predictions_flag:
             print("pulled_predictions:")
             for spec in specs:
-                if is_score_risk_sweep(spec) and not args.predictions:
-                    print(f"  {spec.run_id}: skipped predictions for score_risk_sweep")
+                if (
+                    is_score_risk_sweep(spec) or is_gap_attribution(spec)
+                ) and not args.predictions:
+                    print(f"  {spec.run_id}: skipped predictions for {spec.kind}")
                     continue
                 path = fetch_predictions(args.hfcli, spec, pod_name, predictions_root)
                 print(f"  {spec.run_id}: {path}")
         if fetch_artifacts_flag:
             print("pulled_artifacts:")
             for spec in specs:
-                if not (is_score_risk_sweep(spec) or is_rolling_validation(spec)):
+                if not is_non_standard_artifact_run(spec):
                     if args.artifacts:
                         print(f"  {spec.run_id}: no artifact sync configured")
                     continue
@@ -695,8 +810,15 @@ def main() -> None:
                         pod_name,
                         artifacts_root,
                     )
-                else:
+                elif is_rolling_validation(spec):
                     paths = pull_rolling_validation_artifacts(
+                        args.hfcli,
+                        spec,
+                        pod_name,
+                        artifacts_root,
+                    )
+                else:
+                    paths = pull_gap_attribution_artifacts(
                         args.hfcli,
                         spec,
                         pod_name,
@@ -716,12 +838,21 @@ def main() -> None:
                 print(f"  {spec.run_id}: {path}")
                 if status and status != "completed":
                     print(f"  {spec.run_id}: config status is {status!r}; confirm before final archive")
-            elif is_score_risk_sweep(spec) and not args.metrics:
-                print(f"  {spec.run_id}: no metrics to record for score_risk_sweep")
-            elif is_rolling_validation(spec) and not args.metrics:
+            elif is_non_standard_artifact_run(spec) and not args.metrics:
                 print(f"  {spec.run_id}: no metrics to record for {spec.kind}")
             else:
                 print(f"  {spec.run_id}: missing {metrics_dir / f'{spec.run_id}{METRICS_SUFFIX}'}")
+        print("recorded_artifacts:")
+        for spec in specs:
+            paths = record_lightweight_artifacts(
+                spec,
+                artifacts_root,
+                records_dir,
+            )
+            if paths:
+                print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
+            elif is_non_standard_artifact_run(spec):
+                print(f"  {spec.run_id}: no lightweight artifacts to record")
 
 
 if __name__ == "__main__":

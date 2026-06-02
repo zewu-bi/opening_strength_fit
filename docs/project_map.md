@@ -79,6 +79,7 @@ Scripts:
 - `scripts/run_score_risk_sweep.py`: historical/superseded alpha-minus-risk score sweeps over existing score files.
 - `scripts/run_learned_risk_layer.py`: historical learned dirty-risk / next-flip risk layers for score-sweep evidence.
 - `scripts/run_alpha_conditioned_rolling_validation.py`: historical monthly validation for alpha-conditioned Top100 risk-penalty scores.
+- `scripts/plot_rolling_validation_tradeoff.py`: render the archived rolling short-vs-next Top100 tradeoff chart from `experiments/results/backtests/*_month_summary.csv`.
 - `scripts/run_gap_risk_attribution.py`: historical attribution of risk-penalized Top100 replacements.
 
 ## Infrastructure
@@ -135,4 +136,4 @@ Job entrypoints:
 - `output/predictions/<run_id>/`: pulled parquet predictions.
 - `output/k8s/metrics/`: raw pulled metrics before archive.
 - `output/reports/`: local PNGs, markdown reports, and heavy diagnostics.
-- `output/local/`: smoke and scratch outputs.
+- `output/local/`: ignored artifact-sync and scratch buffer; lightweight evidence is archived under `experiments/results/`.

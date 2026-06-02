@@ -313,19 +313,25 @@ output/predictions/<run_id>/predictions_all.parquet
 experiments/results/metrics/<run_id>_metrics_by_year.csv
 ```
 
-`score_risk_sweep` run 没有标准 metrics/predictions；`--all` 会改为拉取 sweep artifact：
+`score_risk_sweep` run 没有标准 metrics/predictions；`--all` 会改为拉取轻量 sweep artifact：
 
 ```text
 output/local/<run_id>/score_risk_summary.csv
 output/local/<run_id>/score_risk_minute_summary.csv
 output/local/<run_id>/score_risk_group_metrics.csv
 output/local/<run_id>/score_risk_trace.json
+experiments/results/backtests/<run_id>_summary.csv
 ```
 
 `alpha_conditioned_rolling_validation` run 也属于非标准 artifact sync；`--all` 会优先拉取 root-level
 `rolling_summary.csv` / `rolling_month_summary.csv` / `rolling_group_metrics.csv`，如果 root summary 缺失，
 则按 `month_YYYY-MM/` shards 拉取并在本地合并。score-risk 和 rolling artifact 拉取共用同一套
-artifact fetch trace，结果写到 `output/local/<run_id>/artifact_fetch_trace.json`。
+artifact fetch trace，结果写到 `output/local/<run_id>/artifact_fetch_trace.json`；summary / month summary
+会归档到 `experiments/results/backtests/<run_id>_*.csv`。`clickhouse_next_close_labels.parquet` 属于
+可重建 label cache，sync 不再把它作为 artifact 拉回本地。
+
+`gap_risk_attribution` run 只拉取和归档 outcome / exposure / residual-control 的轻量 CSV，不拉 bulky
+group-level diagnostics。
 
 ## 7. 分析命令
 
@@ -382,7 +388,6 @@ Existing-score TopN guard sweep:
 ```bash
 python scripts/run_score_tail_guards.py \
   --input output/predictions/lgbm_delay2_postopen_0931_0940_baseline_v1/predictions_all.parquet \
-  --next-close-label-input output/reports/lgbm_delay2_postopen_0931_0940_baseline_v1_four_panel/clickhouse_next_close_labels.parquet \
   --output-dir output/reports/lgbm_delay2_postopen_tail_guards_v1
 ```
 
@@ -392,6 +397,14 @@ Existing-score risk penalty sweep:
 python scripts/run_score_risk_sweep.py \
   --config experiments/runs/score_risk_sweep_guard_shrunk_v1.toml \
   --output-dir output/local/score_risk_sweep_guard_shrunk_v1
+```
+
+Rolling short-vs-next tradeoff chart:
+
+```bash
+python scripts/plot_rolling_validation_tradeoff.py \
+  --input experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1_month_summary.csv \
+  --output-dir output/reports/rolling_alpha_conditioned_top100_validation_v1
 ```
 
 Feature dependence audit：
