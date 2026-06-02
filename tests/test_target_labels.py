@@ -65,6 +65,64 @@ class TargetLabelTest(unittest.TestCase):
         self.assertAlmostEqual(out.loc[1, "label"], 0.25)
         self.assertTrue(pd.isna(out.loc[2, "label"]))
 
+    def test_mixed_target_combines_short_and_long_cross_sectional_zscores(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "date": ["2022-01-04"] * 3,
+                "symbol": [f"00000{idx}.SZ" for idx in range(3)],
+                "decision_target_timestamp": [
+                    pd.Timestamp("2022-01-04 09:31:00")
+                ]
+                * 3,
+                "timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 3,
+                "label": [1.0, 2.0, 3.0],
+                "alpha_return_next_close": [30.0, 10.0, 20.0],
+                "valid_label": [True] * 3,
+            }
+        )
+
+        out = add_cross_sectional_target_label(
+            frame,
+            mode="mixed",
+            target_col="target_label",
+            long_label_weight=0.10,
+            min_group_size=2,
+        )
+
+        self.assertEqual(out["label"].tolist(), frame["label"].tolist())
+        self.assertAlmostEqual(out.loc[0, "label_xs_short_component"], -1.224744871)
+        self.assertAlmostEqual(out.loc[0, "label_xs_long_component"], 1.224744871)
+        self.assertEqual(
+            out["target_label"].round(6).tolist(),
+            [-1.10227, -0.122474, 1.224745],
+        )
+
+    def test_mixed_target_requires_finite_long_label(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "date": ["2022-01-04"] * 3,
+                "symbol": [f"00000{idx}.SZ" for idx in range(3)],
+                "decision_target_timestamp": [
+                    pd.Timestamp("2022-01-04 09:31:00")
+                ]
+                * 3,
+                "timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 3,
+                "label": [1.0, 2.0, 3.0],
+                "alpha_return_next_close": [30.0, None, 20.0],
+                "valid_label": [True] * 3,
+            }
+        )
+
+        out = add_cross_sectional_target_label(
+            frame,
+            mode="mixed",
+            target_col="target_label",
+            min_group_size=3,
+        )
+
+        self.assertTrue(out["target_label"].isna().all())
+        self.assertFalse(out["valid_label"].any())
+
     def test_target_label_is_not_a_feature_and_can_train_model(self) -> None:
         frame = _frame().iloc[:2].copy()
         frame["feature"] = [1.0, 2.0]

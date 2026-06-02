@@ -9,8 +9,9 @@
 
 - 项目窗口仍是 `09:30-09:40`；当前优化子域是 `09:31-09:40`。
 - 训练主线改为单模型 mixed label：一分钟 VWAP short label 为主，小权重加入持有到第二天收盘的 long label。
-- 训练仍用 full universe；评估默认同时看 `pool_S`、`pool_M`、`pool_L` 三个外部股池。
-- 下一步先把 short / replay 做强，主要靠特征工程和模型调参；信号变强后再同时评估高频和日频。
+- 训练仍用 full universe；`pool_S`、`pool_M`、`pool_L` 只作为 TopN selection mask，指标在不同 mask 下分别汇总。
+- 下一步先扫 mixed label 的 `w_long`。选 `w_long` 时看 short / next 的 Rank IC 和 Top100；固定后继续把
+  short / replay 做强，next close 不作为后续主优化目标。
 - 两模型 `final_score = alpha_rank - lambda * gap_risk_rank` 路线封存。它通过 rolling，说明短+长目标有信息，
   但当前不继续用两个模型定义目标。
 
@@ -1086,11 +1087,10 @@ train_label = xs_norm(short_label) + w_long * xs_norm(long_label)
 
 | step | decision | note |
 | --- | --- | --- |
-| 1 | 先固定 mixed label | 短 label 是主体，长 label 只加小成分；不要把模型练成 next-close selector。 |
-| 2 | 先做强 short/replay | 重点做特征工程和模型调参，先把一个方向真的做强。 |
-| 3 | 训练 full universe | 不用 S/M/L 过滤训练，也不把 membership 当特征，先作为评估选择 mask。 |
-| 4 | 评估 S/M/L 三池 | 每个 baseline、改进模型和 rolling 切片都默认输出三池口径。 |
-| 5 | 再看高频和日频 | 信号做强后，同时评估短持有 replay 和持有到第二天收盘。 |
+| 1 | 先扫 `w_long` | 短 label 是主体，长 label 只加小成分；用 short / next 的 Rank IC 和 Top100 选权重，不要把模型练成 next-close selector。 |
+| 2 | 训练 full universe | 不用 S/M/L 过滤训练，也不把 membership 当特征；pool 只作为 TopN selection mask。 |
+| 3 | 按 mask 汇总同一组指标 | universe / S / M / L 只是筛选口径；同一模型在每个 mask 下分别报 short / next Rank IC 和 Top100。 |
+| 4 | 固定权重后做强 short/replay | 重点做特征工程和模型调参，主目标回到 short Rank IC、Top100 excess 和 replay。 |
 
 画图口径：
 
@@ -1101,8 +1101,9 @@ train_label = xs_norm(short_label) + w_long * xs_norm(long_label)
 
 判断原则：
 
-- 一个真正练好的模型，即使按 mixed label 训练，切到纯短线 replay、next-day-close sanity 或新的
-  S/M/L 评估体系下也应该相对稳健。
+- 选择 `w_long` 时，short / next 的 Rank IC 和 Top100 都要看；固定 `w_long` 后，后续信号增强不再把
+  next close 当主优化目标。
+- universe / S / M / L 是 selection mask，不是和 Rank IC、Top100 并列的评估指标。
 - 如果模型只在训练 label 上好、换一个合理评估体系就塌，说明还没有真的把 opening signal 做强。
 
 ## 查找索引

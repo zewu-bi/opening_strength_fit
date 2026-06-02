@@ -16,12 +16,17 @@ from opening_strength_fit.config import (
     run_id,
 )
 from opening_strength_fit.io import read_frame, write_frame
+from opening_strength_fit.labels import normalize_return_label_frame
 from opening_strength_fit.reports import print_mapping
+from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns
 from opening_strength_fit.targets import (
     DEFAULT_HEAT_NEUTRALIZE_COLUMNS,
     add_cross_sectional_target_label,
     target_label_summary,
 )
+
+
+KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
 
 
 def _list_config(config: dict, section: str, key: str, default: tuple[str, ...]) -> tuple[str, ...]:
@@ -48,6 +53,32 @@ def _write_frame_atomic(frame, path: Path) -> None:
     os.replace(tmp_path, path)
 
 
+def _normalize_key_columns(frame):
+    out = ensure_timestamp_columns(standardize_columns(frame)).copy()
+    if "date" in out.columns:
+        out["date"] = out["date"].astype(str)
+    if "symbol" in out.columns:
+        out["symbol"] = out["symbol"].astype(str)
+    if "decision_target_timestamp" in out.columns:
+        out["decision_target_timestamp"] = out[
+            "decision_target_timestamp"
+        ].dt.tz_localize(None)
+    return out
+
+
+def _merge_long_label_input(frame, path: Path, *, label_col: str):
+    required = [*KEY_COLUMNS, label_col]
+    labels = normalize_return_label_frame(
+        read_frame(path, columns=required),
+        key_columns=KEY_COLUMNS,
+        label_col=label_col,
+    )
+    out = _normalize_key_columns(frame)
+    if label_col in out.columns:
+        out = out.drop(columns=[label_col])
+    return out.merge(labels, on=list(KEY_COLUMNS), how="left")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Build a derived labeled cache with a target-aligned label."
@@ -67,6 +98,7 @@ def main() -> None:
             "heat_neutral",
             "guard_shrunk",
             "guard_risk_shrunk",
+            "mixed",
         ],
         default="",
     )
@@ -90,6 +122,11 @@ def main() -> None:
     parser.add_argument("--guard-rank-method", default="")
     parser.add_argument("--guard-risk-lambda", type=float, default=None)
     parser.add_argument("--guard-risk-normalization", default="")
+    parser.add_argument("--long-label-input", default="")
+    parser.add_argument("--long-label-col", default="")
+    parser.add_argument("--long-label-weight", type=float, default=None)
+    parser.add_argument("--short-label-transform", default="")
+    parser.add_argument("--long-label-transform", default="")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
@@ -202,6 +239,26 @@ def main() -> None:
         args.guard_risk_normalization
         or config_str(config, "target_cache", "guard_risk_normalization", "mean")
     )
+    long_label_input = _arg_or_config(args, config, "long_label_input", "")
+    long_label_col = _arg_or_config(
+        args,
+        config,
+        "long_label_col",
+        "alpha_return_next_close",
+    )
+    long_label_weight = (
+        float(args.long_label_weight)
+        if args.long_label_weight is not None
+        else config_float(config, "target_cache", "long_label_weight", 0.10)
+    )
+    short_label_transform = (
+        args.short_label_transform
+        or config_str(config, "target_cache", "short_label_transform", "zscore")
+    )
+    long_label_transform = (
+        args.long_label_transform
+        or config_str(config, "target_cache", "long_label_transform", "zscore")
+    )
     guard_min_values = config_float_mapping(config, "target_cache", "guard_min")
     guard_max_values = config_float_mapping(config, "target_cache", "guard_max")
     guard_rank_min_values = config_float_mapping(
@@ -248,6 +305,11 @@ def main() -> None:
             "guard_rank_method": guard_rank_method,
             "guard_risk_lambda": guard_risk_lambda,
             "guard_risk_normalization": guard_risk_normalization,
+            "long_label_input": long_label_input,
+            "long_label_col": long_label_col,
+            "long_label_weight": long_label_weight,
+            "short_label_transform": short_label_transform,
+            "long_label_transform": long_label_transform,
             "guard_min": guard_min_values,
             "guard_max": guard_max_values,
             "guard_rank_min": guard_rank_min_values,
@@ -258,6 +320,12 @@ def main() -> None:
     )
 
     frame = read_frame(input_path)
+    if long_label_input:
+        frame = _merge_long_label_input(
+            frame,
+            Path(long_label_input),
+            label_col=long_label_col,
+        )
     aligned = add_cross_sectional_target_label(
         frame,
         mode=mode,
@@ -283,6 +351,10 @@ def main() -> None:
         guard_risk_rank_min_values=guard_risk_rank_min_values,
         guard_risk_rank_max_values=guard_risk_rank_max_values,
         guard_risk_normalization=guard_risk_normalization,
+        long_label_col=long_label_col,
+        long_label_weight=long_label_weight,
+        short_label_transform=short_label_transform,
+        long_label_transform=long_label_transform,
     )
     _write_frame_atomic(aligned, output_path)
 
@@ -309,6 +381,11 @@ def main() -> None:
         "guard_rank_method": guard_rank_method,
         "guard_risk_lambda": guard_risk_lambda,
         "guard_risk_normalization": guard_risk_normalization,
+        "long_label_input": long_label_input,
+        "long_label_col": long_label_col,
+        "long_label_weight": long_label_weight,
+        "short_label_transform": short_label_transform,
+        "long_label_transform": long_label_transform,
         "guard_min": guard_min_values,
         "guard_max": guard_max_values,
         "guard_rank_min": guard_rank_min_values,

@@ -21,17 +21,16 @@ train_label = short_label + w_long * long_label
 `short_label` 仍是主体，`w_long` 只取小权重，起点按 `0.10` 附近做窄扫。目标不是把模型练成
 next-close selector，而是让一分钟短线信号带一点长线稳定性约束。
 
-训练仍使用 full A-share universe。评估默认同时报 `pool_S`、`pool_M`、`pool_L` 三个外部股池，
-股池先只作为 selection mask，不过滤训练，也不作为模型特征。
+训练仍使用 full A-share universe。`pool_S`、`pool_M`、`pool_L` 只作为 TopN selection mask：
+模型训练和全量打分不按池过滤，也不把 membership 当模型特征；指标在不同 mask 下分别汇总。
 
 执行顺序：
 
 | step | focus | gate |
 | --- | --- | --- |
-| 1 | 固定 mixed label | `w_long` 小权重，next-day sanity 不能明显打坏 short。 |
-| 2 | 做强 short / replay | short Rank IC、Top100 excess、replay 相比 raw short baseline 有明确提升。 |
-| 3 | 三池评估 | S/M/L 三池都要报，不能只在一个池子里好看。 |
-| 4 | 高频 + 日频复核 | 信号做强后，同时看短持有 replay 和持有到第二天收盘。 |
+| 1 | 选择 mixed label 的 `w_long` | 在同一 selection mask 下看 short / next 的 Rank IC 和 Top100；short 不能明显受损，next tail 不能明显恶化。 |
+| 2 | 做强 short / replay | 固定 `w_long` 后，主目标回到 short Rank IC、Top100 excess 和 replay，相比 raw short baseline 要有明确提升。 |
+| 3 | 按 selection mask 切片 | universe / S / M / L 分别报同一组指标；pool 只限制 TopN 候选，不改变训练口径。 |
 
 ## 研究口径
 
@@ -67,11 +66,13 @@ ClickHouse 原始 tick 偶尔出现 6 秒间隔时，不默认视为中间 tick 
 - `Rank IC`：同一 `date x decision_time` 横截面内的排序能力。
 - `Top100 excess`：Top100 相对同横截面均值的 raw short label 超额。
 - `replay`：先做短线可执行 proxy，不在第一阶段混入完整交易约束。
-- `S/M/L pools`：同一模型在三个外部股池 selection mask 下的表现。
-- `next close / next-day close`：mixed label 的长线 sanity 和 transfer check。
+- `selection mask`：universe / `pool_S` / `pool_M` / `pool_L` 是切片维度，不是单独的评估指标。
+- `next close / next-day close`：只在选择 `w_long` 和诊断 dirty tail 时与 short 同看；固定 `w_long` 后，
+  后续信号增强主目标仍是 short。
 
-图表口径：baseline 一组至少 3 个柱子；baseline + 一个改进模型至少 6 个柱子；如果再加 rolling 维度，
-很容易到 `2 models x 3 pools x 3 windows = 18` 个柱子。优先用分组柱、按 pool 分面或 small multiples。
+图表口径：同一指标在多个 selection mask 下展示。baseline 一组至少 3 个柱子；baseline + 一个改进模型
+至少 6 个柱子；如果再加 rolling 维度，很容易到 `2 models x 3 pools x 3 windows = 18` 个柱子。
+优先用分组柱、按 pool 分面或 small multiples。
 
 ## 实验弧线
 
@@ -120,7 +121,7 @@ learned risk layer 的经验是：两模型公式能工作，但解释成本高�
 
 - 不把 `final_score = alpha_rank - lambda * gap_risk_rank` 作为当前主线。
 - 不把 `w_long` 放大到让模型变成 next-close selector。
-- 不在第一阶段按 S/M/L 股池过滤训练，也不把股池 membership 当特征。
+- 不按 S/M/L 股池过滤训练，也不把股池 membership 当特征；股池只做 TopN selection mask。
 - 不在 short / replay 做强前，把 fee/slippage、多档容量、同股冷却和 T+1 overlay 混进训练目标。
 - 不围绕特殊 `09:30` opening snapshot 做主优化。
 - 不继续叠加 clean target、risk-shrunk target 和 risk penalty。

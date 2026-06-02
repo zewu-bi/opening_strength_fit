@@ -105,6 +105,41 @@ def _gpu_opencl_bootstrap_yaml(resources: dict, indent: int) -> str:
     )
 
 
+def _wait_for_paths_yaml(config: dict, indent: int) -> str:
+    paths = get(config, "k8s", "wait_for_paths", []) or []
+    if isinstance(paths, str):
+        paths = paths.replace(",", " ").split()
+    paths = [str(path).strip() for path in paths if str(path).strip()]
+    if not paths:
+        return ""
+
+    timeout_seconds = int(get(config, "k8s", "wait_for_path_timeout_seconds", 21600))
+    interval_seconds = int(get(config, "k8s", "wait_for_path_interval_seconds", 60))
+    quoted_paths = " ".join(f'"{path.replace(chr(34), chr(92) + chr(34))}"' for path in paths)
+    return textwrap.indent(
+        textwrap.dedent(
+            f"""\
+            WAIT_PATH_TIMEOUT_SECONDS={timeout_seconds}
+            WAIT_PATH_INTERVAL_SECONDS={interval_seconds}
+            WAIT_PATH_STARTED=${{SECONDS}}
+            WAIT_PATHS=({quoted_paths})
+            for WAIT_PATH in "${{WAIT_PATHS[@]}}"; do
+              until [ -f "${{WAIT_PATH}}" ]; do
+                if [ $((SECONDS - WAIT_PATH_STARTED)) -ge "${{WAIT_PATH_TIMEOUT_SECONDS}}" ]; then
+                  echo "timed out waiting for dependency file: ${{WAIT_PATH}}" >&2
+                  exit 1
+                fi
+                echo "waiting for dependency file: ${{WAIT_PATH}}"
+                sleep "${{WAIT_PATH_INTERVAL_SECONDS}}"
+              done
+              echo "dependency file is ready: ${{WAIT_PATH}}"
+            done
+            """
+        ),
+        " " * indent,
+    )
+
+
 def _scheduler_yaml(config: dict, resources: dict, indent: int = 14) -> str:
     return _node_selector_yaml(config, indent=indent) + _gpu_tolerations_yaml(
         resources,
@@ -318,6 +353,7 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
     script = training_script(config)
     env_from = _clickhouse_env_from(config, indent=18)
     opencl_bootstrap = _gpu_opencl_bootstrap_yaml(resources, indent=26)
+    wait_for_paths = _wait_for_paths_yaml(config, indent=26)
     if _window_mode(config) == "rolling_monthly":
         env_from = _clickhouse_env_from(config, indent=22)
         months_list = _month_range_from_config(config)
@@ -376,6 +412,7 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
                         - |
                           set -euo pipefail
 {opencl_bootstrap.rstrip()}
+{wait_for_paths.rstrip()}
                           ROOT={output_dir}
                           mkdir -p "${{ROOT}}"
                           MONTHS=({months})

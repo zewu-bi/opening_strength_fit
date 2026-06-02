@@ -12,7 +12,7 @@ precheck -> render job -> apply/wait -> sync artifacts -> audit/coverage -> anal
 ## 当前维护分层
 
 - Active mainline: single mixed label，short label 为主体，小权重 long / next-day close 约束；训练仍用
-  full universe，S/M/L 先作为 selection-mask 评估口径。
+  full universe，S/M/L 只作为 TopN selection mask，指标在不同 mask 下分别汇总。
 - Current running cache jobs: 只应有 `build_delay2_2023_cache_v1` 和 `build_delay2_2024_cache_v1` 两个
   labeled-cache 任务在集群继续跑。不要删除、重渲染或复用它们的 run/job/config，除非明确要处理这两个任务。
 - Historical evidence: `docs/experiment_log.md` 已记录、`experiments/results/**` 有轻量证据、或文档明确引用的
@@ -110,13 +110,9 @@ L -> lml.bzw@ssd/data/pool_L.parquet
 `scripts/run_alpha_conditioned_rolling_validation.py` 目前只支持这个 selection-mask 语义：alpha/risk
 训练和 risk target 仍使用 full universe，TopN 从股池内候选里选；不要给 rolling 入口传
 `--pool-filter-train` 或 `--pool-add-feature`。后续单模型 mixed-label rolling 也沿用同一原则：
-训练 full universe，评估 S/M/L selection masks。
+训练 full universe，在 S/M/L selection masks 下分别汇总同一组指标。
 
-如果要第二阶段试“只在池内训练”，再显式加：
-
-```bash
---pool S --pool-filter-train
-```
+当前主线不使用 `--pool-filter-train` 或 `--pool-add-feature`；股池只做 TopN selection mask。
 
 正式实验归档时，把同样口径落进 TOML：
 
@@ -335,7 +331,7 @@ group-level diagnostics。
 
 ## 7. 分析命令
 
-当前报告默认使用 S/M/L 三池评估。画模型对比图时按 pool 分组或分面：
+当前报告默认在 universe / S / M / L selection mask 下分别汇总同一组指标。画模型对比图时按 pool 分组或分面：
 
 - baseline 一组 3 个柱子：`S`、`M`、`L`。
 - baseline + 改进模型一组 6 个柱子。

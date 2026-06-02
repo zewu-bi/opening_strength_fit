@@ -26,6 +26,14 @@ TARGET_STAT_COLUMNS = (
     "label_xs_guard_shrink",
     "label_xs_guard_risk",
     "label_xs_guard_risk_component_count",
+    "label_xs_short_component",
+    "label_xs_long_raw",
+    "label_xs_long_mean",
+    "label_xs_long_std",
+    "label_xs_long_count",
+    "label_xs_long_rank_pct",
+    "label_xs_long_component",
+    "label_xs_mixed_long_weight",
 )
 
 DEFAULT_HEAT_NEUTRALIZE_COLUMNS = (
@@ -103,6 +111,63 @@ def _zscore(values: pd.Series, *, std_epsilon: float) -> pd.Series:
     if not np.isfinite(std) or std <= float(std_epsilon):
         return pd.Series(np.nan, index=values.index, dtype="float64")
     return (values - mean) / std
+
+
+def _cross_sectional_transformed_label(
+    out: pd.DataFrame,
+    *,
+    values: pd.Series,
+    valid: pd.Series,
+    group_cols: tuple[str, ...],
+    transform: str,
+    min_group_size: int,
+    std_epsilon: float,
+) -> tuple[pd.Series, pd.Series, pd.Series, pd.Series, pd.Series]:
+    values = pd.to_numeric(values, errors="coerce").astype("float64").replace(
+        [np.inf, -np.inf],
+        np.nan,
+    )
+    transform = transform.strip().lower().replace("-", "_")
+    valid = valid & values.notna()
+
+    component = pd.Series(np.nan, index=out.index, dtype="float64")
+    mean = pd.Series(np.nan, index=out.index, dtype="float64")
+    std = pd.Series(np.nan, index=out.index, dtype="float64")
+    count = pd.Series(np.nan, index=out.index, dtype="float64")
+    rank_pct = pd.Series(np.nan, index=out.index, dtype="float64")
+    if not valid.any():
+        return component, mean, std, count, rank_pct
+
+    valid_frame = out.loc[valid, [*group_cols]].copy()
+    valid_frame["_value"] = values.loc[valid].to_numpy()
+    grouped = valid_frame.groupby(list(group_cols), sort=False)["_value"]
+
+    mean.loc[valid] = grouped.transform("mean").to_numpy()
+    std.loc[valid] = grouped.transform(lambda group: group.std(ddof=0)).to_numpy()
+    count.loc[valid] = grouped.transform("count").to_numpy()
+    rank_pct.loc[valid] = grouped.rank(method="average", pct=True).to_numpy()
+
+    usable = valid & count.ge(int(min_group_size))
+    if transform == "raw":
+        component.loc[usable] = values.loc[usable]
+    elif transform in {"demean", "center"}:
+        component.loc[usable] = values.loc[usable] - mean.loc[usable]
+    elif transform == "zscore":
+        zscore_usable = usable & std.gt(float(std_epsilon))
+        component.loc[zscore_usable] = (
+            values.loc[zscore_usable] - mean.loc[zscore_usable]
+        ) / std.loc[zscore_usable]
+    elif transform == "rank_pct":
+        component.loc[usable] = rank_pct.loc[usable]
+    elif transform == "rank_centered":
+        rank_mean = (count.loc[usable] + 1.0) / (2.0 * count.loc[usable])
+        component.loc[usable] = rank_pct.loc[usable] - rank_mean
+    else:
+        raise SystemExit(
+            "mixed label transform must be raw, demean, zscore, rank_pct, "
+            f"or rank_centered; got {transform!r}"
+        )
+    return component, mean, std, count, rank_pct
 
 
 def _transformed_exposure(
@@ -362,6 +427,10 @@ def add_cross_sectional_target_label(
     guard_risk_rank_min_values: Mapping[str, object] | None = None,
     guard_risk_rank_max_values: Mapping[str, object] | None = None,
     guard_risk_normalization: str = "mean",
+    long_label_col: str = "alpha_return_next_close",
+    long_label_weight: float = 0.10,
+    short_label_transform: str = "zscore",
+    long_label_transform: str = "zscore",
 ) -> pd.DataFrame:
     """Replace or add a cross-sectionally aligned label.
 
@@ -382,17 +451,21 @@ def add_cross_sectional_target_label(
         "heat_neutral",
         "guard_shrunk",
         "guard_risk_shrunk",
+        "mixed",
     }:
         raise SystemExit(
             "unknown target mode "
             f"{mode!r}; expected raw, demean, zscore, rank_pct, "
-            "rank_centered, heat_neutral, guard_shrunk, or guard_risk_shrunk"
+            "rank_centered, heat_neutral, guard_shrunk, guard_risk_shrunk, "
+            "or mixed"
         )
     neutralization_transform = neutralization_transform.strip().lower().replace("-", "_")
     if not 0.0 <= float(guard_shrink_penalty) <= 1.0:
         raise SystemExit("guard_shrink_penalty must be between 0 and 1")
     if float(guard_risk_lambda) < 0.0:
         raise SystemExit("guard_risk_lambda must be non-negative")
+    if not np.isfinite(float(long_label_weight)):
+        raise SystemExit("long_label_weight must be finite")
 
     out = ensure_timestamp_columns(standardize_columns(frame)).copy()
     resolved_group_cols = resolve_group_cols(out, group_cols)
@@ -500,6 +573,56 @@ def add_cross_sectional_target_label(
         out["label_xs_guard_risk_component_count"] = risk_component_count.where(usable)
         out["label_xs_guard_positive_excess"] = positive_excess.where(usable)
         out["label_xs_guard_shrink"] = shrink.where(shrink_mask, 0.0).where(usable)
+    elif mode == "mixed":
+        if long_label_col not in out.columns:
+            raise SystemExit(f"mixed target missing long label column: {long_label_col}")
+        long_label = pd.to_numeric(out[long_label_col], errors="coerce").astype(
+            "float64"
+        ).replace([np.inf, -np.inf], np.nan)
+        mixed_valid = valid & long_label.notna()
+        (
+            short_component,
+            _short_mean,
+            _short_std,
+            _short_count,
+            _short_rank_pct,
+        ) = _cross_sectional_transformed_label(
+            out,
+            values=raw_label,
+            valid=mixed_valid,
+            group_cols=resolved_group_cols,
+            transform=short_label_transform,
+            min_group_size=min_group_size,
+            std_epsilon=std_epsilon,
+        )
+        (
+            long_component,
+            long_mean,
+            long_std,
+            long_count,
+            long_rank_pct,
+        ) = _cross_sectional_transformed_label(
+            out,
+            values=long_label,
+            valid=mixed_valid,
+            group_cols=resolved_group_cols,
+            transform=long_label_transform,
+            min_group_size=min_group_size,
+            std_epsilon=std_epsilon,
+        )
+        mixed_usable = short_component.notna() & long_component.notna()
+        target.loc[mixed_usable] = (
+            short_component.loc[mixed_usable]
+            + float(long_label_weight) * long_component.loc[mixed_usable]
+        )
+        out["label_xs_short_component"] = short_component
+        out["label_xs_long_raw"] = long_label
+        out["label_xs_long_mean"] = long_mean
+        out["label_xs_long_std"] = long_std
+        out["label_xs_long_count"] = long_count
+        out["label_xs_long_rank_pct"] = long_rank_pct
+        out["label_xs_long_component"] = long_component
+        out["label_xs_mixed_long_weight"] = float(long_label_weight)
 
     out["label_xs_mean"] = group_mean
     out["label_xs_median"] = group_median

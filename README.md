@@ -37,9 +37,10 @@ train_label = xs_norm(short_label) + small_weight * xs_norm(long_label)
 - 当前优化子域：`09:31:00-09:40:00`。
 - 默认数据窗口：`09:15:00-09:45:00`。
 - 训练股票池：A 股 `00/30.SZ` 和 `60/68.SH` full universe。
-- 评估股票池：S/M/L 三个外部股池都要报；训练仍默认不按池过滤。
+- 选股筛选口径：S/M/L 三个外部股池只作为 TopN selection mask；训练不按池过滤。
 - 主评估：short-horizon Rank IC、Top100 excess 和 replay。
-- 日频 sanity：next close / next-day close 单独看，先少量进入混合 label，不做独立 risk layer。
+- `w_long` 诊断：选择 mixed label 权重时同时看 short / next 的 Rank IC 和 Top100；固定后继续以 short 为主，
+  不做独立 risk layer。
 
 Label 定义：
 
