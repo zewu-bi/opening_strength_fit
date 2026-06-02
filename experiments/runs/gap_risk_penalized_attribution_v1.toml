@@ -2,7 +2,7 @@
 id = "gap_risk_penalized_attribution_v1"
 kind = "gap_risk_attribution"
 description = "Attribute gap-risk Top100 changes by comparing baseline kept, penalized-out, and replacement names across outcome, feature exposure, and residual-control diagnostics."
-status = "running"
+status = "completed"
 
 [window]
 mode = "rolling_monthly"

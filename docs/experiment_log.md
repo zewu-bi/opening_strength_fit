@@ -1018,6 +1018,52 @@ Risk-score diagnostic inside alpha Top100:
 - rolling 结果说明短+长目标有信息；复盘后主线改为直接训练单模型 mixed label，而不是继续推进两模型
   `alpha - risk` score。
 
+## 2026-06-02 Gap-Risk Attribution v1 Results
+
+`gap_risk_penalized_attribution_v1` 是解释性分析，不训练新模型；它用 rolling validation 的 prediction shards
+解释 `gap_penalty_030_p80` / `gap_penalty_035_p80` 到底替换了哪些 Top100 股票。
+
+Artifacts:
+
+```text
+output/local/gap_risk_penalized_attribution_v1/gap_attribution_outcomes_overall.csv
+output/local/gap_risk_penalized_attribution_v1/gap_attribution_feature_exposure_overall.csv
+output/local/gap_risk_penalized_attribution_v1/gap_attribution_penalized_feature_delta.csv
+output/local/gap_risk_penalized_attribution_v1/gap_attribution_residual_penalized_vs_kept.csv
+```
+
+Top100 replacement summary:
+
+| score | replaced names / group | short excess bps | next excess bps | note |
+| --- | ---: | ---: | ---: | --- |
+| raw `alpha_rank` | 0.0 | +24.87 | -6.91 | short 强，但 next tail 为负。 |
+| `gap_penalty_030_p80` | 46.4 | +21.20 | +7.84 | 主折中：少损失 short，next 转正。 |
+| `gap_penalty_035_p80` | 62.2 | +17.39 | +13.25 | 防守版：next 更干净，short 损失更大。 |
+
+Cohort outcome:
+
+| variant | cohort | short excess bps | next excess bps |
+| --- | --- | ---: | ---: |
+| `gap_penalty_030_p80` | baseline kept | +28.98 | -0.54 |
+| `gap_penalty_030_p80` | penalized out | +19.41 | -12.04 |
+| `gap_penalty_030_p80` | replacement in | +11.94 | +17.17 |
+| `gap_penalty_035_p80` | baseline kept | +26.85 | +6.42 |
+| `gap_penalty_035_p80` | penalized out | +22.95 | -12.74 |
+| `gap_penalty_035_p80` | replacement in | +11.27 | +17.46 |
+
+特征画像：
+
+- 被 penalty 踢出的票不是 short 垃圾票；它们 short excess 仍为正，但 next tail 更差。
+- `penalized_out - baseline_kept` 暴露最明显的是 `preopen_turnover`、`preopen_volume`，其次是
+  `turnover_diff_30t`、`volume_diff_30t`、`turnover_diff_10t` 等开盘成交增量。
+- 在控制 `turnover_diff_10t`、`return_10t`、`spread_bps`、`ask_depth_10`、`depth_imbalance_10`、
+  `preopen_turnover`、`buy_price` 后，`penalized_out` 相对 `baseline_kept` 的 next residual 仍更差：
+  `gap_penalty_030_p80 = -10.91 bps`，`gap_penalty_035_p80 = -17.08 bps`。
+
+结论：dirty tail 的主要形态是“短线 alpha 高、盘前/开盘成交拥挤、next close 容易回吐”。`gap 0.30 p80`
+仍是两模型诊断里的主折中，`gap 0.35 p80` 作为防守对照；这轮结果支持把经验吸收到 single mixed label，
+而不是继续推进 `alpha - risk` final score。
+
 ## 2026-06-02 Mentor Re-scope: Single-Label Mainline
 
 和 mentor 复盘后，当前主线从“两模型 score 组合”切回“先把一个单模型 label 做强”。
@@ -1123,6 +1169,7 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `score_alpha_conditioned_top100_sweep_v3_p85` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_alpha_conditioned_top100_sweep_v3_p85/` |
 | `score_alpha_conditioned_top100_sweep_v3_p90` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_alpha_conditioned_top100_sweep_v3_p90/` |
 | `rolling_alpha_conditioned_top100_validation_v1` | alpha_conditioned_rolling_validation | completed | `/mnt/output/opening_strength_fit/rolling_alpha_conditioned_top100_validation_v1/` |
+| `gap_risk_penalized_attribution_v1` | gap_risk_attribution | completed | `/mnt/output/opening_strength_fit/gap_risk_penalized_attribution_v1/` |
 
 ### Run 索引
 
@@ -1184,6 +1231,7 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `score_alpha_conditioned_top100_sweep_v3_p85` | completed | Top100-only p85 fine sweep；`gap penalty 0.30` short/next excess = +16.82 / +3.25 bps。 |
 | `score_alpha_conditioned_top100_sweep_v3_p90` | completed | Top100-only p90 fine sweep；`gap penalty 0.30` short/next excess = +17.68 / +0.72 bps。 |
 | `rolling_alpha_conditioned_top100_validation_v1` | completed | 18m cache 上完成 2021-08 至 2022-01 rolling validation；`gap_penalty_030_p80` short/next excess = +21.20 / +7.84 bps，`gap_penalty_035_p80` = +17.39 / +13.25 bps。 |
+| `gap_risk_penalized_attribution_v1` | completed | 解释 rolling Top100 替换；被踢出票偏高 `preopen_turnover` / `preopen_volume` 和开盘成交增量，`gap 0.30` 是主折中。 |
 
 ### Output 索引
 
@@ -1201,4 +1249,5 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `output/reports/opening_delay2_signal_baseline` | delay2 保守 baseline 的分钟四曲线，用于当前 feature-strengthening 门槛。 |
 | `output/local/score_learned_risk_sweep_v1` | learned-risk sweep artifact；轻量 summary 归档到 `experiments/results/backtests/score_learned_risk_sweep_v1_summary.csv`。 |
 | `output/local/rolling_alpha_conditioned_top100_validation_v1` | 18m rolling validation 合并汇总，包含 `rolling_summary.csv`、`rolling_month_summary.csv` 和 `rolling_group_metrics.csv`。 |
+| `output/local/gap_risk_penalized_attribution_v1` | rolling gap-risk Top100 替换归因，包含 outcome、feature exposure 和 residual-control CSV。 |
 | `output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw` | 18m rolling 各测试月 prediction shard，用于 alpha Top100 内 risk/short/next 相关诊断。 |

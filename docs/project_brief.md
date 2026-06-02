@@ -84,7 +84,7 @@ ClickHouse 原始 tick 偶尔出现 6 秒间隔时，不默认视为中间 tick 
 | `09:31-09:40` baseline | 排除特殊 `09:30` 后是否还能学？ | 能。`postopen_0931_0940_baseline` Rank IC `0.1360`，Top100 `+13.45 bps`。 |
 | next tail 诊断 | raw short score 是否带隔夜回吐？ | 是。Top100 short excess `+22.21 bps`，next excess `-32.21 bps`。 |
 | guard / clean target | 可见信息能否减少 next tail？ | 能，但代价明显；强 clean target 会把 short excess 打到 `+6.21 bps`。 |
-| learned risk layer | 两模型 `alpha - risk` 是否可行？ | 可行但复杂；`gap_penalty_030_p80` rolling short / next `+21.20 / +7.84 bps`。 |
+| learned risk layer | 两模型 `alpha - risk` 是否可行？ | 可行但复杂；`gap_penalty_030_p80` rolling short / next `+21.20 / +7.84 bps`，归因指向开盘拥挤 tail。 |
 | mentor re-scope | 下一步继续两模型还是直接定义 label？ | 直接训练单模型 mixed label；两模型路线封存为历史对照。 |
 
 ## 关键事实
@@ -109,7 +109,9 @@ clean target 能改变排序，但过于防守。`guard_shrunk_target_050_v1` �
 
 learned risk layer 的经验是：两模型公式能工作，但解释成本高。`bad_tail` v1 太像 next-close selector；
 `conditional_bad_tail` v1 学成了 short-alpha 强度 proxy；`alpha_conditioned_reversal` v2/v3 解决了部分问题，
-并在 18m rolling 中通过。复盘后，这条路线封存为“短+长目标有信息”的证据，而不是继续作为当前主实现。
+并在 18m rolling 中通过。后续 attribution 显示，被 risk penalty 踢出的原始 Top100 股票更偏高
+`preopen_turnover`、`preopen_volume` 和开盘成交增量，符合“开盘拥挤后 next 回吐”的 dirty-tail 画像。
+复盘后，这条路线封存为“短+长目标有信息”的证据，而不是继续作为当前主实现。
 
 ## 当前不做
 
