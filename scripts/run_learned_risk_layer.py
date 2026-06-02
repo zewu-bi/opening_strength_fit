@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
-import math
 import os
 from pathlib import Path
 
@@ -10,6 +8,12 @@ import numpy as np
 import pandas as pd
 
 import _bootstrap  # noqa: F401
+from opening_strength_fit.analysis import (
+    json_safe as shared_json_safe,
+    load_or_fetch_next_close_labels as shared_load_or_fetch_next_close_labels,
+    normalize_next_close_labels as shared_normalize_next_close_labels,
+    write_json,
+)
 from opening_strength_fit.alpha_conditioning import (
     KEY_COLUMNS,
     add_group_rank,
@@ -31,10 +35,7 @@ from opening_strength_fit.config import (
     run_id,
 )
 from opening_strength_fit.io import read_frame, write_frame
-from opening_strength_fit.labels import (
-    finite_numeric_series,
-    normalize_return_label_frame,
-)
+from opening_strength_fit.labels import finite_numeric_series
 from opening_strength_fit.model import evaluate_prediction_frame
 from opening_strength_fit.model import fit_lightgbm_frame, predict_frame
 from opening_strength_fit.reports import dataset_summary, metrics_by_year_from_windows
@@ -77,18 +78,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def json_safe(value):
-    if isinstance(value, dict):
-        return {key: json_safe(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [json_safe(item) for item in value]
-    if isinstance(value, (np.bool_, bool)):
-        return bool(value)
-    if isinstance(value, (np.integer, int)):
-        return int(value)
-    if isinstance(value, (np.floating, float)):
-        number = float(value)
-        return number if math.isfinite(number) else None
-    return value
+    return shared_json_safe(value)
 
 
 def risk_rank_config(config: dict) -> tuple[dict[str, float], dict[str, float]]:
@@ -123,11 +113,7 @@ def manual_dirty_risk(frame: pd.DataFrame, config: dict) -> pd.Series:
 
 
 def normalize_next_close_labels(frame: pd.DataFrame) -> pd.DataFrame:
-    return normalize_return_label_frame(
-        frame,
-        key_columns=KEY_COLUMNS,
-        label_col="alpha_return_next_close",
-    )
+    return shared_normalize_next_close_labels(frame, key_columns=KEY_COLUMNS)
 
 
 def load_or_fetch_next_close_labels(
@@ -137,15 +123,8 @@ def load_or_fetch_next_close_labels(
     config: dict,
     output_dir: Path,
 ) -> pd.DataFrame:
-    cached_path = output_dir / "clickhouse_next_close_labels.parquet"
     configured_input = config_str(config, "risk_layer", "next_close_label_input", "")
-    label_input = Path(args.next_close_label_input or configured_input) if (args.next_close_label_input or configured_input) else None
-    if label_input and label_input.exists():
-        labels = normalize_next_close_labels(read_frame(label_input))
-        labels.to_parquet(cached_path, index=False)
-        return labels
-    if cached_path.exists():
-        return normalize_next_close_labels(pd.read_parquet(cached_path))
+    label_input = args.next_close_label_input or configured_input
 
     username = (
         args.clickhouse_user
@@ -157,54 +136,59 @@ def load_or_fetch_next_close_labels(
         or config_str(config, "clickhouse", "password", "")
         or os.environ.get("CLICKHOUSE_PASSWORD", "")
     )
-    if not username or not password:
-        raise SystemExit(
-            "bad-tail risk labels need next-close labels. Pass "
-            "--next-close-label-input or set ClickHouse credentials."
+    def _fetch(base: pd.DataFrame) -> pd.DataFrame:
+        if not username or not password:
+            raise SystemExit(
+                "bad-tail risk labels need next-close labels. Pass "
+                "--next-close-label-input or set ClickHouse credentials."
+            )
+        label_base = base[[*KEY_COLUMNS, "buy_price"]].drop_duplicates(list(KEY_COLUMNS))
+        return compute_clickhouse_close_labels(
+            label_base.copy(),
+            [HorizonSpec(name="next_close", label="next close", seconds=None)],
+            host=args.clickhouse_host
+            or config_str(
+                config,
+                "clickhouse",
+                "host",
+                os.environ.get("CLICKHOUSE_HOST", "ch.db.prod.highfortfunds.com"),
+            ),
+            port=int(
+                args.clickhouse_port
+                or config_optional_int(config, "clickhouse", "port", None)
+                or os.environ.get("CLICKHOUSE_PORT", "8123")
+            ),
+            username=username,
+            password=password,
+            table=args.clickhouse_table
+            or config_str(
+                config,
+                "clickhouse",
+                "table",
+                os.environ.get("CLICKHOUSE_TICK_TABLE", DEFAULT_CLICKHOUSE_TICK_TABLE),
+            ),
+            close_offset_us=int(
+                config_optional_int(config, "risk_layer", "close_offset_us", None)
+                or args.close_offset_us
+            ),
+            close_lookback_seconds=int(
+                config_optional_int(config, "risk_layer", "close_lookback_seconds", None)
+                or args.close_lookback_seconds
+            ),
+            calendar_days_after=int(
+                config_optional_int(config, "risk_layer", "calendar_days_after", None)
+                or args.calendar_days_after
+            ),
+            fee_bps=0.0,
         )
 
-    label_base = labeled[[*KEY_COLUMNS, "buy_price"]].drop_duplicates(list(KEY_COLUMNS))
-    labels = compute_clickhouse_close_labels(
-        label_base.copy(),
-        [HorizonSpec(name="next_close", label="next close", seconds=None)],
-        host=args.clickhouse_host
-        or config_str(
-            config,
-            "clickhouse",
-            "host",
-            os.environ.get("CLICKHOUSE_HOST", "ch.db.prod.highfortfunds.com"),
-        ),
-        port=int(
-            args.clickhouse_port
-            or config_optional_int(config, "clickhouse", "port", None)
-            or os.environ.get("CLICKHOUSE_PORT", "8123")
-        ),
-        username=username,
-        password=password,
-        table=args.clickhouse_table
-        or config_str(
-            config,
-            "clickhouse",
-            "table",
-            os.environ.get("CLICKHOUSE_TICK_TABLE", DEFAULT_CLICKHOUSE_TICK_TABLE),
-        ),
-        close_offset_us=int(
-            config_optional_int(config, "risk_layer", "close_offset_us", None)
-            or args.close_offset_us
-        ),
-        close_lookback_seconds=int(
-            config_optional_int(config, "risk_layer", "close_lookback_seconds", None)
-            or args.close_lookback_seconds
-        ),
-        calendar_days_after=int(
-            config_optional_int(config, "risk_layer", "calendar_days_after", None)
-            or args.calendar_days_after
-        ),
-        fee_bps=0.0,
+    return shared_load_or_fetch_next_close_labels(
+        labeled,
+        output_dir=output_dir,
+        label_input=label_input,
+        fetch_labels=_fetch,
+        key_columns=KEY_COLUMNS,
     )
-    labels = normalize_next_close_labels(labels)
-    labels.to_parquet(cached_path, index=False)
-    return labels
 
 
 def bad_tail_risk(labeled: pd.DataFrame, config: dict) -> pd.Series:
@@ -351,10 +335,7 @@ def add_fit_alpha_conditioning_rank(
             ),
         },
     }
-    (output_dir / "alpha_conditioning_trace.json").write_text(
-        json.dumps(json_safe(trace), indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    write_json(output_dir / "alpha_conditioning_trace.json", trace)
     print_mapping("alpha_conditioning", trace)
     return out
 
@@ -698,10 +679,7 @@ def main() -> None:
         },
         "train_stats_by_window": train_stats_by_window,
     }
-    (output_dir / "risk_layer_trace.json").write_text(
-        json.dumps(json_safe(trace), indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    write_json(output_dir / "risk_layer_trace.json", trace)
     print(f"\nwrote: {output_dir}")
 
 

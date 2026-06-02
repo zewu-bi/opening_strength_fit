@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 import shutil
@@ -9,6 +8,11 @@ import shutil
 import pandas as pd
 
 import _bootstrap  # noqa: F401
+from opening_strength_fit.analysis import (
+    month_periods,
+    write_artifact_fetch_trace,
+    write_json,
+)
 from opening_strength_fit.config import load_toml
 from opening_strength_fit.k8s import DEFAULT_IMAGE, RunSpec
 from opening_strength_fit.k8s import command_succeeds, delete_temp_pod, ensure_temp_pod
@@ -153,40 +157,62 @@ def is_rolling_validation(spec: RunSpec) -> bool:
     return spec.kind == "alpha_conditioned_rolling_validation"
 
 
-def pull_score_risk_artifacts(
+def pull_artifact_set(
     hfcli: str,
     spec: RunSpec,
     pod_name: str,
     output_root: Path,
-) -> list[Path]:
+    artifact_names: tuple[str, ...],
+) -> tuple[Path, list[Path], list[str]]:
     output_dir = output_root / spec.run_id
     output_dir.mkdir(parents=True, exist_ok=True)
     pulled: list[Path] = []
     missing: list[str] = []
-    for name in SCORE_RISK_ARTIFACTS:
+    for name in artifact_names:
         remote_path = f"{spec.pvc_dir}/{name}"
         local_path = output_dir / name
         if fetch_remote_file_if_exists(hfcli, spec, pod_name, remote_path, local_path):
             pulled.append(local_path)
         else:
             missing.append(name)
+    return output_dir, pulled, missing
+
+
+def record_artifact_fetch(
+    spec: RunSpec,
+    output_dir: Path,
+    pulled: list[Path],
+    missing: list[str],
+) -> Path:
+    return write_artifact_fetch_trace(
+        output_dir,
+        fetched_at_utc=datetime.now(UTC).isoformat(),
+        run_id=spec.run_id,
+        namespace=spec.namespace,
+        pvc_dir=spec.pvc_dir,
+        files=pulled,
+        missing=missing,
+    )
+
+
+def pull_score_risk_artifacts(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    output_root: Path,
+) -> list[Path]:
+    output_dir, pulled, missing = pull_artifact_set(
+        hfcli,
+        spec,
+        pod_name,
+        output_root,
+        SCORE_RISK_ARTIFACTS,
+    )
     if not pulled:
         raise SystemExit(
             f"{spec.run_id}: no score-risk artifacts found under {spec.pvc_dir}"
         )
-    trace = {
-        "fetched_at_utc": datetime.now(UTC).isoformat(),
-        "run_id": spec.run_id,
-        "namespace": spec.namespace,
-        "pvc_dir": spec.pvc_dir,
-        "local_output_dir": str(output_dir),
-        "files": [str(path) for path in pulled],
-        "missing": missing,
-    }
-    (output_dir / "artifact_fetch_trace.json").write_text(
-        json.dumps(trace, indent=2),
-        encoding="utf-8",
-    )
+    record_artifact_fetch(spec, output_dir, pulled, missing)
     return pulled
 
 
@@ -196,32 +222,16 @@ def pull_rolling_validation_artifacts(
     pod_name: str,
     output_root: Path,
 ) -> list[Path]:
-    output_dir = output_root / spec.run_id
-    output_dir.mkdir(parents=True, exist_ok=True)
-    pulled: list[Path] = []
-    missing: list[str] = []
-    for name in ROLLING_VALIDATION_ARTIFACTS:
-        remote_path = f"{spec.pvc_dir}/{name}"
-        local_path = output_dir / name
-        if fetch_remote_file_if_exists(hfcli, spec, pod_name, remote_path, local_path):
-            pulled.append(local_path)
-        else:
-            missing.append(name)
+    output_dir, pulled, missing = pull_artifact_set(
+        hfcli,
+        spec,
+        pod_name,
+        output_root,
+        ROLLING_VALIDATION_ARTIFACTS,
+    )
 
     if (output_dir / "rolling_summary.csv").exists():
-        trace = {
-            "fetched_at_utc": datetime.now(UTC).isoformat(),
-            "run_id": spec.run_id,
-            "namespace": spec.namespace,
-            "pvc_dir": spec.pvc_dir,
-            "local_output_dir": str(output_dir),
-            "files": [str(path) for path in pulled],
-            "missing": missing,
-        }
-        (output_dir / "artifact_fetch_trace.json").write_text(
-            json.dumps(trace, indent=2),
-            encoding="utf-8",
-        )
+        record_artifact_fetch(spec, output_dir, pulled, missing)
         return pulled
 
     shard_paths = pull_rolling_validation_shards(
@@ -236,19 +246,7 @@ def pull_rolling_validation_artifacts(
         raise SystemExit(
             f"{spec.run_id}: no rolling-validation artifacts found under {spec.pvc_dir}"
         )
-    trace = {
-        "fetched_at_utc": datetime.now(UTC).isoformat(),
-        "run_id": spec.run_id,
-        "namespace": spec.namespace,
-        "pvc_dir": spec.pvc_dir,
-        "local_output_dir": str(output_dir),
-        "files": [str(path) for path in pulled],
-        "missing": missing,
-    }
-    (output_dir / "artifact_fetch_trace.json").write_text(
-        json.dumps(trace, indent=2),
-        encoding="utf-8",
-    )
+    record_artifact_fetch(spec, output_dir, pulled, missing)
     return pulled
 
 
@@ -277,22 +275,19 @@ def combine_rolling_validation_shards(
     group_metrics.to_csv(group_path, index=False)
     month_summary.to_csv(month_path, index=False)
     summary.to_csv(summary_path, index=False)
-    trace_path.write_text(
-        json.dumps(
-            {
-                "combined_at_utc": datetime.now(UTC).isoformat(),
-                "months": months,
-                "missing_months": missing_months,
-                "outputs": {
-                    "group_metrics": str(group_path),
-                    "month_summary": str(month_path),
-                    "summary": str(summary_path),
-                },
+    write_json(
+        trace_path,
+        {
+            "combined_at_utc": datetime.now(UTC).isoformat(),
+            "months": months,
+            "missing_months": missing_months,
+            "outputs": {
+                "group_metrics": str(group_path),
+                "month_summary": str(month_path),
+                "summary": str(summary_path),
             },
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
+        },
+        ensure_ascii=True,
     )
     return [group_path, month_path, summary_path, trace_path]
 
@@ -482,10 +477,6 @@ def combine_prediction_files(raw_dir: Path, output_path: Path) -> dict[str, obje
     return summarize_predictions(output_path) | {"file_rows": file_rows}
 
 
-def month_periods(start_month: str, end_month: str) -> list[str]:
-    return [str(month) for month in pd.period_range(start_month, end_month, freq="M")]
-
-
 def fetch_predictions(
     hfcli: str,
     spec: RunSpec,
@@ -577,7 +568,7 @@ def fetch_predictions(
         "files": fetched_files,
         "combined_stats": combined_stats,
     }
-    trace_path.write_text(json.dumps(trace, indent=2), encoding="utf-8")
+    write_json(trace_path, trace, ensure_ascii=True)
     return combined_path
 
 

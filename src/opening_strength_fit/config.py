@@ -101,6 +101,23 @@ def config_int_tuple(
     return parsed or default
 
 
+def config_float_tuple(
+    config: dict,
+    section: str,
+    key: str,
+    default: tuple[float, ...],
+) -> tuple[float, ...]:
+    value = config_value(config, section, key, default)
+    if value is None:
+        return default
+    if isinstance(value, str):
+        raw = value.replace(",", " ").split()
+    else:
+        raw = list(value)
+    parsed = tuple(float(item) for item in raw if str(item).strip())
+    return parsed or default
+
+
 def run_id(config: dict, config_path: str | Path) -> str:
     return str(config_value(config, "run", "id", Path(config_path).stem))
 

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
-import math
 import os
 from pathlib import Path
 import re
@@ -12,18 +10,25 @@ import numpy as np
 import pandas as pd
 
 import _bootstrap  # noqa: F401
+from opening_strength_fit.analysis import (
+    clock_range as shared_clock_range,
+    load_or_fetch_next_close_labels as shared_load_or_fetch_next_close_labels,
+    normalize_next_close_labels as shared_normalize_next_close_labels,
+    selection_return_stats,
+    write_json,
+)
 from opening_strength_fit.clickhouse_ticks import DEFAULT_CLICKHOUSE_TICK_TABLE
 from opening_strength_fit.config import (
     config_bool,
     config_float,
+    config_float_tuple,
     config_int,
+    config_int_tuple,
     config_str,
-    config_value,
     load_toml,
     run_id,
 )
-from opening_strength_fit.io import read_frame
-from opening_strength_fit.labels import normalize_return_label_frame
+from opening_strength_fit.io import frame_columns, read_frame
 from run_alpha_horizon_decay import HorizonSpec, compute_clickhouse_close_labels
 
 
@@ -52,27 +57,11 @@ RISK_GATES = (0.25, 0.50, 0.75)
 
 
 def _float_sequence(config: dict, section: str, key: str, default: tuple[float, ...]) -> tuple[float, ...]:
-    value = config_value(config, section, key, default)
-    if value in (None, ""):
-        return default
-    if isinstance(value, str):
-        raw = value.replace(",", " ").split()
-    else:
-        raw = list(value)
-    parsed = tuple(float(item) for item in raw if str(item).strip())
-    return parsed or default
+    return config_float_tuple(config, section, key, default)
 
 
 def _int_sequence(config: dict, section: str, key: str, default: tuple[int, ...]) -> tuple[int, ...]:
-    value = config_value(config, section, key, default)
-    if value in (None, ""):
-        return default
-    if isinstance(value, str):
-        raw = value.replace(",", " ").split()
-    else:
-        raw = list(value)
-    parsed = tuple(int(item) for item in raw if str(item).strip())
-    return parsed or default
+    return config_int_tuple(config, section, key, default)
 
 
 def parse_args() -> argparse.Namespace:
@@ -134,24 +123,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def clock_range(start: str, end: str) -> list[str]:
-    start_ts = pd.Timestamp(f"2000-01-01 {start}")
-    end_ts = pd.Timestamp(f"2000-01-01 {end}")
-    if end_ts < start_ts:
-        raise SystemExit("--end-clock must be >= --start-clock")
-    clocks = []
-    current = start_ts
-    while current <= end_ts:
-        clocks.append(current.strftime("%H:%M"))
-        current += pd.Timedelta(minutes=1)
-    return clocks
+    return shared_clock_range(start, end)
 
 
 def existing_columns(path: Path) -> set[str]:
-    if path.suffix.lower() == ".csv":
-        return set(pd.read_csv(path, nrows=0).columns)
-    import pyarrow.parquet as pq
-
-    return set(pq.ParquetFile(path).schema.names)
+    return frame_columns(path)
 
 
 def parse_input_specs(args: argparse.Namespace, config: dict) -> list[dict[str, str]]:
@@ -246,7 +222,7 @@ def load_predictions(spec: dict[str, str], *, score_col: str, clocks: list[str])
     if missing:
         raise SystemExit(f"{spec['run_id']}: prediction input missing columns: {missing}")
     columns = [column for column in [*required, *RISK_COLUMNS] if column in available]
-    frame = read_frame(path)[columns] if path.suffix.lower() == ".csv" else pd.read_parquet(path, columns=columns)
+    frame = read_frame(path, columns=columns)
     frame = frame.dropna(subset=[*KEY_COLUMNS, score_col, "label", "buy_price"]).copy()
     frame["run_id"] = spec["run_id"]
     frame["date"] = frame["date"].astype(str)
@@ -278,11 +254,7 @@ def load_risk_predictions(
     missing = [column for column in required if column not in available]
     if missing:
         raise SystemExit(f"{risk_name}: risk prediction input missing columns: {missing}")
-    frame = (
-        read_frame(path, columns=required)
-        if path.suffix.lower() == ".csv"
-        else pd.read_parquet(path, columns=required)
-    )
+    frame = read_frame(path, columns=required)
     frame = frame.dropna(subset=[*KEY_COLUMNS, score_col]).copy()
     frame["date"] = frame["date"].astype(str)
     frame["symbol"] = frame["symbol"].astype(str)
@@ -299,11 +271,7 @@ def load_risk_predictions(
 
 
 def normalize_next_close_labels(frame: pd.DataFrame) -> pd.DataFrame:
-    return normalize_return_label_frame(
-        frame,
-        key_columns=KEY_COLUMNS,
-        label_col="alpha_return_next_close",
-    )
+    return shared_normalize_next_close_labels(frame, key_columns=KEY_COLUMNS)
 
 
 def load_or_fetch_next_close_labels(
@@ -313,41 +281,42 @@ def load_or_fetch_next_close_labels(
     config: dict,
     output_dir: Path,
 ) -> pd.DataFrame:
-    cached_path = output_dir / "clickhouse_next_close_labels.parquet"
     configured_input = config_str(config, "risk_sweep", "next_close_label_input", "")
-    label_input = Path(args.next_close_label_input or configured_input) if (args.next_close_label_input or configured_input) else None
-    if label_input and label_input.exists():
-        labels = normalize_next_close_labels(read_frame(label_input))
-        labels.to_parquet(cached_path, index=False)
-        return labels
-    if cached_path.exists():
-        return normalize_next_close_labels(pd.read_parquet(cached_path))
+    label_input = (
+        args.next_close_label_input or configured_input
+    )
 
     username = args.clickhouse_user or config_str(config, "clickhouse", "user", "")
     password = args.clickhouse_password or config_str(config, "clickhouse", "password", "")
-    if not username or not password:
-        raise SystemExit(
-            "next-close labels not found. Pass --next-close-label-input or set "
-            "CLICKHOUSE_USER and CLICKHOUSE_PASSWORD."
+
+    def _fetch(base: pd.DataFrame) -> pd.DataFrame:
+        if not username or not password:
+            raise SystemExit(
+                "next-close labels not found. Pass --next-close-label-input or set "
+                "CLICKHOUSE_USER and CLICKHOUSE_PASSWORD."
+            )
+        label_base = base[[*KEY_COLUMNS, "buy_price"]].drop_duplicates(list(KEY_COLUMNS))
+        return compute_clickhouse_close_labels(
+            label_base.copy(),
+            [HorizonSpec(name="next_close", label="next close", seconds=None)],
+            host=args.clickhouse_host or "ch.db.prod.highfortfunds.com",
+            port=int(args.clickhouse_port),
+            username=username,
+            password=password,
+            table=args.clickhouse_table,
+            close_offset_us=int(args.close_offset_us),
+            close_lookback_seconds=int(args.close_lookback_seconds),
+            calendar_days_after=int(args.calendar_days_after),
+            fee_bps=0.0,
         )
 
-    label_base = predictions[[*KEY_COLUMNS, "buy_price"]].drop_duplicates(list(KEY_COLUMNS))
-    labels = compute_clickhouse_close_labels(
-        label_base.copy(),
-        [HorizonSpec(name="next_close", label="next close", seconds=None)],
-        host=args.clickhouse_host or "ch.db.prod.highfortfunds.com",
-        port=int(args.clickhouse_port),
-        username=username,
-        password=password,
-        table=args.clickhouse_table,
-        close_offset_us=int(args.close_offset_us),
-        close_lookback_seconds=int(args.close_lookback_seconds),
-        calendar_days_after=int(args.calendar_days_after),
-        fee_bps=0.0,
+    return shared_load_or_fetch_next_close_labels(
+        predictions,
+        output_dir=output_dir,
+        label_input=label_input,
+        fetch_labels=_fetch,
+        key_columns=KEY_COLUMNS,
     )
-    labels = normalize_next_close_labels(labels)
-    labels.to_parquet(cached_path, index=False)
-    return labels
 
 
 def add_risk_scores(frame: pd.DataFrame) -> pd.DataFrame:
@@ -554,16 +523,20 @@ def summarize_selection(
                 & (frame["date"].eq(date))
                 & (frame["decision_target_timestamp"].eq(timestamp))
             ]
-            all_short = float(full_group["label"].mean())
-            all_next = float(full_group["alpha_return_next_close"].mean())
             ranked = group.sort_values("final_score", ascending=False)
             for top_n in top_n_list:
                 selected = ranked.head(int(top_n))
-                short_mean = float(selected["label"].mean()) if len(selected) else float("nan")
-                next_mean = (
-                    float(selected["alpha_return_next_close"].mean())
-                    if len(selected)
-                    else float("nan")
+                short_stats = selection_return_stats(
+                    full_group,
+                    selected,
+                    label_col="label",
+                    prefix="short",
+                )
+                next_stats = selection_return_stats(
+                    full_group,
+                    selected,
+                    label_col="alpha_return_next_close",
+                    prefix="next",
                 )
                 rows.append(
                     {
@@ -579,10 +552,10 @@ def summarize_selection(
                         "rows": int(len(full_group)),
                         "candidate_rows": int(len(group)),
                         "selected_rows": int(len(selected)),
-                        "short_top_mean_bps": short_mean * 10_000.0,
-                        "short_top_excess_bps": (short_mean - all_short) * 10_000.0,
-                        "next_top_mean_bps": next_mean * 10_000.0,
-                        "next_top_excess_bps": (next_mean - all_next) * 10_000.0,
+                        "short_top_mean_bps": short_stats["short_top_mean_bps"],
+                        "short_top_excess_bps": short_stats["short_top_excess_bps"],
+                        "next_top_mean_bps": next_stats["next_top_mean_bps"],
+                        "next_top_excess_bps": next_stats["next_top_excess_bps"],
                         "selected_guard_pass_count": int(
                             selected["next_flip_guard_10t_pass"].sum()
                         ),
@@ -640,21 +613,6 @@ def summarize_selection(
         how="left",
     )
     return group_metrics, minute, summary
-
-
-def json_safe(value):
-    if isinstance(value, dict):
-        return {key: json_safe(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [json_safe(item) for item in value]
-    if isinstance(value, (np.bool_, bool)):
-        return bool(value)
-    if isinstance(value, (np.integer, int)):
-        return int(value)
-    if isinstance(value, (np.floating, float)):
-        number = float(value)
-        return number if math.isfinite(number) else None
-    return value
 
 
 def main() -> None:
@@ -779,10 +737,7 @@ def main() -> None:
             "next_close_labels": str(output_dir / "clickhouse_next_close_labels.parquet"),
         },
     }
-    (output_dir / "score_risk_trace.json").write_text(
-        json.dumps(json_safe(trace), indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    write_json(output_dir / "score_risk_trace.json", trace)
 
     print("score_risk_summary")
     print(

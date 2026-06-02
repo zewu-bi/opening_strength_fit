@@ -67,6 +67,31 @@ def read_frame(
     return _read_frame_file(path, columns=columns, filters=filters)
 
 
+def frame_columns(path: str | Path) -> set[str]:
+    path = Path(path)
+    if not path.exists():
+        raise SystemExit(f"input path does not exist: {path}")
+    if path.is_dir():
+        files = sorted(path.rglob("*.parquet"))
+        if not files:
+            files = sorted(path.rglob("*.csv")) + sorted(path.rglob("*.csv.gz"))
+        if not files:
+            raise SystemExit(f"no parquet/csv files found under directory: {path}")
+        columns: set[str] = set()
+        for file in files:
+            columns |= frame_columns(file)
+        return columns
+
+    suffixes = "".join(path.suffixes[-2:]).lower()
+    if path.suffix.lower() == ".parquet":
+        import pyarrow.parquet as pq
+
+        return set(pq.ParquetFile(path).schema.names)
+    if path.suffix.lower() == ".csv" or suffixes == ".csv.gz":
+        return set(pd.read_csv(path, nrows=0).columns)
+    raise SystemExit(f"unsupported input format: {path.suffix}")
+
+
 def write_frame(df: pd.DataFrame, path: str | Path, *, index: bool = False) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)

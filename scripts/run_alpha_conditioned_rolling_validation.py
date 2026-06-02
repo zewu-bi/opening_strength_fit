@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import argparse
 import gc
-import json
-import math
 from pathlib import Path
 import sys
 
@@ -17,6 +15,14 @@ for path in (SCRIPT_DIR, REPO_SCRIPT_DIR):
         sys.path.insert(0, str(path))
 
 import _bootstrap  # noqa: F401,E402
+from opening_strength_fit.analysis import (  # noqa: E402
+    finite_mean as shared_finite_mean,
+    json_safe as shared_json_safe,
+    positive_count as shared_positive_count,
+    positive_rate as shared_positive_rate,
+    selection_return_stats,
+    write_json,
+)
 from opening_strength_fit.alpha_conditioning import (  # noqa: E402
     KEY_COLUMNS,
     add_alpha_conditioned_risk_targets,
@@ -66,18 +72,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def json_safe(value):
-    if isinstance(value, dict):
-        return {key: json_safe(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [json_safe(item) for item in value]
-    if isinstance(value, (np.bool_, bool)):
-        return bool(value)
-    if isinstance(value, (np.integer, int)):
-        return int(value)
-    if isinstance(value, (np.floating, float)):
-        number = float(value)
-        return number if math.isfinite(number) else None
-    return value
+    return shared_json_safe(value)
 
 
 def variant_specs(config: dict) -> list[dict[str, object]]:
@@ -98,30 +93,15 @@ def variant_specs(config: dict) -> list[dict[str, object]]:
 
 
 def finite_mean(series: pd.Series) -> float:
-    values = (
-        pd.to_numeric(series, errors="coerce")
-        .replace([np.inf, -np.inf], np.nan)
-        .dropna()
-    )
-    return float(values.mean()) if len(values) else float("nan")
+    return shared_finite_mean(series)
 
 
 def positive_rate(series: pd.Series) -> float:
-    values = (
-        pd.to_numeric(series, errors="coerce")
-        .replace([np.inf, -np.inf], np.nan)
-        .dropna()
-    )
-    return float((values > 0).mean()) if len(values) else float("nan")
+    return shared_positive_rate(series)
 
 
 def positive_count(series: pd.Series) -> int:
-    values = (
-        pd.to_numeric(series, errors="coerce")
-        .replace([np.inf, -np.inf], np.nan)
-        .dropna()
-    )
-    return int((values > 0).sum())
+    return shared_positive_count(series)
 
 
 def score_variants(
@@ -165,14 +145,18 @@ def score_variants(
                 selected = group.sort_values("final_score", ascending=False).head(top_n)
             else:
                 selected = group
-            short_mean = finite_mean(selected["label"]) if len(selected) else float("nan")
-            full_short_mean = finite_mean(full_group["label"])
-            next_mean = (
-                finite_mean(selected["alpha_return_next_close"])
-                if len(selected)
-                else float("nan")
+            short_stats = selection_return_stats(
+                full_group,
+                selected,
+                label_col="label",
+                prefix="short",
             )
-            full_next_mean = finite_mean(full_group["alpha_return_next_close"])
+            next_stats = selection_return_stats(
+                full_group,
+                selected,
+                label_col="alpha_return_next_close",
+                prefix="next",
+            )
             rows.append(
                 {
                     "test_month": month,
@@ -193,10 +177,10 @@ def score_variants(
                         if selection_mask_col and len(selected)
                         else float("nan")
                     ),
-                    "short_top_mean_bps": short_mean * 10_000.0,
-                    "short_top_excess_bps": (short_mean - full_short_mean) * 10_000.0,
-                    "next_top_mean_bps": next_mean * 10_000.0,
-                    "next_top_excess_bps": (next_mean - full_next_mean) * 10_000.0,
+                    "short_top_mean_bps": short_stats["short_top_mean_bps"],
+                    "short_top_excess_bps": short_stats["short_top_excess_bps"],
+                    "next_top_mean_bps": next_stats["next_top_mean_bps"],
+                    "next_top_excess_bps": next_stats["next_top_excess_bps"],
                     "selected_gap_risk_rank": (
                         float(selected["gap_risk_rank"].mean())
                         if len(selected) and "gap_risk_rank" in selected
@@ -502,10 +486,7 @@ def main() -> None:
         },
         "train_stats_by_window": train_stats,
     }
-    (output_dir / "rolling_trace.json").write_text(
-        json.dumps(json_safe(trace), indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    write_json(output_dir / "rolling_trace.json", trace)
     print("\nrolling_summary")
     print(
         summary[

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
-import math
 from pathlib import Path
 from typing import Callable
 
@@ -10,7 +8,13 @@ import numpy as np
 import pandas as pd
 
 import _bootstrap  # noqa: F401
-from opening_strength_fit.labels import normalize_return_label_frame
+from opening_strength_fit.analysis import (
+    clock_range as shared_clock_range,
+    load_next_close_label_file,
+    selection_return_stats,
+    write_json,
+)
+from opening_strength_fit.io import frame_columns, read_frame as shared_read_frame
 
 
 DEFAULT_INPUT = (
@@ -54,30 +58,15 @@ def parse_args() -> argparse.Namespace:
 
 
 def clock_range(start: str, end: str) -> list[str]:
-    start_ts = pd.Timestamp(f"2000-01-01 {start}")
-    end_ts = pd.Timestamp(f"2000-01-01 {end}")
-    if end_ts < start_ts:
-        raise SystemExit("--end-clock must be >= --start-clock")
-    clocks = []
-    current = start_ts
-    while current <= end_ts:
-        clocks.append(current.strftime("%H:%M"))
-        current += pd.Timedelta(minutes=1)
-    return clocks
+    return shared_clock_range(start, end)
 
 
 def read_frame(path: Path, *, columns: list[str] | None = None) -> pd.DataFrame:
-    if path.suffix.lower() == ".csv":
-        return pd.read_csv(path, usecols=columns)
-    return pd.read_parquet(path, columns=columns)
+    return shared_read_frame(path, columns=columns)
 
 
 def existing_columns(path: Path) -> set[str]:
-    if path.suffix.lower() == ".csv":
-        return set(pd.read_csv(path, nrows=0).columns)
-    import pyarrow.parquet as pq
-
-    return set(pq.ParquetFile(path).schema.names)
+    return frame_columns(path)
 
 
 def load_predictions(path: Path, clocks: list[str], score_col: str) -> pd.DataFrame:
@@ -105,13 +94,7 @@ def load_predictions(path: Path, clocks: list[str], score_col: str) -> pd.DataFr
 
 
 def load_next_close_labels(path: Path) -> pd.DataFrame:
-    required = [*KEY_COLUMNS, "alpha_return_next_close"]
-    labels = read_frame(path, columns=required)
-    return normalize_return_label_frame(
-        labels,
-        key_columns=KEY_COLUMNS,
-        label_col="alpha_return_next_close",
-    )
+    return load_next_close_label_file(path, key_columns=KEY_COLUMNS)
 
 
 def add_group_ranks(frame: pd.DataFrame, columns: tuple[str, ...]) -> pd.DataFrame:
@@ -271,16 +254,20 @@ def summarize_variant(
     for (date, timestamp), group in frame.groupby(
         ["date", "decision_target_timestamp"],
         sort=True,
-    ):
+        ):
         candidates = group if mask_fn is None else group.loc[mask_fn(group)]
         selected = candidates.sort_values("prediction", ascending=False).head(top_n)
-        all_short = float(group["label"].mean())
-        all_next = float(group["alpha_return_next_close"].mean())
-        short_mean = float(selected["label"].mean()) if len(selected) else float("nan")
-        next_mean = (
-            float(selected["alpha_return_next_close"].mean())
-            if len(selected)
-            else float("nan")
+        short_stats = selection_return_stats(
+            group,
+            selected,
+            label_col="label",
+            prefix="short",
+        )
+        next_stats = selection_return_stats(
+            group,
+            selected,
+            label_col="alpha_return_next_close",
+            prefix="next",
         )
         rows.append(
             {
@@ -291,20 +278,14 @@ def summarize_variant(
                 "rows": int(len(group)),
                 "candidate_rows": int(len(candidates)),
                 "selected_rows": int(len(selected)),
-                "short_all_mean_bps": all_short * 10_000.0,
-                "short_top_mean_bps": short_mean * 10_000.0,
-                "short_top_excess_bps": (short_mean - all_short) * 10_000.0,
-                "short_top_win_rate": float((selected["label"] > 0).mean())
-                if len(selected)
-                else float("nan"),
-                "next_all_mean_bps": all_next * 10_000.0,
-                "next_top_mean_bps": next_mean * 10_000.0,
-                "next_top_excess_bps": (next_mean - all_next) * 10_000.0,
-                "next_top_win_rate": float(
-                    (selected["alpha_return_next_close"] > 0).mean()
-                )
-                if len(selected)
-                else float("nan"),
+                "short_all_mean_bps": short_stats["short_all_mean_bps"],
+                "short_top_mean_bps": short_stats["short_top_mean_bps"],
+                "short_top_excess_bps": short_stats["short_top_excess_bps"],
+                "short_top_win_rate": short_stats["short_top_win_rate"],
+                "next_all_mean_bps": next_stats["next_all_mean_bps"],
+                "next_top_mean_bps": next_stats["next_top_mean_bps"],
+                "next_top_excess_bps": next_stats["next_top_excess_bps"],
+                "next_top_win_rate": next_stats["next_top_win_rate"],
             }
         )
 
@@ -353,21 +334,6 @@ def minute_summary(group_metrics: pd.DataFrame) -> pd.DataFrame:
         )
         .sort_values(["variant", "clock"])
     )
-
-
-def json_safe(value):
-    if isinstance(value, dict):
-        return {key: json_safe(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [json_safe(item) for item in value]
-    if isinstance(value, (np.bool_, bool)):
-        return bool(value)
-    if isinstance(value, (np.integer, int)):
-        return int(value)
-    if isinstance(value, (np.floating, float)):
-        number = float(value)
-        return number if math.isfinite(number) else None
-    return value
 
 
 def main() -> None:
@@ -428,10 +394,7 @@ def main() -> None:
         "skipped": skipped,
         "best_by_next_excess": summary.head(5).to_dict(orient="records"),
     }
-    (output_dir / "tail_guard_trace.json").write_text(
-        json.dumps(json_safe(trace), indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-    )
+    write_json(output_dir / "tail_guard_trace.json", trace)
 
     print("tail_guard_summary")
     print(

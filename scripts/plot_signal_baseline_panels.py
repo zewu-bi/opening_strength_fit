@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 from pathlib import Path
 
@@ -14,8 +13,14 @@ import numpy as np
 import pandas as pd
 
 import _bootstrap  # noqa: F401
+from opening_strength_fit.analysis import (
+    clock_range as shared_clock_range,
+    load_or_fetch_next_close_labels as shared_load_or_fetch_next_close_labels,
+    normalize_next_close_labels as shared_normalize_next_close_labels,
+    write_json,
+)
 from opening_strength_fit.clickhouse_ticks import DEFAULT_CLICKHOUSE_TICK_TABLE
-from opening_strength_fit.labels import normalize_return_label_frame
+from opening_strength_fit.io import read_frame as shared_read_frame
 from opening_strength_fit.model import corr
 from run_alpha_horizon_decay import HorizonSpec, compute_clickhouse_close_labels
 
@@ -84,22 +89,11 @@ def parse_args() -> argparse.Namespace:
 
 
 def clock_range(start: str, end: str) -> list[str]:
-    start_ts = pd.Timestamp(f"2000-01-01 {start}")
-    end_ts = pd.Timestamp(f"2000-01-01 {end}")
-    if end_ts < start_ts:
-        raise SystemExit("--end-clock must be >= --start-clock")
-    clocks = []
-    current = start_ts
-    while current <= end_ts:
-        clocks.append(current.strftime("%H:%M"))
-        current += pd.Timedelta(minutes=1)
-    return clocks
+    return shared_clock_range(start, end)
 
 
 def read_frame(path: Path) -> pd.DataFrame:
-    if path.suffix.lower() == ".csv":
-        return pd.read_csv(path)
-    return pd.read_parquet(path)
+    return shared_read_frame(path)
 
 
 def load_predictions(path: Path, clocks: list[str], score_col: str) -> pd.DataFrame:
@@ -111,7 +105,7 @@ def load_predictions(path: Path, clocks: list[str], score_col: str) -> pd.DataFr
         "label",
         "buy_price",
     ]
-    frame = pd.read_parquet(path, columns=required)
+    frame = shared_read_frame(path, columns=required)
     frame = frame.dropna(
         subset=["date", "symbol", "decision_target_timestamp", score_col, "label"]
     ).copy()
@@ -128,11 +122,7 @@ def load_predictions(path: Path, clocks: list[str], score_col: str) -> pd.DataFr
 
 
 def normalize_next_close_labels(frame: pd.DataFrame) -> pd.DataFrame:
-    return normalize_return_label_frame(
-        frame,
-        key_columns=("date", "symbol", "decision_target_timestamp"),
-        label_col="alpha_return_next_close",
-    )
+    return shared_normalize_next_close_labels(frame)
 
 
 def load_or_fetch_next_close_labels(
@@ -141,39 +131,32 @@ def load_or_fetch_next_close_labels(
     args: argparse.Namespace,
     output_dir: Path,
 ) -> pd.DataFrame:
-    cached_path = output_dir / "clickhouse_next_close_labels.parquet"
-    label_input = Path(args.next_close_label_input) if args.next_close_label_input else None
-    if label_input and label_input.exists():
-        labels = normalize_next_close_labels(read_frame(label_input))
-        labels.to_parquet(cached_path, index=False)
-        return labels
-    if cached_path.exists():
-        return normalize_next_close_labels(pd.read_parquet(cached_path))
-
-    if not args.clickhouse_user or not args.clickhouse_password:
-        raise SystemExit(
-            "next-close labels not found. Pass --next-close-label-input or set "
-            "CLICKHOUSE_USER and CLICKHOUSE_PASSWORD to fetch labels."
+    def _fetch(base: pd.DataFrame) -> pd.DataFrame:
+        if not args.clickhouse_user or not args.clickhouse_password:
+            raise SystemExit(
+                "next-close labels not found. Pass --next-close-label-input or set "
+                "CLICKHOUSE_USER and CLICKHOUSE_PASSWORD to fetch labels."
+            )
+        return compute_clickhouse_close_labels(
+            base[["date", "symbol", "decision_target_timestamp", "buy_price"]].copy(),
+            [HorizonSpec(name="next_close", label="next close", seconds=None)],
+            host=args.clickhouse_host or "ch.db.prod.highfortfunds.com",
+            port=int(args.clickhouse_port),
+            username=args.clickhouse_user,
+            password=args.clickhouse_password,
+            table=args.clickhouse_table,
+            close_offset_us=int(args.close_offset_us),
+            close_lookback_seconds=int(args.close_lookback_seconds),
+            calendar_days_after=int(args.calendar_days_after),
+            fee_bps=0.0,
         )
 
-    labels = compute_clickhouse_close_labels(
-        predictions[
-            ["date", "symbol", "decision_target_timestamp", "buy_price"]
-        ].copy(),
-        [HorizonSpec(name="next_close", label="next close", seconds=None)],
-        host=args.clickhouse_host or "ch.db.prod.highfortfunds.com",
-        port=int(args.clickhouse_port),
-        username=args.clickhouse_user,
-        password=args.clickhouse_password,
-        table=args.clickhouse_table,
-        close_offset_us=int(args.close_offset_us),
-        close_lookback_seconds=int(args.close_lookback_seconds),
-        calendar_days_after=int(args.calendar_days_after),
-        fee_bps=0.0,
+    return shared_load_or_fetch_next_close_labels(
+        predictions,
+        output_dir=output_dir,
+        label_input=args.next_close_label_input,
+        fetch_labels=_fetch,
     )
-    labels = normalize_next_close_labels(labels)
-    labels.to_parquet(cached_path, index=False)
-    return labels
 
 
 def summarize_by_minute(
@@ -410,9 +393,7 @@ def main() -> None:
             "next_close_labels": str(output_dir / "clickhouse_next_close_labels.parquet"),
         },
     }
-    (output_dir / "trace.json").write_text(
-        json.dumps(trace, indent=2, ensure_ascii=False) + "\n"
-    )
+    write_json(output_dir / "trace.json", trace)
 
     print("short")
     print(

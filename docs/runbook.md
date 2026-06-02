@@ -9,6 +9,21 @@
 precheck -> render job -> apply/wait -> sync artifacts -> audit/coverage -> analysis
 ```
 
+## 当前维护分层
+
+- Active mainline: single mixed label，short label 为主体，小权重 long / next-day close 约束；训练仍用
+  full universe，S/M/L 先作为 selection-mask 评估口径。
+- Current running cache jobs: 只应有 `build_delay2_2023_cache_v1` 和 `build_delay2_2024_cache_v1` 两个
+  labeled-cache 任务在集群继续跑。不要删除、重渲染或复用它们的 run/job/config，除非明确要处理这两个任务。
+- Historical evidence: `docs/experiment_log.md` 已记录、`experiments/results/**` 有轻量证据、或文档明确引用的
+  run/job/config 都保留。guard / clean target / two-model alpha-risk / risk penalty 路线现在是 historical /
+  superseded evidence，不是当前主实现。
+- Generated retained trace: 已运行过的 `experiments/jobs/*.yaml` 是轻量 K8s manifest trace；即使对应路线
+  已封存，也保留作可复现索引。
+- Stale cleanup: 只有同时满足“无 docs 引用、无 `experiments/results` 证据、非当前 running、非计划中 active”
+  的 run/job/config 才能删除。本地 `__pycache__`、`.pytest_cache`、`*.egg-info` 可以直接清；`.venv`、`.env`
+  和 ignored `output/` 不作为项目级瘦身目标。
+
 ## 1. 预检
 
 ```bash
@@ -306,6 +321,11 @@ output/local/<run_id>/score_risk_minute_summary.csv
 output/local/<run_id>/score_risk_group_metrics.csv
 output/local/<run_id>/score_risk_trace.json
 ```
+
+`alpha_conditioned_rolling_validation` run 也属于非标准 artifact sync；`--all` 会优先拉取 root-level
+`rolling_summary.csv` / `rolling_month_summary.csv` / `rolling_group_metrics.csv`，如果 root summary 缺失，
+则按 `month_YYYY-MM/` shards 拉取并在本地合并。score-risk 和 rolling artifact 拉取共用同一套
+artifact fetch trace，结果写到 `output/local/<run_id>/artifact_fetch_trace.json`。
 
 ## 7. 分析命令
 

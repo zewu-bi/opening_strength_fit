@@ -49,6 +49,7 @@ Library:
 Library:
 
 - `src/opening_strength_fit/config.py`: TOML loading, typed config lookup, run id, and slug helpers.
+- `src/opening_strength_fit/analysis.py`: shared research-script helpers for clock/month ranges, next-close labels, finite TopN summaries, and JSON artifact traces.
 - `src/opening_strength_fit/model.py`: Ridge, sklearn GBM, LightGBM, prediction, feature filtering, and IC helpers.
 - `src/opening_strength_fit/training.py`: unified training pipeline, configured feature transforms/filters, and output writer.
 - `src/opening_strength_fit/evaluation.py`: score buckets and top-score summaries.
@@ -75,10 +76,10 @@ Scripts:
 - `scripts/run_alpha_horizon_decay.py`: evaluate opening scores on intraday/close horizons.
 - `scripts/plot_signal_baseline_panels.py`: render delay2 short/next-close baseline panels.
 - `scripts/run_score_tail_guards.py`: sweep visible-information TopN guard rules over an existing score file.
-- `scripts/run_score_risk_sweep.py`: sweep alpha-rank minus dirty-risk penalties and hard gates over existing score files.
-- `scripts/run_learned_risk_layer.py`: train learned dirty-risk / next-flip risk layers for later score sweeps.
-- `scripts/run_alpha_conditioned_rolling_validation.py`: monthly rolling validation for alpha-conditioned Top100 risk-penalty scores.
-- `scripts/run_gap_risk_attribution.py`: compare baseline Top100, penalized-out names, replacements, and retained names.
+- `scripts/run_score_risk_sweep.py`: historical/superseded alpha-minus-risk score sweeps over existing score files.
+- `scripts/run_learned_risk_layer.py`: historical learned dirty-risk / next-flip risk layers for score-sweep evidence.
+- `scripts/run_alpha_conditioned_rolling_validation.py`: historical monthly validation for alpha-conditioned Top100 risk-penalty scores.
+- `scripts/run_gap_risk_attribution.py`: historical attribution of risk-penalized Top100 replacements.
 
 ## Infrastructure
 
@@ -100,6 +101,19 @@ Scripts:
 - `experiments/jobs/*.yaml`: rendered K8s jobs.
 - `experiments/results/metrics/`: tracked metrics CSV evidence.
 - `experiments/results/backtests/`: tracked replay and horizon-decay summaries.
+
+Experiment layers:
+
+- Current active core: current docs spine, shared library modules, main training/cache/sync/audit scripts, and the active
+  `build_delay2_2023_cache_v1` / `build_delay2_2024_cache_v1` labeled-cache run/job pairs.
+- Historical evidence: every run/job/config recorded in `docs/experiment_log.md`, represented in `experiments/results/**`,
+  or explicitly referenced by docs. This includes guard, clean-target, learned-risk, score-risk, rolling-risk, and
+  attribution experiments that are now superseded by the single mixed-label mainline.
+- Generated retained trace: rendered K8s YAML and lightweight artifact sync traces that connect a historical result back to
+  its executable job. Keep these even when the research route is no longer active.
+- Stale unrecorded: run/job/config files with no docs/results reference and no current running value. These can be removed
+  after a reference check; ignored local caches such as `__pycache__`, `.pytest_cache`, and `*.egg-info` can be cleaned
+  without preserving trace.
 
 Job entrypoints:
 
