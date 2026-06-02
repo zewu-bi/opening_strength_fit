@@ -79,11 +79,17 @@ L -> lml.bzw@ssd/data/pool_L.parquet
 ```
 
 默认语义是 `filter_train=false`、`filter_selection=true`：模型仍在 full universe 上训练和打分，
-最终 TopN 只从池内候选里选。保守无未来检验可以加：
+最终 TopN 只从池内候选里选。当前主线评估默认要同时产出 `pool_S`、`pool_M`、`pool_L` 三个口径；
+不要只看单个池子的 TopN 结果。保守无未来检验可以加：
 
 ```bash
 --pool S --pool-date-lag-sessions 1
 ```
+
+`scripts/run_alpha_conditioned_rolling_validation.py` 目前只支持这个 selection-mask 语义：alpha/risk
+训练和 risk target 仍使用 full universe，TopN 从股池内候选里选；不要给 rolling 入口传
+`--pool-filter-train` 或 `--pool-add-feature`。后续单模型 mixed-label rolling 也沿用同一原则：
+训练 full universe，评估 S/M/L selection masks。
 
 如果要第二阶段试“只在池内训练”，再显式加：
 
@@ -295,6 +301,13 @@ output/local/<run_id>/score_risk_trace.json
 ```
 
 ## 7. 分析命令
+
+当前报告默认使用 S/M/L 三池评估。画模型对比图时按 pool 分组或分面：
+
+- baseline 一组 3 个柱子：`S`、`M`、`L`。
+- baseline + 改进模型一组 6 个柱子。
+- baseline + 改进模型 + rolling 窗口很容易到 18 个柱子；优先用 small multiples、按 pool 分面，
+  或固定横轴为 rolling window、颜色表示模型，避免一张图里同时塞满模型、池子和月份。
 
 Metrics：
 

@@ -1,12 +1,12 @@
 [run]
 id = "rolling_alpha_conditioned_top100_validation_2024_v1"
 kind = "alpha_conditioned_rolling_validation"
-description = "Monthly 2024 validation using the 2023-2024 24-month delay2 cache; each test month trains on the prior 12 months."
+description = "Monthly 2024 validation using the sharded 2023-2024 24-month delay2 cache; each test month trains on the prior 12 months."
 status = "queued"
 
 [data]
 source = "labeled_pvc"
-labeled_path = "/mnt/output/opening_strength_fit/cache/opening_24m_202301_202412_delay2_labeled.parquet"
+labeled_path = "/mnt/output/opening_strength_fit/cache/opening_24m_202301_202412_delay2_labeled"
 tick_path = ""
 input_kind = "labeled"
 feature_limit = 0

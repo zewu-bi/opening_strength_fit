@@ -41,6 +41,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", default=DEFAULT_INPUT)
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--top-n", type=int, default=100)
+    parser.add_argument("--score-col", default="prediction")
+    parser.add_argument("--title", default="Delay2 baseline signal panels")
     parser.add_argument("--start-clock", default="09:30")
     parser.add_argument("--end-clock", default="09:40")
     parser.add_argument(
@@ -100,19 +102,21 @@ def read_frame(path: Path) -> pd.DataFrame:
     return pd.read_parquet(path)
 
 
-def load_predictions(path: Path, clocks: list[str]) -> pd.DataFrame:
+def load_predictions(path: Path, clocks: list[str], score_col: str) -> pd.DataFrame:
     required = [
         "date",
         "symbol",
         "decision_target_timestamp",
-        "prediction",
+        score_col,
         "label",
         "buy_price",
     ]
     frame = pd.read_parquet(path, columns=required)
     frame = frame.dropna(
-        subset=["date", "symbol", "decision_target_timestamp", "prediction", "label"]
+        subset=["date", "symbol", "decision_target_timestamp", score_col, "label"]
     ).copy()
+    if score_col != "prediction":
+        frame["prediction"] = pd.to_numeric(frame[score_col], errors="coerce")
     frame["date"] = frame["date"].astype(str)
     frame["symbol"] = frame["symbol"].astype(str)
     frame["decision_target_timestamp"] = pd.to_datetime(
@@ -301,7 +305,7 @@ def main() -> None:
     remove_stale_outputs(output_dir)
 
     clocks = clock_range(args.start_clock, args.end_clock)
-    predictions = load_predictions(input_path, clocks)
+    predictions = load_predictions(input_path, clocks, args.score_col)
     next_close_labels = load_or_fetch_next_close_labels(
         predictions,
         args=args,
@@ -376,7 +380,7 @@ def main() -> None:
     )
     for ax in axes[1, :]:
         ax.set_xlabel("Decision minute")
-    fig.suptitle("Delay2 baseline signal panels", fontsize=15)
+    fig.suptitle(args.title, fontsize=15)
     fig.tight_layout(rect=(0, 0, 1, 0.96))
     panel_path = output_dir / "signal_baseline_four_panel.png"
     fig.savefig(panel_path)
@@ -386,6 +390,7 @@ def main() -> None:
         "experiment": "experiment0_delay2_four_panel_baseline",
         "input": str(input_path),
         "top_n": int(args.top_n),
+        "score_col": args.score_col,
         "clocks": clocks,
         "cross_section": "date x decision_target_timestamp",
         "short_label": "label",

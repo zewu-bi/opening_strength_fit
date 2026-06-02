@@ -32,6 +32,13 @@ from opening_strength_fit.config import (  # noqa: E402
 )
 from opening_strength_fit.io import write_frame  # noqa: E402
 from opening_strength_fit.reports import dataset_summary, print_mapping  # noqa: E402
+from opening_strength_fit.stock_pool import (  # noqa: E402
+    apply_stock_pool_cli_overrides,
+    load_configured_stock_pool,
+    stock_pool_config_from_mapping,
+    stock_pool_membership_mask,
+    stock_pool_runtime_summary,
+)
 from opening_strength_fit.training import (  # noqa: E402
     _date_splits,
     _load_labeled_pvc_frame,
@@ -123,8 +130,13 @@ def score_variants(
     month: str,
     variants: list[dict[str, object]],
     top_n: int,
+    selection_mask_col: str = "",
 ) -> pd.DataFrame:
+    if selection_mask_col and selection_mask_col not in test.columns:
+        raise SystemExit(f"selection mask column does not exist: {selection_mask_col}")
+
     rows = []
+    group_cols = ["date", "decision_target_timestamp"]
     for spec in variants:
         variant = str(spec["variant"])
         risk_model = str(spec.get("risk_model", "") or "").lower()
@@ -137,14 +149,22 @@ def score_variants(
         else:
             risk_col = ""
 
-        work = test.loc[test["candidate_alpha_rank"].ge(candidate_min)].copy()
-        risk_values = work[risk_col] if risk_col else 0.0
-        work["final_score"] = work["candidate_alpha_rank"] - penalty * risk_values
-        for (date, timestamp), group in work.groupby(["date", "decision_target_timestamp"], sort=True):
-            full_group = test.loc[
-                test["date"].eq(date) & test["decision_target_timestamp"].eq(timestamp)
-            ]
-            selected = group.sort_values("final_score", ascending=False).head(top_n)
+        for (date, timestamp), full_group in test.groupby(group_cols, sort=True):
+            alpha_candidate_mask = full_group["candidate_alpha_rank"].ge(candidate_min)
+            alpha_candidates = full_group.loc[alpha_candidate_mask]
+            if selection_mask_col:
+                pool_mask = full_group[selection_mask_col].astype(bool)
+                group = full_group.loc[alpha_candidate_mask & pool_mask].copy()
+                stock_pool_candidate_rows = int(pool_mask.sum())
+            else:
+                group = alpha_candidates.copy()
+                stock_pool_candidate_rows = float("nan")
+            if len(group):
+                risk_values = group[risk_col] if risk_col else 0.0
+                group["final_score"] = group["candidate_alpha_rank"] - penalty * risk_values
+                selected = group.sort_values("final_score", ascending=False).head(top_n)
+            else:
+                selected = group
             short_mean = finite_mean(selected["label"]) if len(selected) else float("nan")
             full_short_mean = finite_mean(full_group["label"])
             next_mean = (
@@ -164,8 +184,15 @@ def score_variants(
                     "decision_target_timestamp": pd.Timestamp(timestamp),
                     "clock": pd.Timestamp(timestamp).strftime("%H:%M"),
                     "rows": int(len(full_group)),
+                    "alpha_candidate_rows": int(len(alpha_candidates)),
+                    "stock_pool_candidate_rows": stock_pool_candidate_rows,
                     "candidate_rows": int(len(group)),
                     "selected_rows": int(len(selected)),
+                    "selected_stock_pool_rows": (
+                        int(selected[selection_mask_col].astype(bool).sum())
+                        if selection_mask_col and len(selected)
+                        else float("nan")
+                    ),
                     "short_top_mean_bps": short_mean * 10_000.0,
                     "short_top_excess_bps": (short_mean - full_short_mean) * 10_000.0,
                     "next_top_mean_bps": next_mean * 10_000.0,
@@ -186,13 +213,26 @@ def score_variants(
 
 
 def summarize_group_metrics(group_metrics: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    group_metrics = group_metrics.copy()
+    optional_defaults = {
+        "alpha_candidate_rows": np.nan,
+        "stock_pool_candidate_rows": np.nan,
+        "selected_stock_pool_rows": np.nan,
+    }
+    for column, default in optional_defaults.items():
+        if column not in group_metrics.columns:
+            group_metrics[column] = default
+
     keys = ["variant", "risk_model", "penalty", "candidate_alpha_rank_min"]
     month_summary = (
         group_metrics.groupby(["test_month", *keys], as_index=False)
         .agg(
             groups=("date", "size"),
+            alpha_candidate_rows=("alpha_candidate_rows", "mean"),
+            stock_pool_candidate_rows=("stock_pool_candidate_rows", "mean"),
             candidate_rows=("candidate_rows", "mean"),
             selected_rows=("selected_rows", "mean"),
+            selected_stock_pool_rows=("selected_stock_pool_rows", "mean"),
             short_top_mean_bps=("short_top_mean_bps", "mean"),
             short_top_excess_bps=("short_top_excess_bps", "mean"),
             next_top_mean_bps=("next_top_mean_bps", "mean"),
@@ -221,8 +261,11 @@ def summarize_group_metrics(group_metrics: pd.DataFrame) -> tuple[pd.DataFrame, 
         .agg(
             groups=("date", "size"),
             months=("test_month", "nunique"),
+            alpha_candidate_rows=("alpha_candidate_rows", "mean"),
+            stock_pool_candidate_rows=("stock_pool_candidate_rows", "mean"),
             candidate_rows=("candidate_rows", "mean"),
             selected_rows=("selected_rows", "mean"),
+            selected_stock_pool_rows=("selected_stock_pool_rows", "mean"),
             short_top_mean_bps=("short_top_mean_bps", "mean"),
             short_top_excess_bps=("short_top_excess_bps", "mean"),
             next_top_mean_bps=("next_top_mean_bps", "mean"),
@@ -241,6 +284,22 @@ def summarize_group_metrics(group_metrics: pd.DataFrame) -> tuple[pd.DataFrame, 
 def main() -> None:
     args = parse_args()
     config = load_toml(args.config) if args.config else {}
+    config = apply_stock_pool_cli_overrides(config, args)
+    stock_pool_settings = stock_pool_config_from_mapping(config)
+    if stock_pool_settings.enabled and stock_pool_settings.filter_train:
+        raise SystemExit(
+            "alpha-conditioned rolling validation keeps training on the full universe; "
+            "do not set stock_pool.filter_train or --pool-filter-train."
+        )
+    if stock_pool_settings.enabled and stock_pool_settings.add_feature:
+        raise SystemExit(
+            "alpha-conditioned rolling validation does not add stock_pool_member as a "
+            "model feature; use stock_pool.filter_selection for selection-only masks."
+        )
+    stock_pool = load_configured_stock_pool(stock_pool_settings)
+    if stock_pool is not None:
+        print_mapping("stock_pool", stock_pool_runtime_summary(stock_pool_settings, stock_pool))
+
     run_name = run_id(config, args.config) if args.config else "rolling_alpha_conditioned_top100"
     output_dir = Path(
         args.output_dir
@@ -339,8 +398,25 @@ def main() -> None:
         gc.collect()
         test = add_group_rank(test, "gap_risk_prediction", "gap_risk_rank")
         test = add_group_rank(test, "binary_risk_prediction", "binary_risk_rank")
+        selection_mask_col = ""
+        if stock_pool is not None:
+            pool_mask = stock_pool_membership_mask(
+                test,
+                stock_pool,
+                date_lag_sessions=stock_pool_settings.date_lag_sessions,
+            )
+            if stock_pool_settings.annotate_predictions or stock_pool_settings.filter_selection:
+                test[stock_pool_settings.membership_col] = pool_mask.astype("int8").to_numpy()
+            if stock_pool_settings.filter_selection:
+                selection_mask_col = stock_pool_settings.membership_col
 
-        group_metrics = score_variants(test, month=month, variants=variants, top_n=int(top_n))
+        group_metrics = score_variants(
+            test,
+            month=month,
+            variants=variants,
+            top_n=int(top_n),
+            selection_mask_col=selection_mask_col,
+        )
         group_metric_frames.append(group_metrics)
         prediction_columns = [
             *KEY_COLUMNS,
@@ -353,6 +429,8 @@ def main() -> None:
             "binary_risk_prediction",
             "binary_risk_rank",
         ]
+        if stock_pool_settings.membership_col in test.columns:
+            prediction_columns.append(stock_pool_settings.membership_col)
         shard_output_dir = output_dir / f"month_{month}" if len(splits) > 1 else output_dir
         shard_output_dir.mkdir(parents=True, exist_ok=True)
         prediction_path = shard_output_dir / "predictions.parquet"
@@ -377,6 +455,12 @@ def main() -> None:
                 "train_rows": len(train),
                 "test_rows": len(test),
                 "groups": int(group_metrics[["date", "decision_target_timestamp"]].drop_duplicates().shape[0]),
+                "stock_pool_filter_selection": bool(selection_mask_col),
+                "stock_pool_candidate_rows": (
+                    float(group_metrics["stock_pool_candidate_rows"].mean())
+                    if selection_mask_col
+                    else None
+                ),
             },
         )
         del (
@@ -400,6 +484,14 @@ def main() -> None:
         "top_n": int(top_n),
         "variants": variants,
         "risk_layer": config.get("risk_layer", {}),
+        "stock_pool": {
+            "enabled": stock_pool_settings.enabled,
+            "name": stock_pool_settings.name,
+            "path": stock_pool_settings.path,
+            "date_lag_sessions": stock_pool_settings.date_lag_sessions,
+            "filter_selection": stock_pool_settings.filter_selection,
+            "membership_col": stock_pool_settings.membership_col,
+        },
         "windows": len(splits),
         "rows": int(len(labeled)),
         "outputs": {

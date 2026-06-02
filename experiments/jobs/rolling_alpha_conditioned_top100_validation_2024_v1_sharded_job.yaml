@@ -18,6 +18,9 @@ spec:
         - name: opening-strength-output
           persistentVolumeClaim:
             claimName: bizewu-private-data
+        - name: opening-strength-config
+          configMap:
+            name: opening-strength-2024-cache-config-v1
       nodeSelector:
         kubernetes.io/hostname: "node9"
       containers:
@@ -64,7 +67,7 @@ spec:
               echo "output_dir=${OUT}"
 
               python scripts/run_alpha_conditioned_rolling_validation.py \
-                --config experiments/runs/rolling_alpha_conditioned_top100_validation_2024_v1.toml \
+                --config /mnt/config/rolling_alpha_conditioned_top100_validation_2024_v1.toml \
                 --rolling-monthly \
                 --train-months 12 \
                 --test-start-month "${MONTH}" \
@@ -73,6 +76,9 @@ spec:
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output
+            - name: opening-strength-config
+              mountPath: /mnt/config
+              readOnly: true
           resources:
             requests:
               cpu: "8"
@@ -81,4 +87,3 @@ spec:
             limits:
               cpu: "16"
               memory: 256Gi
-

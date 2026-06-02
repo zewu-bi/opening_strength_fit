@@ -115,6 +115,44 @@ class NextCloseCleaningTest(unittest.TestCase):
         self.assertTrue(np.isfinite(metrics.loc[0, "next_top_mean_bps"]))
         self.assertTrue(np.isfinite(metrics.loc[0, "next_top_excess_bps"]))
 
+    def test_score_variants_can_select_only_from_stock_pool(self) -> None:
+        timestamp = pd.Timestamp("2021-08-02 09:31:00")
+        frame = pd.DataFrame(
+            {
+                "date": ["2021-08-02"] * 4,
+                "decision_target_timestamp": [timestamp] * 4,
+                "symbol": ["000001.SZ", "000002.SZ", "000003.SZ", "000004.SZ"],
+                "label": [0.01, 0.08, 0.03, 0.04],
+                "alpha_return_next_close": [0.01, 0.08, 0.03, 0.04],
+                "candidate_alpha_rank": [0.90, 1.00, 0.80, 0.70],
+                "gap_risk_rank": [0.1, 0.2, 0.3, 0.4],
+                "binary_risk_rank": [0.1, 0.2, 0.3, 0.4],
+                "stock_pool_member": [1, 0, 1, 0],
+            }
+        )
+
+        metrics = score_variants(
+            frame,
+            month="2021-08",
+            variants=[
+                {
+                    "variant": "alpha_rank",
+                    "risk_model": "",
+                    "penalty": 0.0,
+                    "candidate_alpha_rank_min": 0.0,
+                }
+            ],
+            top_n=2,
+            selection_mask_col="stock_pool_member",
+        )
+
+        self.assertEqual(int(metrics.loc[0, "alpha_candidate_rows"]), 4)
+        self.assertEqual(int(metrics.loc[0, "stock_pool_candidate_rows"]), 2)
+        self.assertEqual(int(metrics.loc[0, "candidate_rows"]), 2)
+        self.assertEqual(int(metrics.loc[0, "selected_rows"]), 2)
+        self.assertEqual(int(metrics.loc[0, "selected_stock_pool_rows"]), 2)
+        self.assertAlmostEqual(float(metrics.loc[0, "short_top_mean_bps"]), 200.0)
+
 
 if __name__ == "__main__":
     unittest.main()

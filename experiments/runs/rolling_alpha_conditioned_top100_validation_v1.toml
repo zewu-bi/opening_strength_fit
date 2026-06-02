@@ -2,7 +2,7 @@
 id = "rolling_alpha_conditioned_top100_validation_v1"
 kind = "alpha_conditioned_rolling_validation"
 description = "Six-month rolling validation of Top100 alpha-conditioned risk penalties on the 2020-08 to 2022-01 delay2 cache."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"

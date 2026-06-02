@@ -62,6 +62,7 @@
 - `run_score_risk_sweep.py`: sweep alpha-rank minus dirty-risk penalties and hard gates over existing score files.
 - `run_learned_risk_layer.py`: train learned dirty-risk / next-flip risk layers for later score sweeps.
 - `run_alpha_conditioned_rolling_validation.py`: monthly rolling validation for alpha-conditioned Top100 risk-penalty scores.
+- `run_gap_risk_attribution.py`: compare baseline Top100, gap-risk penalized-out names, replacements, and retained names with outcome/exposure/residual diagnostics.
 - `_bootstrap.py`: makes `python scripts/<name>.py` import `src/`.
 
 ## Experiments
@@ -73,7 +74,8 @@
   `scripts/build_labeled_cache.py`; cache-transform jobs use
   `scripts/build_target_label_cache.py`; learned-risk jobs use
   `scripts/run_learned_risk_layer.py`; alpha-conditioned rolling jobs use
-  `scripts/run_alpha_conditioned_rolling_validation.py`; score-risk sweep jobs use
+  `scripts/run_alpha_conditioned_rolling_validation.py`; gap-risk attribution jobs use
+  `scripts/run_gap_risk_attribution.py`; score-risk sweep jobs use
   `scripts/run_score_risk_sweep.py`. `*_sharded_job.yaml` runs monthly/yearly shards.
 - `experiments/results/metrics/`: tracked metrics CSV evidence.
 - `experiments/results/backtests/`: tracked replay and horizon-decay summaries.

@@ -17,6 +17,7 @@ K8S_JOB_ENTRYPOINTS = (
     "scripts/run_learned_risk_layer.py",
     "scripts/run_alpha_conditioned_rolling_validation.py",
     "/mnt/config/run_alpha_conditioned_rolling_validation.py",
+    "scripts/run_gap_risk_attribution.py",
     "scripts/run_score_risk_sweep.py",
 )
 REQUIRED_DIRS = (

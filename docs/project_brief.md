@@ -9,8 +9,10 @@ future gross return，并检查模型分数是否能稳定识别更强股票或�
 所以当前优化主线暂时聚焦 `09:31-09:40` post-open decision points。这不是把项目改成只做
 `09:31-09:40`，而是把特殊开盘快照从当前建模主目标里旁路出来。
 
-当前 60s label 是 microstructure proxy，不是 A 股 T+1 下的可交易收益。当前阶段的目标仍然是把开盘后
-横截面 short signal 做强；fee/slippage、多档容量、同股冷却和日频 overlay 暂不进入优化目标。
+当前 60s label 是 microstructure proxy，不是 A 股 T+1 下的可交易收益。最新主线不再把
+short alpha model 和 gap-risk model 拆成两层，而是先固定一个短线为主、少量混入长线成分的单模型
+training label。当前阶段仍先把开盘后横截面 short signal / replay 做强；高频和日频的完整联合评估
+放到信号变强之后。
 
 ## 研究口径
 
@@ -41,6 +43,17 @@ sell_vwap  = VWAP(entry_t + 60s, entry_t + 120s)
 label      = sell_vwap / buy_price - 1 - fee_bps / 10000
 ```
 
+主线 training label：
+
+```text
+short_label = xs_norm(short-horizon proxy label | date, decision_time)
+long_label  = xs_norm(next-day-close return from the same buy_price | date, decision_time)
+train_label = short_label + w_long * long_label
+```
+
+`w_long` 只取小权重，起点按 `0.10` 附近做窄扫；目标是让模型仍主要学习一分钟 VWAP
+short label，同时带一点持有到第二天收盘的稳定性约束。
+
 `entry_tick_delay` 是研究用成交代理，不等于真实成交。如果价格已经涨上去，真实挂在原位置的买单可能不会成交。
 `09:40` 是正式 decision point；它的 label 使用到约 `09:41-09:42` 的 VWAP 是预期口径，不是出界。
 
@@ -48,7 +61,9 @@ label      = sell_vwap / buy_price - 1 - fee_bps / 10000
 
 - `Rank IC`：同一 `date x decision_time` 横截面内的排序能力。
 - `Top100 excess`：Top100 相对同横截面均值的 raw short label 超额。
-- `next close`：sanity check 和 risk-layer 监督来源；不直接混进 alpha model 的训练目标。
+- `replay`：优先强化短线可执行 proxy，不先展开完整交易约束。
+- `S/M/L pools`：模型训练仍使用 full universe；评估和报告同时给 `pool_S`、`pool_M`、`pool_L` 三个选择池。
+- `next close`：作为少量长线成分进入混合 label，并作为日频 sanity / transfer check 单独报告。
 
 ## 当前结论
 
@@ -63,29 +78,30 @@ label      = sell_vwap / buy_price - 1 - fee_bps / 10000
 - 这个负 next tail 不是市场方向问题，而是 raw short score 混入了“短期正、隔夜回吐”的拥挤追涨风险。
 - 可见信息 guard 能显著改善 next tail，说明当前时点已经能看到一部分回吐风险形态。
 - sample weight、显式 guard feature、硬 feature core 都没有自然把 Top100 推到干净池子里。
-- clean target 能把 guard 信息压进模型，但 penalty 越强 short alpha 掉得越多；它现在更适合作诊断和对照。
-- learned risk layer v1 证明两层打分方向可行：`guard_teacher` 能复现手工风险，`bad_tail` 能学到一部分
-  short-positive / next-negative 成分。
-- 但 `bad_tail` v1 不是可直接部署的 overnight-alpha 证据。它太像 next-close selector，强扣之后
-  next 远大于 short，说明它混入了“哪些开盘状态第二天收盘更好”的 B 成分。
-- `conditional_bad_tail` v1 也不是可用风险层。它在训练标签里直接用了真实 `short_rank` 定义候选和
-  risk gap，模型最终主要学到“短期赢家强度”，不是“短期强势里的回吐风险”。扣它会删掉 short alpha
-  本体，next tail 也没有改善。
-- `alpha_conditioned_reversal` v2 改为用 alpha-score 定义候选，再学习候选里的 next underperformance。
-  Top100 v3 细扫显示 soft penalty 是主线：`gap penalty 0.30` 在保留约 `+16.8 bps` short excess 的同时，
-  把 next excess 从 `-32.2 bps` 拉到 `+3~4.5 bps`。
-- 下一步不继续在单个 2022-01 上调参；用 18 个月 cache 做 6 个月 rolling validation，固定验证
-  `gap penalty 0.30/0.35`、`binary penalty 0.35` 和 alpha baseline。
+- clean target、risk-shrunk target、learned risk layer、alpha-conditioned gap risk 都证明了
+  “短线收益 + 长线稳定性”这个目标有信息，但两模型 `final_score` 公式暂时封存为历史对照。
+- 封存原因不是 rolling 失败。`gap_penalty_030_p80` 在 18m cache 的 6 个月 rolling 中保留 Top100
+  short excess `+21.20 bps`，并把 next excess 从 alpha baseline 的 `-6.91 bps` 拉到 `+7.84 bps`。
+  但它本质上还是用两个模型定义一个短+长目标；主线改为直接训练一个短线为主、少量长线约束的模型。
+- 训练仍使用 full universe；评估改成同时看 S/M/L 三个外部股池。后续图表和表格不能只报单一 universe
+  Top100，要默认给出三池可比口径。
+- 当前优先方向是把短线 label / replay 做强，手段包括特征工程和模型调参。真正做强后，再同时评估
+  高频短持有和日频持有到次日收盘。
+- 一个真正练好的模型，即使是按某个 label 训练，切到新的评估体系下也应该保持较好的相对表现；
+  这会作为后续 transfer check。
 
 当前工作分解：
 
 ```text
-alpha_model = raw short-label post-open baseline
-risk_model  = learned dirty-risk / next-flip layer
-final_score = alpha_score - lambda * risk_score
+train_universe = full A-share universe
+train_label    = mostly short_label + small long_label component
+eval_pools     = pool_S, pool_M, pool_L selection masks
 ```
 
 ## 关键证据
+
+下面按历史路线保留关键实验事实。它们解释为什么要把长线稳定性纳入目标，也解释为什么当前不再优先推进
+两模型 `alpha - risk` 公式。
 
 ### Opening Baseline
 
@@ -246,46 +262,70 @@ Top100 v3 细扫结果，以 excess 为主：
 结论：
 
 - Top100 应看 excess frontier；actual 只作为后续交易成本 sanity check。
-- `gap` risk soft penalty 明显优于 hard gate，`0.30` 是当前 rolling 的主候选，`0.35` 是更防守的候选。
+- `gap` risk soft penalty 明显优于 hard gate；当时固定 `0.30` 做主 rolling 候选，`0.35` 做更防守候选。
 - `binary` risk 能更保 short，但 next 尚未稳定拉正，只作为对照。
 - hard gate 不再作为主路线。
 
+### 18m Rolling Validation
+
+`rolling_alpha_conditioned_top100_validation_v1` 在 18m delay2 cache 上做 6 个测试月 rolling：
+`2021-08` 至 `2022-01`，每月用前 12 个月重新训练 alpha、gap risk 和 binary risk。
+合并结果来自 `output/local/rolling_alpha_conditioned_top100_validation_v1/rolling_summary.csv`。
+这段结果保留为“两模型短+长目标”可行性的历史证据；它不再是当前优先实现路线。
+
+| score | short Top100 excess bps | next Top100 excess bps | next positive months | next positive minutes |
+| --- | ---: | ---: | ---: | ---: |
+| raw alpha baseline | +24.87 | -6.91 | 2 / 6 | 2 / 10 |
+| `gap_penalty_030_p80` | +21.20 | +7.84 | 6 / 6 | 8 / 10 |
+| `gap_penalty_035_p80` | +17.39 | +13.25 | 6 / 6 | 10 / 10 |
+| `gap_penalty_030_p90` | +21.77 | +6.45 | 3 / 6 | 8 / 10 |
+| `binary_penalty_035_p80` | +22.45 | +3.64 | 3 / 6 | 5 / 10 |
+
+结论：
+
+- rolling 通过，不再只是 2022-01 单月有效；所有测试月 short excess 均保持为正。
+- `gap_penalty_030_p80` 是封存两模型路线里的最好候选：保留约 85% raw alpha excess，同时把 6 个月 next excess 全部拉正。
+- `gap_penalty_035_p80` 是两模型路线里的防守候选：short 更低，但 next 更稳，10 个分钟均值全部为正。
+- `gap_penalty_030_p90` 和 `binary_penalty_035_p80` 更保 short，但 next 月度稳定性只有 3 / 6，暂作对照。
+- rolling 预测诊断显示 gap risk 在 alpha Top100 内与 raw short label 的 Spearman 均值约 `+0.05`，
+  与 next close 约 `-0.07`，不像 conditional v1 那样在扣 alpha 本体。
+
 ## 下一步任务
 
-下一步目标仍是让 alpha 模型继续寻找短周期强势，让 risk 模型只惩罚强势候选里的回吐概率。
-但 conditional v1 已经说明：不能用真实 `short_rank` 直接构造 risk 强度，否则 risk layer 会学习
-short alpha 本身。
+下一步目标是先把一个方向做强：以短线 label / replay 为主，训练一个单模型 mixed label。
+长线成分只作为小权重稳定性约束，不把模型训练成 next-close selector。
 
 | step | run direction | purpose |
 | --- | --- | --- |
-| 1 | `rolling_alpha_conditioned_top100_validation_v1` | 每个测试月用前 12 个月重新训练 alpha、gap risk、binary risk，固定验证 Top100 penalty frontier。 |
-| 2 | rolling 结果复盘 | 看 6 个测试月中 short/next excess 是否稳定，不再按 2022-01 单月继续调参。 |
-| 3 | 若 rolling 通过 | 再进入交易约束：成本、成交、容量、同股冷却和日频 overlay。 |
-| 4 | 若 rolling 不通过 | 回到 risk target：候选定义、next residual、OOF alpha conditioning，而不是继续扩大 score sweep。 |
+| 1 | label freeze | 用 `short_label + w_long * long_label` 作为主线 label，先从 `w_long ~= 0.10` 做窄扫，选一个默认口径。 |
+| 2 | short/replay strengthening | 在默认 label 下做特征工程和模型调参，优先提升 short Rank IC、Top100 excess 和 replay。 |
+| 3 | S/M/L evaluation | 训练仍用 full universe，评估默认同时报 `pool_S`、`pool_M`、`pool_L`。 |
+| 4 | transfer check | 短线方向真正做强后，再同时评估高频短持有和持有到第二天收盘。 |
 
 下一轮 gate：
 
-- short Top100 excess 不要从 +22 bps 直接掉到 +5 bps 以下，优先保住约 +10 bps 以上。
-- next-close Top100 excess 从 -32 bps 明显收敛，目标是接近 0 或小正，而不是 next 远大于 short。
-- risk 层只扣 alpha-score 强势候选中 next residual 差的 A 类 dirty tail；纯 next-close 更好的 B 类不作为额外奖励。
-- learned risk 至少接近 manual risk penalty 的 short/next tradeoff，并在小 lambda 区间更平滑。
-- risk score 与 short label 的相关不能过高；若 alpha Top100 内 Spearman 接近 `+0.7`，基本就是在扣 alpha 本体。
+- short Rank IC / Top100 excess / replay 相比 raw short baseline 有明确提升，且不能只在一个股池里好看。
+- next-day-close sanity 不能被明显打坏；长线成分是稳定性约束，不是主收益来源。
+- S/M/L 三池评估要成为默认视图。普通 baseline 对比至少 3 个柱子；baseline + 改进模型就是 6 个柱子；
+  再加 rolling 维度时很容易到 18 个柱子，优先用分组柱、small multiples 或按池分面，避免挤成一团。
+- 如果一个模型在 mixed label 下练得好，切到纯短线、高频 replay 或 next-day-close 检查时也应该相对稳健；
+  这是判断“信号真的做强”的重要证据。
 
 ## 建模边界
 
 当前不做：
 
-- 不把 next-close label 混进 alpha model。next-close 可以监督 risk layer，因为 risk layer 的职责就是识别回吐风险。
-- 不把 bad-tail risk 当作 next-close reward；final score 的被减数必须是 conditional reversal-risk。
-- 不再用真实 `short_rank` 直接作为 learned risk 的候选或强度来源；它太容易把 risk 学成 short-alpha proxy。
-- 不优化 fee/slippage、多档容量、同股冷却或 T+1 overlay。
+- 不把 `final_score = alpha_rank - lambda * gap_risk_rank` 作为当前主线；它封存为诊断和对照。
+- 不把 long label 权重放大到让模型变成 next-close selector；mixed label 仍以短线 VWAP label 为主。
+- 不在第一阶段按 S/M/L 股池过滤训练，也不把股池 membership 当特征；股池先只作为评估选择 mask。
+- 不在短线 replay 还没做强前，把 fee/slippage、多档容量、同股冷却和 T+1 overlay 混进训练目标。
 - 不围绕特殊 `09:30` opening snapshot 做主优化。
-- 不继续叠加 clean target 和 risk penalty，避免重复惩罚同一类 dirty tail。
+- 不继续叠加 clean target、risk-shrunk target 和 risk penalty，避免把同一类 long-risk 约束重复塞进模型。
 
 当前继续坚持：
 
 - 所有 inference features 必须是 decision point 当时及以前可见信息。
-- 主指标是 short Rank IC 和 Top100 excess。
+- 主指标是 short Rank IC、Top100 excess 和 replay；S/M/L 三池都要报。
 - `09:30-09:40` 是项目主窗口；`09:31-09:40` 是当前 post-open 优化子域。
 - 大体积 predictions 和图片留在 ignored `output/`；可提交证据保留在 `experiments/results/`。
 
@@ -299,5 +339,6 @@ short alpha 本身。
 - post-open v1/v2 feature engineering、feature dependence audit。
 - heat-neutral target、feature core、strong regularization。
 - guard-filtered、guard-weighted、guard-feature-in-model 尝试。
+- two-model learned risk / alpha-conditioned gap-risk `final_score` 路线；数字保留作 short+long 目标可行性证据。
 
 详细实验数字、K8s 输出和配置索引见 [experiment_log.md](experiment_log.md)。

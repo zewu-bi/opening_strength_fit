@@ -1,0 +1,80 @@
+[run]
+id = "gap_risk_penalized_attribution_v1"
+kind = "gap_risk_attribution"
+description = "Attribute gap-risk Top100 changes by comparing baseline kept, penalized-out, and replacement names across outcome, feature exposure, and residual-control diagnostics."
+status = "running"
+
+[window]
+mode = "rolling_monthly"
+test_start_month = "2021-08"
+test_end_month = "2022-01"
+
+[attribution]
+prediction_dir = "/mnt/output/opening_strength_fit/rolling_alpha_conditioned_top100_validation_v1"
+labeled_path = "/mnt/output/opening_strength_fit/cache/opening_18m_202008_202201_delay2_labeled.parquet"
+months = ["2021-08", "2021-09", "2021-10", "2021-11", "2021-12", "2022-01"]
+top_n = 100
+
+feature_columns = [
+  "spread_bps",
+  "turnover_diff_1t",
+  "turnover_diff_3t",
+  "turnover_diff_10t",
+  "turnover_diff_30t",
+  "volume_diff_10t",
+  "volume_diff_30t",
+  "return_10t",
+  "return_30t",
+  "ask_depth_10",
+  "bid_depth_10",
+  "ask_volume_1",
+  "bid_volume_1",
+  "depth_imbalance_1",
+  "depth_imbalance_10",
+  "preopen_turnover",
+  "preopen_volume",
+  "buy_price",
+  "mid_price",
+]
+
+control_columns = [
+  "turnover_diff_10t",
+  "return_10t",
+  "spread_bps",
+  "ask_depth_10",
+  "depth_imbalance_10",
+  "preopen_turnover",
+  "buy_price",
+]
+
+[[attribution.variants]]
+variant = "gap_penalty_030_p80"
+risk_model = "gap"
+penalty = 0.30
+candidate_alpha_rank_min = 0.80
+
+[[attribution.variants]]
+variant = "gap_penalty_035_p80"
+risk_model = "gap"
+penalty = 0.35
+candidate_alpha_rank_min = 0.80
+
+[output]
+local_dir = "output/local/gap_risk_penalized_attribution_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/gap_risk_penalized_attribution_v1"
+
+[k8s]
+namespace = "bizewu"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+clickhouse_secret = "opening-strength-clickhouse"
+
+[k8s.node_selector]
+"kubernetes.io/hostname" = "node8"
+
+[k8s.resources]
+cpu_request = "4"
+cpu_limit = "8"
+memory_request = "64Gi"
+memory_limit = "128Gi"

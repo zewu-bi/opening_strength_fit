@@ -31,6 +31,8 @@ def training_script(config: dict) -> str:
         return "scripts/run_learned_risk_layer.py"
     if run_kind == "alpha_conditioned_rolling_validation":
         return "scripts/run_alpha_conditioned_rolling_validation.py"
+    if run_kind == "gap_risk_attribution":
+        return "scripts/run_gap_risk_attribution.py"
     if run_kind == "score_risk_sweep":
         return "scripts/run_score_risk_sweep.py"
     if run_kind not in {"experiment", "exploration"}:

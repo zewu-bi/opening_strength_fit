@@ -8,16 +8,15 @@
 当前路线：
 
 - `09:30-09:40` 是项目主窗口；当前优化子域是实验后确定的 `09:31-09:40`。
-- raw-label post-open baseline 继续作为 alpha 主干。
-- clean target / risk-shrunk target 暂停作为主 alpha target，只保留为诊断和对照。
-- learned risk layer v1 已完成：两层打分方向有效，但 `bad_tail` v1 太像 next-close selector。
-- conditional risk v1 已否定：真实 `short_rank` 条件会让 risk 学成 short-alpha proxy。
-- alpha-conditioned risk v2/v3 当前最优：用 alpha-score 定义候选，再学习候选里的 next underperformance；
-  Top100 `gap penalty 0.30/0.35` 是 rolling 验证对象。
-- 下一步不再在 2022-01 单月调参，优先做 18m cache 上的 6 个月 rolling validation。
-- 手工 `next_flip_guard_10t` 和 dirty-risk penalty 是 teacher / baseline，不是最终规则。
+- 主线改为单模型 mixed label：短 label 是持有约一分钟后 VWAP 卖出的收益，长 label 是持有到第二天收盘的收益；
+  训练 label 以短 label 为主，只加小权重长 label 成分。
+- 训练仍使用 full universe；评估默认同时看 `pool_S`、`pool_M`、`pool_L` 三个外部股池。
+- 先把短 label / replay 一个方向做强，主要手段是特征工程和模型调参；之后再同时评估高频和日频。
+- `final_score = alpha_rank - lambda * gap_risk_rank` 两模型路线暂时封存。它通过 rolling，说明短+长目标有信息，
+  但本质上还是用两个模型定义 mixed label；当前主线改成直接训练一个模型。
+- clean target、risk-shrunk target、learned risk layer、alpha-conditioned risk 都只保留为诊断和历史对照。
 
-核心对照：
+历史风险层对照：
 
 | score / variant | short Top100 excess bps | next Top100 excess bps | next positive minutes |
 | --- | ---: | ---: | ---: |
@@ -28,15 +27,19 @@
 | baseline + learned `bad_tail_penalty_025` | +8.13 | +21.05 | 10 / 10 |
 | alpha-conditioned `gap_penalty_030_p80` | +16.79 | +4.49 | 7 / 10 |
 | alpha-conditioned `gap_penalty_035_p80` | +13.24 | +17.86 | 10 / 10 |
+| 18m rolling `alpha_rank` | +24.87 | -6.91 | 2 / 10 |
+| 18m rolling `gap_penalty_030_p80` | +21.20 | +7.84 | 8 / 10 |
+| 18m rolling `gap_penalty_035_p80` | +17.39 | +13.25 | 10 / 10 |
 | `guard_shrunk_target_050_v1` | +14.55 | -20.98 | 0 / 10 |
 | `guard_shrunk_target_075_v1` | +6.21 | +0.07 | 5 / 10 |
 | `guard_risk_shrunk_target_100_v1` | +18.80 | -16.87 | 1 / 10 |
 
 定位方式：
 
-- 当前路线和解释：看 `2026-05-28 Clean Target and Risk Sweep`、
-  `2026-05-28 Learned Risk Layer v1`、`2026-05-29 Alpha-Conditioned Risk v2 Results`
-  和 `2026-05-29 Rolling Validation v1`。
+- 当前路线和解释：先看 `2026-06-02 Mentor Re-scope: Single-Label Mainline`；历史证据看
+  `2026-05-28 Clean Target and Risk Sweep`、
+  `2026-05-28 Learned Risk Layer v1`、`2026-05-29 Alpha-Conditioned Risk v2 Results`、
+  `2026-05-29 Rolling Validation v1` 和 `2026-06-02 Rolling Validation v1 Results`。
 - 查某个 run 是否完成：看下面的 `Run 索引`。
 - 查历史演进：从对应日期小节读；越靠近文件底部越旧。
 
@@ -101,7 +104,7 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `score_alpha_conditioned_top100_sweep_v3_p80` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_alpha_conditioned_top100_sweep_v3_p80/` |
 | `score_alpha_conditioned_top100_sweep_v3_p85` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_alpha_conditioned_top100_sweep_v3_p85/` |
 | `score_alpha_conditioned_top100_sweep_v3_p90` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_alpha_conditioned_top100_sweep_v3_p90/` |
-| `rolling_alpha_conditioned_top100_validation_v1` | alpha_conditioned_rolling_validation | running | `/mnt/output/opening_strength_fit/rolling_alpha_conditioned_top100_validation_v1/` |
+| `rolling_alpha_conditioned_top100_validation_v1` | alpha_conditioned_rolling_validation | completed | `/mnt/output/opening_strength_fit/rolling_alpha_conditioned_top100_validation_v1/` |
 
 ## Run 索引
 
@@ -162,7 +165,7 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `score_alpha_conditioned_top100_sweep_v3_p80` | completed | Top100-only p80 fine sweep；`gap penalty 0.30` short/next excess = +16.79 / +4.49 bps。 |
 | `score_alpha_conditioned_top100_sweep_v3_p85` | completed | Top100-only p85 fine sweep；`gap penalty 0.30` short/next excess = +16.82 / +3.25 bps。 |
 | `score_alpha_conditioned_top100_sweep_v3_p90` | completed | Top100-only p90 fine sweep；`gap penalty 0.30` short/next excess = +17.68 / +0.72 bps。 |
-| `rolling_alpha_conditioned_top100_validation_v1` | running | 18m cache 上做 2021-08 至 2022-01 rolling validation；固定验证 gap 0.30/0.35、binary 0.35 和 alpha baseline。 |
+| `rolling_alpha_conditioned_top100_validation_v1` | completed | 18m cache 上完成 2021-08 至 2022-01 rolling validation；`gap_penalty_030_p80` short/next excess = +21.20 / +7.84 bps，`gap_penalty_035_p80` = +17.39 / +13.25 bps。 |
 
 ## Output 索引
 
@@ -179,6 +182,8 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `output/reports/opening_alpha_horizon_decay_delay2_*` | delay2 horizon decay，对应 `opening_alpha_horizon_decay_delay2_*` 归档摘要。 |
 | `output/reports/opening_delay2_signal_baseline` | delay2 保守 baseline 的分钟四曲线，用于当前 feature-strengthening 门槛。 |
 | `output/local/score_learned_risk_sweep_v1` | learned-risk sweep artifact；轻量 summary 归档到 `experiments/results/backtests/score_learned_risk_sweep_v1_summary.csv`。 |
+| `output/local/rolling_alpha_conditioned_top100_validation_v1` | 18m rolling validation 合并汇总，包含 `rolling_summary.csv`、`rolling_month_summary.csv` 和 `rolling_group_metrics.csv`。 |
+| `output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw` | 18m rolling 各测试月 prediction shard，用于 alpha Top100 内 risk/short/next 相关诊断。 |
 
 ## 2026-05-26 CPU LightGBM Delay
 
@@ -987,10 +992,119 @@ Top100-only v3 随后只扫 Top100，候选池 p80/p85/p90，soft penalty 0.25-0
 结论：
 
 - 当前阶段主看 excess frontier，不用 actual 否定 discovery 结果；actual 留到交易成本/容量阶段。
-- `gap risk + soft penalty` 是主线，`0.30` 平衡，`0.35` 防守；两者都优于简单 guard frontier。
+- `gap risk + soft penalty` 是当时固定 rolling 的最好路线，`0.30` 平衡，`0.35` 防守；两者都优于简单 guard frontier。
 - `binary` risk 更保 short，但 next 还没有稳定过零，只保留为 rolling 对照。
 - hard gate 不是主线。
 - 不再在 2022-01 单月继续调参；下一步固定参数做 rolling。
+
+## 2026-06-02 Rolling Validation v1 Results
+
+`rolling_alpha_conditioned_top100_validation_v1` 的 6 个 monthly shard 已拉回并合并，`rolling_trace.json`
+记录合并时间为 `2026-06-02T05:05:02Z`，无缺失月份。
+
+Artifacts:
+
+```text
+output/local/rolling_alpha_conditioned_top100_validation_v1/rolling_summary.csv
+output/local/rolling_alpha_conditioned_top100_validation_v1/rolling_month_summary.csv
+output/local/rolling_alpha_conditioned_top100_validation_v1/rolling_group_metrics.csv
+output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw/predictions_2021-08.parquet
+...
+output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw/predictions_2022-01.parquet
+```
+
+合并口径：
+
+- Test months: `2021-08` 至 `2022-01`，共 6 个月。
+- Groups: `1220` 个 `date x decision_time` 横截面。
+- 每个测试月用前 12 个月重新训练 alpha model、gap risk model、binary risk model。
+- 评估固定 Top100，score variants 不再按单月结果调参。
+
+Overall Top100 rolling excess:
+
+| variant | short excess bps | next excess bps | next positive months | next positive minutes | next positive group rate |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `alpha_rank` | +24.87 | -6.91 | 2 / 6 | 2 / 10 | 48.4% |
+| `gap_penalty_030_p80` | +21.20 | +7.84 | 6 / 6 | 8 / 10 | 55.8% |
+| `gap_penalty_035_p80` | +17.39 | +13.25 | 6 / 6 | 10 / 10 | 58.8% |
+| `gap_penalty_030_p90` | +21.77 | +6.45 | 3 / 6 | 8 / 10 | 54.5% |
+| `binary_penalty_035_p80` | +22.45 | +3.64 | 3 / 6 | 5 / 10 | 53.0% |
+
+Monthly next excess, Top100:
+
+| test month | alpha | gap 0.30 p80 | gap 0.35 p80 | gap 0.30 p90 | binary 0.35 p80 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `2021-08` | -3.95 | +13.42 | +16.23 | +11.14 | +8.24 |
+| `2021-09` | -34.75 | +2.67 | +16.07 | -0.54 | -10.29 |
+| `2021-10` | +32.95 | +23.98 | +24.99 | +25.93 | +27.20 |
+| `2021-11` | +33.37 | +9.74 | +2.81 | +13.67 | +15.15 |
+| `2021-12` | -29.61 | +0.31 | +9.92 | -3.97 | -9.25 |
+| `2022-01` | -33.73 | +0.15 | +13.04 | -3.75 | -4.62 |
+
+Monthly short excess sanity:
+
+- `alpha_rank` 每月 short excess 为 `+21.42` 至 `+29.35 bps`，说明 raw post-open alpha 在 rolling 上仍强。
+- `gap_penalty_030_p80` 每月 short excess 为 `+17.05` 至 `+26.78 bps`，6 / 6 月显著为正。
+- `gap_penalty_035_p80` 每月 short excess 为 `+12.81` 至 `+22.60 bps`，防守版本也没有把 short alpha 打没。
+
+Risk-score diagnostic inside alpha Top100:
+
+| risk score | Spearman vs short label | Spearman vs next close |
+| --- | ---: | ---: |
+| gap risk rank | +0.050 | -0.066 |
+| binary risk rank | +0.042 | -0.055 |
+
+该诊断按每个 `date x decision_time` 的 alpha Top100 计算后再跨月平均。相比 conditional v1 里接近
+`+0.7` 的 short 相关，这轮 gap risk 没有明显学成 short-alpha 本体 proxy。
+
+结论：
+
+- rolling 通过。`gap_penalty_030_p80` 和 `gap_penalty_035_p80` 都不是只在 2022-01 单月有效。
+- `gap_penalty_030_p80` 是两模型路线里的主候选：short excess 仍有 `+21.20 bps`，约保留 raw alpha 的 85%，且
+  next excess 6 / 6 月为正。
+- `gap_penalty_035_p80` 是两模型路线里的防守候选：short 降到 `+17.39 bps`，但 next excess 更稳，10 个分钟均值全部为正。
+- `gap_penalty_030_p90` 和 `binary_penalty_035_p80` 更保 short，但 next 月度稳定性只有 3 / 6，暂时只保留为对照。
+- rolling 结果说明短+长目标有信息；复盘后主线改为直接训练单模型 mixed label，而不是继续推进两模型
+  `alpha - risk` score。
+
+## 2026-06-02 Mentor Re-scope: Single-Label Mainline
+
+和 mentor 复盘后，当前主线从“两模型 score 组合”切回“先把一个单模型 label 做强”。
+
+新的 label 口径：
+
+```text
+short_label = 持有约一分钟后用 VWAP 卖出的收益
+long_label  = 持有到第二天收盘的收益
+train_label = xs_norm(short_label) + w_long * xs_norm(long_label)
+```
+
+`w_long` 只作为小权重稳定性约束，起点放在 `0.10` 附近窄扫。这个选择吸收了 rolling risk-layer
+实验的经验：旧 `final_score = alpha_rank - lambda * gap_risk_rank` 其实也是在构造短+长目标，只是通过
+两个模型完成；现在先直接训练一个模型，减少目标定义和评估解释的复杂度。
+
+主线执行顺序：
+
+| step | decision | note |
+| --- | --- | --- |
+| 1 | 先固定 mixed label | 短 label 是主体，长 label 只加小成分；不要把模型练成 next-close selector。 |
+| 2 | 先做强 short/replay | 重点做特征工程和模型调参，先把一个方向真的做强。 |
+| 3 | 训练 full universe | 不用 S/M/L 过滤训练，也不把 membership 当特征，先作为评估选择 mask。 |
+| 4 | 评估 S/M/L 三池 | 每个 baseline、改进模型和 rolling 切片都默认输出三池口径。 |
+| 5 | 再看高频和日频 | 信号做强后，同时评估短持有 replay 和持有到第二天收盘。 |
+
+画图口径：
+
+- baseline 一组至少 3 个柱子：`S`、`M`、`L`。
+- baseline + 一个改进模型至少 6 个柱子。
+- 如果加 rolling 维度，例如 3 个测试月或 3 个窗口，就是 `2 models x 3 pools x 3 windows = 18`
+  个柱子；优先使用分组柱、按 pool 分面或 small multiples，避免把所有标签挤在一张横轴上。
+
+判断原则：
+
+- 一个真正练好的模型，即使按 mixed label 训练，切到纯短线 replay、next-day-close sanity 或新的
+  S/M/L 评估体系下也应该相对稳健。
+- 如果模型只在训练 label 上好、换一个合理评估体系就塌，说明还没有真的把 opening signal 做强。
 
 ## 2026-05-29 Rolling Validation v1
 

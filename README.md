@@ -10,15 +10,14 @@ ClickHouse `stock.tick` 或本地 tick parquet 构造
 这只是当前建模子域，不是改变项目定义。
 
 当前结论：opening proxy signal 真实存在，但 `09:31-09:40` raw short-alpha 里混有明显
-“短正长负”的 dirty tail。`bad_tail` v1 太像 next-close selector；`conditional_bad_tail` v1
-又学成了 short-alpha 强度 proxy。最新 `alpha_conditioned_reversal` v2/v3 用 alpha-score 定义候选，
-再只在候选里学习 next underperformance；Top100 excess frontier 已优于简单 guard，下一步是用
-18m cache 做 6 个月 rolling validation。
+“短正长负”的 dirty tail。旧的 `final_score = alpha_rank - lambda * gap_risk_rank`
+两模型路线已经封存为诊断和历史对照；它本质上也是在定义一个短线收益加长线风险约束的目标。
+新的主线改为直接训练一个短线为主、少量混入长线成分的单模型 label。
 
 ```text
-alpha_model = raw short-label post-open model
-risk_model  = learned dirty-risk / next-flip layer
-final_score = alpha_score - lambda * risk_score
+short_label = buy at delayed ask, hold about 1 minute, sell by VWAP
+long_label  = buy at delayed ask, hold to next-day close
+train_label = xs_norm(short_label) + small_weight * xs_norm(long_label)
 ```
 
 ## 文档分工
@@ -37,9 +36,10 @@ final_score = alpha_score - lambda * risk_score
 - 项目窗口：`09:30:00-09:40:00` 整分钟 decision points。
 - 当前优化子域：`09:31:00-09:40:00`。
 - 默认数据窗口：`09:15:00-09:45:00`。
-- 股票池：A 股 `00/30.SZ` 和 `60/68.SH`，除非 config 显式指定 symbols file。
-- 主评估：short-horizon Rank IC 和 Top100 excess。
-- sanity check：next close；不直接混进 alpha model 的训练目标。
+- 训练股票池：A 股 `00/30.SZ` 和 `60/68.SH` full universe。
+- 评估股票池：S/M/L 三个外部股池都要报；训练仍默认不按池过滤。
+- 主评估：short-horizon Rank IC、Top100 excess 和 replay。
+- 日频 sanity：next close / next-day close 单独看，先少量进入混合 label，不做独立 risk layer。
 
 Label 定义：
 
