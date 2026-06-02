@@ -1,7 +1,13 @@
 # 运行手册
 
-这个文件只放操作命令。研究解释放在 [docs/project_brief.md](project_brief.md)，历史数值放在
-[docs/experiment_log.md](experiment_log.md)。
+这个文件只放操作命令和配置口径。研究逻辑见 [project_brief.md](project_brief.md)，实验事实见
+[experiment_log.md](experiment_log.md)。
+
+标准闭环：
+
+```text
+precheck -> render job -> apply/wait -> sync artifacts -> audit/coverage -> analysis
+```
 
 ## 1. 预检
 
@@ -215,6 +221,7 @@ experiments/results/metrics/<run_id>_metrics_by_year.csv
   输出 risk predictions，供后续 score-risk sweep 读取。
 - `[run].kind = "alpha_conditioned_rolling_validation"`：每个测试月用前 N 个月重新训练
   alpha 和 alpha-conditioned risk model，并固定评估 Top100 penalty variants。
+- `[run].kind = "gap_risk_attribution"`：比较 baseline Top100、risk-penalized 剔除、替换和保留样本。
 - `[run].kind = "score_risk_sweep"`：对已有 prediction 做 score/risk penalty 或 hard gate 扫描，
   不训练新模型。
 - `[run].kind = "exploration"`：可以先保持 active/running，不要求立刻有 metrics；确认后再归档成正式实验。
@@ -375,7 +382,7 @@ python scripts/audit_feature_dependence.py \
   --output-dir output/local/lgbm_delay2_feature_dependence_v1
 ```
 
-## 7. 排查
+## 8. 排查
 
 - `field is immutable`：删除同名 Job 后重新 apply。
 - K8s 内找不到新 config：重新 build/push 镜像，并重新 render Job。

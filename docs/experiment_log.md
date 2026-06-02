@@ -7,183 +7,83 @@
 
 当前路线：
 
-- `09:30-09:40` 是项目主窗口；当前优化子域是实验后确定的 `09:31-09:40`。
-- 主线改为单模型 mixed label：短 label 是持有约一分钟后 VWAP 卖出的收益，长 label 是持有到第二天收盘的收益；
-  训练 label 以短 label 为主，只加小权重长 label 成分。
-- 训练仍使用 full universe；评估默认同时看 `pool_S`、`pool_M`、`pool_L` 三个外部股池。
-- 先把短 label / replay 一个方向做强，主要手段是特征工程和模型调参；之后再同时评估高频和日频。
-- `final_score = alpha_rank - lambda * gap_risk_rank` 两模型路线暂时封存。它通过 rolling，说明短+长目标有信息，
-  但本质上还是用两个模型定义 mixed label；当前主线改成直接训练一个模型。
-- clean target、risk-shrunk target、learned risk layer、alpha-conditioned risk 都只保留为诊断和历史对照。
+- 项目窗口仍是 `09:30-09:40`；当前优化子域是 `09:31-09:40`。
+- 训练主线改为单模型 mixed label：一分钟 VWAP short label 为主，小权重加入持有到第二天收盘的 long label。
+- 训练仍用 full universe；评估默认同时看 `pool_S`、`pool_M`、`pool_L` 三个外部股池。
+- 下一步先把 short / replay 做强，主要靠特征工程和模型调参；信号变强后再同时评估高频和日频。
+- 两模型 `final_score = alpha_rank - lambda * gap_risk_rank` 路线封存。它通过 rolling，说明短+长目标有信息，
+  但当前不继续用两个模型定义目标。
 
-历史风险层对照：
+关键分叉结果：
 
-| score / variant | short Top100 excess bps | next Top100 excess bps | next positive minutes |
-| --- | ---: | ---: | ---: |
-| baseline raw alpha | +22.21 | -32.21 | 0 / 10 |
-| baseline + manual `risk_penalty_075` | +10.91 | +1.99 | 6 / 10 |
-| baseline + hard `next_flip_guard_10t` | +6.77 | +11.88 | 9 / 10 |
-| baseline + learned `guard_teacher_penalty_050` | +9.05 | +3.28 | 6 / 10 |
-| baseline + learned `bad_tail_penalty_025` | +8.13 | +21.05 | 10 / 10 |
-| alpha-conditioned `gap_penalty_030_p80` | +16.79 | +4.49 | 7 / 10 |
-| alpha-conditioned `gap_penalty_035_p80` | +13.24 | +17.86 | 10 / 10 |
-| 18m rolling `alpha_rank` | +24.87 | -6.91 | 2 / 10 |
-| 18m rolling `gap_penalty_030_p80` | +21.20 | +7.84 | 8 / 10 |
-| 18m rolling `gap_penalty_035_p80` | +17.39 | +13.25 | 10 / 10 |
-| `guard_shrunk_target_050_v1` | +14.55 | -20.98 | 0 / 10 |
-| `guard_shrunk_target_075_v1` | +6.21 | +0.07 | 5 / 10 |
-| `guard_risk_shrunk_target_100_v1` | +18.80 | -16.87 | 1 / 10 |
+| stage / score | short Top100 excess bps | next Top100 excess bps | decision |
+| --- | ---: | ---: | --- |
+| raw post-open baseline | +22.21 | -32.21 | short 强，但 next tail 脏。 |
+| hard `next_flip_guard_10t` | +6.77 | +11.88 | 可见信息能排雷，但太防守。 |
+| `guard_shrunk_target_050_v1` | +14.55 | -20.98 | clean target 有效但仍不够干净。 |
+| `guard_shrunk_target_075_v1` | +6.21 | +0.07 | next 接近修复，short 掉太多。 |
+| alpha-conditioned `gap_penalty_030_p80` | +16.79 | +4.49 | 两模型单月 frontier 最好。 |
+| 18m rolling `gap_penalty_030_p80` | +21.20 | +7.84 | 证明短+长目标跨月有信息。 |
 
-定位方式：
+## 实验时间线
 
-- 当前路线和解释：先看 `2026-06-02 Mentor Re-scope: Single-Label Mainline`；历史证据看
-  `2026-05-28 Clean Target and Risk Sweep`、
-  `2026-05-28 Learned Risk Layer v1`、`2026-05-29 Alpha-Conditioned Risk v2 Results`、
-  `2026-05-29 Rolling Validation v1` 和 `2026-06-02 Rolling Validation v1 Results`。
-- 查某个 run 是否完成：看下面的 `Run 索引`。
-- 查历史演进：从对应日期小节读；越靠近文件底部越旧。
-
-## 索引区
-
-下面的清单和表格是检索用，不是叙事正文。
-
-正式归档实验：
-
-- `1m3d` 小窗口 Ridge/GBM 对比。
-- `1y_next_month` Ridge/GBM/strong 对比。
-- `1y_next_month` CPU LightGBM delay0/1/2 普通 universe 与 strong 分支。
-
-旧 Ridge/GBM baseline 使用无成交延迟旧口径（`entry_tick_delay = 0`）；LightGBM delay 分支使用各自
-PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混比。
-
-近期探索和辅助任务：
-
-| task | kind | status | output |
-| --- | --- | --- | --- |
-| `lgbm_delay2_postopen_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_v1/` |
-| `lgbm_delay2_postopen_no_preopen_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_no_preopen_v1/` |
-| `lgbm_delay2_postopen_v2` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_v2/` |
-| `lgbm_delay2_feature_dependence_v1` | feature_audit | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_feature_dependence_v1/` |
-| `build_delay2_xs_demean_cache_v1` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_xs_demean_labeled.parquet` |
-| `lgbm_delay2_postopen_v2_xs_demean_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_v2_xs_demean_v1/` |
-| `lgbm_delay2_postopen_0931_0940_baseline_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_0931_0940_baseline_v1/` |
-| `build_delay2_postopen_heat_neutral_target_v1` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_postopen_heat_neutral_labeled.parquet` |
-| `lgbm_delay2_postopen_heat_neutral_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_heat_neutral_v1/` |
-| `lgbm_delay2_postopen_core_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_core_v1/` |
-| `build_delay2_postopen_heat_neutral_target_v2` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_postopen_heat_neutral_v2_labeled.parquet` |
-| `lgbm_delay2_postopen_heat_neutral_v2` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_heat_neutral_v2/` |
-| `lgbm_delay2_postopen_regularized_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_regularized_v1/` |
-| `lgbm_delay2_postopen_guard_filtered_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_guard_filtered_v1/` |
-| `lgbm_delay2_postopen_guard_weighted_025_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_guard_weighted_025_v1/` |
-| `lgbm_delay2_postopen_guard_weighted_050_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_guard_weighted_050_v1/` |
-| `lgbm_delay2_postopen_guard_features_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_guard_features_v1/` |
-| `lgbm_delay2_postopen_guard_feature_weighted_025_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_guard_feature_weighted_025_v1/` |
-| `build_guard_shrunk_target_050_v1` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_guard_shrunk_target_050_v1_labeled.parquet` |
-| `guard_shrunk_target_050_v1` | exploration | completed | `/mnt/output/opening_strength_fit/guard_shrunk_target_050_v1/` |
-| `build_guard_shrunk_target_060_v1` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_guard_shrunk_target_060_v1_labeled.parquet` |
-| `guard_shrunk_target_060_v1` | exploration | completed | `/mnt/output/opening_strength_fit/guard_shrunk_target_060_v1/` |
-| `build_guard_shrunk_target_065_v1` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_guard_shrunk_target_065_v1_labeled.parquet` |
-| `guard_shrunk_target_065_v1` | exploration | completed | `/mnt/output/opening_strength_fit/guard_shrunk_target_065_v1/` |
-| `build_guard_shrunk_target_075_v1` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_guard_shrunk_target_075_v1_labeled.parquet` |
-| `guard_shrunk_target_075_v1` | exploration | completed | `/mnt/output/opening_strength_fit/guard_shrunk_target_075_v1/` |
-| `build_guard_risk_shrunk_target_075_v1` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_guard_risk_shrunk_target_075_v1_labeled.parquet` |
-| `guard_risk_shrunk_target_075_v1` | exploration | completed | `/mnt/output/opening_strength_fit/guard_risk_shrunk_target_075_v1/` |
-| `build_guard_risk_shrunk_target_100_v1` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_guard_risk_shrunk_target_100_v1_labeled.parquet` |
-| `guard_risk_shrunk_target_100_v1` | exploration | completed | `/mnt/output/opening_strength_fit/guard_risk_shrunk_target_100_v1/` |
-| `score_risk_sweep_guard_shrunk_v1` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_risk_sweep_guard_shrunk_v1/` |
-| `learned_risk_layer_guard_teacher_v1` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/learned_risk_layer_guard_teacher_v1/` |
-| `learned_risk_layer_bad_tail_v1` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/learned_risk_layer_bad_tail_v1/` |
-| `score_learned_risk_sweep_v1` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_learned_risk_sweep_v1/` |
-| `conditional_bad_tail_risk_v1` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/conditional_bad_tail_risk_v1/` |
-| `conditional_bad_tail_binary_risk_v1` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/conditional_bad_tail_binary_risk_v1/` |
-| `score_conditional_risk_sweep_v1` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_conditional_risk_sweep_v1/` |
-| `build_delay2_18m_cache_v1` | labeled_cache | completed | `/mnt/output/opening_strength_fit/cache/opening_18m_202008_202201_delay2_labeled.parquet` |
-| `alpha_conditioned_reversal_binary_risk_v2` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/alpha_conditioned_reversal_binary_risk_v2/` |
-| `alpha_conditioned_reversal_gap_risk_v2` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/alpha_conditioned_reversal_gap_risk_v2/` |
-| `score_alpha_conditioned_risk_gate_v2` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_alpha_conditioned_risk_gate_v2/` |
-| `score_alpha_conditioned_top100_sweep_v3_p80` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_alpha_conditioned_top100_sweep_v3_p80/` |
-| `score_alpha_conditioned_top100_sweep_v3_p85` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_alpha_conditioned_top100_sweep_v3_p85/` |
-| `score_alpha_conditioned_top100_sweep_v3_p90` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_alpha_conditioned_top100_sweep_v3_p90/` |
-| `rolling_alpha_conditioned_top100_validation_v1` | alpha_conditioned_rolling_validation | completed | `/mnt/output/opening_strength_fit/rolling_alpha_conditioned_top100_validation_v1/` |
-
-## Run 索引
-
-| run | status | notes |
+| date | stage | conclusion |
 | --- | --- | --- |
-| `ridge_opening_1m_3d` | completed | 2021-12 训练、2022-01-04 至 2022-01-06 测试；decision rank IC = 0.0824，Top20 mean = +16.26 bps。 |
-| `ridge_opening_1m_3d_strong` | completed | 小窗 strong 分支；decision rank IC = 0.1087，Top20 mean = +6.78 bps。 |
-| `gbm_opening_1m_3d` | completed | 小窗 GBM；decision rank IC = 0.1426，Top20 mean = +41.92 bps。 |
-| `ridge_opening_1y_next_month` | completed | 2021 训练、2022-01 测试；decision rank IC = 0.0799，Top20 mean = +18.96 bps。 |
-| `ridge_opening_1y_next_month_strong` | completed | strong Ridge；decision rank IC = 0.1156，Top20 mean = +9.63 bps。 |
-| `gbm_opening_1y_next_month` | completed | sklearn GBM；decision rank IC = 0.1831，Top20 mean = +34.33 bps。 |
-| `gbm_opening_1y_next_month_strong` | completed | strong GBM；decision rank IC = 0.1454，Top20 mean = +18.78 bps。 |
-| `lgbm_opening_1y_next_month_delay0` | completed | CPU LightGBM universe delay0；group rank IC = 0.2044，Top20 mean = +50.05 bps。 |
-| `lgbm_opening_1y_next_month_delay1` | completed | CPU LightGBM universe delay1；group rank IC = 0.1515，Top20 mean = +40.29 bps。 |
-| `lgbm_opening_1y_next_month_delay2` | completed | CPU LightGBM universe delay2；group rank IC = 0.1360，Top20 mean = +36.75 bps。 |
-| `lgbm_opening_1y_next_month_strong_delay0` | completed | CPU LightGBM strong delay0；group rank IC = 0.1729，Top20 mean = +29.28 bps。 |
-| `lgbm_opening_1y_next_month_strong_delay1` | completed | CPU LightGBM strong delay1；group rank IC = 0.1389，Top20 mean = +17.17 bps。 |
-| `lgbm_opening_1y_next_month_strong_delay2` | completed | CPU LightGBM strong delay2；group rank IC = 0.1298，Top20 mean = +12.60 bps。 |
-| `lgbm_delay2_postopen_v2` | completed | post-open v1 plus v2 queue/depth-shape/trade-impact features；group rank IC = 0.1394，Top100 mean = +14.01 bps。 |
-| `lgbm_delay2_feature_dependence_v1` | completed | grouped feature importance 和 permutation；postopen/orderbook 依赖强于 preopen。 |
-| `build_delay2_xs_demean_cache_v1` | completed | 生成 delay2 横截面去均值 `target_label` cache，原始 `label` 保留用于评估。 |
-| `lgbm_delay2_postopen_v2_xs_demean_v1` | completed | v2 特征、`target_label` 训练；group rank IC = 0.1406，Top100 mean = +14.05 bps。 |
-| `lgbm_delay2_postopen_0931_0940_baseline_v1` | completed | 排除特殊 `09:30`，只训练/评估 `09:31-09:40`；group rank IC = 0.1360，Top100 mean = +13.45 bps。 |
-| `build_delay2_postopen_heat_neutral_target_v1` | completed | 生成 heat-neutral shrink `target_label` cache；对 price / turnover / opening-impact 暴露做 50% residual shrink。 |
-| `lgbm_delay2_postopen_heat_neutral_v1` | completed | 使用 heat-neutral `target_label` 训练，评估仍看 raw short `label`；`09:31-09:40` group rank IC = 0.1245，Top100 mean = +13.64 bps。 |
-| `lgbm_delay2_postopen_core_v1` | completed | 242 个核心特征；group rank IC = 0.1311，Top100 mean = +11.40 bps，未通过 gate。 |
-| `build_delay2_postopen_heat_neutral_target_v2` | completed | gentler heat-neutral cache：只中性化短窗 momentum / turnover-flow 暴露，strength = 0.25。 |
-| `lgbm_delay2_postopen_heat_neutral_v2` | completed | v2 heat-neutral `target_label` 训练；short group Rank IC = 0.1362，Top100 mean = +13.74 bps。 |
-| `lgbm_delay2_postopen_regularized_v1` | completed | raw-label 强正则 LGBM；short group Rank IC = 0.1341，Top100 mean = +12.65 bps，未通过 gate。 |
-| `lgbm_delay2_postopen_guard_filtered_v1` | completed | 只在固定 `next_flip_guard_10t` 可见候选池内训练/评估，检验硬候选域是否还能学出 short alpha。 |
-| `lgbm_delay2_postopen_guard_weighted_025_v1` | completed | 全样本 raw-label 训练；Top100 mean = +12.92 bps，next Top100 excess = -32.54 bps，未把 guard 练进 Top100。 |
-| `lgbm_delay2_postopen_guard_weighted_050_v1` | completed | 全样本 raw-label 训练；Top100 mean = +13.17 bps，next Top100 excess = -33.06 bps，未通过 gate。 |
-| `lgbm_delay2_postopen_guard_features_v1` | completed | 显式加入 guard rank/pass 特征；Top100 mean = +12.29 bps，next Top100 excess = -34.36 bps，未通过 gate。 |
-| `lgbm_delay2_postopen_guard_feature_weighted_025_v1` | completed | guard rank/pass 特征 + fail 权重 0.25；Top100 mean = +12.81 bps，next Top100 excess = -34.64 bps，未通过 gate。 |
-| `build_guard_shrunk_target_050_v1` | completed | 生成二元 guard-shrunk `target_label` cache：dirty short positive excess shrink 50%。 |
-| `guard_shrunk_target_050_v1` | completed | 用 50% guard-shrunk target 训练；short Top100 excess = +14.55 bps，next Top100 excess = -20.98 bps。 |
-| `build_guard_shrunk_target_060_v1` | completed | 生成二元 guard-shrunk `target_label` cache：dirty short positive excess shrink 60%。 |
-| `guard_shrunk_target_060_v1` | completed | 用 60% guard-shrunk target 训练；short Top100 excess = +10.47 bps，next Top100 excess = -13.13 bps。 |
-| `build_guard_shrunk_target_065_v1` | completed | 生成二元 guard-shrunk `target_label` cache：dirty short positive excess shrink 65%。 |
-| `guard_shrunk_target_065_v1` | completed | 用 65% guard-shrunk target 训练；short Top100 excess = +8.49 bps，next Top100 excess = -8.92 bps。 |
-| `build_guard_shrunk_target_075_v1` | completed | 生成二元 guard-shrunk `target_label` cache：dirty short positive excess shrink 75%。 |
-| `guard_shrunk_target_075_v1` | completed | 用 75% guard-shrunk target 训练；short Top100 excess = +6.21 bps，next Top100 excess = +0.07 bps。 |
-| `build_guard_risk_shrunk_target_075_v1` | completed | 生成连续 dirty-risk shrink `target_label` cache：lambda = 0.75。 |
-| `guard_risk_shrunk_target_075_v1` | completed | 连续 risk-shrunk target 训练；short Top100 excess = +19.95 bps，next Top100 excess = -25.60 bps。 |
-| `build_guard_risk_shrunk_target_100_v1` | completed | 生成连续 dirty-risk shrink `target_label` cache：lambda = 1.00。 |
-| `guard_risk_shrunk_target_100_v1` | completed | 连续 risk-shrunk target 训练；short Top100 excess = +18.80 bps，next Top100 excess = -16.87 bps。 |
-| `score_risk_sweep_guard_shrunk_v1` | completed | 对 baseline、guard_shrunk_050、guard_shrunk_075 的 score 做 alpha-rank minus dirty-risk penalty 和 hard-gate sweep。 |
-| `learned_risk_layer_guard_teacher_v1` | completed | 学手工 dirty-risk teacher；group rank IC = 0.9768，说明手工风险形态可被可见特征平滑复现。 |
-| `learned_risk_layer_bad_tail_v1` | completed | 学 short-rank 高且 next-rank 低的 bad-tail risk；group rank IC = 0.1028，learnable 但不强。 |
-| `score_learned_risk_sweep_v1` | completed | baseline `alpha_rank - lambda * learned_risk_rank` sweep；guard teacher 较平衡，bad_tail v1 太像 next-close selector。 |
-| `conditional_bad_tail_risk_v1` | completed | 条件 rank-gap reversal risk：short-rank >= p70 候选内学习 `max(short_rank - next_rank, 0)`；group rank IC = 0.6901。 |
-| `conditional_bad_tail_binary_risk_v1` | completed | 条件 hard reversal risk：short-rank >= p80 且 next-rank <= p50；group rank IC = 0.4023。 |
-| `score_conditional_risk_sweep_v1` | completed | alpha p80 候选池内扫 Top20/50/100 与 lambda 0.05-0.30；结果未通过，risk penalty 吃掉 short alpha 且未改善 Top100 next tail。 |
-| `build_delay2_18m_cache_v1` | completed | 从 ClickHouse 构造 2020-08 至 2022-01 的 18 个月 delay2 labeled cache，供后续 6 个月 rolling 用。 |
-| `alpha_conditioned_reversal_binary_risk_v2` | completed | alpha p80 候选内学习 `next_rank <= p40` 的 hard reversal risk；group rank IC = 0.4121。 |
-| `alpha_conditioned_reversal_gap_risk_v2` | completed | alpha p80 候选内学习 bottom-half next-rank severity；group rank IC = 0.4276。 |
-| `score_alpha_conditioned_risk_gate_v2` | completed | Top20/50 有强信号；Top100 需要更细 soft-penalty sweep，hard gate 不是主线。 |
-| `score_alpha_conditioned_top100_sweep_v3_p80` | completed | Top100-only p80 fine sweep；`gap penalty 0.30` short/next excess = +16.79 / +4.49 bps。 |
-| `score_alpha_conditioned_top100_sweep_v3_p85` | completed | Top100-only p85 fine sweep；`gap penalty 0.30` short/next excess = +16.82 / +3.25 bps。 |
-| `score_alpha_conditioned_top100_sweep_v3_p90` | completed | Top100-only p90 fine sweep；`gap penalty 0.30` short/next excess = +17.68 / +0.72 bps。 |
-| `rolling_alpha_conditioned_top100_validation_v1` | completed | 18m cache 上完成 2021-08 至 2022-01 rolling validation；`gap_penalty_030_p80` short/next excess = +21.20 / +7.84 bps，`gap_penalty_035_p80` = +17.39 / +13.25 bps。 |
+| 2026-05-20 | 小窗 Ridge/GBM | 小窗 short signal 为正，值得扩到 1y。 |
+| 2026-05-21 | 1y next-month baseline | 2021 训、2022-01 测，GBM Top20 `+34.33 bps`。 |
+| 2026-05-22 | 本地实验清理 | 正式路径校准为 CPU LightGBM + PVC labeled cache。 |
+| 2026-05-26 | LightGBM delay / replay / horizon | delay2 universe 仍为正；日频衰减明显，先不做 T+1。 |
+| 2026-05-26 | mentor re-scope | 从交易约束前移到信号增强，主看 Rank IC 和 Top100。 |
+| 2026-05-26/27 | post-open feature engineering | v1/v2 有增量，`postopen_v2` Rank IC `0.1394`。 |
+| 2026-05-27 | target / feature diagnostics | xs demean 增益小；`09:31-09:40` baseline 成为主样本域。 |
+| 2026-05-28 | guard / clean target | 可见信息能修 next tail，但直接硬塞进模型代价大。 |
+| 2026-05-28/29 | learned risk layer | 两模型公式可行；conditional v1 失败，alpha-conditioned v2 改善。 |
+| 2026-05-29/06-02 | rolling validation | `gap_penalty_030_p80` 6 个月 rolling 通过。 |
+| 2026-06-02 | mentor re-scope | 不继续两模型，改为直接训练 single mixed label。 |
 
-## Output 索引
+## 2026-05-20 小窗结果
 
-本地 `output/` 只保留能追溯到上述 run/job 的产物：
+三组小窗实验已从 K8s PVC 拉回 `metrics_by_year.csv`，并用当前代码按
+`date x decision_target_timestamp` 重算横截面指标：
 
-| local path | source |
-| --- | --- |
-| `output/predictions/<run_id>/predictions_all.parquet` | 对应 `experiments/runs/<run_id>.toml`、K8s training job 和 sync 记录。 |
-| `output/k8s/metrics/<run_id>_metrics_by_year.csv` | 从对应 PVC run output 拉回的 raw metrics。 |
-| `output/reports/opening_1m3d_*` | 小窗 Ridge/GBM 归档实验对比和校正指标。 |
-| `output/reports/opening_1y_next_month_*` | 一年训练、次月测试 Ridge/GBM 归档实验对比和校正指标。 |
-| `output/reports/opening_intraday_top20_1y_next_month` | 旧 GBM/strong baseline replay，对应 `opening_intraday_top20_1y_next_month_*` 归档摘要。 |
-| `output/reports/opening_intraday_lgbm_delay_replays` | LightGBM delay0/1/2 标准 replay，对应 `opening_intraday_lgbm_delay_replays_*` 归档摘要。 |
-| `output/reports/opening_alpha_horizon_decay_delay2_*` | delay2 horizon decay，对应 `opening_alpha_horizon_decay_delay2_*` 归档摘要。 |
-| `output/reports/opening_delay2_signal_baseline` | delay2 保守 baseline 的分钟四曲线，用于当前 feature-strengthening 门槛。 |
-| `output/local/score_learned_risk_sweep_v1` | learned-risk sweep artifact；轻量 summary 归档到 `experiments/results/backtests/score_learned_risk_sweep_v1_summary.csv`。 |
-| `output/local/rolling_alpha_conditioned_top100_validation_v1` | 18m rolling validation 合并汇总，包含 `rolling_summary.csv`、`rolling_month_summary.csv` 和 `rolling_group_metrics.csv`。 |
-| `output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw` | 18m rolling 各测试月 prediction shard，用于 alpha Top100 内 risk/short/next 相关诊断。 |
+| run | overall rank IC | decision rank IC | B5-B1 bps | Top20 mean bps | Top20 win rate |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `gbm_opening_1m_3d` | 0.1631 | 0.1426 | +21.03 | +41.92 | 62.1% |
+| `ridge_opening_1m_3d_strong` | 0.1083 | 0.1087 | +23.39 | +6.78 | 49.1% |
+| `ridge_opening_1m_3d` | 0.1070 | 0.0824 | +12.23 | +16.26 | 50.3% |
+
+小窗测试期只有 2022-01-04 至 2022-01-06 三天，只能作为继续跑 one-year 主线的依据。
+
+## 2026-05-21 1y Next-Month Baseline
+
+四个 2021 训练、2022-01 测试实验已从 K8s PVC 拉回 metrics 和 predictions。由于旧镜像原始 metrics
+按实际 tick `timestamp` 分组，本地按 `date x decision_target_timestamp` 重算横截面指标并归档：
+
+```text
+experiments/results/metrics/opening_1y_next_month_corrected_cross_section_summary.csv
+experiments/results/metrics/opening_1y_next_month_corrected_score_buckets.csv
+```
+
+| run | decision rank IC | rank IC IR | Top20 mean bps | Top20 win rate |
+| --- | ---: | ---: | ---: | ---: |
+| `gbm_opening_1y_next_month` | 0.1831 | 2.7548 | +34.33 | 60.7% |
+| `gbm_opening_1y_next_month_strong` | 0.1454 | 1.9402 | +18.78 | 53.8% |
+| `ridge_opening_1y_next_month_strong` | 0.1156 | 1.5987 | +9.63 | 51.2% |
+| `ridge_opening_1y_next_month` | 0.0799 | 1.4788 | +18.96 | 54.4% |
+
+旧开盘短周期 Top20 replay 轻量摘要归档到
+`experiments/results/backtests/opening_intraday_top20_1y_next_month_*`。旧普通 GBM mean cycle return 约
+`+42.21 bps`，19 个测试日均为正。该结果只说明短周期方向性值得继续验证，不代表 T+1 可交易收益。
+
+## 2026-05-22 本地实验清理
+
+当时按 PVC/研究口径，本地只保留 `1m3d` 小窗口和 `1y_next_month` Ridge/GBM baseline 归档；
+未进入归档的旧 LightGBM delay Job YAML 和 run config 已清理。随后按实时 PVC 校准状态：
+
+- 当时 PVC 可分析结果仍只有 Ridge/GBM baseline；没有可拉回的 LightGBM delay 结果目录。
+- 已删除过期的本地 cache snapshot；后续以实时 PVC `find /mnt/output/opening_strength_fit` 为准。
+- `*.tmp.parquet`、lock 和 heartbeat 只表示进行中或被中断，不是可用训练输入。
+- 正式训练路径校准为 CPU LightGBM + PVC labeled cache；GPU 仅保留为显式配置能力。
 
 ## 2026-05-26 CPU LightGBM Delay
 
@@ -997,6 +897,57 @@ Top100-only v3 随后只扫 Top100，候选池 p80/p85/p90，soft penalty 0.25-0
 - hard gate 不是主线。
 - 不再在 2022-01 单月继续调参；下一步固定参数做 rolling。
 
+## 2026-05-29 Rolling Validation v1
+
+18m cache 已完成：
+
+```text
+/mnt/output/opening_strength_fit/cache/opening_18m_202008_202201_delay2_labeled.parquet
+date_min: 2020-08-03
+date_max: 2022-01-28
+rows: 16,748,169
+valid_labels: 16,545,004
+```
+
+新增 rolling 入口：
+
+```text
+scripts/run_alpha_conditioned_rolling_validation.py
+experiments/runs/rolling_alpha_conditioned_top100_validation_v1.toml
+experiments/jobs/rolling_alpha_conditioned_top100_validation_v1_job.yaml
+```
+
+Validation design:
+
+- Test months: `2021-08` 至 `2022-01`，共 6 个月。
+- Each window: 前 12 个月训练 alpha model、gap risk model、binary risk model。
+- Risk target: alpha p80 候选内的 next underperformance；gap 用 `next_rank <= p50` severity，
+  binary 用 `next_rank <= p40`。
+- Fixed Top100 variants:
+  `alpha_rank`、`gap_penalty_030_p80`、`gap_penalty_035_p80`、
+  `gap_penalty_030_p90`、`binary_penalty_035_p80`。
+
+Rolling 通过标准：
+
+- `gap_penalty_030_p80` 或 `gap_penalty_035_p80` 的 short Top100 excess 多数月份仍显著为正。
+- next Top100 excess 相比 raw alpha baseline 大幅收敛，最好多数月份为正。
+- 如果只在 2022-01 有效，说明 v3 是单月 post-hoc；回到 target 定义，不继续扩大 score sweep。
+
+Rescue note:
+
+- 第一版单 Job 在跑完 `2021-08`、进入 `2021-09` 后被 `OOMKilled`，原因是 6 个 rolling window 在同一
+  Python 进程里串行训练，峰值/累积内存超过 256Gi。
+- 采用 `xy_fit` 的 sharded 思路重渲染为 monthly shard：每个月独立 Python 子进程写
+  `month_YYYY-MM/rolling_*.csv` 和 `month_YYYY-MM/predictions.parquet`，root 目录保留共享
+  `clickhouse_next_close_labels.parquet`；`sync_experiment_artifacts.py --all` 负责拉取并本地合并 root-level
+  `rolling_summary.csv`。
+- 救援镜像：`registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260529-rolling-sharded-rescue`。
+- Job YAML：`experiments/jobs/rolling_alpha_conditioned_top100_validation_v1_sharded_job.yaml`。
+- 二次 OOM 复盘：上述 sharded YAML 仍是单 Pod 内的 shell loop，2021-08 shard 完成后同一 cgroup 进入
+  2021-09，再次读全量 18m cache（约 15.2M 行、490 列）并训练，最终在 256Gi limit 下 OOMKilled。
+  后续修正为 Kubernetes Indexed Job，每个月一个 Pod；PVC labeled cache 对 rolling 月份按 train+test
+  日期范围做 parquet filter，并减少训练阶段的大 DataFrame copy。
+
 ## 2026-06-02 Rolling Validation v1 Results
 
 `rolling_alpha_conditioned_top100_validation_v1` 的 6 个 monthly shard 已拉回并合并，`rolling_trace.json`
@@ -1106,97 +1057,148 @@ train_label = xs_norm(short_label) + w_long * xs_norm(long_label)
   S/M/L 评估体系下也应该相对稳健。
 - 如果模型只在训练 label 上好、换一个合理评估体系就塌，说明还没有真的把 opening signal 做强。
 
-## 2026-05-29 Rolling Validation v1
+## 查找索引
 
-18m cache 已完成：
+下面只做定位用；研究逻辑以上面的时间线为准。
 
-```text
-/mnt/output/opening_strength_fit/cache/opening_18m_202008_202201_delay2_labeled.parquet
-date_min: 2020-08-03
-date_max: 2022-01-28
-rows: 16,748,169
-valid_labels: 16,545,004
-```
+### 实验清单
 
-新增 rolling 入口：
+下面的清单和表格是检索用，不是叙事正文。
 
-```text
-scripts/run_alpha_conditioned_rolling_validation.py
-experiments/runs/rolling_alpha_conditioned_top100_validation_v1.toml
-experiments/jobs/rolling_alpha_conditioned_top100_validation_v1_job.yaml
-```
+正式归档实验：
 
-Validation design:
+- `1m3d` 小窗口 Ridge/GBM 对比。
+- `1y_next_month` Ridge/GBM/strong 对比。
+- `1y_next_month` CPU LightGBM delay0/1/2 普通 universe 与 strong 分支。
 
-- Test months: `2021-08` 至 `2022-01`，共 6 个月。
-- Each window: 前 12 个月训练 alpha model、gap risk model、binary risk model。
-- Risk target: alpha p80 候选内的 next underperformance；gap 用 `next_rank <= p50` severity，
-  binary 用 `next_rank <= p40`。
-- Fixed Top100 variants:
-  `alpha_rank`、`gap_penalty_030_p80`、`gap_penalty_035_p80`、
-  `gap_penalty_030_p90`、`binary_penalty_035_p80`。
+旧 Ridge/GBM baseline 使用无成交延迟旧口径（`entry_tick_delay = 0`）；LightGBM delay 分支使用各自
+PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混比。
 
-Rolling 通过标准：
+近期探索和辅助任务：
 
-- `gap_penalty_030_p80` 或 `gap_penalty_035_p80` 的 short Top100 excess 多数月份仍显著为正。
-- next Top100 excess 相比 raw alpha baseline 大幅收敛，最好多数月份为正。
-- 如果只在 2022-01 有效，说明 v3 是单月 post-hoc；回到 target 定义，不继续扩大 score sweep。
+| task | kind | status | output |
+| --- | --- | --- | --- |
+| `lgbm_delay2_postopen_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_v1/` |
+| `lgbm_delay2_postopen_no_preopen_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_no_preopen_v1/` |
+| `lgbm_delay2_postopen_v2` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_v2/` |
+| `lgbm_delay2_feature_dependence_v1` | feature_audit | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_feature_dependence_v1/` |
+| `build_delay2_xs_demean_cache_v1` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_xs_demean_labeled.parquet` |
+| `lgbm_delay2_postopen_v2_xs_demean_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_v2_xs_demean_v1/` |
+| `lgbm_delay2_postopen_0931_0940_baseline_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_0931_0940_baseline_v1/` |
+| `build_delay2_postopen_heat_neutral_target_v1` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_postopen_heat_neutral_labeled.parquet` |
+| `lgbm_delay2_postopen_heat_neutral_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_heat_neutral_v1/` |
+| `lgbm_delay2_postopen_core_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_core_v1/` |
+| `build_delay2_postopen_heat_neutral_target_v2` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_postopen_heat_neutral_v2_labeled.parquet` |
+| `lgbm_delay2_postopen_heat_neutral_v2` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_heat_neutral_v2/` |
+| `lgbm_delay2_postopen_regularized_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_regularized_v1/` |
+| `lgbm_delay2_postopen_guard_filtered_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_guard_filtered_v1/` |
+| `lgbm_delay2_postopen_guard_weighted_025_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_guard_weighted_025_v1/` |
+| `lgbm_delay2_postopen_guard_weighted_050_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_guard_weighted_050_v1/` |
+| `lgbm_delay2_postopen_guard_features_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_guard_features_v1/` |
+| `lgbm_delay2_postopen_guard_feature_weighted_025_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_guard_feature_weighted_025_v1/` |
+| `build_guard_shrunk_target_050_v1` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_guard_shrunk_target_050_v1_labeled.parquet` |
+| `guard_shrunk_target_050_v1` | exploration | completed | `/mnt/output/opening_strength_fit/guard_shrunk_target_050_v1/` |
+| `build_guard_shrunk_target_060_v1` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_guard_shrunk_target_060_v1_labeled.parquet` |
+| `guard_shrunk_target_060_v1` | exploration | completed | `/mnt/output/opening_strength_fit/guard_shrunk_target_060_v1/` |
+| `build_guard_shrunk_target_065_v1` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_guard_shrunk_target_065_v1_labeled.parquet` |
+| `guard_shrunk_target_065_v1` | exploration | completed | `/mnt/output/opening_strength_fit/guard_shrunk_target_065_v1/` |
+| `build_guard_shrunk_target_075_v1` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_guard_shrunk_target_075_v1_labeled.parquet` |
+| `guard_shrunk_target_075_v1` | exploration | completed | `/mnt/output/opening_strength_fit/guard_shrunk_target_075_v1/` |
+| `build_guard_risk_shrunk_target_075_v1` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_guard_risk_shrunk_target_075_v1_labeled.parquet` |
+| `guard_risk_shrunk_target_075_v1` | exploration | completed | `/mnt/output/opening_strength_fit/guard_risk_shrunk_target_075_v1/` |
+| `build_guard_risk_shrunk_target_100_v1` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_guard_risk_shrunk_target_100_v1_labeled.parquet` |
+| `guard_risk_shrunk_target_100_v1` | exploration | completed | `/mnt/output/opening_strength_fit/guard_risk_shrunk_target_100_v1/` |
+| `score_risk_sweep_guard_shrunk_v1` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_risk_sweep_guard_shrunk_v1/` |
+| `learned_risk_layer_guard_teacher_v1` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/learned_risk_layer_guard_teacher_v1/` |
+| `learned_risk_layer_bad_tail_v1` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/learned_risk_layer_bad_tail_v1/` |
+| `score_learned_risk_sweep_v1` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_learned_risk_sweep_v1/` |
+| `conditional_bad_tail_risk_v1` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/conditional_bad_tail_risk_v1/` |
+| `conditional_bad_tail_binary_risk_v1` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/conditional_bad_tail_binary_risk_v1/` |
+| `score_conditional_risk_sweep_v1` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_conditional_risk_sweep_v1/` |
+| `build_delay2_18m_cache_v1` | labeled_cache | completed | `/mnt/output/opening_strength_fit/cache/opening_18m_202008_202201_delay2_labeled.parquet` |
+| `alpha_conditioned_reversal_binary_risk_v2` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/alpha_conditioned_reversal_binary_risk_v2/` |
+| `alpha_conditioned_reversal_gap_risk_v2` | learned_risk_layer | completed | `/mnt/output/opening_strength_fit/alpha_conditioned_reversal_gap_risk_v2/` |
+| `score_alpha_conditioned_risk_gate_v2` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_alpha_conditioned_risk_gate_v2/` |
+| `score_alpha_conditioned_top100_sweep_v3_p80` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_alpha_conditioned_top100_sweep_v3_p80/` |
+| `score_alpha_conditioned_top100_sweep_v3_p85` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_alpha_conditioned_top100_sweep_v3_p85/` |
+| `score_alpha_conditioned_top100_sweep_v3_p90` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_alpha_conditioned_top100_sweep_v3_p90/` |
+| `rolling_alpha_conditioned_top100_validation_v1` | alpha_conditioned_rolling_validation | completed | `/mnt/output/opening_strength_fit/rolling_alpha_conditioned_top100_validation_v1/` |
 
-Rescue note:
+### Run 索引
 
-- 第一版单 Job 在跑完 `2021-08`、进入 `2021-09` 后被 `OOMKilled`，原因是 6 个 rolling window 在同一
-  Python 进程里串行训练，峰值/累积内存超过 256Gi。
-- 采用 `xy_fit` 的 sharded 思路重渲染为 monthly shard：每个月独立 Python 子进程写
-  `month_YYYY-MM/rolling_*.csv` 和 `month_YYYY-MM/predictions.parquet`，root 目录保留共享
-  `clickhouse_next_close_labels.parquet`；`sync_experiment_artifacts.py --all` 负责拉取并本地合并 root-level
-  `rolling_summary.csv`。
-- 救援镜像：`registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260529-rolling-sharded-rescue`。
-- Job YAML：`experiments/jobs/rolling_alpha_conditioned_top100_validation_v1_sharded_job.yaml`。
-- 二次 OOM 复盘：上述 sharded YAML 仍是单 Pod 内的 shell loop，2021-08 shard 完成后同一 cgroup 进入
-  2021-09，再次读全量 18m cache（约 15.2M 行、490 列）并训练，最终在 256Gi limit 下 OOMKilled。
-  后续修正为 Kubernetes Indexed Job，每个月一个 Pod；PVC labeled cache 对 rolling 月份按 train+test
-  日期范围做 parquet filter，并减少训练阶段的大 DataFrame copy。
+| run | status | notes |
+| --- | --- | --- |
+| `ridge_opening_1m_3d` | completed | 2021-12 训练、2022-01-04 至 2022-01-06 测试；decision rank IC = 0.0824，Top20 mean = +16.26 bps。 |
+| `ridge_opening_1m_3d_strong` | completed | 小窗 strong 分支；decision rank IC = 0.1087，Top20 mean = +6.78 bps。 |
+| `gbm_opening_1m_3d` | completed | 小窗 GBM；decision rank IC = 0.1426，Top20 mean = +41.92 bps。 |
+| `ridge_opening_1y_next_month` | completed | 2021 训练、2022-01 测试；decision rank IC = 0.0799，Top20 mean = +18.96 bps。 |
+| `ridge_opening_1y_next_month_strong` | completed | strong Ridge；decision rank IC = 0.1156，Top20 mean = +9.63 bps。 |
+| `gbm_opening_1y_next_month` | completed | sklearn GBM；decision rank IC = 0.1831，Top20 mean = +34.33 bps。 |
+| `gbm_opening_1y_next_month_strong` | completed | strong GBM；decision rank IC = 0.1454，Top20 mean = +18.78 bps。 |
+| `lgbm_opening_1y_next_month_delay0` | completed | CPU LightGBM universe delay0；group rank IC = 0.2044，Top20 mean = +50.05 bps。 |
+| `lgbm_opening_1y_next_month_delay1` | completed | CPU LightGBM universe delay1；group rank IC = 0.1515，Top20 mean = +40.29 bps。 |
+| `lgbm_opening_1y_next_month_delay2` | completed | CPU LightGBM universe delay2；group rank IC = 0.1360，Top20 mean = +36.75 bps。 |
+| `lgbm_opening_1y_next_month_strong_delay0` | completed | CPU LightGBM strong delay0；group rank IC = 0.1729，Top20 mean = +29.28 bps。 |
+| `lgbm_opening_1y_next_month_strong_delay1` | completed | CPU LightGBM strong delay1；group rank IC = 0.1389，Top20 mean = +17.17 bps。 |
+| `lgbm_opening_1y_next_month_strong_delay2` | completed | CPU LightGBM strong delay2；group rank IC = 0.1298，Top20 mean = +12.60 bps。 |
+| `lgbm_delay2_postopen_v2` | completed | post-open v1 plus v2 queue/depth-shape/trade-impact features；group rank IC = 0.1394，Top100 mean = +14.01 bps。 |
+| `lgbm_delay2_feature_dependence_v1` | completed | grouped feature importance 和 permutation；postopen/orderbook 依赖强于 preopen。 |
+| `build_delay2_xs_demean_cache_v1` | completed | 生成 delay2 横截面去均值 `target_label` cache，原始 `label` 保留用于评估。 |
+| `lgbm_delay2_postopen_v2_xs_demean_v1` | completed | v2 特征、`target_label` 训练；group rank IC = 0.1406，Top100 mean = +14.05 bps。 |
+| `lgbm_delay2_postopen_0931_0940_baseline_v1` | completed | 排除特殊 `09:30`，只训练/评估 `09:31-09:40`；group rank IC = 0.1360，Top100 mean = +13.45 bps。 |
+| `build_delay2_postopen_heat_neutral_target_v1` | completed | 生成 heat-neutral shrink `target_label` cache；对 price / turnover / opening-impact 暴露做 50% residual shrink。 |
+| `lgbm_delay2_postopen_heat_neutral_v1` | completed | 使用 heat-neutral `target_label` 训练，评估仍看 raw short `label`；`09:31-09:40` group rank IC = 0.1245，Top100 mean = +13.64 bps。 |
+| `lgbm_delay2_postopen_core_v1` | completed | 242 个核心特征；group rank IC = 0.1311，Top100 mean = +11.40 bps，未通过 gate。 |
+| `build_delay2_postopen_heat_neutral_target_v2` | completed | gentler heat-neutral cache：只中性化短窗 momentum / turnover-flow 暴露，strength = 0.25。 |
+| `lgbm_delay2_postopen_heat_neutral_v2` | completed | v2 heat-neutral `target_label` 训练；short group Rank IC = 0.1362，Top100 mean = +13.74 bps。 |
+| `lgbm_delay2_postopen_regularized_v1` | completed | raw-label 强正则 LGBM；short group Rank IC = 0.1341，Top100 mean = +12.65 bps，未通过 gate。 |
+| `lgbm_delay2_postopen_guard_filtered_v1` | completed | 只在固定 `next_flip_guard_10t` 可见候选池内训练/评估，检验硬候选域是否还能学出 short alpha。 |
+| `lgbm_delay2_postopen_guard_weighted_025_v1` | completed | 全样本 raw-label 训练；Top100 mean = +12.92 bps，next Top100 excess = -32.54 bps，未把 guard 练进 Top100。 |
+| `lgbm_delay2_postopen_guard_weighted_050_v1` | completed | 全样本 raw-label 训练；Top100 mean = +13.17 bps，next Top100 excess = -33.06 bps，未通过 gate。 |
+| `lgbm_delay2_postopen_guard_features_v1` | completed | 显式加入 guard rank/pass 特征；Top100 mean = +12.29 bps，next Top100 excess = -34.36 bps，未通过 gate。 |
+| `lgbm_delay2_postopen_guard_feature_weighted_025_v1` | completed | guard rank/pass 特征 + fail 权重 0.25；Top100 mean = +12.81 bps，next Top100 excess = -34.64 bps，未通过 gate。 |
+| `build_guard_shrunk_target_050_v1` | completed | 生成二元 guard-shrunk `target_label` cache：dirty short positive excess shrink 50%。 |
+| `guard_shrunk_target_050_v1` | completed | 用 50% guard-shrunk target 训练；short Top100 excess = +14.55 bps，next Top100 excess = -20.98 bps。 |
+| `build_guard_shrunk_target_060_v1` | completed | 生成二元 guard-shrunk `target_label` cache：dirty short positive excess shrink 60%。 |
+| `guard_shrunk_target_060_v1` | completed | 用 60% guard-shrunk target 训练；short Top100 excess = +10.47 bps，next Top100 excess = -13.13 bps。 |
+| `build_guard_shrunk_target_065_v1` | completed | 生成二元 guard-shrunk `target_label` cache：dirty short positive excess shrink 65%。 |
+| `guard_shrunk_target_065_v1` | completed | 用 65% guard-shrunk target 训练；short Top100 excess = +8.49 bps，next Top100 excess = -8.92 bps。 |
+| `build_guard_shrunk_target_075_v1` | completed | 生成二元 guard-shrunk `target_label` cache：dirty short positive excess shrink 75%。 |
+| `guard_shrunk_target_075_v1` | completed | 用 75% guard-shrunk target 训练；short Top100 excess = +6.21 bps，next Top100 excess = +0.07 bps。 |
+| `build_guard_risk_shrunk_target_075_v1` | completed | 生成连续 dirty-risk shrink `target_label` cache：lambda = 0.75。 |
+| `guard_risk_shrunk_target_075_v1` | completed | 连续 risk-shrunk target 训练；short Top100 excess = +19.95 bps，next Top100 excess = -25.60 bps。 |
+| `build_guard_risk_shrunk_target_100_v1` | completed | 生成连续 dirty-risk shrink `target_label` cache：lambda = 1.00。 |
+| `guard_risk_shrunk_target_100_v1` | completed | 连续 risk-shrunk target 训练；short Top100 excess = +18.80 bps，next Top100 excess = -16.87 bps。 |
+| `score_risk_sweep_guard_shrunk_v1` | completed | 对 baseline、guard_shrunk_050、guard_shrunk_075 的 score 做 alpha-rank minus dirty-risk penalty 和 hard-gate sweep。 |
+| `learned_risk_layer_guard_teacher_v1` | completed | 学手工 dirty-risk teacher；group rank IC = 0.9768，说明手工风险形态可被可见特征平滑复现。 |
+| `learned_risk_layer_bad_tail_v1` | completed | 学 short-rank 高且 next-rank 低的 bad-tail risk；group rank IC = 0.1028，learnable 但不强。 |
+| `score_learned_risk_sweep_v1` | completed | baseline `alpha_rank - lambda * learned_risk_rank` sweep；guard teacher 较平衡，bad_tail v1 太像 next-close selector。 |
+| `conditional_bad_tail_risk_v1` | completed | 条件 rank-gap reversal risk：short-rank >= p70 候选内学习 `max(short_rank - next_rank, 0)`；group rank IC = 0.6901。 |
+| `conditional_bad_tail_binary_risk_v1` | completed | 条件 hard reversal risk：short-rank >= p80 且 next-rank <= p50；group rank IC = 0.4023。 |
+| `score_conditional_risk_sweep_v1` | completed | alpha p80 候选池内扫 Top20/50/100 与 lambda 0.05-0.30；结果未通过，risk penalty 吃掉 short alpha 且未改善 Top100 next tail。 |
+| `build_delay2_18m_cache_v1` | completed | 从 ClickHouse 构造 2020-08 至 2022-01 的 18 个月 delay2 labeled cache，供后续 6 个月 rolling 用。 |
+| `alpha_conditioned_reversal_binary_risk_v2` | completed | alpha p80 候选内学习 `next_rank <= p40` 的 hard reversal risk；group rank IC = 0.4121。 |
+| `alpha_conditioned_reversal_gap_risk_v2` | completed | alpha p80 候选内学习 bottom-half next-rank severity；group rank IC = 0.4276。 |
+| `score_alpha_conditioned_risk_gate_v2` | completed | Top20/50 有强信号；Top100 需要更细 soft-penalty sweep，hard gate 不是主线。 |
+| `score_alpha_conditioned_top100_sweep_v3_p80` | completed | Top100-only p80 fine sweep；`gap penalty 0.30` short/next excess = +16.79 / +4.49 bps。 |
+| `score_alpha_conditioned_top100_sweep_v3_p85` | completed | Top100-only p85 fine sweep；`gap penalty 0.30` short/next excess = +16.82 / +3.25 bps。 |
+| `score_alpha_conditioned_top100_sweep_v3_p90` | completed | Top100-only p90 fine sweep；`gap penalty 0.30` short/next excess = +17.68 / +0.72 bps。 |
+| `rolling_alpha_conditioned_top100_validation_v1` | completed | 18m cache 上完成 2021-08 至 2022-01 rolling validation；`gap_penalty_030_p80` short/next excess = +21.20 / +7.84 bps，`gap_penalty_035_p80` = +17.39 / +13.25 bps。 |
 
-## 2026-05-21 1y Next-Month Baseline
+### Output 索引
 
-四个 2021 训练、2022-01 测试实验已从 K8s PVC 拉回 metrics 和 predictions。由于旧镜像原始 metrics
-按实际 tick `timestamp` 分组，本地按 `date x decision_target_timestamp` 重算横截面指标并归档：
+本地 `output/` 只保留能追溯到上述 run/job 的产物：
 
-```text
-experiments/results/metrics/opening_1y_next_month_corrected_cross_section_summary.csv
-experiments/results/metrics/opening_1y_next_month_corrected_score_buckets.csv
-```
-
-| run | decision rank IC | rank IC IR | Top20 mean bps | Top20 win rate |
-| --- | ---: | ---: | ---: | ---: |
-| `gbm_opening_1y_next_month` | 0.1831 | 2.7548 | +34.33 | 60.7% |
-| `gbm_opening_1y_next_month_strong` | 0.1454 | 1.9402 | +18.78 | 53.8% |
-| `ridge_opening_1y_next_month_strong` | 0.1156 | 1.5987 | +9.63 | 51.2% |
-| `ridge_opening_1y_next_month` | 0.0799 | 1.4788 | +18.96 | 54.4% |
-
-旧开盘短周期 Top20 replay 轻量摘要归档到
-`experiments/results/backtests/opening_intraday_top20_1y_next_month_*`。旧普通 GBM mean cycle return 约
-`+42.21 bps`，19 个测试日均为正。该结果只说明短周期方向性值得继续验证，不代表 T+1 可交易收益。
-
-## 2026-05-22 本地实验清理
-
-当时按 PVC/研究口径，本地只保留 `1m3d` 小窗口和 `1y_next_month` Ridge/GBM baseline 归档；
-未进入归档的旧 LightGBM delay Job YAML 和 run config 已清理。随后按实时 PVC 校准状态：
-
-- 当时 PVC 可分析结果仍只有 Ridge/GBM baseline；没有可拉回的 LightGBM delay 结果目录。
-- 已删除过期的本地 cache snapshot；后续以实时 PVC `find /mnt/output/opening_strength_fit` 为准。
-- `*.tmp.parquet`、lock 和 heartbeat 只表示进行中或被中断，不是可用训练输入。
-- 正式训练路径校准为 CPU LightGBM + PVC labeled cache；GPU 仅保留为显式配置能力。
-
-## 2026-05-20 小窗结果
-
-三组小窗实验已从 K8s PVC 拉回 `metrics_by_year.csv`，并用当前代码按
-`date x decision_target_timestamp` 重算横截面指标：
-
-| run | overall rank IC | decision rank IC | B5-B1 bps | Top20 mean bps | Top20 win rate |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `gbm_opening_1m_3d` | 0.1631 | 0.1426 | +21.03 | +41.92 | 62.1% |
-| `ridge_opening_1m_3d_strong` | 0.1083 | 0.1087 | +23.39 | +6.78 | 49.1% |
-| `ridge_opening_1m_3d` | 0.1070 | 0.0824 | +12.23 | +16.26 | 50.3% |
-
-小窗测试期只有 2022-01-04 至 2022-01-06 三天，只能作为继续跑 one-year 主线的依据。
+| local path | source |
+| --- | --- |
+| `output/predictions/<run_id>/predictions_all.parquet` | 对应 `experiments/runs/<run_id>.toml`、K8s training job 和 sync 记录。 |
+| `output/k8s/metrics/<run_id>_metrics_by_year.csv` | 从对应 PVC run output 拉回的 raw metrics。 |
+| `output/reports/opening_1m3d_*` | 小窗 Ridge/GBM 归档实验对比和校正指标。 |
+| `output/reports/opening_1y_next_month_*` | 一年训练、次月测试 Ridge/GBM 归档实验对比和校正指标。 |
+| `output/reports/opening_intraday_top20_1y_next_month` | 旧 GBM/strong baseline replay，对应 `opening_intraday_top20_1y_next_month_*` 归档摘要。 |
+| `output/reports/opening_intraday_lgbm_delay_replays` | LightGBM delay0/1/2 标准 replay，对应 `opening_intraday_lgbm_delay_replays_*` 归档摘要。 |
+| `output/reports/opening_alpha_horizon_decay_delay2_*` | delay2 horizon decay，对应 `opening_alpha_horizon_decay_delay2_*` 归档摘要。 |
+| `output/reports/opening_delay2_signal_baseline` | delay2 保守 baseline 的分钟四曲线，用于当前 feature-strengthening 门槛。 |
+| `output/local/score_learned_risk_sweep_v1` | learned-risk sweep artifact；轻量 summary 归档到 `experiments/results/backtests/score_learned_risk_sweep_v1_summary.csv`。 |
+| `output/local/rolling_alpha_conditioned_top100_validation_v1` | 18m rolling validation 合并汇总，包含 `rolling_summary.csv`、`rolling_month_summary.csv` 和 `rolling_group_metrics.csv`。 |
+| `output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw` | 18m rolling 各测试月 prediction shard，用于 alpha Top100 内 risk/short/next 相关诊断。 |
