@@ -34,6 +34,10 @@ from opening_strength_fit.config import (
     load_toml,
     run_id,
 )
+from opening_strength_fit.feature_config import (
+    feature_filters_from_config,
+    feature_limit,
+)
 from opening_strength_fit.io import read_frame, write_frame
 from opening_strength_fit.labels import finite_numeric_series
 from opening_strength_fit.model import evaluate_prediction_frame
@@ -42,8 +46,6 @@ from opening_strength_fit.reports import dataset_summary, metrics_by_year_from_w
 from opening_strength_fit.reports import print_mapping
 from opening_strength_fit.training import (
     _date_splits,
-    _feature_filters_from_config,
-    _feature_limit,
     _load_labeled_pvc_frame,
     build_training_parser,
 )
@@ -555,10 +557,10 @@ def fit_predict_split(
     test = labeled.loc[labeled["date"].isin(split.test_dates)].copy()
     model, train_stats = fit_lightgbm_frame(
         train,
-        feature_limit=_feature_limit(args, config),
+        feature_limit=feature_limit(args, config),
         target_col=target_col,
         sample_weight_col=config_str(config, "model", "sample_weight_col", ""),
-        feature_filters=_feature_filters_from_config(config),
+        feature_filters=feature_filters_from_config(config),
         n_estimators=config_int(config, "model", "n_estimators", 300),
         learning_rate=config_float(config, "model", "learning_rate", 0.03),
         num_leaves=config_int(config, "model", "num_leaves", 63),

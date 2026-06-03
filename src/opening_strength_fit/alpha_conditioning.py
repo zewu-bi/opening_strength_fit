@@ -12,9 +12,12 @@ from opening_strength_fit.config import (
     config_str,
     config_value,
 )
+from opening_strength_fit.feature_config import (
+    feature_filters_from_config,
+    feature_limit,
+)
 from opening_strength_fit.labels import finite_numeric_series
 from opening_strength_fit.model import RidgePredictionModel, fit_lightgbm_frame
-from opening_strength_fit.training import _feature_filters_from_config, _feature_limit
 
 
 KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
@@ -82,10 +85,10 @@ def fit_lgbm_config_section(
 ) -> tuple[RidgePredictionModel, dict[str, int]]:
     return fit_lightgbm_frame(
         train,
-        feature_limit=_feature_limit(args, config),
+        feature_limit=feature_limit(args, config),
         target_col=target_col,
         sample_weight_col=sample_weight_col,
-        feature_filters=_feature_filters_from_config(config),
+        feature_filters=feature_filters_from_config(config),
         n_estimators=section_int(config, section, "model", "n_estimators", 300),
         learning_rate=section_float(config, section, "model", "learning_rate", 0.03),
         num_leaves=section_int(config, section, "model", "num_leaves", 63),

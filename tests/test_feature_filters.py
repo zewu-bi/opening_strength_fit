@@ -5,6 +5,7 @@ import unittest
 import pandas as pd
 
 from opening_strength_fit.model import feature_columns
+from opening_strength_fit.feature_config import feature_filters_from_config
 from opening_strength_fit.training import _feature_filters_from_config
 
 
@@ -43,18 +44,17 @@ class FeatureFilterTest(unittest.TestCase):
         )
 
     def test_feature_filters_from_config_maps_toml_keys(self) -> None:
-        filters = _feature_filters_from_config(
-            {
-                "features": {
-                    "include_feature_columns": ["spread_bps"],
-                    "include_feature_prefixes": ["postopen_v2_trade_vwap_vs_"],
-                    "include_feature_regexes": [r"^postopen_(?!v2_)"],
-                    "drop_feature_columns": ["volume"],
-                    "drop_feature_prefixes": ["preopen_"],
-                    "drop_feature_regexes": [r"_debug$"],
-                }
+        config = {
+            "features": {
+                "include_feature_columns": ["spread_bps"],
+                "include_feature_prefixes": ["postopen_v2_trade_vwap_vs_"],
+                "include_feature_regexes": [r"^postopen_(?!v2_)"],
+                "drop_feature_columns": ["volume"],
+                "drop_feature_prefixes": ["preopen_"],
+                "drop_feature_regexes": [r"_debug$"],
             }
-        )
+        }
+        filters = feature_filters_from_config(config)
 
         self.assertEqual(filters["include_columns"], ("spread_bps",))
         self.assertEqual(
@@ -65,6 +65,7 @@ class FeatureFilterTest(unittest.TestCase):
         self.assertEqual(filters["drop_columns"], ("volume",))
         self.assertEqual(filters["drop_prefixes"], ("preopen_",))
         self.assertEqual(filters["drop_patterns"], (r"_debug$",))
+        self.assertEqual(_feature_filters_from_config(config), filters)
 
 
 if __name__ == "__main__":

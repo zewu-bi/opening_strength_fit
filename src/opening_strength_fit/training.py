@@ -59,6 +59,10 @@ from opening_strength_fit.features import (
     add_postopen_decision_features,
     add_postopen_v2_decision_features,
 )
+from opening_strength_fit.feature_config import (
+    feature_filters_from_config as _feature_filters_from_config,
+    feature_limit as _feature_limit,
+)
 from opening_strength_fit.io import read_frame, write_frame
 from opening_strength_fit.model import (
     evaluate_prediction_frame,
@@ -208,23 +212,6 @@ def build_training_parser(description: str) -> argparse.ArgumentParser:
         help="Add stock_pool_member as a model feature. Default only annotates predictions.",
     )
     return parser
-
-
-def _feature_filters_from_config(config: dict) -> dict[str, tuple[str, ...]]:
-    return {
-        "include_columns": tuple(
-            config_list(config, "features", "include_feature_columns", [])
-        ),
-        "include_prefixes": tuple(
-            config_list(config, "features", "include_feature_prefixes", [])
-        ),
-        "include_patterns": tuple(
-            config_list(config, "features", "include_feature_regexes", [])
-        ),
-        "drop_columns": tuple(config_list(config, "features", "drop_feature_columns", [])),
-        "drop_prefixes": tuple(config_list(config, "features", "drop_feature_prefixes", [])),
-        "drop_patterns": tuple(config_list(config, "features", "drop_feature_regexes", [])),
-    }
 
 
 def _drop_features_from_config(
@@ -544,15 +531,6 @@ def _metrics_row(
     for key, value in top_summary.items():
         row[f"top_score_{key}"] = value
     return row
-
-
-def _feature_limit(args: argparse.Namespace, config: dict) -> int | None:
-    raw = (
-        args.feature_limit
-        if args.feature_limit is not None
-        else config_int(config, "data", "feature_limit", 0)
-    )
-    return raw if raw and raw > 0 else None
 
 
 def build_labeled_frame_from_config(
