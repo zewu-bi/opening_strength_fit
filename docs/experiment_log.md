@@ -1492,6 +1492,23 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_mid_v1` | running | soft feature regroup + 中正则候选；feature cleanup 主候选。 |
 | `lgbm_delay2_18m_postopen_mixed_w030_soft_core_no_preopen_reg_mid_v1` | running | soft feature regroup + 中正则并去掉 `preopen_*`；诊断集合竞价依赖。 |
 
+## 2026-06-03 Cache v2 Rebuild Prep
+
+用户确认主线改为 3 年训练、12 个月滚动测试，基础数据需要覆盖 2015-2024。按新口径处理：
+
+- 停止仍在跑的 `opening-strength-build-delay2-2024-cache-v1`。
+- 提交 ClickHouse tick JSON object 序列化修复：`8149ad8 Handle JSON object fields in ClickHouse ticks`。
+- PVC cache 清理：删除旧 `opening_24m_202301_202412_delay2_labeled/`、旧 1y delay0/1/2 cache、
+  guard / heat-neutral / xs-demean 派生 cache、18m base cache、18m mixed w010/w020 cache；暂留
+  `opening_18m_202008_202201_delay2_mixed_w030_labeled.parquet`，因为仍有 w030 rolling shard 在跑。
+- 新增 `opening_strength_fit.cache_manifest`，`build_labeled_cache.py` 会写 `<cache>.manifest.json`。
+- 新增 `scripts/inspect_labeled_cache.py`，用于在 PVC 上轻量检查 schema / row count / required columns。
+- 新增年度基础 cache v2 run/job：
+  `build_delay2_2015_cache_v2` 至 `build_delay2_2024_cache_v2`，统一写到
+  `/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_base_labeled_v2/`。
+- labeled PVC 读取顺序改为先在完整 cache 上构造 postopen 特征，再按实验 `decision_times` 过滤；
+  因此只看 `09:31-09:40` 时仍能让 `09:31` 使用 cache 中的 `09:30` context。
+
 ### Output 索引
 
 本地 `output/` 只保留能追溯到上述 run/job 的产物：

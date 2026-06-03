@@ -14,8 +14,12 @@ precheck -> render job -> apply/wait -> sync artifacts -> audit/coverage -> anal
 - Active mainline: single mixed label，当前暂定 `w_long=0.30`；short label 为主体，小权重 long /
   next-day close 约束。训练仍用 full universe，S/M/L 只作为 TopN selection mask，指标在不同 mask
   下分别汇总。
-- Current running cache jobs: 只应有 `build_delay2_2023_cache_v1` 和 `build_delay2_2024_cache_v1` 两个
-  labeled-cache 任务在集群继续跑。不要删除、重渲染或复用它们的 run/job/config，除非明确要处理这两个任务。
+- Cache rebuild line: `build_delay2_2024_cache_v1` 已按用户要求停止；旧 2023/2024 v1 cache 和过期派生
+  cache 已从 PVC 清掉。新的基础 cache 线是 `build_delay2_2015_cache_v2` 至
+  `build_delay2_2024_cache_v2`，统一写入
+  `/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_base_labeled_v2/`。
+  启动这些 job 前需要先 build/push 包含 `cache_manifest.py` 和 `inspect_labeled_cache.py` 的
+  `opening-strength-fit-20260603-cache-v2` 镜像。
 - Historical evidence: `docs/experiment_log.md` 已记录、`experiments/results/**` 有轻量证据、或文档明确引用的
   run/job/config 都保留。guard / clean target / two-model alpha-risk / risk penalty 路线现在是 historical /
   superseded evidence，不是当前主实现。
@@ -226,7 +230,8 @@ experiments/results/metrics/<run_id>_metrics_by_year.csv
 - `[run].kind = "feature_audit"`：运行 grouped importance、permutation 和 drop-retrain ablation，
   audit CSV 写到 run output dir。
 - `[run].kind = "labeled_cache"`：从 ClickHouse 读取 tick、构造 labeled rows，并写出单个 PVC cache，
-  不训练模型。
+  不训练模型。`scripts/build_labeled_cache.py` 会同时写 `<cache>.manifest.json` 和 run output 下的
+  `labeled_cache_manifest.json`，manifest 由 `opening_strength_fit.cache_manifest` 生成。
 - `[run].kind = "cache_transform"` 或 `"target_cache"`：运行 target-label cache 构建，
   output 通常是 `/mnt/output/opening_strength_fit/cache/*.parquet`。
 - `[run].kind = "learned_risk_layer"`：训练 learned dirty-risk / next-flip risk model，
@@ -375,6 +380,11 @@ Target-label cache build:
 ```bash
 python scripts/build_labeled_cache.py \
   --config experiments/runs/<build_labeled_cache_run_id>.toml
+
+python scripts/inspect_labeled_cache.py \
+  --input /mnt/output/opening_strength_fit/cache/<cache>.parquet \
+  --config experiments/runs/<build_labeled_cache_run_id>.toml \
+  --output output/local/<build_labeled_cache_run_id>/cache_manifest.json
 
 python scripts/build_target_label_cache.py \
   --config experiments/runs/<build_target_run_id>.toml

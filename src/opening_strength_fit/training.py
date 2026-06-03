@@ -644,8 +644,8 @@ def _filter_labeled_frame(labeled: pd.DataFrame, config: dict) -> pd.DataFrame:
             ),
             symbols=load_symbol_list(symbols_file) if symbols_file else None,
         )
-    labeled = _filter_labeled_sample_from_config(labeled, config)
     labeled = _apply_feature_transforms_from_config(labeled, config)
+    labeled = _filter_labeled_sample_from_config(labeled, config)
     return _apply_candidate_filter_from_config(labeled, config)
 
 

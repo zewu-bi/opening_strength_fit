@@ -1,8 +1,8 @@
 [run]
-id = "build_delay2_2024_cache_v1"
+id = "build_delay2_2024_cache_v2"
 kind = "labeled_cache"
-description = "Build the 2024 shard of the 2023-2024 09:30-09:40 delay2 labeled cache for 2024 monthly rolling validation."
-status = "canceled"
+description = "Rebuild the 2024 shard into the 2015-2024 09:30-09:40 delay2 base labeled cache v2."
+status = "queued"
 
 [data]
 source = "clickhouse"
@@ -16,7 +16,8 @@ feature_limit = 0
 enabled = true
 read = true
 write = true
-path = "/mnt/output/opening_strength_fit/cache/opening_24m_202301_202412_delay2_labeled/opening_2024_delay2_labeled.parquet"
+schema_version = "delay2_base_labeled_v2"
+path = "/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_base_labeled_v2/opening_2024_delay2_base_labeled_v2.parquet"
 lock_timeout_seconds = 21600
 
 [clickhouse]
@@ -81,8 +82,8 @@ ic_mode = "cross_section"
 top_n = 100
 
 [output]
-local_dir = "output/local/build_delay2_2024_cache_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/build_delay2_2024_cache_v1"
+local_dir = "output/local/build_delay2_2024_cache_v2"
+k8s_dir = "/mnt/output/opening_strength_fit/build_delay2_2024_cache_v2"
 
 [k8s]
 namespace = "bizewu"
@@ -90,10 +91,10 @@ image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
-helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260529-next-close-finite-v2"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260603-cache-v2"
 
 [k8s.node_selector]
-"kubernetes.io/hostname" = "node8"
+"kubernetes.io/hostname" = "node9"
 
 [k8s.resources]
 cpu_request = "8"

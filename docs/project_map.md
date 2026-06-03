@@ -25,6 +25,7 @@ Library:
 Scripts:
 
 - `scripts/build_labeled_cache.py`: build a single labeled cache from ClickHouse without training a model.
+- `scripts/inspect_labeled_cache.py`: inspect a labeled cache schema/summary and write a compact manifest.
 - `scripts/build_target_label_cache.py`: derive target-aligned labeled caches while preserving raw labels.
 - `scripts/build_labels.py`: build labeled rows from existing tick files.
 - `scripts/audit_labels.py`: audit labeled dataset quality.
@@ -87,6 +88,7 @@ Scripts:
 Library:
 
 - `src/opening_strength_fit/k8s.py`: RunSpec, PVC helper pod, and kubectl wrappers.
+- `src/opening_strength_fit/cache_manifest.py`: JSON-safe labeled-cache schema and summary manifest helpers.
 
 Scripts:
 
@@ -105,8 +107,8 @@ Scripts:
 
 Experiment layers:
 
-- Current active core: current docs spine, shared library modules, main training/cache/sync/audit scripts, and the active
-  `build_delay2_2023_cache_v1` / `build_delay2_2024_cache_v1` labeled-cache run/job pairs.
+- Current active core: current docs spine, shared library modules, main training/cache/sync/audit scripts, and the
+  `build_delay2_2015_cache_v2` through `build_delay2_2024_cache_v2` labeled-cache run/job pairs.
 - Historical evidence: every run/job/config recorded in `docs/experiment_log.md`, represented in `experiments/results/**`,
   or explicitly referenced by docs. This includes guard, clean-target, learned-risk, score-risk, rolling-risk, and
   attribution experiments that are now superseded by the single mixed-label mainline.

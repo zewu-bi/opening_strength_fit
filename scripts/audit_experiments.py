@@ -14,7 +14,8 @@ JOB_SUFFIXES = (
 )
 ACTIVE_STATUSES = {"queued", "running"}
 COMPLETED_STATUS = "completed"
-KNOWN_STATUSES = {*ACTIVE_STATUSES, COMPLETED_STATUS}
+INACTIVE_STATUSES = {"canceled", "superseded"}
+KNOWN_STATUSES = {*ACTIVE_STATUSES, COMPLETED_STATUS, *INACTIVE_STATUSES}
 
 
 @dataclass(frozen=True)
@@ -164,7 +165,8 @@ def main() -> None:
 
         if record.status not in KNOWN_STATUSES:
             warnings.append(
-                f"{run_id}: unknown status={record.status!r}; use queued, running, or completed"
+                f"{run_id}: unknown status={record.status!r}; use queued, running, "
+                "completed, canceled, or superseded"
             )
 
         if has_jobs and not has_metrics and is_running and not (
