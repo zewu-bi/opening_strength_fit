@@ -4,12 +4,21 @@ import argparse
 import json
 import os
 from pathlib import Path
-import threading
-import time
 
 import numpy as np
 import pandas as pd
 
+from opening_strength_fit.cache_lock import (
+    CacheLockHeartbeat as _CacheLockHeartbeat,
+    acquire_cache_lock as _acquire_cache_lock,
+    cache_lock_done_path as _cache_lock_done_path,
+    cache_lock_has_fresh_heartbeat as _cache_lock_has_fresh_heartbeat,
+    cache_lock_heartbeat_path as _cache_lock_heartbeat_path,
+    clear_cache_ready as _clear_cache_ready,
+    mark_cache_ready as _mark_cache_ready,
+    release_cache_lock as _release_cache_lock,
+    write_cache_lock_heartbeat as _write_cache_lock_heartbeat,
+)
 from opening_strength_fit.clickhouse_ticks import (
     DEFAULT_CLICKHOUSE_TICK_HOST,
     DEFAULT_CLICKHOUSE_TICK_PORT,
@@ -873,61 +882,6 @@ def _labeled_pvc_date_filters(
     ], {"date_start": start_date, "date_end": end_date}
 
 
-def _cache_lock_done_path(lock_path: Path) -> Path:
-    return Path(f"{lock_path}.done")
-
-
-def _cache_lock_heartbeat_path(lock_path: Path) -> Path:
-    return lock_path / "heartbeat"
-
-
-def _write_cache_lock_heartbeat(lock_path: Path) -> None:
-    try:
-        lock_path.mkdir(parents=True, exist_ok=True)
-        _cache_lock_heartbeat_path(lock_path).write_text(
-            json.dumps({"pid": os.getpid(), "time": time.time()}) + "\n",
-            encoding="utf-8",
-        )
-    except OSError:
-        return
-
-
-def _cache_lock_has_fresh_heartbeat(
-    lock_path: Path,
-    *,
-    stale_after_seconds: float,
-) -> bool:
-    heartbeat_path = _cache_lock_heartbeat_path(lock_path)
-    try:
-        heartbeat_age = time.time() - heartbeat_path.stat().st_mtime
-    except OSError:
-        return False
-    return heartbeat_age <= float(stale_after_seconds)
-
-
-class _CacheLockHeartbeat:
-    def __init__(self, lock_path: Path, interval_seconds: float = 60.0) -> None:
-        self.lock_path = lock_path
-        self.interval_seconds = float(interval_seconds)
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
-
-    def __enter__(self) -> "_CacheLockHeartbeat":
-        _write_cache_lock_heartbeat(self.lock_path)
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
-        return self
-
-    def __exit__(self, exc_type, exc, traceback) -> None:
-        self._stop.set()
-        if self._thread is not None:
-            self._thread.join(timeout=min(1.0, self.interval_seconds))
-
-    def _run(self) -> None:
-        while not self._stop.wait(self.interval_seconds):
-            _write_cache_lock_heartbeat(self.lock_path)
-
-
 def _load_labeled_cache(path: Path) -> pd.DataFrame:
     labeled = read_frame(path)
     return ensure_timestamp_columns(standardize_columns(labeled))
@@ -939,76 +893,6 @@ def _write_labeled_cache(labeled: pd.DataFrame, path: Path) -> None:
     tmp_path = path.with_name(f".{path.name}.{os.getpid()}.tmp{suffix}")
     write_frame(labeled, tmp_path)
     os.replace(tmp_path, path)
-
-
-def _mark_cache_ready(cache_path: Path, lock_path: Path) -> None:
-    _cache_lock_done_path(lock_path).write_text(
-        json.dumps(
-            {
-                "path": str(cache_path),
-                "bytes": cache_path.stat().st_size,
-                "time": time.time(),
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
-
-def _clear_cache_ready(lock_path: Path) -> None:
-    try:
-        _cache_lock_done_path(lock_path).unlink()
-    except FileNotFoundError:
-        return
-
-
-def _acquire_cache_lock(
-    lock_path: Path,
-    timeout_seconds: float,
-    *,
-    cache_path: Path | None = None,
-    cache_read: bool = True,
-    poll_seconds: float = 15.0,
-) -> str:
-    start = time.monotonic()
-    timeout_seconds = float(timeout_seconds)
-    heartbeat_stale_after = max(timeout_seconds, float(poll_seconds) * 3.0, 60.0)
-    while True:
-        if cache_path and cache_read and cache_path.exists():
-            return "cache_ready"
-        try:
-            lock_path.mkdir(parents=True)
-            _write_cache_lock_heartbeat(lock_path)
-            return "acquired"
-        except FileExistsError:
-            if (
-                _cache_lock_done_path(lock_path).exists()
-                and cache_path
-                and cache_read
-                and cache_path.exists()
-            ):
-                return "cache_ready"
-            if timeout_seconds > 0.0 and (
-                time.monotonic() - start
-            ) >= timeout_seconds:
-                if _cache_lock_has_fresh_heartbeat(
-                    lock_path,
-                    stale_after_seconds=heartbeat_stale_after,
-                ):
-                    start = time.monotonic()
-                else:
-                    return "timeout"
-            time.sleep(float(poll_seconds))
-
-
-def _release_cache_lock(lock_path: Path) -> None:
-    try:
-        for child in lock_path.iterdir():
-            if child.is_file() or child.is_symlink():
-                child.unlink()
-        lock_path.rmdir()
-    except FileNotFoundError:
-        return
 
 
 def _build_clickhouse_labeled_frame(

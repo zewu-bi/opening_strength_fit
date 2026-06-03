@@ -30,6 +30,7 @@ current w_long = 0.30
 | [docs/experiment_log.md](docs/experiment_log.md) | 实验事实源：run、数字、K8s 输出、配置索引。 |
 | [docs/runbook.md](docs/runbook.md) | 本地 smoke、K8s Job、artifact sync、replay 和归档命令。 |
 | [docs/project_map.md](docs/project_map.md) | 文件、模块和脚本索引。 |
+| [docs/maintenance_audit.md](docs/maintenance_audit.md) | 本地维护安全边界、集群风险面和低风险重构记录。 |
 | [experiments/results/README.md](experiments/results/README.md) | 可提交轻量结果目录约定。 |
 
 ## 核心口径

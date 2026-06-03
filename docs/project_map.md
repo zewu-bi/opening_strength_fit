@@ -1,7 +1,8 @@
 # Project Map
 
 这个文件只回答“代码和脚本在哪里”。研究逻辑看 [project_brief.md](project_brief.md)，实验顺序看
-[experiment_log.md](experiment_log.md)，操作命令看 [runbook.md](runbook.md)。
+[experiment_log.md](experiment_log.md)，操作命令看 [runbook.md](runbook.md)，维护边界看
+[maintenance_audit.md](maintenance_audit.md)。
 
 ## Root
 
@@ -89,6 +90,7 @@ Library:
 
 - `src/opening_strength_fit/k8s.py`: RunSpec, PVC helper pod, and kubectl wrappers.
 - `src/opening_strength_fit/cache_manifest.py`: JSON-safe labeled-cache schema and summary manifest helpers.
+- `src/opening_strength_fit/cache_lock.py`: labeled-cache lock acquisition, heartbeat, ready marker, and release helpers.
 
 Scripts:
 
