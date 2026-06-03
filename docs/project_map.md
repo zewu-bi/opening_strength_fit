@@ -1,8 +1,7 @@
 # Project Map
 
 这个文件只回答“代码和脚本在哪里”。研究逻辑看 [project_brief.md](project_brief.md)，实验顺序看
-[experiment_log.md](experiment_log.md)，操作命令看 [runbook.md](runbook.md)，维护边界看
-[maintenance_audit.md](maintenance_audit.md)。
+[experiment_log.md](experiment_log.md)，操作命令看 [runbook.md](runbook.md)。
 
 ## Root
 
