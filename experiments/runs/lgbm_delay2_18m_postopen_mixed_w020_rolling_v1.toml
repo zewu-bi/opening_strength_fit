@@ -1,12 +1,12 @@
 [run]
-id = "lgbm_delay2_18m_postopen_mixed_w010_rolling_v1"
+id = "lgbm_delay2_18m_postopen_mixed_w020_rolling_v1"
 kind = "exploration"
-description = "Six-month rolling LightGBM validation on the 18-month delay2 mixed-label cache, using zscore(short) + 0.10 * zscore(next close) target_label."
-status = "completed"
+description = "Six-month rolling LightGBM validation on the 18-month delay2 mixed-label cache, using zscore(short) + 0.20 * zscore(next close) target_label."
+status = "running"
 
 [data]
 source = "labeled_pvc"
-labeled_path = "/mnt/output/opening_strength_fit/cache/opening_18m_202008_202201_delay2_mixed_w010_labeled.parquet"
+labeled_path = "/mnt/output/opening_strength_fit/cache/opening_18m_202008_202201_delay2_mixed_w020_labeled.parquet"
 tick_path = ""
 input_kind = "labeled"
 feature_limit = 0
@@ -86,8 +86,8 @@ ic_mode = "cross_section"
 top_n = 100
 
 [output]
-local_dir = "output/local/lgbm_delay2_18m_postopen_mixed_w010_rolling_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/lgbm_delay2_18m_postopen_mixed_w010_rolling_v1"
+local_dir = "output/local/lgbm_delay2_18m_postopen_mixed_w020_rolling_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/lgbm_delay2_18m_postopen_mixed_w020_rolling_v1"
 
 [k8s]
 namespace = "bizewu"
@@ -96,7 +96,7 @@ pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260602-mixed-label-v1"
-wait_for_paths = ["/mnt/output/opening_strength_fit/cache/opening_18m_202008_202201_delay2_mixed_w010_labeled.parquet"]
+wait_for_paths = ["/mnt/output/opening_strength_fit/cache/opening_18m_202008_202201_delay2_mixed_w020_labeled.parquet"]
 wait_for_path_timeout_seconds = 43200
 wait_for_path_interval_seconds = 120
 shard_parallelism = 1
