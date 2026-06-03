@@ -10,8 +10,8 @@
 - 项目窗口仍是 `09:30-09:40`；当前优化子域是 `09:31-09:40`。
 - 训练主线改为单模型 mixed label：一分钟 VWAP short label 为主，小权重加入持有到第二天收盘的 long label。
 - 训练仍用 full universe；`pool_S`、`pool_M`、`pool_L` 只作为 TopN selection mask，指标在不同 mask 下分别汇总。
-- 下一步先扫 mixed label 的 `w_long`。选 `w_long` 时看 short / next 的 Rank IC 和 Top100；固定后继续把
-  short / replay 做强，next close 不作为后续主优化目标。
+- mixed label 已扫 `w_long=0.10 / 0.20 / 0.30`；结合 S/M/L 池内 Top100 excess，当前暂定
+  `w_long=0.30`。固定权重后进入 S/M/L 绑定下的信号增强，next close 作为约束和诊断，不作为后续主优化目标。
 - 两模型 `final_score = alpha_rank - lambda * gap_risk_rank` 路线封存。它通过 rolling，说明短+长目标有信息，
   但当前不继续用两个模型定义目标。
 
@@ -25,6 +25,7 @@
 | `guard_shrunk_target_075_v1` | +6.21 | +0.07 | next 接近修复，short 掉太多。 |
 | alpha-conditioned `gap_penalty_030_p80` | +16.79 | +4.49 | 两模型单月 frontier 最好。 |
 | 18m rolling `gap_penalty_030_p80` | +21.20 | +7.84 | 证明短+长目标跨月有信息。 |
+| S/M/L pool-internal mixed `w=0.30` | +10.0 / +12.2 / +14.1 | +6.6 / +9.0 / +9.4 | 暂定单模型主线权重；三列为 pool_S/M/L。 |
 
 ## 实验时间线
 
@@ -41,6 +42,7 @@
 | 2026-05-28/29 | learned risk layer | 两模型公式可行；conditional v1 失败，alpha-conditioned v2 改善。 |
 | 2026-05-29/06-02 | rolling validation | `gap_penalty_030_p80` 6 个月 rolling 通过。 |
 | 2026-06-02 | mentor re-scope | 不继续两模型，改为直接训练 single mixed label。 |
+| 2026-06-03 | S/M/L mixed weight scan | `w_long=0.30` 在池内保住 short，并改善 next internal excess；暂定为主线权重。 |
 
 ## 2026-05-20 小窗结果
 
@@ -1090,7 +1092,7 @@ train_label = xs_norm(short_label) + w_long * xs_norm(long_label)
 | 1 | 先扫 `w_long` | 短 label 是主体，长 label 只加小成分；用 short / next 的 Rank IC 和 Top100 选权重，不要把模型练成 next-close selector。 |
 | 2 | 训练 full universe | 不用 S/M/L 过滤训练，也不把 membership 当特征；pool 只作为 TopN selection mask。 |
 | 3 | 按 mask 汇总同一组指标 | universe / S / M / L 只是筛选口径；同一模型在每个 mask 下分别报 short / next Rank IC 和 Top100。 |
-| 4 | 固定权重后做强 short/replay | 重点做特征工程和模型调参，主目标回到 short Rank IC、Top100 excess 和 replay。 |
+| 4 | 固定权重后做 S/M/L 信号增强 | 重点做特征工程、训练权重和模型调参，主目标回到 S/M/L 池内 Rank IC 和池内 Top100 excess。 |
 
 画图口径：
 
@@ -1196,8 +1198,8 @@ output/local/pool_selection_top100_w010_vs_risk/pool_selection_group_metrics.csv
 | --- | --- | --- |
 | `build_delay2_18m_mixed_w020_target_v1` | completed | 构造 `w_long=0.20` mixed cache；K8s job 完成后已清理。 |
 | `build_delay2_18m_mixed_w030_target_v1` | completed | 构造 `w_long=0.30` mixed cache；K8s job 完成后已清理。 |
-| `lgbm_delay2_18m_postopen_mixed_w020_rolling_v1` | running | 6 个 monthly shard；等待 w020 cache 后训练。 |
-| `lgbm_delay2_18m_postopen_mixed_w030_rolling_v1` | running | 6 个 monthly shard；等待 w030 cache 后训练。 |
+| `lgbm_delay2_18m_postopen_mixed_w020_rolling_v1` | completed | 6 个 monthly shard 已完成；metrics、pool selection 和 pool-internal summary 已归档。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_rolling_v1` | completed | 6 个 monthly shard 已完成；metrics、pool selection 和 pool-internal summary 已归档。 |
 
 这四个 job 使用 ConfigMap `opening-strength-mixed-w020-w030-configs` 挂载新 TOML 到 `/mnt/config`，
 因为当前镜像只包含 2026-06-02 之前的 run config。已清理 K8s 上完成的
@@ -1251,6 +1253,84 @@ experiments/results/backtests/pool_internal_top100_w010_vs_risk_pool_M_with_mean
 experiments/results/backtests/pool_internal_top100_w010_vs_risk_pool_L_with_mean.svg
 experiments/results/backtests/pool_internal_top100_w010_vs_risk_monthly_plot_data.csv
 ```
+
+补充同一四图对应的 monthly Rank IC 表：
+
+```text
+experiments/results/backtests/pool_internal_monthly_rank_ic_3models.csv
+```
+
+6 个月 mean 读法：raw / mixed `w=0.10` 的 short Rank IC 在 S/M/L 内分别约
+`0.1190 / 0.1308 / 0.1400` 和 `0.1222 / 0.1342 / 0.1433`，说明短期排序能力扎实；
+next Rank IC 只有 `0.001-0.005` 量级，说明隔夜不是全池强单调排序。`gap 0.30 p80`
+是在 `alpha_rank >= p80` 子集内算 IC，next Rank IC 为 `0.0068 / 0.0079 / 0.0091`，
+更像高 alpha 子集里的隔夜修正器，而不是 full-pool short 排序器。
+
+## 2026-06-03 w020/w030 Completed and w030 Mainline Decision
+
+`w_long=0.20`、`w_long=0.30` rolling jobs 已完成，相关 run TOML 状态改为 `completed`。当前主线只归档
+S/M/L 池内 Top100 excess 表；相对 universe 的 pool-selection 表不作为本轮判断依据。
+
+```text
+experiments/results/metrics/lgbm_delay2_18m_postopen_mixed_w020_rolling_v1_metrics_by_year.csv
+experiments/results/metrics/lgbm_delay2_18m_postopen_mixed_w030_rolling_v1_metrics_by_year.csv
+experiments/results/backtests/pool_internal_top100_w020_w030_summary.csv
+experiments/results/backtests/pool_internal_top100_w020_w030_month_summary.csv
+```
+
+池内 Top100 excess，单位 bps，按 1220 个 `date x minute` group 汇总：
+
+| pool | score | short internal excess | next internal excess | next positive months | next positive minutes |
+| --- | --- | ---: | ---: | ---: | ---: |
+| pool_S | mixed `w=0.20` | +9.9 | +5.8 | 4 / 6 | 9 / 10 |
+| pool_S | mixed `w=0.30` | +10.0 | +5.6 | 3 / 6 | 8 / 10 |
+| pool_M | mixed `w=0.20` | +12.2 | +7.3 | 3 / 6 | 10 / 10 |
+| pool_M | mixed `w=0.30` | +12.3 | +7.7 | 3 / 6 | 10 / 10 |
+| pool_L | mixed `w=0.20` | +14.0 | +6.8 | 3 / 6 | 9 / 10 |
+| pool_L | mixed `w=0.30` | +14.2 | +8.0 | 3 / 6 | 10 / 10 |
+
+把 raw alpha、mixed `w=0.10`、mixed `w=0.30` 放到同一张四图口径下比较，新归档：
+
+```text
+experiments/results/backtests/pool_internal_top100_w010_w030_universe_with_mean.svg
+experiments/results/backtests/pool_internal_top100_w010_w030_pool_S_with_mean.svg
+experiments/results/backtests/pool_internal_top100_w010_w030_pool_M_with_mean.svg
+experiments/results/backtests/pool_internal_top100_w010_w030_pool_L_with_mean.svg
+experiments/results/backtests/pool_internal_top100_w010_w030_monthly_plot_data.csv
+output/reports/pool_selection_top100_w010_w030/monthly_pool_internal_3models/
+```
+
+四图 mean：
+
+| pool | score | short internal excess | next internal excess |
+| --- | --- | ---: | ---: |
+| universe | raw alpha | +24.8 | -6.0 |
+| universe | mixed `w=0.10` | +24.9 | -3.6 |
+| universe | mixed `w=0.30` | +24.9 | -2.0 |
+| pool_S | raw alpha | +9.7 | +5.4 |
+| pool_S | mixed `w=0.10` | +9.7 | +5.5 |
+| pool_S | mixed `w=0.30` | +10.0 | +6.6 |
+| pool_M | raw alpha | +12.0 | +6.0 |
+| pool_M | mixed `w=0.10` | +11.9 | +6.8 |
+| pool_M | mixed `w=0.30` | +12.2 | +9.0 |
+| pool_L | raw alpha | +14.1 | +6.5 |
+| pool_L | mixed `w=0.10` | +13.8 | +7.1 |
+| pool_L | mixed `w=0.30` | +14.1 | +9.4 |
+
+判断：当前先定 `w_long=0.30`。它在 universe 里没有让 next Top100 彻底转正，但比 raw / `w=0.10`
+更少负；在 S/M/L 池内，`w=0.30` 相比 raw 和 `w=0.10` 保住 short internal excess，同时提高
+`pool_M/L` 的 next internal excess，`pool_S` 的 next 也有小幅改善。相比 `gap 0.30 p80`，
+`w=0.30` 是单模型、full-pool 打分、解释和部署更简单；gap risk 暂保留为 tail 诊断和二阶段对照。
+
+下一步不是继续无限扫权重，也不是切到 replay / 容量，而是把 `w_long=0.30` 当作固定训练目标，
+在 S/M/L 绑定口径下做信号增强：
+
+1. 固定评估面板：每个新模型都和 raw alpha、mixed `w=0.10`、mixed `w=0.30` baseline 在
+   universe / pool_S / pool_M / pool_L 同图比较，横轴仍是 6 个 rolling month + Mean。
+2. 做模型内增强：优先尝试 post-open feature cleanup / regroup、LightGBM 正则和采样参数、小幅 S/M/L
+   样本权重，而不是引入独立 risk layer 或二阶段 score。
+3. 验收标准：S/M/L 池内 short Top100 excess 不能低于当前 `w=0.30`，next Top100 excess 不能明显回吐；
+   如果只改善 universe 而不改善 S/M/L，则不算主线增量。
 
 ## 查找索引
 
@@ -1383,6 +1463,10 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `gap_risk_penalized_attribution_v1` | completed | 解释 rolling Top100 替换；被踢出票偏高 `preopen_turnover` / `preopen_volume` 和开盘成交增量，`gap 0.30` 是主折中。 |
 | `build_delay2_18m_mixed_w010_target_v1` | completed | 18m delay2 labeled cache 转换为 mixed target，`w_long=0.10`。 |
 | `lgbm_delay2_18m_postopen_mixed_w010_rolling_v1` | completed | single mixed-label rolling 首证；short / next Top100 excess = +25.02 / -4.29 bps，保住 short 但 next tail 仍未转正。 |
+| `build_delay2_18m_mixed_w020_target_v1` | completed | 18m delay2 labeled cache 转换为 mixed target，`w_long=0.20`。 |
+| `lgbm_delay2_18m_postopen_mixed_w020_rolling_v1` | completed | `w=0.20` single mixed-label rolling；S/M/L pool-internal short / next excess = +9.9/+5.8、+12.2/+7.3、+14.0/+6.8 bps。 |
+| `build_delay2_18m_mixed_w030_target_v1` | completed | 18m delay2 labeled cache 转换为 mixed target，`w_long=0.30`。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_rolling_v1` | completed | 暂定主线权重；S/M/L pool-internal short / next excess = +10.0/+5.6、+12.3/+7.7、+14.2/+8.0 bps。 |
 
 ### Output 索引
 
@@ -1401,6 +1485,9 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `output/local/score_learned_risk_sweep_v1` | learned-risk sweep artifact；轻量 summary 归档到 `experiments/results/backtests/score_learned_risk_sweep_v1_summary.csv`。 |
 | `experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1_*` | 18m rolling validation 的轻量 summary / month summary / trace；可重画 short-vs-next tradeoff 图。 |
 | `experiments/results/backtests/lgbm_delay2_18m_postopen_mixed_w010_rolling_v1_signal_gate_summary.csv` | mixed label `w_long=0.10` rolling short / next gate 摘要。 |
+| `experiments/results/backtests/pool_internal_top100_w020_w030_*` | `w=0.20 / 0.30` 在 S/M/L 内部的 Top100 excess summary / month summary。 |
+| `experiments/results/backtests/pool_internal_top100_w010_w030_*` | raw alpha、mixed `w=0.10`、mixed `w=0.30` 的四张 monthly pool-internal SVG 和 plot data。 |
+| `experiments/results/backtests/pool_internal_monthly_rank_ic_3models.csv` | raw alpha、mixed `w=0.10`、`gap 0.30 p80` 对应四图的 monthly Rank IC 表。 |
 | `experiments/results/backtests/gap_risk_penalized_attribution_v1_*` | rolling gap-risk Top100 替换归因的 outcome、feature exposure 和 residual-control 证据。 |
 | `output/local/<run_id>` | ignored artifact-sync buffer；不再作为唯一证据位置。 |
 | `output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw` | 18m rolling 各测试月 prediction shard，用于 alpha Top100 内 risk/short/next 相关诊断。 |

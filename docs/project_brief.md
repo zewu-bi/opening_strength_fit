@@ -18,8 +18,9 @@ long_label  = xs_norm(同一买入价持有到第二天收盘的收益 | date, d
 train_label = short_label + w_long * long_label
 ```
 
-`short_label` 仍是主体，`w_long` 只取小权重，起点按 `0.10` 附近做窄扫。目标不是把模型练成
-next-close selector，而是让一分钟短线信号带一点长线稳定性约束。
+`short_label` 仍是主体，`w_long` 只取小权重。2026-06-03 对 `0.10 / 0.20 / 0.30` 做完
+6 个月 rolling 和 S/M/L selection-mask 复核后，当前暂定 `w_long = 0.30` 作为下一轮主线权重。
+目标不是把模型练成 next-close selector，而是让一分钟短线信号带一点长线稳定性约束。
 
 训练仍使用 full A-share universe。`pool_S`、`pool_M`、`pool_L` 只作为 TopN selection mask：
 模型训练和全量打分不按池过滤，也不把 membership 当模型特征；指标在不同 mask 下分别汇总。
@@ -28,9 +29,29 @@ next-close selector，而是让一分钟短线信号带一点长线稳定性约�
 
 | step | focus | gate |
 | --- | --- | --- |
-| 1 | 选择 mixed label 的 `w_long` | 在同一 selection mask 下看 short / next 的 Rank IC 和 Top100；short 不能明显受损，next tail 不能明显恶化。 |
-| 2 | 做强 short / replay | 固定 `w_long` 后，主目标回到 short Rank IC、Top100 excess 和 replay，相比 raw short baseline 要有明确提升。 |
-| 3 | 按 selection mask 切片 | universe / S / M / L 分别报同一组指标；pool 只限制 TopN 候选，不改变训练口径。 |
+| 1 | 选择 mixed label 的 `w_long` | 在同一 selection mask 下看 short / next 的 Rank IC 和池内 Top100 excess；short 不能明显受损，next tail 不能明显恶化。 |
+| 2 | S/M/L 绑定下做信号增强 | 固定 `w_long=0.30` 后，主目标回到 S/M/L 池内 short Rank IC 和池内 Top100 excess。 |
+| 3 | 同口径留痕 | 每个候选实验都按 universe / S / M / L 产出同一组月度图和 mean 表；pool 只限制 TopN 候选，不改变训练口径。 |
+
+当前定权重依据是各自候选域内的 Top100 超额，单位 bps，6 个 rolling month 等权平均：
+
+| pool | score | short internal excess | next internal excess |
+| --- | --- | ---: | ---: |
+| universe | raw alpha | +24.8 | -6.0 |
+| universe | mixed `w=0.10` | +24.9 | -3.6 |
+| universe | mixed `w=0.30` | +24.9 | -2.0 |
+| pool_S | raw alpha | +9.7 | +5.4 |
+| pool_S | mixed `w=0.10` | +9.7 | +5.5 |
+| pool_S | mixed `w=0.30` | +10.0 | +6.6 |
+| pool_M | raw alpha | +12.0 | +6.0 |
+| pool_M | mixed `w=0.10` | +11.9 | +6.8 |
+| pool_M | mixed `w=0.30` | +12.2 | +9.0 |
+| pool_L | raw alpha | +14.1 | +6.5 |
+| pool_L | mixed `w=0.10` | +13.8 | +7.1 |
+| pool_L | mixed `w=0.30` | +14.1 | +9.4 |
+
+读法：`w=0.30` 在 universe 下只是把 next tail 从更负拉到较少负；真正支持定权重的是
+`pool_S/M/L` 池内 next internal excess 明显提高，同时 short internal excess 没有被吃掉。
 
 ## 研究口径
 
@@ -64,8 +85,9 @@ ClickHouse 原始 tick 偶尔出现 6 秒间隔时，不默认视为中间 tick 
 主评估：
 
 - `Rank IC`：同一 `date x decision_time` 横截面内的排序能力。
-- `Top100 excess`：Top100 相对同横截面均值的 raw short label 超额。
-- `replay`：先做短线可执行 proxy，不在第一阶段混入完整交易约束。
+- `Top100 excess`：当前 S/M/L 主线里默认指池内 Top100 excess，即 Top100 均值减同一
+  `date x decision_time`、同一 selection mask 内全体候选均值；若使用 universe-relative 诊断，必须显式写明。
+- `replay`：历史验证工具；当前 S/M/L 信号增强阶段不把 replay / 容量作为主门槛。
 - `selection mask`：universe / `pool_S` / `pool_M` / `pool_L` 是切片维度，不是单独的评估指标。
 - `next close / next-day close`：只在选择 `w_long` 和诊断 dirty tail 时与 short 同看；固定 `w_long` 后，
   后续信号增强主目标仍是 short。
@@ -87,6 +109,7 @@ ClickHouse 原始 tick 偶尔出现 6 秒间隔时，不默认视为中间 tick 
 | guard / clean target | 可见信息能否减少 next tail？ | 能，但代价明显；强 clean target 会把 short excess 打到 `+6.21 bps`。 |
 | learned risk layer | 两模型 `alpha - risk` 是否可行？ | 可行但复杂；`gap_penalty_030_p80` rolling short / next `+21.20 / +7.84 bps`，归因指向开盘拥挤 tail。 |
 | mentor re-scope | 下一步继续两模型还是直接定义 label？ | 直接训练单模型 mixed label；两模型路线封存为历史对照。 |
+| S/M/L mixed weight scan | 单模型 mixed label 权重怎么定？ | 暂定 `w_long=0.30`；在 S/M/L 池内保住 short，并比 raw / `w=0.10` 改善 next internal excess。 |
 
 ## 关键事实
 
@@ -120,9 +143,9 @@ learned risk layer 的经验是：两模型公式能工作，但解释成本高�
 ## 当前不做
 
 - 不把 `final_score = alpha_rank - lambda * gap_risk_rank` 作为当前主线。
-- 不把 `w_long` 放大到让模型变成 next-close selector。
+- 不把 `w_long` 继续放大到让模型变成 next-close selector；`0.30` 只是当前 S/M/L 口径下的主线候选。
 - 不按 S/M/L 股池过滤训练，也不把股池 membership 当特征；股池只做 TopN selection mask。
-- 不在 short / replay 做强前，把 fee/slippage、多档容量、同股冷却和 T+1 overlay 混进训练目标。
+- 不在当前 S/M/L 信号增强阶段，把 fee/slippage、多档容量、同股冷却和 T+1 overlay 混进训练目标。
 - 不围绕特殊 `09:30` opening snapshot 做主优化。
 - 不继续叠加 clean target、risk-shrunk target 和 risk penalty。
 

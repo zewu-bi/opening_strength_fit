@@ -11,8 +11,9 @@ precheck -> render job -> apply/wait -> sync artifacts -> audit/coverage -> anal
 
 ## 当前维护分层
 
-- Active mainline: single mixed label，short label 为主体，小权重 long / next-day close 约束；训练仍用
-  full universe，S/M/L 只作为 TopN selection mask，指标在不同 mask 下分别汇总。
+- Active mainline: single mixed label，当前暂定 `w_long=0.30`；short label 为主体，小权重 long /
+  next-day close 约束。训练仍用 full universe，S/M/L 只作为 TopN selection mask，指标在不同 mask
+  下分别汇总。
 - Current running cache jobs: 只应有 `build_delay2_2023_cache_v1` 和 `build_delay2_2024_cache_v1` 两个
   labeled-cache 任务在集群继续跑。不要删除、重渲染或复用它们的 run/job/config，除非明确要处理这两个任务。
 - Historical evidence: `docs/experiment_log.md` 已记录、`experiments/results/**` 有轻量证据、或文档明确引用的

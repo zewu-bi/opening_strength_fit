@@ -1,6 +1,7 @@
 import argparse
 from datetime import date
 import hashlib
+import re
 import textwrap
 from pathlib import Path
 
@@ -218,6 +219,50 @@ def _window_mode(config: dict) -> str:
     return str(get(config, "window", "mode", "chronological"))
 
 
+def _compact_run_slug(run_id_value: str, *, max_length: int) -> str:
+    run_slug = slug(run_id_value)
+    if len(run_slug) <= max_length:
+        return run_slug
+
+    tokens = [token for token in run_slug.split("-") if token]
+    model = tokens[0] if tokens else ""
+    delay = next((token for token in tokens if re.fullmatch(r"delay\d+", token)), "")
+    horizon = next((token for token in tokens if re.fullmatch(r"\d+[mhd]", token)), "")
+    weight = next((token for token in tokens if re.fullmatch(r"w\d+", token)), "")
+    version = next((token for token in reversed(tokens) if re.fullmatch(r"v\d+", token)), "")
+
+    candidates: list[list[str]] = []
+    if "mixed" in tokens and weight:
+        candidates.append([model, delay, horizon, "mixed", weight, version])
+        candidates.append([model, delay, "mixed", weight])
+        candidates.append(["mixed", weight, version])
+    if "rolling" in tokens:
+        candidates.append([model, delay, horizon, "roll", version])
+        candidates.append([model, delay, "roll"])
+
+    important = []
+    for token in tokens:
+        mapped = "roll" if token == "rolling" else token
+        if (
+            token == model
+            or token in {"mixed", "top100"}
+            or re.fullmatch(r"delay\d+", token)
+            or re.fullmatch(r"\d+[mhd]", token)
+            or re.fullmatch(r"w\d+", token)
+            or re.fullmatch(r"v\d+", token)
+            or token == "rolling"
+        ):
+            important.append(mapped)
+    candidates.append(important)
+
+    for parts in candidates:
+        compact = "-".join(part for part in parts if part)
+        if compact and len(compact) <= max_length:
+            return compact
+
+    return run_slug[:max_length].rstrip("-")
+
+
 def _k8s_job_name(
     prefix: str,
     run_id_value: str,
@@ -239,7 +284,7 @@ def _k8s_job_name(
     if keep < 1:
         keep = max_length - len(tail) - 1
         head = ""
-    return f"{head}{slug(run_id_value)[:keep].rstrip('-')}{tail}"
+    return f"{head}{_compact_run_slug(run_id_value, max_length=keep)}{tail}"
 
 
 def _clickhouse_env_from(config: dict, indent: int = 18) -> str:

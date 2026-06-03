@@ -35,6 +35,18 @@ class K8sHelperTest(unittest.TestCase):
         self.assertTrue(name.startswith("opening-strength-"))
         self.assertIn("-sharded-", name)
 
+    def test_rendered_job_name_keeps_mixed_weight_token(self) -> None:
+        name = _k8s_job_name(
+            "opening-strength",
+            "lgbm_delay2_18m_postopen_mixed_w030_rolling_v1",
+            "sharded",
+            max_length=KUBERNETES_NAME_LIMIT - 2,
+        )
+
+        self.assertLessEqual(len(name), KUBERNETES_NAME_LIMIT - 2)
+        self.assertIn("mixed-w030", name)
+        self.assertNotIn("postopen-mi", name)
+
     def test_rolling_monthly_sharded_job_uses_indexed_pods(self) -> None:
         config = {
             "run": {

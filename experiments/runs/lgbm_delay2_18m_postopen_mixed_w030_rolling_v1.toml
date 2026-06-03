@@ -2,7 +2,7 @@
 id = "lgbm_delay2_18m_postopen_mixed_w030_rolling_v1"
 kind = "exploration"
 description = "Six-month rolling LightGBM validation on the 18-month delay2 mixed-label cache, using zscore(short) + 0.30 * zscore(next close) target_label."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"
