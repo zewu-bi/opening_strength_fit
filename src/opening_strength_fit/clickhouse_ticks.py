@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 
+import numpy as np
 import pandas as pd
 
 from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns
@@ -203,13 +204,30 @@ def query_tick_day_window(
     )
 
 
+def _json_default(value: object) -> object:
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    raise TypeError(
+        f"Object of type {value.__class__.__name__} is not JSON serializable"
+    )
+
+
 def normalize_clickhouse_ticks(df: pd.DataFrame) -> pd.DataFrame:
     ticks = standardize_columns(df)
     ticks = ensure_timestamp_columns(ticks)
-    for column in ticks.select_dtypes(include=["object"]).columns:
+    for column in ticks.columns:
+        if not pd.api.types.is_object_dtype(ticks[column]):
+            continue
         if ticks[column].map(lambda value: isinstance(value, (dict, list))).any():
             ticks[column] = ticks[column].map(
-                lambda value: json.dumps(value, ensure_ascii=False, sort_keys=True)
+                lambda value: json.dumps(
+                    value,
+                    default=_json_default,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
                 if isinstance(value, (dict, list))
                 else value
             )
