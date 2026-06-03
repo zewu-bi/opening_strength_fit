@@ -1215,6 +1215,8 @@ pool_internal_excess = pool 内 Top100 平均收益 - 同一 date x minute pool 
 ```text
 experiments/results/backtests/pool_internal_top100_w010_vs_risk_summary.csv
 experiments/results/backtests/pool_internal_top100_w010_vs_risk_month_summary.csv
+experiments/results/backtests/pool_internal_top100_w010_vs_risk_mean_by_pool.csv
+experiments/results/backtests/pool_internal_top100_w010_vs_risk_mean_by_pool.svg
 output/reports/pool_selection_top100_w010_vs_risk/sml_model_comparison_pool_internal_big.png
 ```
 
@@ -1331,6 +1333,21 @@ output/reports/pool_selection_top100_w010_w030/monthly_pool_internal_3models/
    样本权重，而不是引入独立 risk layer 或二阶段 score。
 3. 验收标准：S/M/L 池内 short Top100 excess 不能低于当前 `w=0.30`，next Top100 excess 不能明显回吐；
    如果只改善 universe 而不改善 S/M/L，则不算主线增量。
+
+按这个决策，已准备下一批 `w=0.30` 信号增强候选。它们都复用
+`opening_18m_202008_202201_delay2_mixed_w030_labeled.parquet`，仍跑 `2021-08` 至 `2022-01`
+6 个 rolling monthly shard，并通过 ConfigMap `opening-strength-w030-regroup-sweep-v1`
+挂载到 K8s Job：
+
+| run | status | purpose |
+| --- | --- | --- |
+| `lgbm_delay2_18m_postopen_mixed_w030_reg_light_v1` | running | full postopen v2 feature set；轻度 sampling / regularization。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_reg_mid_v1` | running | full postopen v2 feature set；中度 sampling / regularization，作为优先候选。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_reg_strong_v1` | running | full postopen v2 feature set；更强正则，检查 short 是否被吃掉。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_v1` | running | soft feature regroup；保留核心盘口/开盘后特征，baseline LGBM 参数。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1` | running | soft feature regroup + 轻度正则。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_mid_v1` | running | soft feature regroup + 中度正则，作为 feature cleanup 主候选。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_no_preopen_reg_mid_v1` | running | soft feature regroup + 中度正则，并去掉 `preopen_*`，检查集合竞价依赖。 |
 
 ## 查找索引
 
@@ -1467,6 +1484,13 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `lgbm_delay2_18m_postopen_mixed_w020_rolling_v1` | completed | `w=0.20` single mixed-label rolling；S/M/L pool-internal short / next excess = +9.9/+5.8、+12.2/+7.3、+14.0/+6.8 bps。 |
 | `build_delay2_18m_mixed_w030_target_v1` | completed | 18m delay2 labeled cache 转换为 mixed target，`w_long=0.30`。 |
 | `lgbm_delay2_18m_postopen_mixed_w030_rolling_v1` | completed | 暂定主线权重；S/M/L pool-internal short / next excess = +10.0/+5.6、+12.3/+7.7、+14.2/+8.0 bps。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_reg_light_v1` | running | 固定 `w=0.30` 后的 full postopen v2 轻正则候选；需按 S/M/L pool-internal 面板验收。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_reg_mid_v1` | running | 固定 `w=0.30` 后的 full postopen v2 中正则候选；优先看是否保住 S/M/L short。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_reg_strong_v1` | running | 固定 `w=0.30` 后的 full postopen v2 强正则候选；用于测正则上限。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_v1` | running | soft feature regroup baseline；减少宽泛 postopen/preopen 暴露后重测。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1` | running | soft feature regroup + 轻正则候选。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_mid_v1` | running | soft feature regroup + 中正则候选；feature cleanup 主候选。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_no_preopen_reg_mid_v1` | running | soft feature regroup + 中正则并去掉 `preopen_*`；诊断集合竞价依赖。 |
 
 ### Output 索引
 
@@ -1485,6 +1509,7 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `output/local/score_learned_risk_sweep_v1` | learned-risk sweep artifact；轻量 summary 归档到 `experiments/results/backtests/score_learned_risk_sweep_v1_summary.csv`。 |
 | `experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1_*` | 18m rolling validation 的轻量 summary / month summary / trace；可重画 short-vs-next tradeoff 图。 |
 | `experiments/results/backtests/lgbm_delay2_18m_postopen_mixed_w010_rolling_v1_signal_gate_summary.csv` | mixed label `w_long=0.10` rolling short / next gate 摘要。 |
+| `experiments/results/backtests/pool_internal_top100_w010_vs_risk_*` | raw alpha、mixed `w=0.10`、gap-risk score 的 pool-internal summary / month summary / mean-by-pool 图表。 |
 | `experiments/results/backtests/pool_internal_top100_w020_w030_*` | `w=0.20 / 0.30` 在 S/M/L 内部的 Top100 excess summary / month summary。 |
 | `experiments/results/backtests/pool_internal_top100_w010_w030_*` | raw alpha、mixed `w=0.10`、mixed `w=0.30` 的四张 monthly pool-internal SVG 和 plot data。 |
 | `experiments/results/backtests/pool_internal_monthly_rank_ic_3models.csv` | raw alpha、mixed `w=0.10`、`gap 0.30 p80` 对应四图的 monthly Rank IC 表。 |
