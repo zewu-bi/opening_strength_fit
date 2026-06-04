@@ -116,7 +116,10 @@ ClickHouse 原始 tick 偶尔出现 6 秒间隔时，不默认视为中间 tick 
 `09:30` 是单独 regime：它强，但主要混合集合竞价结果、第一张开盘盘口快照、时间坐标和缺失/0 模式。
 当前不围绕它优化。
 
-`09:31-09:40` 有稳定 short alpha。raw post-open baseline 在 `09:31-09:40` 的 short Top100 excess
+术语上，当前主线不要简称为 `postopen` 口径。更准确的说法是“决策时点可见信息”口径：集合竞价摘要、
+开盘快照和开盘后轨迹都可以使用，约束是不能吃未来信息。`postopen_v1/v2` 只是开盘后轨迹特征族的历史命名。
+
+`09:31-09:40` 有稳定 short alpha。raw decision-time baseline 在 `09:31-09:40` 的 short Top100 excess
 为 `+22.21 bps`，但同一 Top100 的 next-close excess 为 `-32.21 bps`。这定义了核心矛盾：
 短线信号存在，但 raw label 会奖励一部分“短正长负”的拥挤追涨 tail。
 

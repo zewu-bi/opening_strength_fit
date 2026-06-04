@@ -41,7 +41,7 @@ Library:
 
 - `src/opening_strength_fit/universe.py`: A-share symbol filtering and symbol-list loading.
 - `src/opening_strength_fit/stock_pool.py`: Ceph/local `date x symbol` bool stock-pool loading, masks, and summaries.
-- `src/opening_strength_fit/features.py`: preopen, orderbook, post-open v1/v2 decision, trade-flow, and momentum features.
+- `src/opening_strength_fit/features.py`: preopen/auction summaries, orderbook, `postopen_*` trajectory/response features, trade-flow, and momentum features.
 - `src/opening_strength_fit/feature_config.py`: feature include/drop filter and feature-limit config helpers.
 - `src/opening_strength_fit/candidates.py`: visible-information opening candidate filters.
 - `src/opening_strength_fit/targets.py`: cross-sectional demean/zscore/rank, heat-neutral, guard-shrunk, and risk-shrunk transforms.

@@ -14,6 +14,10 @@ precheck -> render job -> apply/wait -> sync artifacts -> audit/coverage -> anal
 - Active mainline: single mixed label，当前暂定 `w_long=0.30`；short label 为主体，小权重 long /
   next-day close 约束。训练仍用 full universe，S/M/L 只作为 TopN selection mask，指标在不同 mask
   下分别汇总。
+- Terminology: 主线不要简称为 “postopen 口径”。当前口径是 decision-time visible / causal feature
+  set：只要在下单决策时已经可见，`preopen_*` 集合竞价摘要、`09:30` 开盘快照、以及 `09:31-09:40`
+  的开盘后轨迹都可以进入特征。`postopen_*` 只是历史特征前缀，特指开盘后轨迹/盘口响应特征，不表示删除
+  集合竞价信息。
 - Cache rebuild line: `build_delay2_2024_cache_v1` 已按用户要求停止；旧 2023/2024 v1 cache 和过期派生
   cache 已从 PVC 清掉。新的基础 cache 线是 `build_delay2_2015_cache_v2` 至
   `build_delay2_2024_cache_v2`，统一写入
@@ -245,8 +249,9 @@ experiments/results/metrics/<run_id>_metrics_by_year.csv
 - `[run].kind = "score_risk_sweep"`：对已有 prediction 做 score/risk penalty 或 hard gate 扫描，
   不训练新模型。
 - `[run].kind = "exploration"`：可以先保持 active/running，不要求立刻有 metrics；确认后再归档成正式实验。
-- Post-open 实验仍走 `scripts/run_experiment.py`；`[features].include_postopen_decision = true`
-  打开 post-open decision 特征，v2 特征再加 `[features].include_postopen_v2 = true`。
+- `postopen_*` 特征实验仍走 `scripts/run_experiment.py`；`[features].include_postopen_decision = true`
+  打开开盘后轨迹/盘口响应特征，v2 特征再加 `[features].include_postopen_v2 = true`。这只是特征族开关，
+  不等于删除 `preopen_*` 集合竞价摘要。
 
 PVC 约定：
 
