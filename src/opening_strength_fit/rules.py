@@ -4,7 +4,6 @@ from collections.abc import Iterable
 
 import pandas as pd
 
-
 RULE_COLUMNS = {
     "open_momentum_30t": "return_30t",
     "open_momentum_10t": "return_10t",

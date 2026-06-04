@@ -16,8 +16,7 @@ def minute_decision_times(
     if end < start:
         raise ValueError("decision minute range end must be >= start")
     return tuple(
-        timestamp.strftime("%H:%M:%S")
-        for timestamp in pd.date_range(start, end, freq="min")
+        timestamp.strftime("%H:%M:%S") for timestamp in pd.date_range(start, end, freq="min")
     )
 
 
@@ -63,9 +62,7 @@ def select_decision_points(
     if work.empty:
         return work.copy()
 
-    tolerance = (
-        pd.Timedelta(seconds=max_lag_seconds) if max_lag_seconds is not None else None
-    )
+    tolerance = pd.Timedelta(seconds=max_lag_seconds) if max_lag_seconds is not None else None
     selected_parts = []
     base_dates = work[["date"]].drop_duplicates().sort_values("date")
 
@@ -74,9 +71,7 @@ def select_decision_points(
         date_targets = pd.DataFrame(
             {
                 "decision_time": times,
-                "_target_ts": pd.to_datetime(
-                    [f"{trading_day} {clock}" for clock in times]
-                ),
+                "_target_ts": pd.to_datetime([f"{trading_day} {clock}" for clock in times]),
             }
         ).sort_values("_target_ts")
 

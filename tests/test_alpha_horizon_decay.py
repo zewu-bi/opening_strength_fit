@@ -1,20 +1,14 @@
 from __future__ import annotations
 
-from pathlib import Path
-import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 
-
-SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
-
-from run_alpha_horizon_decay import (  # noqa: E402
+from opening_strength_fit.commands.horizon_decay import (  # noqa: E402
     HorizonSpec,
     build_summary_tables,
     compute_clickhouse_close_labels,
@@ -168,13 +162,16 @@ class AlphaHorizonDecayTest(unittest.TestCase):
         predictions.loc[1, "buy_price"] = 0.0
 
         with (
-            patch("run_alpha_horizon_decay.get_tick_client", return_value=object()),
             patch(
-                "run_alpha_horizon_decay.query_trading_dates",
+                "opening_strength_fit.commands.horizon_clickhouse_labels.get_tick_client",
+                return_value=object(),
+            ),
+            patch(
+                "opening_strength_fit.commands.horizon_clickhouse_labels.query_trading_dates",
                 return_value=["2022-01-04", "2022-01-05"],
             ),
             patch(
-                "run_alpha_horizon_decay.query_close_prices",
+                "opening_strength_fit.commands.horizon_clickhouse_labels.query_close_prices",
                 return_value=pd.DataFrame(
                     {
                         "date": ["2022-01-05", "2022-01-05"],

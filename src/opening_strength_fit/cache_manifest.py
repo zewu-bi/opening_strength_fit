@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
-from datetime import UTC, datetime
 import hashlib
 import json
+from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 from opening_strength_fit.reports import dataset_summary
-
 
 REQUIRED_LABELED_CACHE_COLUMNS = (
     "date",
@@ -65,14 +64,8 @@ def _column_schema(
     schema_columns: Sequence[tuple[str, str]] | None = None,
 ) -> list[dict[str, str]]:
     if schema_columns is not None:
-        return [
-            {"name": str(name), "dtype": str(dtype)}
-            for name, dtype in schema_columns
-        ]
-    return [
-        {"name": str(column), "dtype": str(dtype)}
-        for column, dtype in frame.dtypes.items()
-    ]
+        return [{"name": str(name), "dtype": str(dtype)} for name, dtype in schema_columns]
+    return [{"name": str(column), "dtype": str(dtype)} for column, dtype in frame.dtypes.items()]
 
 
 def build_cache_manifest(

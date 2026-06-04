@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 import pandas as pd
 
@@ -22,9 +22,7 @@ class CacheManifestTest(unittest.TestCase):
                     "symbol": "000001.SZ",
                     "timestamp": pd.Timestamp("2022-01-04 09:30:00"),
                     "decision_time": "09:30:00",
-                    "decision_target_timestamp": pd.Timestamp(
-                        "2022-01-04 09:30:00"
-                    ),
+                    "decision_target_timestamp": pd.Timestamp("2022-01-04 09:30:00"),
                     "decision_lag_seconds": 0.0,
                     "label": 0.01,
                     "valid_label": True,
@@ -34,9 +32,7 @@ class CacheManifestTest(unittest.TestCase):
                     "symbol": "000002.SZ",
                     "timestamp": pd.Timestamp("2022-01-04 09:31:00"),
                     "decision_time": "09:31:00",
-                    "decision_target_timestamp": pd.Timestamp(
-                        "2022-01-04 09:31:00"
-                    ),
+                    "decision_target_timestamp": pd.Timestamp("2022-01-04 09:31:00"),
                     "decision_lag_seconds": 1.0,
                     "label": None,
                     "valid_label": False,

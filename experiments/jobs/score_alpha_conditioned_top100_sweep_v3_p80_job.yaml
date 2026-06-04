@@ -29,8 +29,7 @@ spec:
                 name: opening-strength-clickhouse
           workingDir: /app/opening_strength_fit
           command:
-            - python
-            - scripts/run_score_risk_sweep.py
+            - osf-run-score-risk-sweep
             - --config
             - /mnt/config/score_alpha_conditioned_top100_sweep_v3_p80.toml
             - --output-dir

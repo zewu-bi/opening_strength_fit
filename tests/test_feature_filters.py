@@ -4,9 +4,8 @@ import unittest
 
 import pandas as pd
 
-from opening_strength_fit.model import feature_columns
 from opening_strength_fit.feature_config import feature_filters_from_config
-from opening_strength_fit.training import _feature_filters_from_config
+from opening_strength_fit.model import feature_columns
 
 
 class FeatureFilterTest(unittest.TestCase):
@@ -65,7 +64,6 @@ class FeatureFilterTest(unittest.TestCase):
         self.assertEqual(filters["drop_columns"], ("volume",))
         self.assertEqual(filters["drop_prefixes"], ("preopen_",))
         self.assertEqual(filters["drop_patterns"], (r"_debug$",))
-        self.assertEqual(_feature_filters_from_config(config), filters)
 
 
 if __name__ == "__main__":

@@ -26,8 +26,7 @@ spec:
                 name: opening-strength-clickhouse
           workingDir: /app/opening_strength_fit
           command:
-            - python
-            - scripts/run_score_risk_sweep.py
+            - osf-run-score-risk-sweep
             - --config
             - experiments/runs/score_learned_risk_sweep_v1.toml
             - --output-dir

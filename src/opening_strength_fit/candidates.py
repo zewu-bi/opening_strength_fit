@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import pandas as pd
 
@@ -18,9 +17,7 @@ def _float_map(values: Mapping[str, object] | None) -> dict[str, float]:
     if not values:
         return {}
     return {
-        str(column): float(value)
-        for column, value in values.items()
-        if value not in (None, "")
+        str(column): float(value) for column, value in values.items() if value not in (None, "")
     }
 
 
@@ -93,9 +90,7 @@ def opening_candidate_mask(
     if rank_min or rank_max:
         group_cols = _resolve_group_cols(frame, rank_group_cols)
         if not group_cols:
-            raise SystemExit(
-                "candidate rank filters need at least one available group column"
-            )
+            raise SystemExit("candidate rank filters need at least one available group column")
         allowed_rank_methods = {"average", "min", "max", "first", "dense"}
         if rank_method not in allowed_rank_methods:
             allowed = ", ".join(sorted(allowed_rank_methods))

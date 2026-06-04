@@ -81,7 +81,7 @@ spec:
               echo "running lgbm_delay2_18m_postopen_mixed_w030_rolling_v1 shard month=${MONTH} index=${INDEX}"
               echo "output_dir=${OUT}"
 
-              python scripts/run_experiment.py \
+              osf-train \
                 --config /mnt/config/lgbm_delay2_18m_postopen_mixed_w030_rolling_v1.toml \
                 --rolling-monthly \
                 --train-months 12 \

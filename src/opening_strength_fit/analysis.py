@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
 import json
 import math
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -10,7 +10,6 @@ import pandas as pd
 
 from opening_strength_fit.io import read_frame, write_frame
 from opening_strength_fit.labels import finite_numeric_series, normalize_return_label_frame
-
 
 KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
 NEXT_CLOSE_LABEL_COL = "alpha_return_next_close"
@@ -23,8 +22,7 @@ def clock_range(start: str, end: str) -> list[str]:
     if end_ts < start_ts:
         raise SystemExit("--end-clock must be >= --start-clock")
     return [
-        timestamp.strftime("%H:%M")
-        for timestamp in pd.date_range(start_ts, end_ts, freq="min")
+        timestamp.strftime("%H:%M") for timestamp in pd.date_range(start_ts, end_ts, freq="min")
     ]
 
 

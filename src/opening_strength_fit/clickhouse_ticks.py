@@ -9,7 +9,6 @@ import pandas as pd
 from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns
 from opening_strength_fit.universe import DEFAULT_A_SHARE_SYMBOL_REGEX
 
-
 DEFAULT_CLICKHOUSE_TICK_HOST = "ch.db.prod.highfortfunds.com"
 DEFAULT_CLICKHOUSE_TICK_PORT = 8123
 DEFAULT_CLICKHOUSE_TICK_TABLE = "stock.tick"
@@ -209,9 +208,7 @@ def _json_default(value: object) -> object:
         return value.item()
     if isinstance(value, np.ndarray):
         return value.tolist()
-    raise TypeError(
-        f"Object of type {value.__class__.__name__} is not JSON serializable"
-    )
+    raise TypeError(f"Object of type {value.__class__.__name__} is not JSON serializable")
 
 
 def normalize_clickhouse_ticks(df: pd.DataFrame) -> pd.DataFrame:
@@ -222,22 +219,21 @@ def normalize_clickhouse_ticks(df: pd.DataFrame) -> pd.DataFrame:
             continue
         if ticks[column].map(lambda value: isinstance(value, (dict, list))).any():
             ticks[column] = ticks[column].map(
-                lambda value: json.dumps(
-                    value,
-                    default=_json_default,
-                    ensure_ascii=False,
-                    sort_keys=True,
+                lambda value: (
+                    json.dumps(
+                        value,
+                        default=_json_default,
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    )
+                    if isinstance(value, (dict, list))
+                    else value
                 )
-                if isinstance(value, (dict, list))
-                else value
             )
     return ticks
 
 
 def field_description_frame() -> pd.DataFrame:
     return pd.DataFrame(
-        [
-            {"field": field, "description": desc}
-            for field, desc in TICK_FIELD_DESC.items()
-        ]
+        [{"field": field, "description": desc} for field, desc in TICK_FIELD_DESC.items()]
     )

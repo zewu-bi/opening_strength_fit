@@ -23,8 +23,7 @@ spec:
           imagePullPolicy: Always
           workingDir: /app/opening_strength_fit
           command:
-            - python
-            - scripts/build_target_label_cache.py
+            - osf-build-target-label-cache
             - --config
             - experiments/runs/build_delay2_2021_mixed_w030_target_v1.toml
             - --output-dir

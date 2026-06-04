@@ -26,8 +26,7 @@ spec:
                 name: opening-strength-clickhouse
           workingDir: /app/opening_strength_fit
           command:
-            - python
-            - scripts/run_gap_risk_attribution.py
+            - osf-run-gap-risk-attribution
             - --config
             - experiments/runs/gap_risk_penalized_attribution_v1.toml
             - --output-dir

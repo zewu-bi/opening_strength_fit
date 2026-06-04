@@ -1,21 +1,22 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 import pandas as pd
 
-from opening_strength_fit.rolling import DateSplit
 from opening_strength_fit.reports import metrics_by_year_from_windows
+from opening_strength_fit.rolling import DateSplit
 from opening_strength_fit.stock_pool import (
     apply_stock_pool_cli_overrides,
     load_stock_pool,
     parse_stock_pool_location,
     stock_pool_membership_mask,
 )
-from opening_strength_fit.training import _evaluation_settings, _fit_predict_split
+from opening_strength_fit.training_modeling import fit_predict_split
+from opening_strength_fit.training_windows import build_evaluation_settings
 
 
 class StockPoolTest(unittest.TestCase):
@@ -159,7 +160,7 @@ class StockPoolTest(unittest.TestCase):
         args = argparse.Namespace(feature_limit=None, top_n=None)
 
         with tempfile.TemporaryDirectory() as directory:
-            predictions, metrics_row, _ = _fit_predict_split(
+            predictions, metrics_row, _ = fit_predict_split(
                 labeled=labeled,
                 split=DateSplit(
                     train_dates=["2022-01-03", "2022-01-04"],
@@ -170,7 +171,7 @@ class StockPoolTest(unittest.TestCase):
                 args=args,
                 config=config,
                 alpha=1.0,
-                evaluation_settings=_evaluation_settings(config, args),
+                evaluation_settings=build_evaluation_settings(config, args),
                 stock_pool=pool,
             )
 

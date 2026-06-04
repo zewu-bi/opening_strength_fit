@@ -42,11 +42,7 @@ def safe_price_return(
     buy_values = finite_numeric_series(buy_price, index=exit_values.index)
     with np.errstate(divide="ignore", invalid="ignore"):
         returns = exit_values / buy_values - 1.0 - float(fee_bps) / 10_000.0
-    valid = (
-        np.isfinite(returns)
-        & exit_values.gt(0)
-        & buy_values.gt(0)
-    )
+    valid = np.isfinite(returns) & exit_values.gt(0) & buy_values.gt(0)
     return returns.where(valid, np.nan)
 
 
@@ -89,9 +85,7 @@ def _future_values(
     target_timestamp_col: str | None = None,
     max_gap_seconds: int | None = None,
 ) -> pd.DataFrame:
-    tolerance = (
-        pd.Timedelta(seconds=max_gap_seconds) if max_gap_seconds is not None else None
-    )
+    tolerance = pd.Timedelta(seconds=max_gap_seconds) if max_gap_seconds is not None else None
     aligned_parts = []
     target_col = target_timestamp_col or timestamp_col
 
@@ -105,8 +99,7 @@ def _future_values(
         left = pd.DataFrame(
             {
                 "_row": group.index.to_numpy(),
-                "_target_ts": group[target_col]
-                + pd.to_timedelta(seconds, unit="s"),
+                "_target_ts": group[target_col] + pd.to_timedelta(seconds, unit="s"),
             }
         ).dropna(subset=["_target_ts"])
         left["_target_ts"] = pd.to_datetime(left["_target_ts"]).astype("datetime64[ns]")
@@ -170,9 +163,7 @@ def _future_tick_values(
         group = group.sort_values(timestamp_col)
         shifted = group[[timestamp_col, *value_columns]].shift(-offset_ticks)
         shifted.index = group.index
-        timestamps = pd.to_datetime(group[timestamp_col], errors="coerce").astype(
-            "datetime64[ns]"
-        )
+        timestamps = pd.to_datetime(group[timestamp_col], errors="coerce").astype("datetime64[ns]")
         entry_timestamps = pd.to_datetime(
             shifted[timestamp_col],
             errors="coerce",
@@ -183,9 +174,9 @@ def _future_tick_values(
             float(offset_ticks),
             np.nan,
         )
-        shifted[f"_{suffix}_delay_seconds"] = (
-            entry_timestamps - timestamps
-        ) / pd.Timedelta(seconds=1)
+        shifted[f"_{suffix}_delay_seconds"] = (entry_timestamps - timestamps) / pd.Timedelta(
+            seconds=1
+        )
         if offset_ticks == 0:
             max_tick_gap = pd.Series(np.nan, index=group.index, dtype="float64")
             max_tick_gap.loc[valid_entry] = 0.0
@@ -362,9 +353,7 @@ def build_trade_labels(
         allowed = {str(status).upper() for status in tradable_statuses}
         work["valid_label"] &= work["status"].astype(str).str.upper().isin(allowed)
         if "entry_status" in work.columns:
-            work["valid_label"] &= (
-                work["entry_status"].astype(str).str.upper().isin(allowed)
-            )
+            work["valid_label"] &= work["entry_status"].astype(str).str.upper().isin(allowed)
 
     return filter_time_range(
         work,

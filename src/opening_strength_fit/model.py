@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -13,7 +13,6 @@ from sklearn.preprocessing import StandardScaler
 
 from opening_strength_fit.evaluation import resolve_group_cols
 from opening_strength_fit.schema import PRICE_LEVELS
-
 
 NON_FEATURE_COLUMNS = {
     "date",
@@ -140,9 +139,7 @@ def feature_columns(
     numeric_columns = df.select_dtypes(include=[np.number, "bool"]).columns
     include_columns_set = set(include_columns)
     drop_columns_set = set(drop_columns)
-    has_include_filter = bool(
-        include_columns_set or include_prefixes or include_patterns
-    )
+    has_include_filter = bool(include_columns_set or include_prefixes or include_patterns)
     features = []
     for column in numeric_columns:
         if column in NON_FEATURE_COLUMNS:
@@ -401,9 +398,7 @@ def predict_frame(model: RidgePredictionModel, frame: pd.DataFrame) -> pd.DataFr
     ]
     columns = list(dict.fromkeys(columns))
     columns.extend(
-        column
-        for column in PREDICTION_CONTEXT_COLUMNS
-        if column in frame and column not in columns
+        column for column in PREDICTION_CONTEXT_COLUMNS if column in frame and column not in columns
     )
     out = frame[columns].copy()
     x = frame[model.features].replace([np.inf, -np.inf], np.nan)
@@ -469,13 +464,9 @@ def grouped_prediction_metrics(
                     "rows": len(frame),
                     "ic": corr(frame[label_col], frame[score_col], "pearson"),
                     "rank_ic": corr(frame[label_col], frame[score_col], "spearman"),
-                    "mean_label": (
-                        float(frame[label_col].mean()) if len(frame) else float("nan")
-                    ),
+                    "mean_label": (float(frame[label_col].mean()) if len(frame) else float("nan")),
                     "win_rate": (
-                        float((frame[label_col] > 0).mean())
-                        if len(frame)
-                        else float("nan")
+                        float((frame[label_col] > 0).mean()) if len(frame) else float("nan")
                     ),
                 }
             ]

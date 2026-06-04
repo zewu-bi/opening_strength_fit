@@ -1,18 +1,14 @@
 from __future__ import annotations
 
-from pathlib import Path
-import sys
 import unittest
+from pathlib import Path
 
+from opening_strength_fit.commands.k8s_rendering import (
+    _k8s_job_name,  # noqa: E402
+    render_sharded_training_job,  # noqa: E402
+    training_command,  # noqa: E402
+)
 from opening_strength_fit.k8s import KUBERNETES_NAME_LIMIT, temporary_pod_name
-
-SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
-
-from render_k8s_job import _k8s_job_name  # noqa: E402
-from render_k8s_job import render_sharded_training_job  # noqa: E402
-from render_k8s_job import training_script  # noqa: E402
 
 
 class K8sHelperTest(unittest.TestCase):
@@ -79,7 +75,7 @@ class K8sHelperTest(unittest.TestCase):
     def test_next_close_label_cache_uses_cache_builder_script(self) -> None:
         config = {"run": {"kind": "next_close_label_cache"}}
 
-        self.assertEqual(training_script(config), "scripts/build_next_close_labels.py")
+        self.assertEqual(training_command(config), "osf-build-next-close-labels")
 
 
 if __name__ == "__main__":

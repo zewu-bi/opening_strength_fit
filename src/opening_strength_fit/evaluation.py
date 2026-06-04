@@ -3,7 +3,6 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-
 SELECTION_GROUPS = {
     "global": (),
     "daily": ("date",),
@@ -96,19 +95,11 @@ def top_score_trades(
         return frame
 
     if not group_cols:
-        return (
-            frame.sort_values(score_col, ascending=False)
-            .head(top_n)
-            .reset_index(drop=True)
-        )
+        return frame.sort_values(score_col, ascending=False).head(top_n).reset_index(drop=True)
 
     resolved_group_cols = resolve_group_cols(frame, group_cols)
     if not resolved_group_cols:
-        return (
-            frame.sort_values(score_col, ascending=False)
-            .head(top_n)
-            .reset_index(drop=True)
-        )
+        return frame.sort_values(score_col, ascending=False).head(top_n).reset_index(drop=True)
 
     selected = []
     for _, group in frame.groupby(list(resolved_group_cols), sort=False):

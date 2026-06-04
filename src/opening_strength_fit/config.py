@@ -1,20 +1,24 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
 import tomllib
+from pathlib import Path
+from typing import Any, cast
 
 from opening_strength_fit.sampling import parse_clock_times
 
 
-def load_toml(path: str | Path) -> dict:
+def load_toml(path: str | Path) -> dict[str, Any]:
     with Path(path).open("rb") as file:
         return tomllib.load(file)
 
 
-def config_value(config: dict, section: str, key: str, default):
-    value = config.get(section, {}).get(key, default)
-    return default if value is None else value
+def config_value[T](config: dict[str, Any], section: str, key: str, default: T) -> T:
+    values = config.get(section, {})
+    if not isinstance(values, dict):
+        return default
+    value = values.get(key, default)
+    return default if value is None else cast(T, value)
 
 
 def config_int(config: dict, section: str, key: str, default: int) -> int:

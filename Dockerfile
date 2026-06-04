@@ -6,7 +6,6 @@ ENV PIP_NO_CACHE_DIR=1
 ENV PIP_DEFAULT_TIMEOUT=120
 ENV PIP_RETRIES=10
 ENV TZ=Asia/Shanghai
-ENV PYTHONPATH=/app/opening_strength_fit/src
 
 WORKDIR /app/opening_strength_fit
 
@@ -24,4 +23,4 @@ RUN test -n "$CACHE_BUST"
 
 COPY . .
 
-CMD ["python", "scripts/run_experiment.py", "--help"]
+CMD ["osf-train", "--help"]

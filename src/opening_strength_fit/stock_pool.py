@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import base64
-from io import BytesIO
 import json
 import os
+from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +13,6 @@ import pandas as pd
 
 from opening_strength_fit.config import config_bool, config_int, config_str
 from opening_strength_fit.universe import normalize_symbols
-
 
 CEPH_ENDPOINTS = {
     "ssd": "http://ceph-s3-ssd.prod.highfortfunds.com",

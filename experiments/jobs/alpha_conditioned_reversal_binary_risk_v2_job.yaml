@@ -26,8 +26,7 @@ spec:
                 name: opening-strength-clickhouse
           workingDir: /app/opening_strength_fit
           command:
-            - python
-            - scripts/run_learned_risk_layer.py
+            - osf-run-learned-risk-layer
             - --config
             - experiments/runs/alpha_conditioned_reversal_binary_risk_v2.toml
             - --output-dir

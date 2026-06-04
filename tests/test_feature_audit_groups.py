@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-from pathlib import Path
-import sys
 import unittest
 
-
-SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
-
-from audit_feature_dependence import _feature_group_name, _feature_groups  # noqa: E402
+from opening_strength_fit.commands.feature_dependence_audit import (  # noqa: E402
+    _feature_group_name,
+    _feature_groups,
+)
 
 
 class FeatureAuditGroupTest(unittest.TestCase):

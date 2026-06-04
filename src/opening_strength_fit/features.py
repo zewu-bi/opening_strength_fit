@@ -66,10 +66,7 @@ def add_order_book_features(ticks: pd.DataFrame) -> pd.DataFrame:
     if "limit_up_price" in out.columns and "ask_price_1" in out.columns:
         limit_up = _numeric_series(out["limit_up_price"])
         ask1 = _numeric_series(out["ask_price_1"])
-        out["ask1_to_limit_up_bps"] = (
-            safe_divide(limit_up - ask1, ask1)
-            * 10_000
-        )
+        out["ask1_to_limit_up_bps"] = safe_divide(limit_up - ask1, ask1) * 10_000
 
     for level in levels:
         bid_price = bid_price_col(level)
@@ -77,17 +74,11 @@ def add_order_book_features(ticks: pd.DataFrame) -> pd.DataFrame:
         if level > 1 and bid_price in out.columns and "bid_price_1" in out.columns:
             bid1 = _numeric_series(out["bid_price_1"])
             bid_level = _numeric_series(out[bid_price])
-            out[f"bid_gap_{level}_bps"] = (
-                safe_divide(bid1 - bid_level, bid1)
-                * 10_000
-            )
+            out[f"bid_gap_{level}_bps"] = safe_divide(bid1 - bid_level, bid1) * 10_000
         if level > 1 and ask_price in out.columns and "ask_price_1" in out.columns:
             ask1 = _numeric_series(out["ask_price_1"])
             ask_level = _numeric_series(out[ask_price])
-            out[f"ask_gap_{level}_bps"] = (
-                safe_divide(ask_level - ask1, ask1)
-                * 10_000
-            )
+            out[f"ask_gap_{level}_bps"] = safe_divide(ask_level - ask1, ask1) * 10_000
     return out
 
 
@@ -152,9 +143,7 @@ def add_postopen_decision_features(
 ) -> pd.DataFrame:
     out = ensure_timestamp_columns(frame)
     time_col = (
-        "decision_target_timestamp"
-        if "decision_target_timestamp" in out.columns
-        else "timestamp"
+        "decision_target_timestamp" if "decision_target_timestamp" in out.columns else "timestamp"
     )
     out = out.sort_values(["date", "symbol", time_col]).reset_index(drop=True)
     group = out.groupby(["date", "symbol"], sort=False)
@@ -164,9 +153,7 @@ def add_postopen_decision_features(
         out["date"].astype(str) + " 09:30:00",
         errors="coerce",
     )
-    out["postopen_minutes_since_0930"] = (
-        (timestamp - open_timestamp).dt.total_seconds() / 60.0
-    )
+    out["postopen_minutes_since_0930"] = (timestamp - open_timestamp).dt.total_seconds() / 60.0
 
     dynamic_columns = [
         "ask_volume_1",
@@ -205,10 +192,7 @@ def add_postopen_decision_features(
             out["bid_volume_1"],
             out["bid_depth_10"],
         )
-    if (
-        "postopen_bid1_depth_share" in out.columns
-        and "postopen_ask1_depth_share" in out.columns
-    ):
+    if "postopen_bid1_depth_share" in out.columns and "postopen_ask1_depth_share" in out.columns:
         out["postopen_top_depth_share_imbalance"] = (
             out["postopen_bid1_depth_share"] - out["postopen_ask1_depth_share"]
         )
@@ -224,8 +208,8 @@ def add_postopen_decision_features(
         out["postopen_bid_gap_mean_2_10"] = out[present_bid_gaps].mean(axis=1)
         out["postopen_bid_gap_std_2_10"] = out[present_bid_gaps].std(axis=1)
     if "spread_bps" in out.columns and "depth_imbalance_1" in out.columns:
-        out["postopen_spread_x_imbalance_1"] = (
-            _numeric_series(out["spread_bps"]) * _numeric_series(out["depth_imbalance_1"])
+        out["postopen_spread_x_imbalance_1"] = _numeric_series(out["spread_bps"]) * _numeric_series(
+            out["depth_imbalance_1"]
         )
     if "volume_diff_1t" in out.columns and "ask_volume_1" in out.columns:
         out["postopen_trade_vs_ask1_queue"] = safe_divide(
@@ -421,9 +405,8 @@ def _add_depth_concentration_features(builder: _PostOpenV2Builder) -> None:
                 builder.series("postopen_v2_bid_depth_10"),
             ),
         )
-    if (
-        builder.has("postopen_v2_bid_depth_concentration_3_10")
-        and builder.has("postopen_v2_ask_depth_concentration_3_10")
+    if builder.has("postopen_v2_bid_depth_concentration_3_10") and builder.has(
+        "postopen_v2_ask_depth_concentration_3_10"
     ):
         builder.add(
             "postopen_v2_depth_concentration_imbalance_3_10",
@@ -493,8 +476,7 @@ def _add_trade_impact_features(builder: _PostOpenV2Builder) -> None:
                 f"postopen_v2_trade_turnover_to_depth_notional_{ticks}t",
                 safe_divide(
                     turnover,
-                    _column_values(out, "ask_depth_10")
-                    * _column_values(out, "ask_price_1"),
+                    _column_values(out, "ask_depth_10") * _column_values(out, "ask_price_1"),
                 ),
             )
         if vwap_col_name in out.columns:

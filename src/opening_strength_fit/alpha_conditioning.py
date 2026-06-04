@@ -7,8 +7,6 @@ import pandas as pd
 
 from opening_strength_fit.config import (
     config_float,
-    config_int,
-    config_optional_int,
     config_str,
     config_value,
 )
@@ -18,7 +16,6 @@ from opening_strength_fit.feature_config import (
 )
 from opening_strength_fit.labels import finite_numeric_series
 from opening_strength_fit.model import RidgePredictionModel, fit_lightgbm_frame
-
 
 KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
 
@@ -157,9 +154,11 @@ def alpha_conditioned_reversal_risk(
 
     groupers = [labeled["date"], labeled["decision_target_timestamp"]]
     alpha_rank = finite_numeric_series(labeled["candidate_alpha_rank"])
-    next_rank = finite_numeric_series(labeled["alpha_return_next_close"]).groupby(
-        groupers
-    ).rank(method="average", pct=True)
+    next_rank = (
+        finite_numeric_series(labeled["alpha_return_next_close"])
+        .groupby(groupers)
+        .rank(method="average", pct=True)
+    )
     candidate_min = (
         config_float(config, "risk_layer", "candidate_alpha_rank_min", 0.80)
         if candidate_alpha_rank_min is None
@@ -168,10 +167,14 @@ def alpha_conditioned_reversal_risk(
     candidate = alpha_rank.ge(candidate_min)
 
     form = (
-        config_str(config, "risk_layer", "target_form", "binary_next_low")
-        if target_form is None
-        else target_form
-    ).strip().lower()
+        (
+            config_str(config, "risk_layer", "target_form", "binary_next_low")
+            if target_form is None
+            else target_form
+        )
+        .strip()
+        .lower()
+    )
     rank_max = (
         config_float(config, "risk_layer", "next_rank_max", 0.40)
         if next_rank_max is None

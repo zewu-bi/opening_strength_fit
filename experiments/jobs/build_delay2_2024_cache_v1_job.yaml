@@ -29,8 +29,7 @@ spec:
                 name: opening-strength-clickhouse
           workingDir: /app/opening_strength_fit
           command:
-            - python
-            - scripts/build_labeled_cache.py
+            - osf-build-labeled-cache
             - --config
             - /mnt/config/build_delay2_2024_cache_v1.toml
             - --output-dir

@@ -7,24 +7,12 @@ from opening_strength_fit.config import config_int, config_list
 
 def feature_filters_from_config(config: dict) -> dict[str, tuple[str, ...]]:
     return {
-        "include_columns": tuple(
-            config_list(config, "features", "include_feature_columns", [])
-        ),
-        "include_prefixes": tuple(
-            config_list(config, "features", "include_feature_prefixes", [])
-        ),
-        "include_patterns": tuple(
-            config_list(config, "features", "include_feature_regexes", [])
-        ),
-        "drop_columns": tuple(
-            config_list(config, "features", "drop_feature_columns", [])
-        ),
-        "drop_prefixes": tuple(
-            config_list(config, "features", "drop_feature_prefixes", [])
-        ),
-        "drop_patterns": tuple(
-            config_list(config, "features", "drop_feature_regexes", [])
-        ),
+        "include_columns": tuple(config_list(config, "features", "include_feature_columns", [])),
+        "include_prefixes": tuple(config_list(config, "features", "include_feature_prefixes", [])),
+        "include_patterns": tuple(config_list(config, "features", "include_feature_regexes", [])),
+        "drop_columns": tuple(config_list(config, "features", "drop_feature_columns", [])),
+        "drop_prefixes": tuple(config_list(config, "features", "drop_feature_prefixes", [])),
+        "drop_patterns": tuple(config_list(config, "features", "drop_feature_regexes", [])),
     }
 
 

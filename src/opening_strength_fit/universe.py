@@ -4,10 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-
-DEFAULT_A_SHARE_SYMBOL_REGEX = (
-    r"^(?:(?:00|30)\d{4}\.SZ|(?:60|68)\d{4}\.SH)$"
-)
+DEFAULT_A_SHARE_SYMBOL_REGEX = r"^(?:(?:00|30)\d{4}\.SZ|(?:60|68)\d{4}\.SH)$"
 
 
 def normalize_symbols(symbols: pd.Series) -> pd.Series:

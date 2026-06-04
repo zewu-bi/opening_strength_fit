@@ -77,7 +77,7 @@ spec:
               echo "running lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1 shard month=${MONTH} index=${INDEX}"
               echo "output_dir=${OUT}"
 
-              python scripts/run_experiment.py \
+              osf-train \
                 --config experiments/runs/lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1.toml \
                 --rolling-monthly \
                 --train-months 36 \

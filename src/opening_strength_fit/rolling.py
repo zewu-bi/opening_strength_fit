@@ -43,8 +43,7 @@ def chronological_date_split(
         test_dates = [
             date
             for date in dates
-            if date >= test_start_date
-            and (test_end_date is None or date <= test_end_date)
+            if date >= test_start_date and (test_end_date is None or date <= test_end_date)
         ]
     else:
         cut = max(1, min(len(dates) - 1, int(len(dates) * train_fraction)))
@@ -81,19 +80,13 @@ def annual_rolling_date_splits(
 
     splits: list[DateSplit] = []
     for test_year in range(int(first_test_year), int(last_test_year) + 1):
-        train_years = [
-            year for year in years if train_start_year <= year < test_year
-        ]
+        train_years = [year for year in years if train_start_year <= year < test_year]
         if len(train_years) < min_train_years:
             continue
         train_dates = [
-            date
-            for date in dates
-            if train_start_year <= int(date_years.loc[date]) < test_year
+            date for date in dates if train_start_year <= int(date_years.loc[date]) < test_year
         ]
-        test_dates = [
-            date for date in dates if int(date_years.loc[date]) == test_year
-        ]
+        test_dates = [date for date in dates if int(date_years.loc[date]) == test_year]
         if train_dates and test_dates:
             splits.append(DateSplit(train_dates=train_dates, test_dates=test_dates))
 
@@ -123,9 +116,7 @@ def monthly_rolling_date_splits(
 
     default_first_index = min(max(int(train_months), 1), len(months) - 1)
     first_period = (
-        pd.Period(first_test_month, freq="M")
-        if first_test_month
-        else months[default_first_index]
+        pd.Period(first_test_month, freq="M") if first_test_month else months[default_first_index]
     )
     last_period = pd.Period(last_test_month, freq="M") if last_test_month else months[-1]
 
@@ -139,9 +130,7 @@ def monthly_rolling_date_splits(
             if train_start <= pd.Period(pd.Timestamp(date), freq="M") <= train_end
         ]
         test_dates = [
-            date
-            for date in dates
-            if pd.Period(pd.Timestamp(date), freq="M") == test_month
+            date for date in dates if pd.Period(pd.Timestamp(date), freq="M") == test_month
         ]
         if train_dates and test_dates:
             splits.append(DateSplit(train_dates=train_dates, test_dates=test_dates))

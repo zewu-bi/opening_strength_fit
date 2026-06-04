@@ -4,7 +4,6 @@ from collections.abc import Mapping
 
 import pandas as pd
 
-
 PREOPEN_START = "09:15:00"
 PREOPEN_END = "09:25:30"
 OPEN_SAMPLE_START = "09:30:00"
@@ -165,9 +164,7 @@ def ensure_timestamp_columns(
     if date_col not in out.columns:
         out[date_col] = out[timestamp_col].dt.strftime("%Y-%m-%d")
     else:
-        out[date_col] = pd.to_datetime(out[date_col].astype(str)).dt.strftime(
-            "%Y-%m-%d"
-        )
+        out[date_col] = pd.to_datetime(out[date_col].astype(str)).dt.strftime("%Y-%m-%d")
 
     out[time_col] = out[timestamp_col].dt.strftime("%H:%M:%S")
     out[symbol_col] = out[symbol_col].astype(str)

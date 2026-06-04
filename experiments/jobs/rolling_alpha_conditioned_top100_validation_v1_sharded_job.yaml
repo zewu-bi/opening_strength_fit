@@ -63,7 +63,7 @@ spec:
               echo "running rolling_alpha_conditioned_top100_validation_v1 shard month=${MONTH} index=${INDEX}"
               echo "output_dir=${OUT}"
 
-              python scripts/run_alpha_conditioned_rolling_validation.py \
+              osf-run-alpha-conditioned-rolling-validation \
                 --config experiments/runs/rolling_alpha_conditioned_top100_validation_v1.toml \
                 --rolling-monthly \
                 --train-months 12 \

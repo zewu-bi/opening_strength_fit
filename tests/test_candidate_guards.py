@@ -10,9 +10,9 @@ from opening_strength_fit.candidates import (
     opening_candidate_mask,
 )
 from opening_strength_fit.model import feature_columns, fit_lightgbm_frame
-from opening_strength_fit.training import (
-    _apply_guard_features_from_config,
-    _apply_sample_weight_from_config,
+from opening_strength_fit.training_labeled import (
+    apply_guard_features_from_config,
+    apply_sample_weight_from_config,
 )
 
 
@@ -71,7 +71,7 @@ class CandidateGuardTest(unittest.TestCase):
             }
         }
 
-        weighted = _apply_sample_weight_from_config(frame, config)
+        weighted = apply_sample_weight_from_config(frame, config)
 
         self.assertEqual(weighted["sample_weight"].tolist(), [0.25, 1.0, 1.0, 0.25])
         self.assertTrue(
@@ -127,7 +127,7 @@ class CandidateGuardTest(unittest.TestCase):
             }
         }
 
-        out = _apply_guard_features_from_config(frame, config)
+        out = apply_guard_features_from_config(frame, config)
 
         self.assertEqual(
             out["guard_heat_rank_pct"].round(2).tolist(),

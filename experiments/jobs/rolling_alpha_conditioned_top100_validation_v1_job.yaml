@@ -29,8 +29,7 @@ spec:
                 name: opening-strength-clickhouse
           workingDir: /app/opening_strength_fit
           command:
-            - python
-            - /mnt/config/run_alpha_conditioned_rolling_validation.py
+            - osf-run-alpha-conditioned-rolling-validation
             - --config
             - /mnt/config/rolling_alpha_conditioned_top100_validation_v1.toml
             - --output-dir

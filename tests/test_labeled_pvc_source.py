@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import tempfile
 import unittest
+from pathlib import Path
 
 import pandas as pd
 
-from opening_strength_fit.training import _load_labeled_pvc_frame
-from opening_strength_fit.training import _resolved_data_source
+from opening_strength_fit.training_data import load_labeled_pvc_frame, resolve_data_source
 
 
 class LabeledPvcSourceTest(unittest.TestCase):
@@ -33,7 +32,7 @@ class LabeledPvcSourceTest(unittest.TestCase):
                 "universe": {"enabled": False},
             }
 
-            labeled = _load_labeled_pvc_frame(args, config)
+            labeled = load_labeled_pvc_frame(args, config)
 
         self.assertEqual(len(labeled), 1)
         self.assertIn("label", labeled.columns)
@@ -49,9 +48,7 @@ class LabeledPvcSourceTest(unittest.TestCase):
                         "symbol": "000001.SZ",
                         "timestamp": pd.Timestamp("2022-01-04 09:30:00"),
                         "decision_time": "09:30:00",
-                        "decision_target_timestamp": pd.Timestamp(
-                            "2022-01-04 09:30:00"
-                        ),
+                        "decision_target_timestamp": pd.Timestamp("2022-01-04 09:30:00"),
                         "decision_lag_seconds": 0.0,
                         "label": 0.01,
                         "valid_label": True,
@@ -61,9 +58,7 @@ class LabeledPvcSourceTest(unittest.TestCase):
                         "symbol": "000001.SZ",
                         "timestamp": pd.Timestamp("2022-01-04 09:31:01"),
                         "decision_time": "09:31:00",
-                        "decision_target_timestamp": pd.Timestamp(
-                            "2022-01-04 09:31:00"
-                        ),
+                        "decision_target_timestamp": pd.Timestamp("2022-01-04 09:31:00"),
                         "decision_lag_seconds": 1.0,
                         "label": 0.02,
                         "valid_label": True,
@@ -82,7 +77,7 @@ class LabeledPvcSourceTest(unittest.TestCase):
                 },
             }
 
-            labeled = _load_labeled_pvc_frame(args, config)
+            labeled = load_labeled_pvc_frame(args, config)
 
         self.assertEqual(len(labeled), 1)
         self.assertEqual(labeled.iloc[0]["decision_time"], "09:31:00")
@@ -138,7 +133,7 @@ class LabeledPvcSourceTest(unittest.TestCase):
                 },
             }
 
-            labeled = _load_labeled_pvc_frame(args, config)
+            labeled = load_labeled_pvc_frame(args, config)
 
         self.assertEqual(len(labeled), 1)
         self.assertAlmostEqual(
@@ -159,9 +154,7 @@ class LabeledPvcSourceTest(unittest.TestCase):
                         "symbol": "000001.SZ",
                         "timestamp": pd.Timestamp("2022-01-04 09:31:00"),
                         "decision_time": "09:31:00",
-                        "decision_target_timestamp": pd.Timestamp(
-                            "2022-01-04 09:31:00"
-                        ),
+                        "decision_target_timestamp": pd.Timestamp("2022-01-04 09:31:00"),
                         "decision_lag_seconds": 0.0,
                         "label": 0.01,
                         "target_label": 0.2,
@@ -185,7 +178,7 @@ class LabeledPvcSourceTest(unittest.TestCase):
                 "model": {"target_col": "target_label"},
             }
 
-            labeled = _load_labeled_pvc_frame(args, config)
+            labeled = load_labeled_pvc_frame(args, config)
 
         self.assertIn("keep_feature", labeled.columns)
         self.assertIn("target_label", labeled.columns)
@@ -244,7 +237,7 @@ class LabeledPvcSourceTest(unittest.TestCase):
                 "model": {"target_col": "target_label"},
             }
 
-            labeled = _load_labeled_pvc_frame(args, config)
+            labeled = load_labeled_pvc_frame(args, config)
 
         self.assertAlmostEqual(
             labeled.iloc[0]["postopen_v2_ask_volume_1_diff_1m"],
@@ -263,9 +256,7 @@ class LabeledPvcSourceTest(unittest.TestCase):
                         "symbol": "000001.SZ",
                         "timestamp": pd.Timestamp("2020-09-01 09:31:00"),
                         "decision_time": "09:31:00",
-                        "decision_target_timestamp": pd.Timestamp(
-                            "2020-09-01 09:31:00"
-                        ),
+                        "decision_target_timestamp": pd.Timestamp("2020-09-01 09:31:00"),
                         "decision_lag_seconds": 0.0,
                         "label": 0.01,
                         "target_label": 0.2,
@@ -282,9 +273,7 @@ class LabeledPvcSourceTest(unittest.TestCase):
                         "symbol": "000001.SZ",
                         "timestamp": pd.Timestamp("2021-09-30 09:31:00"),
                         "decision_time": "09:31:00",
-                        "decision_target_timestamp": pd.Timestamp(
-                            "2021-09-30 09:31:00"
-                        ),
+                        "decision_target_timestamp": pd.Timestamp("2021-09-30 09:31:00"),
                         "decision_lag_seconds": 0.0,
                         "label": 0.03,
                         "target_label": 0.4,
@@ -311,7 +300,7 @@ class LabeledPvcSourceTest(unittest.TestCase):
                 "model": {"target_col": "target_label"},
             }
 
-            labeled = _load_labeled_pvc_frame(args, config)
+            labeled = load_labeled_pvc_frame(args, config)
 
         self.assertEqual(labeled["date"].tolist(), ["2020-09-01", "2021-09-30"])
         self.assertEqual(labeled["keep_feature"].tolist(), [1.0, 2.0])
@@ -346,7 +335,7 @@ class LabeledPvcSourceTest(unittest.TestCase):
                 "model": {"target_col": "target_label"},
             }
 
-            labeled = _load_labeled_pvc_frame(args, config)
+            labeled = load_labeled_pvc_frame(args, config)
 
         self.assertEqual(str(labeled["keep_feature"].dtype), "float32")
         self.assertEqual(str(labeled["target_label"].dtype), "float32")
@@ -401,7 +390,7 @@ class LabeledPvcSourceTest(unittest.TestCase):
                 "universe": {"enabled": False},
             }
 
-            labeled = _load_labeled_pvc_frame(args, config)
+            labeled = load_labeled_pvc_frame(args, config)
 
         self.assertEqual(labeled["date"].tolist(), ["2020-09-01", "2021-09-30"])
 
@@ -409,13 +398,13 @@ class LabeledPvcSourceTest(unittest.TestCase):
         args = argparse.Namespace(input=None, labeled_input=None, data_source=None)
         config = {"data": {"source": "labeled_pvc"}}
 
-        self.assertEqual(_resolved_data_source(args, config, ""), "labeled_pvc")
+        self.assertEqual(resolve_data_source(args, config, ""), "labeled_pvc")
 
     def test_auto_source_prefers_data_labeled_path(self) -> None:
         args = argparse.Namespace(input=None, labeled_input=None, data_source=None)
         config = {"data": {"source": "auto", "labeled_path": "/mnt/cache/labeled.parquet"}}
 
-        self.assertEqual(_resolved_data_source(args, config, ""), "labeled_pvc")
+        self.assertEqual(resolve_data_source(args, config, ""), "labeled_pvc")
 
 
 if __name__ == "__main__":

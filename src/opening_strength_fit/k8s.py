@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date
 import hashlib
 import json
-from pathlib import Path
 import subprocess
+from dataclasses import dataclass
+from datetime import date
+from pathlib import Path
 
 from opening_strength_fit.config import config_value, load_toml, run_id, slug
-
 
 DEFAULT_IMAGE = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:latest"
 KUBERNETES_NAME_LIMIT = 63

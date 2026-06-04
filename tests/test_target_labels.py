@@ -70,10 +70,7 @@ class TargetLabelTest(unittest.TestCase):
             {
                 "date": ["2022-01-04"] * 3,
                 "symbol": [f"00000{idx}.SZ" for idx in range(3)],
-                "decision_target_timestamp": [
-                    pd.Timestamp("2022-01-04 09:31:00")
-                ]
-                * 3,
+                "decision_target_timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 3,
                 "timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 3,
                 "label": [1.0, 2.0, 3.0],
                 "alpha_return_next_close": [30.0, 10.0, 20.0],
@@ -102,10 +99,7 @@ class TargetLabelTest(unittest.TestCase):
             {
                 "date": ["2022-01-04"] * 3,
                 "symbol": [f"00000{idx}.SZ" for idx in range(3)],
-                "decision_target_timestamp": [
-                    pd.Timestamp("2022-01-04 09:31:00")
-                ]
-                * 3,
+                "decision_target_timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 3,
                 "timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 3,
                 "label": [1.0, 2.0, 3.0],
                 "alpha_return_next_close": [30.0, None, 20.0],
@@ -149,10 +143,7 @@ class TargetLabelTest(unittest.TestCase):
             {
                 "date": ["2022-01-04"] * 5,
                 "symbol": [f"00000{idx}.SZ" for idx in range(5)],
-                "decision_target_timestamp": [
-                    pd.Timestamp("2022-01-04 09:31:00")
-                ]
-                * 5,
+                "decision_target_timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 5,
                 "timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 5,
                 "heat": [-2.0, -1.0, 0.0, 1.0, 2.0],
                 "label": [-0.21, -0.09, 0.02, 0.11, 0.19],
@@ -179,10 +170,7 @@ class TargetLabelTest(unittest.TestCase):
             {
                 "date": ["2022-01-04"] * 5,
                 "symbol": [f"00000{idx}.SZ" for idx in range(5)],
-                "decision_target_timestamp": [
-                    pd.Timestamp("2022-01-04 09:31:00")
-                ]
-                * 5,
+                "decision_target_timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 5,
                 "timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 5,
                 "heat": [-2.0, -1.0, 0.0, 1.0, 2.0],
                 "label": [-0.21, -0.09, 0.02, 0.11, 0.19],
@@ -220,10 +208,7 @@ class TargetLabelTest(unittest.TestCase):
             {
                 "date": ["2022-01-04"] * 3,
                 "symbol": [f"00000{idx}.SZ" for idx in range(3)],
-                "decision_target_timestamp": [
-                    pd.Timestamp("2022-01-04 09:31:00")
-                ]
-                * 3,
+                "decision_target_timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 3,
                 "timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 3,
                 "label": [-8.0, -8.0, 32.0],
                 "guard_pass": [False, True, False],
@@ -249,10 +234,7 @@ class TargetLabelTest(unittest.TestCase):
             {
                 "date": ["2022-01-04"] * 3,
                 "symbol": [f"00000{idx}.SZ" for idx in range(3)],
-                "decision_target_timestamp": [
-                    pd.Timestamp("2022-01-04 09:31:00")
-                ]
-                * 3,
+                "decision_target_timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 3,
                 "timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 3,
                 "heat": [1.0, 2.0, 3.0],
                 "label": [-8.0, -8.0, 32.0],
@@ -278,10 +260,7 @@ class TargetLabelTest(unittest.TestCase):
             {
                 "date": ["2022-01-04"] * 3,
                 "symbol": [f"00000{idx}.SZ" for idx in range(3)],
-                "decision_target_timestamp": [
-                    pd.Timestamp("2022-01-04 09:31:00")
-                ]
-                * 3,
+                "decision_target_timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 3,
                 "timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 3,
                 "spread": [1.0, 2.0, 3.0],
                 "label": [-8.0, -8.0, 32.0],
@@ -308,10 +287,7 @@ class TargetLabelTest(unittest.TestCase):
             {
                 "date": ["2022-01-04"] * 3,
                 "symbol": [f"00000{idx}.SZ" for idx in range(3)],
-                "decision_target_timestamp": [
-                    pd.Timestamp("2022-01-04 09:31:00")
-                ]
-                * 3,
+                "decision_target_timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 3,
                 "timestamp": [pd.Timestamp("2022-01-04 09:31:00")] * 3,
                 "spread": [1.0, 2.0, 3.0],
                 "depth": [3.0, 2.0, 1.0],

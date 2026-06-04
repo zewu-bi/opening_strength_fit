@@ -24,8 +24,7 @@ spec:
                 name: opening-strength-clickhouse
           workingDir: /app/opening_strength_fit
           command:
-            - python
-            - scripts/run_experiment.py
+            - osf-train
             - --config
             - experiments/runs/ridge_opening_1y_next_month_strong.toml
             - --output-dir

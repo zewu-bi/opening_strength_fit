@@ -1,18 +1,13 @@
 from __future__ import annotations
 
-from pathlib import Path
-import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
 
-SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
-
-from build_next_close_labels import (  # noqa: E402
+from opening_strength_fit.commands.next_close_label_cache import (  # noqa: E402
     _read_base_frame,
     fetch_next_close_labels,
     main,
@@ -45,7 +40,10 @@ class NextCloseLabelCacheTest(unittest.TestCase):
                 decision_times=("09:31:00", "09:40:00"),
             )
 
-        self.assertEqual(frame["decision_target_timestamp"].dt.strftime("%H:%M:%S").tolist(), ["09:31:00", "09:40:00"])
+        self.assertEqual(
+            frame["decision_target_timestamp"].dt.strftime("%H:%M:%S").tolist(),
+            ["09:31:00", "09:40:00"],
+        )
         self.assertEqual(frame["buy_price"].tolist(), [10.0, 10.2])
 
     def test_fetch_next_close_labels_normalizes_non_finite_returns(self) -> None:
@@ -63,7 +61,7 @@ class NextCloseLabelCacheTest(unittest.TestCase):
         returned["alpha_return_next_close"] = [0.01, float("inf")]
 
         with patch(
-            "build_next_close_labels.compute_clickhouse_close_labels",
+            "opening_strength_fit.commands.next_close_label_cache.compute_clickhouse_close_labels",
             return_value=returned,
         ):
             labels = fetch_next_close_labels(
@@ -119,8 +117,20 @@ class NextCloseLabelCacheTest(unittest.TestCase):
             )
 
             with (
-                patch("sys.argv", ["build_next_close_labels.py", "--config", str(config_path), "--output-dir", str(output_dir)]),
-                patch("build_next_close_labels.compute_clickhouse_close_labels", return_value=returned),
+                patch(
+                    "sys.argv",
+                    [
+                        "osf-build-next-close-labels",
+                        "--config",
+                        str(config_path),
+                        "--output-dir",
+                        str(output_dir),
+                    ],
+                ),
+                patch(
+                    "opening_strength_fit.commands.next_close_label_cache.compute_clickhouse_close_labels",
+                    return_value=returned,
+                ),
             ):
                 main()
 

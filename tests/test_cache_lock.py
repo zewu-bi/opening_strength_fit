@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from pathlib import Path
 import tempfile
 import threading
 import time
 import unittest
+from pathlib import Path
 
-from opening_strength_fit.training import _acquire_cache_lock
-from opening_strength_fit.training import _release_cache_lock
-from opening_strength_fit.training import _write_cache_lock_heartbeat
+from opening_strength_fit.cache_lock import (
+    acquire_cache_lock,
+    release_cache_lock,
+    write_cache_lock_heartbeat,
+)
 
 
 class CacheLockTest(unittest.TestCase):
@@ -18,7 +20,7 @@ class CacheLockTest(unittest.TestCase):
             cache_path = root / "labeled.parquet"
             lock_path = Path(f"{cache_path}.lock")
             lock_path.mkdir()
-            _write_cache_lock_heartbeat(lock_path)
+            write_cache_lock_heartbeat(lock_path)
 
             def create_cache() -> None:
                 time.sleep(0.08)
@@ -27,7 +29,7 @@ class CacheLockTest(unittest.TestCase):
             writer = threading.Thread(target=create_cache)
             writer.start()
             try:
-                status = _acquire_cache_lock(
+                status = acquire_cache_lock(
                     lock_path,
                     timeout_seconds=0.02,
                     cache_path=cache_path,
@@ -35,7 +37,7 @@ class CacheLockTest(unittest.TestCase):
                 )
             finally:
                 writer.join(timeout=1.0)
-                _release_cache_lock(lock_path)
+                release_cache_lock(lock_path)
 
             self.assertEqual(status, "cache_ready")
 
@@ -46,13 +48,13 @@ class CacheLockTest(unittest.TestCase):
             lock_path = Path(f"{cache_path}.lock")
             lock_path.mkdir()
 
-            status = _acquire_cache_lock(
+            status = acquire_cache_lock(
                 lock_path,
                 timeout_seconds=0.02,
                 cache_path=cache_path,
                 poll_seconds=0.01,
             )
-            _release_cache_lock(lock_path)
+            release_cache_lock(lock_path)
 
             self.assertEqual(status, "timeout")
 
@@ -61,9 +63,9 @@ class CacheLockTest(unittest.TestCase):
             root = Path(directory)
             lock_path = root / "labeled.parquet.lock"
             lock_path.mkdir()
-            _write_cache_lock_heartbeat(lock_path)
+            write_cache_lock_heartbeat(lock_path)
 
-            _release_cache_lock(lock_path)
+            release_cache_lock(lock_path)
 
             self.assertFalse(lock_path.exists())
 

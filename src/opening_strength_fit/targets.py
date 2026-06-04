@@ -9,7 +9,6 @@ from opening_strength_fit.candidates import opening_candidate_mask
 from opening_strength_fit.evaluation import resolve_group_cols
 from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns
 
-
 TARGET_STAT_COLUMNS = (
     "label_raw",
     "label_xs_mean",
@@ -123,9 +122,13 @@ def _cross_sectional_transformed_label(
     min_group_size: int,
     std_epsilon: float,
 ) -> tuple[pd.Series, pd.Series, pd.Series, pd.Series, pd.Series]:
-    values = pd.to_numeric(values, errors="coerce").astype("float64").replace(
-        [np.inf, -np.inf],
-        np.nan,
+    values = (
+        pd.to_numeric(values, errors="coerce")
+        .astype("float64")
+        .replace(
+            [np.inf, -np.inf],
+            np.nan,
+        )
     )
     transform = transform.strip().lower().replace("-", "_")
     valid = valid & values.notna()
@@ -226,8 +229,7 @@ def _add_heat_neutral_target(
     if not present_exposure_cols:
         requested = ", ".join(exposure_cols)
         raise SystemExit(
-            "heat_neutral target has no usable exposure columns; requested: "
-            f"{requested}"
+            f"heat_neutral target has no usable exposure columns; requested: {requested}"
         )
 
     target = pd.Series(np.nan, index=out.index, dtype="float64")
@@ -243,9 +245,7 @@ def _add_heat_neutral_target(
         if len(group_index) == 0:
             continue
 
-        y = (
-            raw_label.loc[group_index] - group_mean.loc[group_index]
-        ).astype("float64")
+        y = (raw_label.loc[group_index] - group_mean.loc[group_index]).astype("float64")
         exposure_parts = []
         for column in present_exposure_cols:
             transformed = _transformed_exposure(
@@ -501,9 +501,9 @@ def add_cross_sectional_target_label(
         target.loc[usable] = raw_label.loc[usable] - group_mean.loc[usable]
     elif mode == "zscore":
         usable &= group_std.gt(float(std_epsilon))
-        target.loc[usable] = (
-            raw_label.loc[usable] - group_mean.loc[usable]
-        ) / group_std.loc[usable]
+        target.loc[usable] = (raw_label.loc[usable] - group_mean.loc[usable]) / group_std.loc[
+            usable
+        ]
     elif mode == "rank_pct":
         target.loc[usable] = rank_pct.loc[usable]
     elif mode == "rank_centered":
@@ -576,9 +576,11 @@ def add_cross_sectional_target_label(
     elif mode == "mixed":
         if long_label_col not in out.columns:
             raise SystemExit(f"mixed target missing long label column: {long_label_col}")
-        long_label = pd.to_numeric(out[long_label_col], errors="coerce").astype(
-            "float64"
-        ).replace([np.inf, -np.inf], np.nan)
+        long_label = (
+            pd.to_numeric(out[long_label_col], errors="coerce")
+            .astype("float64")
+            .replace([np.inf, -np.inf], np.nan)
+        )
         mixed_valid = valid & long_label.notna()
         (
             short_component,

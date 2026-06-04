@@ -1,22 +1,21 @@
 from __future__ import annotations
 
-from pathlib import Path
-import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 import pandas as pd
 
+from opening_strength_fit.commands.delay_replays import (  # noqa: E402
+    DEFAULT_SCENARIOS,
+    SCENARIOS,
+    validate_context_delay,  # noqa: E402
+    validate_prediction_interface,  # noqa: E402
+)
+from opening_strength_fit.commands.opening_intraday_backtest import (
+    apply_static_constraints,  # noqa: E402
+)
 from opening_strength_fit.labels import build_trade_labels
-
-SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
-
-from run_lgbm_delay_replays import DEFAULT_SCENARIOS, SCENARIOS  # noqa: E402
-from run_lgbm_delay_replays import validate_context_delay  # noqa: E402
-from run_lgbm_delay_replays import validate_prediction_interface  # noqa: E402
-from run_opening_intraday_backtest import apply_static_constraints  # noqa: E402
 
 
 def _ticks(offsets: list[int]) -> pd.DataFrame:

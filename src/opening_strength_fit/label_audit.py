@@ -7,7 +7,6 @@ import pandas as pd
 
 from opening_strength_fit.schema import ensure_timestamp_columns
 
-
 DEFAULT_FEE_BPS = (0.0, 5.0, 10.0, 13.0)
 
 
@@ -31,9 +30,7 @@ def _quality_rates(group: pd.DataFrame) -> dict[str, float]:
     if "sell_volume" in group.columns:
         rates["zero_sell_volume_ratio"] = float((group["sell_volume"] <= 0).mean())
     if "sell_turnover" in group.columns:
-        rates["nonpositive_sell_turnover_ratio"] = float(
-            (group["sell_turnover"] <= 0).mean()
-        )
+        rates["nonpositive_sell_turnover_ratio"] = float((group["sell_turnover"] <= 0).mean())
     price_col = "buy_price" if "buy_price" in group.columns else "ask_price_1"
     if price_col in group.columns:
         rates["invalid_buy_price_ratio"] = float(

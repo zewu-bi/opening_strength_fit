@@ -26,8 +26,7 @@ spec:
                 name: opening-strength-clickhouse
           workingDir: /app/opening_strength_fit
           command:
-            - python
-            - scripts/build_next_close_labels.py
+            - osf-build-next-close-labels
             - --config
             - experiments/runs/build_delay2_2024_next_close_labels_v1.toml
             - --output-dir

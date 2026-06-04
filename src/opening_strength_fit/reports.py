@@ -3,7 +3,6 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-
 BASE_YEARLY_COLUMNS = (
     "year",
     "train_window",
@@ -105,9 +104,7 @@ def build_yearly_table(df: pd.DataFrame) -> pd.DataFrame:
 
     ordered = [column for column in BASE_YEARLY_COLUMNS if column in table.columns]
     ordered += [
-        column
-        for column in ("test_dates", "symbols", "selection")
-        if column in table.columns
+        column for column in ("test_dates", "symbols", "selection") if column in table.columns
     ]
     ordered += [
         "model_r2",

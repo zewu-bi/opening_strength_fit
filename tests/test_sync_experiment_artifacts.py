@@ -1,24 +1,21 @@
 from __future__ import annotations
 
-from pathlib import Path
-import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
 
-SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
-
+from opening_strength_fit.commands.artifact_sync import (
+    combine_metric_frames,  # noqa: E402
+    combine_rolling_validation_shards,  # noqa: E402
+    pull_gap_attribution_artifacts,  # noqa: E402
+    pull_rolling_validation_shards,  # noqa: E402
+    pull_score_risk_artifacts,  # noqa: E402
+    record_lightweight_artifacts,  # noqa: E402
+)
 from opening_strength_fit.k8s import RunSpec  # noqa: E402
-from sync_experiment_artifacts import combine_rolling_validation_shards  # noqa: E402
-from sync_experiment_artifacts import combine_metric_frames  # noqa: E402
-from sync_experiment_artifacts import pull_gap_attribution_artifacts  # noqa: E402
-from sync_experiment_artifacts import pull_rolling_validation_shards  # noqa: E402
-from sync_experiment_artifacts import pull_score_risk_artifacts  # noqa: E402
-from sync_experiment_artifacts import record_lightweight_artifacts  # noqa: E402
 
 
 def _metric_row(month: str, rows: int, top_return: float) -> dict[str, object]:
@@ -100,7 +97,7 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             with patch(
-                "sync_experiment_artifacts.fetch_remote_file_if_exists",
+                "opening_strength_fit.commands.artifact_sync_artifacts.fetch_remote_file_if_exists",
                 side_effect=fake_fetch,
             ):
                 paths = pull_score_risk_artifacts(
@@ -116,10 +113,7 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
             self.assertTrue((output_dir / "artifact_fetch_trace.json").exists())
             self.assertFalse((output_dir / "clickhouse_next_close_labels.parquet").exists())
             self.assertFalse(
-                any(
-                    "clickhouse_next_close_labels.parquet" in path
-                    for path in fetched_remote_paths
-                )
+                any("clickhouse_next_close_labels.parquet" in path for path in fetched_remote_paths)
             )
 
     def test_lightweight_artifacts_record_summaries_only(self) -> None:
@@ -272,7 +266,7 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             with patch(
-                "sync_experiment_artifacts.fetch_remote_file_if_exists",
+                "opening_strength_fit.commands.artifact_sync_artifacts.fetch_remote_file_if_exists",
                 side_effect=fake_fetch,
             ):
                 paths = pull_rolling_validation_shards(
@@ -309,7 +303,7 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             with patch(
-                "sync_experiment_artifacts.fetch_remote_file_if_exists",
+                "opening_strength_fit.commands.artifact_sync_artifacts.fetch_remote_file_if_exists",
                 side_effect=fake_fetch,
             ):
                 paths = pull_gap_attribution_artifacts(
@@ -324,10 +318,7 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
                 paths,
             )
         self.assertFalse(
-            any(
-                "gap_attribution_group_metrics.csv" in path
-                for path in fetched_remote_paths
-            )
+            any("gap_attribution_group_metrics.csv" in path for path in fetched_remote_paths)
         )
 
 

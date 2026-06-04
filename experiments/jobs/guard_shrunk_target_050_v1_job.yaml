@@ -34,11 +34,11 @@ spec:
               if [ -f "${CACHE}" ]; then
                 echo "target cache exists, skipping build: ${CACHE}"
               else
-                python scripts/build_target_label_cache.py \
+                osf-build-target-label-cache \
                   --config experiments/runs/build_guard_shrunk_target_050_v1.toml \
                   --output-dir /mnt/output/opening_strength_fit/cache_builds/build_guard_shrunk_target_050_v1
               fi
-              exec python scripts/run_experiment.py \
+              exec osf-train \
                 --config experiments/runs/guard_shrunk_target_050_v1.toml \
                 --output-dir /mnt/output/opening_strength_fit/guard_shrunk_target_050_v1
           volumeMounts:

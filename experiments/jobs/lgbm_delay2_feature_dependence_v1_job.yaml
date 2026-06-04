@@ -26,8 +26,7 @@ spec:
                 name: opening-strength-clickhouse
           workingDir: /app/opening_strength_fit
           command:
-            - python
-            - scripts/audit_feature_dependence.py
+            - osf-audit-feature-dependence
             - --config
             - experiments/runs/lgbm_delay2_feature_dependence_v1.toml
             - --output-dir

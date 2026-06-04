@@ -13,8 +13,7 @@ def _decision_rows() -> pd.DataFrame:
         row: dict[str, object] = {
             "date": "2022-01-04",
             "symbol": "000001.SZ",
-            "timestamp": pd.Timestamp("2022-01-04 09:30:00")
-            + pd.Timedelta(minutes=minute),
+            "timestamp": pd.Timestamp("2022-01-04 09:30:00") + pd.Timedelta(minutes=minute),
             "decision_target_timestamp": pd.Timestamp("2022-01-04 09:30:00")
             + pd.Timedelta(minutes=minute),
             "mid_price": 10.0 + minute * 0.02,
@@ -37,9 +36,8 @@ def _decision_rows() -> pd.DataFrame:
                 row[f"bid_gap_{level}_bps"] = float(level) * 0.5
         row["ask_depth_10"] = sum(float(row[f"ask_volume_{level}"]) for level in range(1, 11))
         row["bid_depth_10"] = sum(float(row[f"bid_volume_{level}"]) for level in range(1, 11))
-        row["depth_imbalance_10"] = (
-            (row["bid_depth_10"] - row["ask_depth_10"])
-            / (row["bid_depth_10"] + row["ask_depth_10"])
+        row["depth_imbalance_10"] = (row["bid_depth_10"] - row["ask_depth_10"]) / (
+            row["bid_depth_10"] + row["ask_depth_10"]
         )
         rows.append(row)
     return pd.DataFrame(rows)

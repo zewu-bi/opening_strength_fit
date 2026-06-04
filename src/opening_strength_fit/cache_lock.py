@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 import threading
 import time
+from pathlib import Path
 
 
 def cache_lock_done_path(lock_path: Path) -> Path:
@@ -46,7 +46,7 @@ class CacheLockHeartbeat:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
-    def __enter__(self) -> "CacheLockHeartbeat":
+    def __enter__(self) -> CacheLockHeartbeat:
         write_cache_lock_heartbeat(self.lock_path)
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -109,9 +109,7 @@ def acquire_cache_lock(
                 and cache_path.exists()
             ):
                 return "cache_ready"
-            if timeout_seconds > 0.0 and (
-                time.monotonic() - start
-            ) >= timeout_seconds:
+            if timeout_seconds > 0.0 and (time.monotonic() - start) >= timeout_seconds:
                 if cache_lock_has_fresh_heartbeat(
                     lock_path,
                     stale_after_seconds=heartbeat_stale_after,

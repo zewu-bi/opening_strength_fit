@@ -1,26 +1,25 @@
 from __future__ import annotations
 
-from pathlib import Path
-import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
-if str(SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS_DIR))
-
-from run_alpha_conditioned_rolling_validation import score_variants  # noqa: E402
-from run_learned_risk_layer import (  # noqa: E402
+from opening_strength_fit.commands.alpha_conditioned_rolling_validation import (
+    score_variants,  # noqa: E402
+)
+from opening_strength_fit.commands.learned_risk_layer import (  # noqa: E402
     normalize_next_close_labels as normalize_learned_next_close_labels,
 )
-from run_score_risk_sweep import (  # noqa: E402
+from opening_strength_fit.commands.score_risk_sweep import (  # noqa: E402
     normalize_next_close_labels as normalize_score_risk_next_close_labels,
 )
-from run_score_tail_guards import load_next_close_labels  # noqa: E402
-from plot_signal_baseline_panels import (  # noqa: E402
+from opening_strength_fit.commands.score_tail_guards import (
+    load_next_close_labels,  # noqa: E402
+)
+from opening_strength_fit.commands.signal_baseline_panels import (  # noqa: E402
     normalize_next_close_labels as normalize_panel_next_close_labels,
 )
 from opening_strength_fit.labels import safe_price_return  # noqa: E402
