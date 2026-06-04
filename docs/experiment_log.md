@@ -10,8 +10,9 @@
 - 项目窗口仍是 `09:30-09:40`；当前优化子域是 `09:31-09:40`。
 - 训练主线改为单模型 mixed label：一分钟 VWAP short label 为主，小权重加入持有到第二天收盘的 long label。
 - 训练仍用 full universe；`pool_S`、`pool_M`、`pool_L` 只作为 TopN selection mask，指标在不同 mask 下分别汇总。
-- mixed label 已扫 `w_long=0.10 / 0.20 / 0.30`；结合 S/M/L 池内 Top100 excess，当前暂定
-  `w_long=0.30`。固定权重后进入 S/M/L 绑定下的信号增强，next close 作为约束和诊断，不作为后续主优化目标。
+- mixed label 已扫 `w_long=0.10 / 0.20 / 0.30`；结合 S/M/L 池内 Top100 excess，当前固定
+  `w_long=0.30`。固定权重后的 7 组 feature/model 小扫已晋级 `soft_core_reg_light`；下一步迁移到
+  `36m train -> next 1m test` 的 2024 全年 rolling。
 - 两模型 `final_score = alpha_rank - lambda * gap_risk_rank` 路线封存。它通过 rolling，说明短+长目标有信息，
   但当前不继续用两个模型定义目标。
 
@@ -25,7 +26,8 @@
 | `guard_shrunk_target_075_v1` | +6.21 | +0.07 | next 接近修复，short 掉太多。 |
 | alpha-conditioned `gap_penalty_030_p80` | +16.79 | +4.49 | 两模型单月 frontier 最好。 |
 | 18m rolling `gap_penalty_030_p80` | +21.20 | +7.84 | 证明短+长目标跨月有信息。 |
-| S/M/L pool-internal mixed `w=0.30` | +10.0 / +12.2 / +14.1 | +6.6 / +9.0 / +9.4 | 暂定单模型主线权重；三列为 pool_S/M/L。 |
+| S/M/L pool-internal mixed `w=0.30` | +10.0 / +12.2 / +14.1 | +6.6 / +9.0 / +9.4 | 固定单模型主线权重；三列为 pool_S/M/L。 |
+| `soft_core_reg_light` vs `w030` baseline | +0.24 / +0.31 / +0.58 | +0.92 / -0.01 / +1.17 | 固定权重后的 feature/model 候选；三列为 pool_S/M/L 的增量。 |
 
 ## 实验时间线
 
@@ -42,7 +44,8 @@
 | 2026-05-28/29 | learned risk layer | 两模型公式可行；conditional v1 失败，alpha-conditioned v2 改善。 |
 | 2026-05-29/06-02 | rolling validation | `gap_penalty_030_p80` 6 个月 rolling 通过。 |
 | 2026-06-02 | mentor re-scope | 不继续两模型，改为直接训练 single mixed label。 |
-| 2026-06-03 | S/M/L mixed weight scan | `w_long=0.30` 在池内保住 short，并改善 next internal excess；暂定为主线权重。 |
+| 2026-06-03 | S/M/L mixed weight scan | `w_long=0.30` 在池内保住 short，并改善 next internal excess；固定为主线权重。 |
+| 2026-06-04 | w030 feature/model sweep | 7 组 18m 小缓存对照后，`soft_core_reg_light` 晋级为当前 feature/model 候选。 |
 
 ## 2026-05-20 小窗结果
 
@@ -1341,13 +1344,105 @@ output/reports/pool_selection_top100_w010_w030/monthly_pool_internal_3models/
 
 | run | status | purpose |
 | --- | --- | --- |
-| `lgbm_delay2_18m_postopen_mixed_w030_reg_light_v1` | running | full postopen v2 feature set；轻度 sampling / regularization。 |
-| `lgbm_delay2_18m_postopen_mixed_w030_reg_mid_v1` | running | full postopen v2 feature set；中度 sampling / regularization，作为优先候选。 |
-| `lgbm_delay2_18m_postopen_mixed_w030_reg_strong_v1` | running | full postopen v2 feature set；更强正则，检查 short 是否被吃掉。 |
-| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_v1` | running | soft feature regroup；保留核心盘口/开盘后特征，baseline LGBM 参数。 |
-| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1` | running | soft feature regroup + 轻度正则。 |
-| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_mid_v1` | running | soft feature regroup + 中度正则，作为 feature cleanup 主候选。 |
-| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_no_preopen_reg_mid_v1` | running | soft feature regroup + 中度正则，并去掉 `preopen_*`，检查集合竞价依赖。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_reg_mid_v1` | completed | full postopen v2 feature set；中度 sampling / regularization，作为优先候选。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_v1` | completed | soft feature regroup；保留核心盘口/开盘后特征，baseline LGBM 参数。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1` | completed | soft feature regroup + 轻度正则。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_mid_v1` | completed | soft feature regroup + 中度正则，作为 feature cleanup 主候选。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_no_preopen_reg_mid_v1` | completed | soft feature regroup + 中度正则，并去掉 `preopen_*`，检查集合竞价依赖。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_no_preopen_reg_mid_v1` | completed | full postopen v2 feature set + 中度正则，并去掉 `preopen_*`，隔离 full-feature 模型的集合竞价依赖。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_drop_raw_reg_mid_v1` | completed | full postopen v2 feature set + 中度正则，只丢 `volume` / `turnover` / `iopv`，隔离 raw cumulative trade 噪声。 |
+
+## 2026-06-04 w030 Feature Regroup Sweep Results
+
+已同步本轮保留的 7 组 completed 候选 metrics / predictions，并用同一份 next-close label cache 复评
+universe / pool_S / pool_M / pool_L 池内 Top100 口径。每组都完成 `2021-08` 至 `2022-01` 的
+6 / 6 rolling monthly shards；未保留的异常任务已清理，不作为 canceled 实验记录。结果文件：
+
+```text
+output/local/w030_regroup_analysis/pool_internal_summary.csv
+output/local/w030_regroup_analysis/pool_internal_month_summary.csv
+output/local/w030_regroup_analysis/pool_internal_clock_summary.csv
+output/local/w030_regroup_analysis/pool_internal_group_metrics.csv
+output/local/w030_regroup_analysis/pool_rank_ic_group_metrics.csv
+output/local/w030_regroup_analysis/universe_target_metric_summary.csv
+experiments/results/metrics/<run_id>_metrics_by_year.csv
+output/predictions/<run_id>/predictions_all.parquet
+```
+
+主结论：`soft_core_reg_light` 是唯一值得晋级的候选。它把特征数从 442 降到 276，在 universe 和
+S/M/L 池内都没有吃掉 short，同时改善 next；`reg_mid`、`soft_core_reg_mid` 和去 preopen / 只去
+raw 累计成交列的变体都没有形成稳定增量。
+
+池内 Top100 excess，单位 bps；表内为 `short / next`。baseline 是
+`lgbm_delay2_18m_postopen_mixed_w030_rolling_v1`：
+
+| variant | universe | pool_S | pool_M | pool_L |
+| --- | ---: | ---: | ---: | ---: |
+| baseline `w030` | +25.08 / -2.72 | +10.03 / +5.64 | +12.29 / +7.74 | +14.19 / +7.96 |
+| `reg_mid` | +24.94 / -3.06 | +9.84 / +5.00 | +12.11 / +6.70 | +14.14 / +6.40 |
+| `soft_core` | +25.24 / -1.33 | +10.07 / +5.84 | +12.34 / +6.76 | +14.38 / +7.60 |
+| `soft_core_reg_light` | +25.75 / +0.56 | +10.27 / +6.56 | +12.60 / +7.73 | +14.77 / +9.13 |
+| `soft_core_reg_mid` | +24.79 / -2.40 | +9.94 / +6.03 | +12.10 / +6.19 | +14.25 / +6.75 |
+| `soft_core_no_preopen_reg_mid` | +24.80 / -2.01 | +9.81 / +6.16 | +12.10 / +6.88 | +14.10 / +5.85 |
+| `full_no_preopen_reg_mid` | +24.91 / -2.41 | +9.66 / +5.77 | +11.91 / +6.28 | +14.02 / +6.12 |
+| `full_drop_raw_reg_mid` | +24.95 / -2.92 | +9.96 / +5.96 | +12.09 / +6.97 | +14.13 / +6.63 |
+
+`soft_core_reg_light` 相对 baseline 的变化是：universe `+0.66 / +3.29`，pool_S `+0.24 / +0.92`，
+pool_M `+0.31 / -0.01`，pool_L `+0.58 / +1.17` bps。唯一不改善的是 pool_M next，幅度接近 0；
+其它候选不是 short 被吃掉，就是 next 没改善。
+
+universe target 指标提供同一方向的辅助证据：
+
+| variant | features | target R2 | group rank IC | Top100 bps | vs baseline |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| baseline `w030` | 442 | 0.03031 | 0.16061 | +16.53 | +0.00 |
+| `reg_mid` | 442 | 0.02977 | 0.15995 | +16.39 | -0.14 |
+| `soft_core` | 276 | 0.02992 | 0.15991 | +16.69 | +0.16 |
+| `soft_core_reg_light` | 276 | 0.03090 | 0.16169 | +17.20 | +0.67 |
+| `soft_core_reg_mid` | 276 | 0.02951 | 0.15934 | +16.24 | -0.30 |
+| `soft_core_no_preopen_reg_mid` | 270 | 0.02925 | 0.15866 | +16.25 | -0.28 |
+| `full_no_preopen_reg_mid` | 436 | 0.02960 | 0.15952 | +16.35 | -0.18 |
+| `full_drop_raw_reg_mid` | 439 | 0.02978 | 0.15985 | +16.40 | -0.13 |
+
+晋级配置口径：
+
+- feature set：`include_preopen=true`，保留 `preopen_*`；保留核心盘口、depth / gap / imbalance、
+  trade-flow diff、`postopen_` 和精选 `postopen_v2_*` 轨迹特征；显式丢
+  `volume` / `turnover` / `iopv` 三个 raw 累计列。
+- feature count：baseline 442 -> soft core 276；去 `preopen_*` 的 soft-core 版本为 270，但 short
+  变弱，因此不能把集合竞价摘要整体删掉。
+- model：`n_estimators=360`，`learning_rate=0.03`，`num_leaves=63`，
+  `min_child_samples=300`，`subsample=0.9`，`colsample_bytree=0.9`，
+  `reg_alpha=0.01`，`reg_lambda=1.0`，`max_bin=63`。
+
+辅助判断：
+
+- 只做 full-feature 中度正则 (`reg_mid`)：short / next 基本全线变差，说明 LGBM 正则不能单独扫。
+- soft feature regroup 本身有小幅帮助，但不如 light regularization 叠加；中度正则偏强。
+- 去掉 `preopen_*` 会伤 short，尤其 full-feature 去 preopen；preopen 不能整体剔除。
+- 只丢 `volume` / `turnover` / `iopv` 不是主要矛盾；更有效的是保留盘口/开盘后核心结构、减少宽泛特征暴露。
+
+下一步：把 `lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1` 作为当前 feature/model 主线，
+进入更长训练窗 / 更多月份验证；不要继续在 18m cache 上做同类小参数扫。
+
+### 36m Rolling Migration Supplement
+
+这轮 18m cache 的作用是筛选候选，不是最终稳健性证明。根据小缓存结果，下一轮主线应是：
+
+- label：继续使用 mixed `w_long=0.30`，即 2026-06-03 定下的单模型目标。
+- train/test：`36m train -> next 1m test`，`test_start_month=2024-01`，
+  `test_end_month=2024-12`，每个 fold 只用测试月之前 36 个自然月训练。
+- data：复用已完成的 `2021-2024` base / next-close / mixed-w030 cache v2/v1 线；
+  当前足够覆盖 2024 全年 12 个 OOS 月份。
+- feature/model：迁移 `soft_core_reg_light` 的 include/drop feature 规则和 light LGBM 参数；
+  不沿用单月 smoke 的 full-feature + medium-reg 口径作为最终候选。
+- evaluation：仍同时输出 universe / pool_S / pool_M / pool_L 的 short 与 next Rank IC、池内 Top100 excess、
+  月度表和 Mean；pool 只做 TopN selection mask，不改变训练 universe。
+
+已存在的 `lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1` 是输入链路 smoke：`2021-01` 至
+`2023-12` train，`2024-01` test。它可以验证 36m cache / mixed target / sharded job 链路，但不是
+这轮小缓存结论所选择的最终 feature/model 配置。正式 12-shard rolling 应新建 soft-core + light-reg
+配置，必要时同时保留一个 36m full-feature baseline 作为同窗对照。
 
 ## 查找索引
 
@@ -1483,14 +1578,14 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `build_delay2_18m_mixed_w020_target_v1` | completed | 18m delay2 labeled cache 转换为 mixed target，`w_long=0.20`。 |
 | `lgbm_delay2_18m_postopen_mixed_w020_rolling_v1` | completed | `w=0.20` single mixed-label rolling；S/M/L pool-internal short / next excess = +9.9/+5.8、+12.2/+7.3、+14.0/+6.8 bps。 |
 | `build_delay2_18m_mixed_w030_target_v1` | completed | 18m delay2 labeled cache 转换为 mixed target，`w_long=0.30`。 |
-| `lgbm_delay2_18m_postopen_mixed_w030_rolling_v1` | completed | 暂定主线权重；S/M/L pool-internal short / next excess = +10.0/+5.6、+12.3/+7.7、+14.2/+8.0 bps。 |
-| `lgbm_delay2_18m_postopen_mixed_w030_reg_light_v1` | running | 固定 `w=0.30` 后的 full postopen v2 轻正则候选；需按 S/M/L pool-internal 面板验收。 |
-| `lgbm_delay2_18m_postopen_mixed_w030_reg_mid_v1` | running | 固定 `w=0.30` 后的 full postopen v2 中正则候选；优先看是否保住 S/M/L short。 |
-| `lgbm_delay2_18m_postopen_mixed_w030_reg_strong_v1` | running | 固定 `w=0.30` 后的 full postopen v2 强正则候选；用于测正则上限。 |
-| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_v1` | running | soft feature regroup baseline；减少宽泛 postopen/preopen 暴露后重测。 |
-| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1` | running | soft feature regroup + 轻正则候选。 |
-| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_mid_v1` | running | soft feature regroup + 中正则候选；feature cleanup 主候选。 |
-| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_no_preopen_reg_mid_v1` | running | soft feature regroup + 中正则并去掉 `preopen_*`；诊断集合竞价依赖。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_rolling_v1` | completed | 固定主线权重；S/M/L pool-internal short / next excess = +10.0/+5.6、+12.3/+7.7、+14.2/+8.0 bps。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_reg_mid_v1` | completed | 固定 `w=0.30` 后的 full postopen v2 中正则候选；优先看是否保住 S/M/L short。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_v1` | completed | soft feature regroup baseline；减少宽泛 postopen/preopen 暴露后重测。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1` | completed | soft feature regroup + 轻正则；本轮晋级的 feature/model 候选。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_mid_v1` | completed | soft feature regroup + 中正则候选；feature cleanup 主候选。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_soft_core_no_preopen_reg_mid_v1` | completed | soft feature regroup + 中正则并去掉 `preopen_*`；诊断集合竞价依赖。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_no_preopen_reg_mid_v1` | completed | full postopen v2 + 中正则并去掉 `preopen_*`；对照 soft-core 去 preopen，隔离 full-feature 下的集合竞价依赖。 |
+| `lgbm_delay2_18m_postopen_mixed_w030_drop_raw_reg_mid_v1` | completed | full postopen v2 + 中正则，只去掉 `volume` / `turnover` / `iopv`；隔离 raw cumulative trade 噪声。 |
 
 ## 2026-06-03 Cache v2 Rebuild Prep
 
@@ -1564,6 +1659,15 @@ PVC 目录：
   v6 将 smoke 限制为 `feature_limit=80`、`n_estimators=40`，已完成 `2024-01` 单月链路检查：
   train `33,144,997` 行、predict `1,103,613` 行、`80` 个特征。该结果只证明 cache/split/output
   链路可跑通，不作为正式收益对比。
+
+### 归档和保留口径
+
+- 按用户要求，`build_delay2_2024_cache_v1` 已停止；旧 2023/2024 v1 cache 和过期派生 cache 已从 PVC 清掉。
+- `docs/experiment_log.md` 已记录、`experiments/results/**` 有轻量证据、或文档明确引用的 run/job/config
+  作为历史证据保留。guard、clean target、two-model alpha-risk、risk penalty 和 attribution 路线都属于这类证据。
+- 已运行过的 `experiments/jobs/*.yaml` 是轻量 K8s manifest trace，用来把结果追溯回可执行 Job。
+- 本地 `__pycache__`、`.pytest_cache`、`*.egg-info` 可直接清理；`.venv`、`.env` 和 ignored `output/`
+  不作为项目级瘦身目标。
 
 ### Output 索引
 

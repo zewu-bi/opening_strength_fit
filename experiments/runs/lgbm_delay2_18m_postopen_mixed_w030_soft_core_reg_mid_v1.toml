@@ -2,7 +2,7 @@
 id = "lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_mid_v1"
 kind = "exploration"
 description = "w030 mixed-label rolling with soft feature regroup plus medium LightGBM sampling/regularization."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"
@@ -156,7 +156,7 @@ helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:open
 wait_for_paths = ["/mnt/output/opening_strength_fit/cache/opening_18m_202008_202201_delay2_mixed_w030_labeled.parquet"]
 wait_for_path_timeout_seconds = 43200
 wait_for_path_interval_seconds = 120
-shard_parallelism = 6
+shard_parallelism = 1
 
 [k8s.resources]
 cpu_request = "8"

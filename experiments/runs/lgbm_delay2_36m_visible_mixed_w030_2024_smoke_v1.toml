@@ -2,7 +2,7 @@
 id = "lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1"
 kind = "exploration"
 description = "Fast single-month smoke for 36m train -> next 1m test rolling on 2021-2024 delay2 mixed_w030 cache; validates the PVC/cache/split/output chain before full soft_core_reg_light rolling."
-status = "queued"
+status = "completed"
 
 [data]
 source = "labeled_pvc"

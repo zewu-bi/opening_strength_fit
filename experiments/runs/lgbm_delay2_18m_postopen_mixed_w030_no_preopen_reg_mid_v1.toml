@@ -1,8 +1,8 @@
 [run]
-id = "lgbm_delay2_18m_postopen_mixed_w030_reg_light_v1"
+id = "lgbm_delay2_18m_postopen_mixed_w030_no_preopen_reg_mid_v1"
 kind = "exploration"
-description = "w030 mixed-label rolling with light LightGBM sampling/regularization; full postopen v2 feature set."
-status = "running"
+description = "w030 mixed-label rolling with full postopen v2 features, preopen features dropped, and medium LightGBM sampling/regularization."
+status = "completed"
 
 [data]
 source = "labeled_pvc"
@@ -51,6 +51,7 @@ postopen_decision_windows = [1, 3, 5]
 include_postopen_v2 = true
 postopen_v2_windows = [1, 2, 3, 5]
 postopen_v2_depth_levels = [3, 5, 10]
+drop_feature_prefixes = ["preopen_"]
 
 [filters]
 tradable_statuses = ["T0", "20", "TRADE"]
@@ -65,15 +66,15 @@ test_end_month = "2022-01"
 name = "lightgbm"
 target_col = "target_label"
 device_type = "cpu"
-n_estimators = 360
-learning_rate = 0.03
-num_leaves = 63
+n_estimators = 400
+learning_rate = 0.025
+num_leaves = 47
 max_depth = -1
-min_child_samples = 300
-subsample = 0.9
-colsample_bytree = 0.9
-reg_alpha = 0.01
-reg_lambda = 1.0
+min_child_samples = 400
+subsample = 0.85
+colsample_bytree = 0.85
+reg_alpha = 0.02
+reg_lambda = 2.0
 random_state = 7
 n_jobs = 8
 max_bin = 63
@@ -86,8 +87,8 @@ ic_mode = "cross_section"
 top_n = 100
 
 [output]
-local_dir = "output/local/lgbm_delay2_18m_postopen_mixed_w030_reg_light_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/lgbm_delay2_18m_postopen_mixed_w030_reg_light_v1"
+local_dir = "output/local/lgbm_delay2_18m_postopen_mixed_w030_no_preopen_reg_mid_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/lgbm_delay2_18m_postopen_mixed_w030_no_preopen_reg_mid_v1"
 
 [k8s]
 namespace = "bizewu"

@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: opening-strength-w030-reg-light-v1-sharded
+  name: opening-strength-w030-drop-raw-reg-mid-v1-sharded
   namespace: bizewu
 spec:
   backoffLimit: 0
@@ -56,7 +56,7 @@ spec:
                 done
                 echo "dependency file is ready: ${WAIT_PATH}"
               done
-              ROOT=/mnt/output/opening_strength_fit/lgbm_delay2_18m_postopen_mixed_w030_reg_light_v1
+              ROOT=/mnt/output/opening_strength_fit/lgbm_delay2_18m_postopen_mixed_w030_drop_raw_reg_mid_v1
               mkdir -p "${ROOT}"
               MONTHS=(2021-08 2021-09 2021-10 2021-11 2021-12 2022-01)
               INDEX="${JOB_COMPLETION_INDEX:-}"
@@ -77,11 +77,11 @@ spec:
               fi
 
               echo
-              echo "running lgbm_delay2_18m_postopen_mixed_w030_reg_light_v1 shard month=${MONTH} index=${INDEX}"
+              echo "running lgbm_delay2_18m_postopen_mixed_w030_drop_raw_reg_mid_v1 shard month=${MONTH} index=${INDEX}"
               echo "output_dir=${OUT}"
 
               python scripts/run_experiment.py \
-                --config /mnt/config/lgbm_delay2_18m_postopen_mixed_w030_reg_light_v1.toml \
+                --config /mnt/config/lgbm_delay2_18m_postopen_mixed_w030_drop_raw_reg_mid_v1.toml \
                 --rolling-monthly \
                 --train-months 12 \
                 --test-start-month "${MONTH}" \

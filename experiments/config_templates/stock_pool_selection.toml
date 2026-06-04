@@ -1,0 +1,12 @@
+[stock_pool]
+enabled = true
+path = "lml.bzw@ssd/data/pool_S.parquet"
+name = "pool_S"
+
+filter_train = false
+filter_selection = true
+date_lag_sessions = 0
+
+membership_col = "stock_pool_member"
+annotate_predictions = true
+add_feature = false

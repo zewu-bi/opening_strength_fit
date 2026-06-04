@@ -1,7 +1,7 @@
 # Project Map
 
-这个文件只回答“代码和脚本在哪里”。研究逻辑看 [project_brief.md](project_brief.md)，实验顺序看
-[experiment_log.md](experiment_log.md)，操作命令看 [runbook.md](runbook.md)。
+代码、脚本和项目目录索引。研究逻辑看 [project_brief.md](project_brief.md)，实验顺序看
+[experiment_log.md](experiment_log.md)，运行命令看 [runbook.md](runbook.md)。
 
 ## Root
 
@@ -79,11 +79,11 @@ Scripts:
 - `scripts/run_alpha_horizon_decay.py`: evaluate opening scores on intraday/close horizons.
 - `scripts/plot_signal_baseline_panels.py`: render delay2 short/next-close baseline panels using cached next-close labels.
 - `scripts/run_score_tail_guards.py`: sweep visible-information TopN guard rules over an existing score file.
-- `scripts/run_score_risk_sweep.py`: historical/superseded alpha-minus-risk score sweeps over existing score files.
-- `scripts/run_learned_risk_layer.py`: historical learned dirty-risk / next-flip risk layers for score-sweep evidence.
-- `scripts/run_alpha_conditioned_rolling_validation.py`: historical monthly validation for alpha-conditioned Top100 risk-penalty scores.
+- `scripts/run_score_risk_sweep.py`: alpha-minus-risk score sweeps over existing score files.
+- `scripts/run_learned_risk_layer.py`: learned dirty-risk / next-flip risk layers for score-sweep evidence.
+- `scripts/run_alpha_conditioned_rolling_validation.py`: monthly validation for alpha-conditioned Top100 risk-penalty scores.
 - `scripts/plot_rolling_validation_tradeoff.py`: render the archived rolling short-vs-next Top100 tradeoff chart from `experiments/results/backtests/*_month_summary.csv`.
-- `scripts/run_gap_risk_attribution.py`: historical attribution of risk-penalized Top100 replacements.
+- `scripts/run_gap_risk_attribution.py`: gap-risk Top100 replacement attribution.
 
 ## Infrastructure
 
@@ -105,36 +105,10 @@ Scripts:
 
 - `experiments/runs/*.toml`: run configs. `run.id` must match the filename.
 - `experiments/jobs/*.yaml`: rendered K8s jobs.
+- `experiments/config_templates/`: reusable TOML snippets for run configs.
 - `experiments/results/metrics/`: tracked metrics CSV evidence.
-- `experiments/results/backtests/`: tracked replay and horizon-decay summaries.
-
-Experiment layers:
-
-- Current active core: current docs spine, shared library modules, main training/cache/sync/audit scripts, and the
-  `build_delay2_2015_cache_v2` through `build_delay2_2024_cache_v2` labeled-cache run/job pairs.
-- Historical evidence: every run/job/config recorded in `docs/experiment_log.md`, represented in `experiments/results/**`,
-  or explicitly referenced by docs. This includes guard, clean-target, learned-risk, score-risk, rolling-risk, and
-  attribution experiments that are now superseded by the single mixed-label mainline.
-- Generated retained trace: rendered K8s YAML and lightweight artifact sync traces that connect a historical result back to
-  its executable job. Keep these even when the research route is no longer active.
-- Stale unrecorded: run/job/config files with no docs/results reference and no current running value. These can be removed
-  after a reference check; ignored local caches such as `__pycache__`, `.pytest_cache`, and `*.egg-info` can be cleaned
-  without preserving trace.
-
-Job entrypoints:
-
-| run kind | script |
-| --- | --- |
-| standard training / exploration | `scripts/run_experiment.py` |
-| feature audit | `scripts/audit_feature_dependence.py` |
-| labeled cache | `scripts/build_labeled_cache.py` |
-| cache transform / target cache | `scripts/build_target_label_cache.py` |
-| learned risk layer | `scripts/run_learned_risk_layer.py` |
-| alpha-conditioned rolling | `scripts/run_alpha_conditioned_rolling_validation.py` |
-| gap-risk attribution | `scripts/run_gap_risk_attribution.py` |
-| score-risk sweep | `scripts/run_score_risk_sweep.py` |
-
-`*_sharded_job.yaml` runs monthly/yearly shards.
+- `experiments/results/backtests/`: tracked replay, horizon-decay, sweep, and rolling summaries.
+- `*_sharded_job.yaml`: monthly/yearly sharded K8s jobs.
 
 ## Ignored Outputs
 

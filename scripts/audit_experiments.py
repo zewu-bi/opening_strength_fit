@@ -93,6 +93,7 @@ def is_artifact_run(record: RunRecord) -> bool:
         "cache_transform",
         "labeled_cache",
         "clickhouse_labeled_cache",
+        "next_close_label_cache",
         "target_cache",
         "score_risk_sweep",
         "alpha_conditioned_rolling_validation",

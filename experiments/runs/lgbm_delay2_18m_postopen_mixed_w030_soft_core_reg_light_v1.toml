@@ -2,7 +2,7 @@
 id = "lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1"
 kind = "exploration"
 description = "w030 mixed-label rolling with soft feature regroup plus light LightGBM sampling/regularization."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"
