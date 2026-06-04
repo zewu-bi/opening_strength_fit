@@ -15,6 +15,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 from build_next_close_labels import (  # noqa: E402
     _read_base_frame,
     fetch_next_close_labels,
+    main,
 )
 
 
@@ -77,6 +78,55 @@ class NextCloseLabelCacheTest(unittest.TestCase):
         self.assertEqual(len(labels), 1)
         self.assertEqual(labels["symbol"].tolist(), ["000001.SZ"])
         self.assertAlmostEqual(labels.loc[0, "alpha_return_next_close"], 0.01)
+
+    def test_main_reads_input_and_output_from_config(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            config_path = root / "run.toml"
+            input_path = root / "input.parquet"
+            output_path = root / "labels.parquet"
+            output_dir = root / "out"
+            pd.DataFrame(
+                {
+                    "date": ["2022-01-04"],
+                    "symbol": ["000001.SZ"],
+                    "decision_target_timestamp": [pd.Timestamp("2022-01-04 09:31:00")],
+                    "buy_price": [10.0],
+                }
+            ).to_parquet(input_path, index=False)
+            config_path.write_text(
+                "\n".join(
+                    [
+                        "[run]",
+                        'id = "build_next_close_test"',
+                        "",
+                        "[next_close_labels]",
+                        f'input_path = "{input_path}"',
+                        f'output_path = "{output_path}"',
+                        'decision_times = ["09:31:00"]',
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            returned = pd.DataFrame(
+                {
+                    "date": ["2022-01-04"],
+                    "symbol": ["000001.SZ"],
+                    "decision_target_timestamp": [pd.Timestamp("2022-01-04 09:31:00")],
+                    "alpha_return_next_close": [0.02],
+                }
+            )
+
+            with (
+                patch("sys.argv", ["build_next_close_labels.py", "--config", str(config_path), "--output-dir", str(output_dir)]),
+                patch("build_next_close_labels.compute_clickhouse_close_labels", return_value=returned),
+            ):
+                main()
+
+            labels = pd.read_parquet(output_path)
+
+        self.assertEqual(labels["alpha_return_next_close"].tolist(), [0.02])
 
 
 if __name__ == "__main__":

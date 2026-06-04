@@ -42,7 +42,7 @@ KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
 
 
 def _arg_or_config(args, config: dict, name: str, default: str = "") -> str:
-    value = getattr(args, name)
+    value = getattr(args, name, "")
     if value not in (None, ""):
         return str(value)
     return config_str(config, "next_close_labels", name, default)
@@ -173,8 +173,8 @@ def main() -> None:
 
     config = load_toml(args.config) if args.config else {}
     run_name = run_id(config, args.config) if args.config else "build_next_close_labels"
-    input_raw = _arg_or_config(args, config, "input_path")
-    output_raw = _arg_or_config(args, config, "output_path")
+    input_raw = args.input or config_str(config, "next_close_labels", "input_path", "")
+    output_raw = args.output or config_str(config, "next_close_labels", "output_path", "")
     if not input_raw:
         raise SystemExit("missing input path: pass --input or [next_close_labels].input_path")
     if not output_raw:
