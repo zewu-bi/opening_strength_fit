@@ -252,6 +252,71 @@ class LabeledPvcSourceTest(unittest.TestCase):
         )
         self.assertNotIn("unused_heavy_feature", labeled.columns)
 
+    def test_labeled_pvc_directory_projects_each_file_before_concat(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "cache"
+            root.mkdir()
+            pd.DataFrame(
+                [
+                    {
+                        "date": "2020-09-01",
+                        "symbol": "000001.SZ",
+                        "timestamp": pd.Timestamp("2020-09-01 09:31:00"),
+                        "decision_time": "09:31:00",
+                        "decision_target_timestamp": pd.Timestamp(
+                            "2020-09-01 09:31:00"
+                        ),
+                        "decision_lag_seconds": 0.0,
+                        "label": 0.01,
+                        "target_label": 0.2,
+                        "valid_label": True,
+                        "keep_feature": 1.0,
+                        "unused_heavy_feature": 999.0,
+                    }
+                ]
+            ).to_parquet(root / "part_2020.parquet", index=False)
+            pd.DataFrame(
+                [
+                    {
+                        "date": "2021-09-30",
+                        "symbol": "000001.SZ",
+                        "timestamp": pd.Timestamp("2021-09-30 09:31:00"),
+                        "decision_time": "09:31:00",
+                        "decision_target_timestamp": pd.Timestamp(
+                            "2021-09-30 09:31:00"
+                        ),
+                        "decision_lag_seconds": 0.0,
+                        "label": 0.03,
+                        "target_label": 0.4,
+                        "valid_label": True,
+                        "keep_feature": 2.0,
+                        "unused_heavy_feature": 999.0,
+                    }
+                ]
+            ).to_parquet(root / "part_2021.parquet", index=False)
+
+            args = argparse.Namespace(
+                labeled_input=None,
+                split_mode=None,
+                rolling_monthly=True,
+                rolling_annual=False,
+                train_months=12,
+                test_start_month="2021-09",
+                test_end_month="2021-09",
+            )
+            config = {
+                "data": {"source": "labeled_pvc", "labeled_path": str(root)},
+                "universe": {"enabled": False},
+                "features": {"include_feature_columns": ["keep_feature"]},
+                "model": {"target_col": "target_label"},
+            }
+
+            labeled = _load_labeled_pvc_frame(args, config)
+
+        self.assertEqual(labeled["date"].tolist(), ["2020-09-01", "2021-09-30"])
+        self.assertEqual(labeled["keep_feature"].tolist(), [1.0, 2.0])
+        self.assertNotIn("unused_heavy_feature", labeled.columns)
+
     def test_labeled_pvc_rolling_monthly_reads_needed_date_range(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "labeled.parquet"

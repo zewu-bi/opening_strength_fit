@@ -1560,8 +1560,8 @@ PVC 目录：
   4 列、`0.07-0.08 GiB`；mixed 年度文件为 184 列、`4.81-5.45 GiB`，`target_label`
   非空数分别为 `10,167,661 / 11,154,082 / 11,823,254 / 12,049,972`。
 - 原 full-feature 36m smoke 在读取阶段 RSS 接近 `489 GiB` 且尚未写输出，已停止。改为
-  `opening-strength-fit-20260604-next-close-v3`：labeled PVC 读取支持按 include feature filters 做列投影，
-  smoke 配置同步迁移到 `soft_core_reg_light`。
+  `opening-strength-fit-20260604-next-close-v4`：labeled PVC 读取支持按 include feature filters 做列投影，
+  并对目录输入按年度文件逐个 transform 后再 concat；smoke 配置同步迁移到 `soft_core_reg_light`。
 
 ### Output 索引
 

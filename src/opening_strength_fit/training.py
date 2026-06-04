@@ -1015,6 +1015,75 @@ def _labeled_pvc_read_columns(path: Path, config: dict) -> list[str] | None:
     return list(dict.fromkeys(_existing_columns(available, selected)))
 
 
+def _labeled_pvc_files(path: Path) -> list[Path]:
+    if not path.is_dir():
+        return [path]
+    files = sorted(path.rglob("*.parquet"))
+    if files:
+        return files
+    files = sorted(path.rglob("*.csv")) + sorted(path.rglob("*.csv.gz"))
+    if files:
+        return files
+    raise SystemExit(f"no parquet/csv files found under directory: {path}")
+
+
+def _read_labeled_pvc_file(
+    path: Path,
+    *,
+    columns: list[str] | None,
+    filters: list[tuple[str, str, object]] | None,
+    config: dict,
+) -> pd.DataFrame:
+    file_columns = columns
+    if columns is not None:
+        available = frame_columns(path)
+        file_columns = [column for column in columns if column in available]
+    return _filter_labeled_frame(
+        read_frame(path, columns=file_columns, filters=filters),
+        config,
+    )
+
+
+def _read_labeled_pvc_frame(
+    path: Path,
+    *,
+    columns: list[str] | None,
+    filters: list[tuple[str, str, object]] | None,
+    config: dict,
+) -> pd.DataFrame:
+    files = _labeled_pvc_files(path)
+    if len(files) == 1:
+        return _read_labeled_pvc_file(
+            files[0],
+            columns=columns,
+            filters=filters,
+            config=config,
+        )
+
+    parts = []
+    for file in files:
+        part = _read_labeled_pvc_file(
+            file,
+            columns=columns,
+            filters=filters,
+            config=config,
+        )
+        if part.empty:
+            continue
+        parts.append(part)
+        print_mapping(
+            "labeled_pvc_part",
+            {
+                "file": file.name,
+                "rows": len(part),
+                "columns": len(part.columns),
+            },
+        )
+    if not parts:
+        return pd.DataFrame()
+    return pd.concat(parts, ignore_index=True)
+
+
 def _load_labeled_cache(path: Path) -> pd.DataFrame:
     labeled = read_frame(path)
     return ensure_timestamp_columns(standardize_columns(labeled))
@@ -1264,7 +1333,12 @@ def _load_labeled_pvc_frame(
             **filter_summary,
         },
     )
-    return _filter_labeled_frame(read_frame(path, columns=columns, filters=filters), config)
+    return _read_labeled_pvc_frame(
+        path,
+        columns=columns,
+        filters=filters,
+        config=config,
+    )
 
 
 def _test_year_from_args(args: argparse.Namespace, config: dict, key: str) -> int | None:

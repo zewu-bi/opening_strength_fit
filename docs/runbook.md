@@ -28,8 +28,9 @@ precheck -> render job -> apply/wait -> sync artifacts -> audit/coverage -> anal
   `36m train -> next 1m test` monthly rolling，覆盖 `2024-01` 至 `2024-12` 这 12 个 OOS
   月份；每个 fold 只用测试月之前的 36 个自然月训练。正式 12-shard 配置应迁移
   `soft_core_reg_light`，已有 `lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1` 只作为输入链路
-  smoke。36m smoke 不再跑 full-feature；使用 PVC 列投影和 `soft_core_reg_light`，避免读取阶段接近
-  512Gi 内存上限。后续补齐 `2015-2020` 后再把同一口径往更早 OOS 月份扩展。
+  smoke。36m smoke 不再跑 full-feature；使用 PVC 列投影、年度文件分块 transform 和
+  `soft_core_reg_light`，避免读取/特征构造阶段接近 512Gi 内存上限。后续补齐 `2015-2020` 后再把
+  同一口径往更早 OOS 月份扩展。
 - Historical evidence: `docs/experiment_log.md` 已记录、`experiments/results/**` 有轻量证据、或文档明确引用的
   run/job/config 都保留。guard / clean target / two-model alpha-risk / risk penalty 路线现在是 historical /
   superseded evidence，不是当前主实现。
