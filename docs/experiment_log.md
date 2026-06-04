@@ -1559,10 +1559,11 @@ PVC 目录：
 - `2021-2024` mixed-w030 target cache 随后全部完成。PVC metadata 检查显示 next-close 年度文件为
   4 列、`0.07-0.08 GiB`；mixed 年度文件为 184 列、`4.81-5.45 GiB`，`target_label`
   非空数分别为 `10,167,661 / 11,154,082 / 11,823,254 / 12,049,972`。
-- 原 full-feature 36m smoke 在读取阶段 RSS 接近 `489 GiB` 且尚未写输出，已停止。改为
-  `opening-strength-fit-20260604-next-close-v5`：labeled PVC 读取支持按 include feature filters 做列投影，
-  并对目录输入按年度文件逐个 transform 后再 concat；smoke 配置同步迁移到 `soft_core_reg_light`，
-  训练输入启用 `downcast_float32`。
+- 原 full-feature 36m smoke 在读取阶段 RSS 接近 `489 GiB` 且尚未写输出，已停止。随后补上
+  labeled PVC 列投影、年度文件逐个 transform、`downcast_float32`；完整参数版 v5 能进入训练但过慢。
+  v6 将 smoke 限制为 `feature_limit=80`、`n_estimators=40`，已完成 `2024-01` 单月链路检查：
+  train `33,144,997` 行、predict `1,103,613` 行、`80` 个特征。该结果只证明 cache/split/output
+  链路可跑通，不作为正式收益对比。
 
 ### Output 索引
 
