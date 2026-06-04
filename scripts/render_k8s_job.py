@@ -26,6 +26,8 @@ def training_script(config: dict) -> str:
         return "scripts/audit_feature_dependence.py"
     if run_kind in {"cache_transform", "target_cache"}:
         return "scripts/build_target_label_cache.py"
+    if run_kind == "next_close_label_cache":
+        return "scripts/build_next_close_labels.py"
     if run_kind in {"labeled_cache", "clickhouse_labeled_cache"}:
         return "scripts/build_labeled_cache.py"
     if run_kind == "learned_risk_layer":

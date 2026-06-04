@@ -1536,6 +1536,21 @@ PVC 目录：
 `missing_required=[]`。该目录当前约 19 GB。后续 2024 测试的 36m train + 12m rolling 已有
 `2021-2024` 数据底座；`2015-2020` 仍待分批启动，用于更早测试窗口和更长历史稳健性。
 
+## 2026-06-04 Next-Close / Mixed Target Prep
+
+为 36m rolling 前置闭环拆出 `scripts/build_next_close_labels.py`：它只负责从 labeled decision rows
+读取 `buy_price`，用 ClickHouse close price 缓存 `alpha_return_next_close`；`plot_signal_baseline_panels.py`
+改为消费该缓存逻辑，画图不再拥有 label 获取逻辑。
+
+新增年度前置 run/job：
+
+- `build_delay2_2021_next_close_labels_v1` 至 `build_delay2_2024_next_close_labels_v1`，输出到
+  `/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_next_close_labels_v1/`。
+- `build_delay2_2021_mixed_w030_target_v1` 至 `build_delay2_2024_mixed_w030_target_v1`，输出到
+  `/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_mixed_w030_labeled_v1/`。
+- `lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1` 是单月 smoke：`2021-01` 至 `2023-12`
+  train，`2024-01` test，验证 36m rolling 输入链路后再开 2024 全年 12 shard。
+
 ### Output 索引
 
 本地 `output/` 只保留能追溯到上述 run/job 的产物：

@@ -12,6 +12,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 from render_k8s_job import _k8s_job_name  # noqa: E402
 from render_k8s_job import render_sharded_training_job  # noqa: E402
+from render_k8s_job import training_script  # noqa: E402
 
 
 class K8sHelperTest(unittest.TestCase):
@@ -74,6 +75,11 @@ class K8sHelperTest(unittest.TestCase):
         self.assertIn("JOB_COMPLETION_INDEX", manifest)
         self.assertIn("MONTHS=(2021-08 2021-09 2021-10)", manifest)
         self.assertNotIn("for MONTH in", manifest)
+
+    def test_next_close_label_cache_uses_cache_builder_script(self) -> None:
+        config = {"run": {"kind": "next_close_label_cache"}}
+
+        self.assertEqual(training_script(config), "scripts/build_next_close_labels.py")
 
 
 if __name__ == "__main__":

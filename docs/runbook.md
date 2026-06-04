@@ -241,6 +241,8 @@ experiments/results/metrics/<run_id>_metrics_by_year.csv
   `labeled_cache_manifest.json`，manifest 由 `opening_strength_fit.cache_manifest` 生成。
 - `[run].kind = "cache_transform"` 或 `"target_cache"`：运行 target-label cache 构建，
   output 通常是 `/mnt/output/opening_strength_fit/cache/*.parquet`。
+- `[run].kind = "next_close_label_cache"`：运行 `scripts/build_next_close_labels.py`，从 labeled decision rows
+  的 `buy_price` 和 ClickHouse close price 缓存 `alpha_return_next_close`。
 - `[run].kind = "learned_risk_layer"`：训练 learned dirty-risk / next-flip risk model，
   输出 risk predictions，供后续 score-risk sweep 读取。
 - `[run].kind = "alpha_conditioned_rolling_validation"`：每个测试月用前 N 个月重新训练

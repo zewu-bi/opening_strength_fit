@@ -1,0 +1,47 @@
+[run]
+id = "build_delay2_2021_mixed_w030_target_v1"
+kind = "cache_transform"
+description = "Build 2021 delay2 mixed_w030 target cache from base labeled cache v2 and next-close labels."
+status = "queued"
+
+[target_cache]
+input_path = "/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_base_labeled_v2/opening_2021_delay2_base_labeled_v2.parquet"
+output_path = "/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_mixed_w030_labeled_v1/opening_2021_delay2_mixed_w030_labeled_v1.parquet"
+mode = "mixed"
+group_cols = ["date", "decision_target_timestamp"]
+label_col = "label"
+target_col = "target_label"
+raw_label_col = "label_raw"
+min_group_size = 50
+long_label_input = "/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_next_close_labels_v1/opening_2021_next_close_labels_v1.parquet"
+long_label_col = "alpha_return_next_close"
+long_label_weight = 0.30
+short_label_transform = "zscore"
+long_label_transform = "zscore"
+
+[data]
+source = "labeled_pvc"
+labeled_path = "/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_base_labeled_v2/opening_2021_delay2_base_labeled_v2.parquet"
+
+[output]
+local_dir = "output/local/build_delay2_2021_mixed_w030_target_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/cache_builds/build_delay2_2021_mixed_w030_target_v1"
+
+[k8s]
+namespace = "bizewu"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260604-next-close-v1"
+wait_for_paths = ["/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_next_close_labels_v1/opening_2021_next_close_labels_v1.parquet"]
+wait_for_path_timeout_seconds = 43200
+wait_for_path_interval_seconds = 120
+
+[k8s.node_selector]
+"kubernetes.io/hostname" = "node8"
+
+[k8s.resources]
+cpu_request = "8"
+cpu_limit = "16"
+memory_request = "256Gi"
+memory_limit = "512Gi"

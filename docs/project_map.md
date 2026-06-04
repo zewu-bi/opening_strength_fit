@@ -34,6 +34,7 @@ Scripts:
 - `scripts/prepare_research_dataset.py`: partition labeled research datasets by date.
 - `scripts/concat_frames.py`: concatenate parquet/csv frames.
 - `scripts/probe_clickhouse_data.py`: inspect ClickHouse schema and opening-window coverage.
+- `scripts/build_next_close_labels.py`: fetch/cache ClickHouse next-close labels for decision rows.
 
 ## Features And Pools
 
@@ -76,7 +77,7 @@ Scripts:
 - `scripts/run_lgbm_delay_replays.py`: standard delay0/1/2 replay grid.
 - `scripts/plot_lgbm_delay_decay.py`: plot delay replay decay summaries.
 - `scripts/run_alpha_horizon_decay.py`: evaluate opening scores on intraday/close horizons.
-- `scripts/plot_signal_baseline_panels.py`: render delay2 short/next-close baseline panels.
+- `scripts/plot_signal_baseline_panels.py`: render delay2 short/next-close baseline panels using cached next-close labels.
 - `scripts/run_score_tail_guards.py`: sweep visible-information TopN guard rules over an existing score file.
 - `scripts/run_score_risk_sweep.py`: historical/superseded alpha-minus-risk score sweeps over existing score files.
 - `scripts/run_learned_risk_layer.py`: historical learned dirty-risk / next-flip risk layers for score-sweep evidence.

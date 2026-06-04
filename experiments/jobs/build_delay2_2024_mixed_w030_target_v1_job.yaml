@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: opening-strength-build-delay2-2024-mixed-w030-target-v1
+  namespace: bizewu
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      volumes:
+        - name: opening-strength-output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+      nodeSelector:
+        kubernetes.io/hostname: "node8"
+      containers:
+        - name: opening-strength-fit
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260604-next-close-v1
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          command:
+            - python
+            - scripts/build_target_label_cache.py
+            - --config
+            - experiments/runs/build_delay2_2024_mixed_w030_target_v1.toml
+            - --output-dir
+            - /mnt/output/opening_strength_fit/cache_builds/build_delay2_2024_mixed_w030_target_v1
+          volumeMounts:
+            - name: opening-strength-output
+              mountPath: /mnt/output
+          resources:
+            requests:
+              cpu: "8"
+              memory: 256Gi
+
+            limits:
+              cpu: "16"
+              memory: 512Gi
+

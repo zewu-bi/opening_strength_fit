@@ -22,7 +22,7 @@ from opening_strength_fit.analysis import (
 from opening_strength_fit.clickhouse_ticks import DEFAULT_CLICKHOUSE_TICK_TABLE
 from opening_strength_fit.io import read_frame as shared_read_frame
 from opening_strength_fit.model import corr
-from run_alpha_horizon_decay import HorizonSpec, compute_clickhouse_close_labels
+from build_next_close_labels import fetch_next_close_labels
 
 
 DEFAULT_INPUT = (
@@ -137,9 +137,8 @@ def load_or_fetch_next_close_labels(
                 "next-close labels not found. Pass --next-close-label-input or set "
                 "CLICKHOUSE_USER and CLICKHOUSE_PASSWORD to fetch labels."
             )
-        return compute_clickhouse_close_labels(
+        return fetch_next_close_labels(
             base[["date", "symbol", "decision_target_timestamp", "buy_price"]].copy(),
-            [HorizonSpec(name="next_close", label="next close", seconds=None)],
             host=args.clickhouse_host or "ch.db.prod.highfortfunds.com",
             port=int(args.clickhouse_port),
             username=args.clickhouse_user,

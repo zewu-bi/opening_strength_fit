@@ -14,6 +14,7 @@ K8S_JOB_ENTRYPOINTS = (
     "scripts/audit_feature_dependence.py",
     "scripts/build_labeled_cache.py",
     "scripts/build_target_label_cache.py",
+    "scripts/build_next_close_labels.py",
     "scripts/run_learned_risk_layer.py",
     "scripts/run_alpha_conditioned_rolling_validation.py",
     "/mnt/config/run_alpha_conditioned_rolling_validation.py",
