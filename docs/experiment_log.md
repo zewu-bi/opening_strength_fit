@@ -1660,6 +1660,51 @@ PVC 目录：
   train `33,144,997` 行、predict `1,103,613` 行、`80` 个特征。该结果只证明 cache/split/output
   链路可跑通，不作为正式收益对比。
 
+## 2026-06-04 36m Full Rolling Preparation
+
+按正式实验前 checklist 复核后，历史尾巴已收束：
+
+- `osf-audit-experiments` 输出 `alignment_ok: yes`。
+- `osf-check-project-contracts` 输出 `contracts_ok: yes`。
+- `2021-2024` next-close label cache 已在 PVC：
+  `/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_next_close_labels_v1/`。
+- `2021-2024` mixed-w030 derived cache 已按年度 shard 存在：
+  `/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_mixed_w030_labeled_v1/`。
+  PVC 实查四个年度 parquet 大小约 `5.16 / 5.62 / 5.81 / 5.86 GB`。
+- `lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1` 已完成并同步，只作为链路 smoke。
+
+正式 12-shard run 已准备但未启动：
+
+```text
+config:
+experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1.toml
+
+job manifest:
+experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_sharded_job.yaml
+
+rendered job name:
+opening-strength-lgbm-delay2-36m-mixed-w030-sharded-a99705d1
+```
+
+该 run 使用 `36m train -> next 1m test`，`2024-01` 至 `2024-12` 共 12 个 monthly Indexed Job
+shards，`shard_parallelism=1`，feature/model 迁移 18m 晋级的 `soft_core_reg_light`：
+`276` 目标特征口径、`n_estimators=360`、`num_leaves=63`、`min_child_samples=300`、
+`subsample=0.9`、`colsample_bytree=0.9`、`reg_alpha=0.01`、`reg_lambda=1.0`、`max_bin=63`。
+它不复用 smoke 的 `feature_limit=80` / `n_estimators=40`。
+
+为长任务过程反馈补充两个入口：
+
+- `osf-rolling-job-status`：把 Indexed Job pod index 映射回 rolling 月份，并打印每月 log 命令。
+- `osf-sync-experiment-artifacts --allow-partial`：只同步已完成月份的 metrics/predictions，不归档到
+  `experiments/results/`。
+- `osf-analyze-pool-internal-top100`：对已同步月份 join 本地 next-close label cache 和
+  universe / pool_S / pool_M / pool_L，输出 short/next Rank IC 与池内 Top100 excess 的
+  summary、month、clock、group 四层 CSV。
+
+启动前仍需从当前 clean worktree build/push manifest 指定 image：
+`registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260604-36m-soft-core-v1`。
+本次只完成准备，不 apply 全量实验。
+
 ### 归档和保留口径
 
 - 按用户要求，`build_delay2_2024_cache_v1` 已停止；旧 2023/2024 v1 cache 和过期派生 cache 已从 PVC 清掉。

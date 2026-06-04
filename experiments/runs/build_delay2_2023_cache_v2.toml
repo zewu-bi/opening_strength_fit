@@ -2,7 +2,7 @@
 id = "build_delay2_2023_cache_v2"
 kind = "labeled_cache"
 description = "Rebuild the 2023 shard into the 2015-2024 09:30-09:40 delay2 base labeled cache v2."
-status = "queued"
+status = "completed"
 
 [data]
 source = "clickhouse"

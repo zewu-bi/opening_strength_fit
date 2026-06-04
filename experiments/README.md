@@ -9,14 +9,14 @@
 
 Run kind entrypoints:
 
-| run kind | script |
+| run kind | entrypoint |
 | --- | --- |
-| standard training / exploration | `scripts/run_experiment.py` |
-| feature audit | `scripts/audit_feature_dependence.py` |
-| labeled cache | `scripts/build_labeled_cache.py` |
-| cache transform / target cache | `scripts/build_target_label_cache.py` |
-| next-close label cache | `scripts/build_next_close_labels.py` |
-| learned risk layer | `scripts/run_learned_risk_layer.py` |
-| alpha-conditioned rolling | `scripts/run_alpha_conditioned_rolling_validation.py` |
-| gap-risk attribution | `scripts/run_gap_risk_attribution.py` |
-| score-risk sweep | `scripts/run_score_risk_sweep.py` |
+| standard training / exploration | `osf-train` |
+| feature audit | `osf-audit-feature-dependence` |
+| labeled cache | `osf-build-labeled-cache` |
+| cache transform / target cache | `osf-build-target-label-cache` |
+| next-close label cache | `osf-build-next-close-labels` |
+| learned risk layer | `osf-run-learned-risk-layer` |
+| alpha-conditioned rolling | `osf-run-alpha-conditioned-rolling-validation` |
+| gap-risk attribution | `osf-run-gap-risk-attribution` |
+| score-risk sweep | `osf-run-score-risk-sweep` |

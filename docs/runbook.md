@@ -14,6 +14,10 @@ precheck -> render job -> apply/wait -> sync artifacts -> audit/coverage -> anal
 36m smoke:
 experiments/runs/lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1.toml
 
+36m formal 2024 rolling, prepared but not launched:
+experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1.toml
+experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_sharded_job.yaml
+
 18m source feature/model config:
 experiments/runs/lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1.toml
 ```
@@ -31,19 +35,19 @@ mixed w030 cache:
 /mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_mixed_w030_labeled_v1/
 ```
 
-创建 2024 全年 12-shard rolling run 时，复用 `soft_core_reg_light` 的 feature include/drop 规则和
-LightGBM 参数。
+2024 全年 12-shard rolling run 已准备为 `soft_core_reg_light` feature include/drop 规则和
+LightGBM 参数；启动前需从当前 clean worktree build/push 对应 image tag，再 dry-run/apply manifest。
 
 ## 1. 预检
 
 ```bash
-cd /home/hefu/projects/opening_strength_fit
+cd "$(git rev-parse --show-toplevel)"
 source .venv/bin/activate
 set -a; . ./.env; set +a
 
-python scripts/audit_experiments.py
-python scripts/check_workflow_coverage.py
-python scripts/probe_clickhouse_data.py --schema --field-notes
+osf-audit-experiments
+osf-check-project-contracts
+osf-probe-clickhouse-data --schema --field-notes
 ```
 
 ## 2. 外部股池
@@ -70,7 +74,7 @@ CEPH_LDAP_KEY='your_headquarter_password'
 加载环境变量：
 
 ```bash
-cd /home/hefu/projects/opening_strength_fit
+cd "$(git rev-parse --show-toplevel)"
 set -a; . ./.env; set +a
 ```
 
@@ -79,7 +83,7 @@ set -a; . ./.env; set +a
 
 ```bash
 cd /home/hefu/projects/xy_fit
-set -a; . /home/hefu/projects/opening_strength_fit/.env; set +a
+set -a; . "$(git rev-parse --show-toplevel)/.env"; set +a
 
 .venv/bin/python - <<'PY'
 from xyfit.io import build_client
@@ -94,7 +98,7 @@ PY
 CLI 快速试验：
 
 ```bash
-python scripts/run_experiment.py \
+osf-train \
   --config experiments/runs/lgbm_delay2_postopen_0931_0940_baseline_v1.toml \
   --pool S \
   --output-dir output/local/lgbm_delay2_postopen_pool_s_selection
@@ -129,7 +133,7 @@ score_buckets_stock_pool.csv
 ## 3. 本地 Smoke
 
 ```bash
-python scripts/inspect_dataset.py \
+osf-inspect-dataset \
   --symbol 000001.SZ 000925.SZ 600519.SH 601318.SH 300750.SZ \
   --date 2021-09-22 2021-09-23 \
   --config experiments/runs/gbm_opening_1y_next_month.toml \
@@ -137,7 +141,7 @@ python scripts/inspect_dataset.py \
   --label-preview-rows 3 \
   --labeled-output output/local/inspect_smoke/multi_symbol_2021-09-22_2021-09-23_labeled.parquet
 
-python scripts/run_experiment.py \
+osf-train \
   --config experiments/runs/gbm_opening_1y_next_month.toml \
   --input output/local/inspect_smoke/multi_symbol_2021-09-22_2021-09-23_labeled.parquet \
   --input-kind labeled \
@@ -148,7 +152,7 @@ python scripts/run_experiment.py \
   --top-n 2 \
   --output-dir output/local/gbm_opening_1y_next_month_multi_symbol_smoke
 
-python scripts/summarize_opening_results.py \
+osf-summarize-opening-results \
   --input-dir output/local/gbm_opening_1y_next_month_multi_symbol_smoke
 ```
 
@@ -186,7 +190,7 @@ TAG=opening-strength-fit-$(date +%Y%m%d)-lgbm-cpu-v1
 docker build --build-arg CACHE_BUST=${TAG} -t registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG} .
 docker push registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG}
 
-python scripts/render_k8s_job.py \
+osf-render-k8s-job \
   --config experiments/runs/<run_id>.toml \
   --image registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG}
 
@@ -202,7 +206,7 @@ hfcli kubectl --cluster research wait --for=condition=complete job/opening-stren
 monthly rolling 或长窗口任务使用 sharded Job：
 
 ```bash
-python scripts/render_k8s_job.py \
+osf-render-k8s-job \
   --config experiments/runs/<run_id>.toml \
   --sharded \
   --image registry.corp.highfortfunds.com/bizewu/opening-strength-fit:${TAG}
@@ -221,18 +225,73 @@ year_YYYY/
 
 并行度由 `[k8s].shard_parallelism` 控制。
 
+### 5.1 2024 全量 rolling 准备件
+
+当前准备好的正式 run：
+
+```text
+run_id: lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1
+job:    opening-strength-lgbm-delay2-36m-mixed-w030-sharded-a99705d1
+image:  registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260604-36m-soft-core-v1
+status: queued, not applied
+```
+
+启动前只做 dry-run：
+
+```bash
+hfcli kubectl --cluster research apply --dry-run=client \
+  -f experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_sharded_job.yaml
+```
+
+真正启动前先 build/push 当前 clean worktree 到 manifest 里的 image tag，或重新 render manifest 使用新 tag。
+不要用旧 smoke image 直接 apply；旧 image 不包含新增正式 run config。
+
+### 5.2 Rolling 过程观测
+
+Indexed Job 的 shard index 对应月份，使用：
+
+```bash
+osf-rolling-job-status \
+  --config experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1.toml
+```
+
+输出会列出 `index -> month -> pod -> phase`，并打印每个月对应的 log 命令。看最近日志：
+
+```bash
+osf-rolling-job-status \
+  --config experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1.toml \
+  --tail 160
+```
+
+也可以直接跟随当前 pod：
+
+```bash
+hfcli kubectl --cluster research logs -n bizewu <pod-name> -f
+```
+
 ## 6. 同步产物
 
 metrics、predictions、shard metrics 合并和轻量归档统一使用：
 
 ```bash
-python scripts/sync_experiment_artifacts.py \
+osf-sync-experiment-artifacts \
   --config experiments/runs/<run_id>.toml \
   --all
 
-python scripts/audit_experiments.py
-python scripts/check_workflow_coverage.py
+osf-audit-experiments
+osf-check-project-contracts
 ```
+
+Rolling 仍在运行时，只同步已完成月份：
+
+```bash
+osf-sync-experiment-artifacts \
+  --config experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1.toml \
+  --metrics --predictions --allow-partial
+```
+
+`--allow-partial` 不写入 `experiments/results/`，只更新 `output/k8s/metrics/` 和
+`output/predictions/<run_id>/raw/predictions_YYYY-MM.parquet`，方便每个月完成后立即分析。
 
 默认输出：
 
@@ -263,16 +322,56 @@ sync 会拉取 `month_YYYY-MM/` shards 并本地合并。
 Metrics：
 
 ```bash
-python scripts/summarize_opening_results.py \
+osf-summarize-opening-results \
   --metrics-csv output/k8s/metrics/<run_id>_metrics_by_year.csv
 
-python scripts/compare_opening_results.py
+osf-compare-opening-results
+```
+
+正式 36m rolling 的 S/M/L pool-internal 验收面板：
+
+```bash
+osf-analyze-pool-internal-top100 \
+  --predictions output/predictions/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1 \
+  --next-close-label-input output/local/next_close_labels_2021_2024 \
+  --run-id lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1 \
+  --variant soft_core_reg_light_36m_2024 \
+  --output-dir output/local/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_pool_internal
+```
+
+该脚本输出：
+
+```text
+pool_internal_summary.csv
+pool_internal_month_summary.csv
+pool_internal_clock_summary.csv
+pool_internal_group_metrics.csv
+pool_internal_trace.json
+```
+
+`predictions` 里不保留 `alpha_return_next_close`，这是训练防泄漏设计；分析前需要把 PVC 上的 next-close 年度
+label 小文件拉到本地 `output/local/next_close_labels_2021_2024/`。这四个文件总量约 310 MiB，拉一次即可。
+
+```bash
+mkdir -p output/local/next_close_labels_2021_2024
+POD=opening-strength-next-close-pull
+IMAGE=registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260604-next-close-v6
+OVERRIDES='{"apiVersion":"v1","spec":{"imagePullSecrets":[{"name":"highfort"}],"containers":[{"name":"opening-strength-helper","image":"'"${IMAGE}"'","command":["/bin/sh","-c","sleep 3600"],"volumeMounts":[{"name":"opening-strength-output","mountPath":"/mnt/output"}]}],"volumes":[{"name":"opening-strength-output","persistentVolumeClaim":{"claimName":"bizewu-private-data"}}]}}'
+hfcli kubectl --cluster research delete pod "${POD}" -n bizewu --ignore-not-found
+hfcli kubectl --cluster research run "${POD}" -n bizewu --restart=Never --image="${IMAGE}" --overrides="${OVERRIDES}" --command -- /bin/sh -c 'sleep 3600'
+hfcli kubectl --cluster research wait --for=condition=Ready pod/"${POD}" -n bizewu --timeout=300s
+for YEAR in 2021 2022 2023 2024; do
+  hfcli kubectl --cluster research exec -n bizewu "${POD}" -- cat \
+    "/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_next_close_labels_v1/opening_${YEAR}_next_close_labels_v1.parquet" \
+    > "output/local/next_close_labels_2021_2024/opening_${YEAR}_next_close_labels_v1.parquet"
+done
+hfcli kubectl --cluster research delete pod "${POD}" -n bizewu --ignore-not-found
 ```
 
 Rolling short-vs-next tradeoff chart：
 
 ```bash
-python scripts/plot_rolling_validation_tradeoff.py \
+osf-plot-rolling-validation-tradeoff \
   --input experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1_month_summary.csv \
   --output-dir output/reports/rolling_alpha_conditioned_top100_validation_v1
 ```
@@ -280,7 +379,7 @@ python scripts/plot_rolling_validation_tradeoff.py \
 Feature dependence audit：
 
 ```bash
-python scripts/audit_feature_dependence.py \
+osf-audit-feature-dependence \
   --config experiments/runs/lgbm_delay2_feature_dependence_v1.toml \
   --output-dir output/local/lgbm_delay2_feature_dependence_v1
 ```
@@ -288,11 +387,11 @@ python scripts/audit_feature_dependence.py \
 Replay / horizon diagnostics：
 
 ```bash
-python scripts/run_lgbm_delay_replays.py --check-interface-only
-python scripts/run_lgbm_delay_replays.py
-python scripts/plot_lgbm_delay_decay.py
+osf-run-lgbm-delay-replays --check-interface-only
+osf-run-lgbm-delay-replays
+osf-plot-lgbm-delay-decay
 
-python scripts/run_alpha_horizon_decay.py \
+osf-run-alpha-horizon-decay \
   --decision-time 09:30:00 \
   --horizon 1m --horizon 2m --horizon 5m --horizon 10m \
   --horizon close --horizon next_close \
@@ -313,4 +412,4 @@ python scripts/run_alpha_horizon_decay.py \
 | K8s 内找不到新 config | 重新 build/push 镜像，并重新 render Job。 |
 | cache 只有 `.tmp` / lock / heartbeat | 等待最终 `.parquet` 和 manifest。 |
 | replay 缺少上下文字段 | 传 `--context-input`，或先运行 interface check。 |
-| completed config 没有 metrics | 运行 `sync_experiment_artifacts.py --all`，然后 audit。 |
+| completed config 没有 metrics | 运行 `osf-sync-experiment-artifacts --all`，然后 audit。 |
