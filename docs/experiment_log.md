@@ -1509,6 +1509,33 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 - labeled PVC 读取顺序改为先在完整 cache 上构造 postopen 特征，再按实验 `decision_times` 过滤；
   因此只看 `09:31-09:40` 时仍能让 `09:31` 使用 cache 中的 `09:30` context。
 
+## 2026-06-04 Cache v2 2021-2024 Pull
+
+`opening-strength-fit-20260603-cache-v2` 已从干净 `HEAD` build/push，digest：
+
+```text
+sha256:612d8dcb5389e26094d5118ceeddc289e1483ef357f1a9f0b3ed116c837845b6
+```
+
+已分批启动并完成四个年度 base labeled cache v2 job：
+
+| year | job | PVC parquet size | date range | rows | valid labels | columns |
+| ---: | --- | ---: | --- | ---: | ---: | ---: |
+| 2021 | `build_delay2_2021_cache_v2` | 4.49 GB | 2021-01-04 -> 2021-12-31 | 11,359,920 | 11,220,250 | 168 |
+| 2022 | `build_delay2_2022_cache_v2` | 4.89 GB | 2022-01-04 -> 2022-12-30 | 12,410,708 | 12,287,506 | 168 |
+| 2023 | `build_delay2_2023_cache_v2` | 5.04 GB | 2023-01-03 -> 2023-12-29 | 13,108,173 | 13,018,257 | 168 |
+| 2024 | `build_delay2_2024_cache_v2` | 5.07 GB | 2024-01-02 -> 2024-12-31 | 13,387,526 | 13,279,131 | 168 |
+
+PVC 目录：
+
+```text
+/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_base_labeled_v2/
+```
+
+每个 shard 都有 `.parquet`、`.parquet.lock.done` 和 `.parquet.manifest.json`；manifest 检查
+`missing_required=[]`。该目录当前约 19 GB。后续 2024 测试的 36m train + 12m rolling 已有
+`2021-2024` 数据底座；`2015-2020` 仍待分批启动，用于更早测试窗口和更长历史稳健性。
+
 ### Output 索引
 
 本地 `output/` 只保留能追溯到上述 run/job 的产物：

@@ -18,8 +18,8 @@ precheck -> render job -> apply/wait -> sync artifacts -> audit/coverage -> anal
   cache 已从 PVC 清掉。新的基础 cache 线是 `build_delay2_2015_cache_v2` 至
   `build_delay2_2024_cache_v2`，统一写入
   `/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_base_labeled_v2/`。
-  启动这些 job 前需要先 build/push 包含 `cache_manifest.py` 和 `inspect_labeled_cache.py` 的
-  `opening-strength-fit-20260603-cache-v2` 镜像。
+  `opening-strength-fit-20260603-cache-v2` 镜像已 build/push；`2021-2024` 四个年度 shard 已完成并有
+  manifest，`2015-2020` 仍待分批启动。
 - Historical evidence: `docs/experiment_log.md` 已记录、`experiments/results/**` 有轻量证据、或文档明确引用的
   run/job/config 都保留。guard / clean target / two-model alpha-risk / risk penalty 路线现在是 historical /
   superseded evidence，不是当前主实现。
