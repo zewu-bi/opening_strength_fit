@@ -1,7 +1,7 @@
 [run]
 id = "lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1"
 kind = "exploration"
-description = "Single-month smoke for 36m train -> next 1m test rolling on 2021-2024 delay2 mixed_w030 cache with the soft_core_reg_light feature/model line."
+description = "Fast single-month smoke for 36m train -> next 1m test rolling on 2021-2024 delay2 mixed_w030 cache; validates the PVC/cache/split/output chain before full soft_core_reg_light rolling."
 status = "queued"
 
 [data]
@@ -9,7 +9,7 @@ source = "labeled_pvc"
 labeled_path = "/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_mixed_w030_labeled_v1"
 tick_path = ""
 input_kind = "labeled"
-feature_limit = 0
+feature_limit = 80
 downcast_float32 = true
 
 [universe]
@@ -123,18 +123,18 @@ test_end_month = "2024-01"
 name = "lightgbm"
 target_col = "target_label"
 device_type = "cpu"
-n_estimators = 360
+n_estimators = 40
 learning_rate = 0.03
-num_leaves = 63
+num_leaves = 31
 max_depth = -1
-min_child_samples = 300
+min_child_samples = 500
 subsample = 0.9
 colsample_bytree = 0.9
 reg_alpha = 0.01
 reg_lambda = 1.0
 random_state = 7
 n_jobs = 8
-max_bin = 63
+max_bin = 31
 
 [evaluation]
 score_bins = 10
