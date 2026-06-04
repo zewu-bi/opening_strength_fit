@@ -25,6 +25,12 @@ train_label = short_label + w_long * long_label
 训练仍使用 full A-share universe。`pool_S`、`pool_M`、`pool_L` 只作为 TopN selection mask：
 模型训练和全量打分不按池过滤，也不把 membership 当模型特征；指标在不同 mask 下分别汇总。
 
+2026-06-04 之后的下一轮候选是 `soft_core_reg_light` feature/model 口径，并迁移到
+`36m train -> next 1m test` 的 2024 全年 rolling。输入链路已经用
+`lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1` 打通：2021-2024 mixed-w030 PVC cache、
+rolling date bounds、36m/1m split、LightGBM 训练预测和 PVC 输出均已通过 `2024-01` 单月 smoke。
+该 smoke 使用轻量参数，只证明工程链路可跑通，不作为收益对比或正式模型结论。
+
 执行顺序：
 
 | step | focus | gate |
