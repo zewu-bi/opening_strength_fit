@@ -20,6 +20,9 @@ precheck -> render job -> apply/wait -> sync artifacts -> audit/coverage -> anal
   `/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_base_labeled_v2/`。
   `opening-strength-fit-20260603-cache-v2` 镜像已 build/push；`2021-2024` 四个年度 shard 已完成并有
   manifest，`2015-2020` 仍待分批启动。
+- Next rolling target: 先用已完成的 `2021-2024` base labeled cache v2 做 `36m train -> next 1m test`
+  monthly rolling，覆盖 `2024-01` 至 `2024-12` 这 12 个 OOS 月份；每个 fold 只用测试月之前的 36
+  个自然月训练。后续补齐 `2015-2020` 后再把同一口径往更早 OOS 月份扩展。
 - Historical evidence: `docs/experiment_log.md` 已记录、`experiments/results/**` 有轻量证据、或文档明确引用的
   run/job/config 都保留。guard / clean target / two-model alpha-risk / risk penalty 路线现在是 historical /
   superseded evidence，不是当前主实现。
