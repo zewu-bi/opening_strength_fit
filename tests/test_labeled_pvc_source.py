@@ -317,6 +317,40 @@ class LabeledPvcSourceTest(unittest.TestCase):
         self.assertEqual(labeled["keep_feature"].tolist(), [1.0, 2.0])
         self.assertNotIn("unused_heavy_feature", labeled.columns)
 
+    def test_labeled_pvc_can_downcast_float64_columns(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "labeled.parquet"
+            pd.DataFrame(
+                [
+                    {
+                        "date": "2022-01-04",
+                        "symbol": "000001.SZ",
+                        "timestamp": pd.Timestamp("2022-01-04 09:31:00"),
+                        "label": 0.01,
+                        "target_label": 0.2,
+                        "valid_label": True,
+                        "keep_feature": 1.0,
+                    }
+                ]
+            ).to_parquet(path, index=False)
+
+            args = argparse.Namespace(labeled_input=None)
+            config = {
+                "data": {
+                    "source": "labeled_pvc",
+                    "labeled_path": str(path),
+                    "downcast_float32": True,
+                },
+                "universe": {"enabled": False},
+                "features": {"include_feature_columns": ["keep_feature"]},
+                "model": {"target_col": "target_label"},
+            }
+
+            labeled = _load_labeled_pvc_frame(args, config)
+
+        self.assertEqual(str(labeled["keep_feature"].dtype), "float32")
+        self.assertEqual(str(labeled["target_label"].dtype), "float32")
+
     def test_labeled_pvc_rolling_monthly_reads_needed_date_range(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "labeled.parquet"

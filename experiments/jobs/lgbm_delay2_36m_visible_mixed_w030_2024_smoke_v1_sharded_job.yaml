@@ -21,7 +21,7 @@ spec:
 
       containers:
         - name: opening-strength-fit
-          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260604-next-close-v4
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260604-next-close-v5
           imagePullPolicy: Always
           envFrom:
             - secretRef:

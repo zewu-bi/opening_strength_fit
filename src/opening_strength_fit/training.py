@@ -1044,6 +1044,17 @@ def _read_labeled_pvc_file(
     )
 
 
+def _downcast_labeled_pvc_frame(frame: pd.DataFrame, config: dict) -> pd.DataFrame:
+    if not config_bool(config, "data", "downcast_float32", False):
+        return frame
+    float_columns = frame.select_dtypes(include=["float64"]).columns
+    if len(float_columns) == 0:
+        return frame
+    out = frame.copy()
+    out[float_columns] = out[float_columns].astype("float32")
+    return out
+
+
 def _read_labeled_pvc_frame(
     path: Path,
     *,
@@ -1053,19 +1064,25 @@ def _read_labeled_pvc_frame(
 ) -> pd.DataFrame:
     files = _labeled_pvc_files(path)
     if len(files) == 1:
-        return _read_labeled_pvc_file(
-            files[0],
-            columns=columns,
-            filters=filters,
-            config=config,
+        return _downcast_labeled_pvc_frame(
+            _read_labeled_pvc_file(
+                files[0],
+                columns=columns,
+                filters=filters,
+                config=config,
+            ),
+            config,
         )
 
     parts = []
     for file in files:
-        part = _read_labeled_pvc_file(
-            file,
-            columns=columns,
-            filters=filters,
+        part = _downcast_labeled_pvc_frame(
+            _read_labeled_pvc_file(
+                file,
+                columns=columns,
+                filters=filters,
+                config=config,
+            ),
             config=config,
         )
         if part.empty:
