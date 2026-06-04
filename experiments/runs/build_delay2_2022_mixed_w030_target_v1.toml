@@ -2,7 +2,7 @@
 id = "build_delay2_2022_mixed_w030_target_v1"
 kind = "cache_transform"
 description = "Build 2022 delay2 mixed_w030 target cache from base labeled cache v2 and next-close labels."
-status = "queued"
+status = "completed"
 
 [target_cache]
 input_path = "/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_base_labeled_v2/opening_2022_delay2_base_labeled_v2.parquet"

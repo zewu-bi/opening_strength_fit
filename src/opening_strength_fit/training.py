@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 
 import numpy as np
 import pandas as pd
@@ -64,7 +65,9 @@ from opening_strength_fit.feature_config import (
     feature_limit as _feature_limit,
 )
 from opening_strength_fit.io import read_frame, write_frame
+from opening_strength_fit.io import frame_columns
 from opening_strength_fit.model import (
+    PREDICTION_CONTEXT_COLUMNS,
     evaluate_prediction_frame,
     fit_gbm_frame,
     fit_lightgbm_frame,
@@ -860,6 +863,158 @@ def _labeled_pvc_date_filters(
     ], {"date_start": start_date, "date_end": end_date}
 
 
+def _mapping_keys(mapping: dict[str, object]) -> tuple[str, ...]:
+    return tuple(str(key) for key in mapping.keys())
+
+
+def _existing_columns(available: set[str], columns: list[str] | tuple[str, ...]) -> list[str]:
+    return [column for column in columns if column in available]
+
+
+def _matching_existing_columns(
+    available: set[str],
+    *,
+    prefixes: tuple[str, ...] = (),
+    patterns: tuple[str, ...] = (),
+) -> list[str]:
+    compiled = [re.compile(pattern) for pattern in patterns]
+    out = []
+    for column in sorted(available):
+        if prefixes and column.startswith(prefixes):
+            out.append(column)
+            continue
+        if compiled and any(pattern.search(column) for pattern in compiled):
+            out.append(column)
+    return out
+
+
+def _postopen_decision_source_columns(config: dict) -> tuple[str, ...]:
+    if not config_bool(config, "features", "include_postopen_decision", False):
+        return ()
+    return (
+        "ask_volume_1",
+        "bid_volume_1",
+        "ask_depth_10",
+        "bid_depth_10",
+        "depth_imbalance_1",
+        "depth_imbalance_10",
+        "spread_bps",
+        "mid_price",
+        "ask_price_1",
+        "bid_price_1",
+        "volume",
+        "turnover",
+        "volume_diff_1t",
+        *(f"ask_gap_{level}_bps" for level in range(2, 11)),
+        *(f"bid_gap_{level}_bps" for level in range(2, 11)),
+    )
+
+
+def _postopen_v2_source_columns(config: dict, available: set[str]) -> list[str]:
+    if not config_bool(config, "features", "include_postopen_v2", False):
+        return []
+    source = [
+        "ask_price_1",
+        "bid_price_1",
+        "ask_volume_1",
+        "bid_volume_1",
+        "mid_price",
+        "spread_bps",
+        "volume",
+        "turnover",
+    ]
+    source.extend(
+        _matching_existing_columns(
+            available,
+            prefixes=(
+                "ask_price_",
+                "bid_price_",
+                "ask_volume_",
+                "bid_volume_",
+                "ask_count_",
+                "bid_count_",
+                "ask_gap_",
+                "bid_gap_",
+                "ask_depth_",
+                "bid_depth_",
+                "depth_imbalance_",
+                "volume_diff_",
+                "turnover_diff_",
+                "trade_vwap_",
+                "return_",
+            ),
+        )
+    )
+    return source
+
+
+def _guard_condition_columns(config: dict, section: str) -> tuple[str, ...]:
+    return (
+        *_mapping_keys(config_float_mapping(config, section, "min")),
+        *_mapping_keys(config_float_mapping(config, section, "max")),
+        *_mapping_keys(config_float_mapping(config, section, "rank_min")),
+        *_mapping_keys(config_float_mapping(config, section, "rank_max")),
+        *tuple(config_list(config, section, "rank_columns", [])),
+        *tuple(config_list(config, section, "rank_group_cols", [])),
+    )
+
+
+def _labeled_pvc_read_columns(path: Path, config: dict) -> list[str] | None:
+    feature_filters = _feature_filters_from_config(config)
+    has_include_filter = bool(
+        feature_filters["include_columns"]
+        or feature_filters["include_prefixes"]
+        or feature_filters["include_patterns"]
+    )
+    explicit = tuple(config_list(config, "data", "read_columns", []))
+    if not has_include_filter and not explicit:
+        return None
+
+    available = frame_columns(path)
+    target_col = config_str(config, "model", "target_col", "label")
+    sample_weight_col = config_str(config, "model", "sample_weight_col", "")
+    sample_weight_output_col = config_str(
+        config,
+        "sample_weight",
+        "output_col",
+        "sample_weight",
+    )
+    required = [
+        "date",
+        "symbol",
+        "timestamp",
+        "decision_time",
+        "decision_target_timestamp",
+        "decision_lag_seconds",
+        "status",
+        "label",
+        "valid_label",
+        "gross_label",
+        target_col,
+        sample_weight_col,
+        sample_weight_output_col,
+        *PREDICTION_CONTEXT_COLUMNS,
+        *_guard_condition_columns(config, "candidate_filter"),
+        *_guard_condition_columns(config, "sample_weight"),
+        *_guard_condition_columns(config, "guard_features"),
+    ]
+
+    selected = []
+    selected.extend(explicit)
+    selected.extend(required)
+    selected.extend(feature_filters["include_columns"])
+    selected.extend(_postopen_decision_source_columns(config))
+    selected.extend(_postopen_v2_source_columns(config, available))
+    selected.extend(
+        _matching_existing_columns(
+            available,
+            prefixes=feature_filters["include_prefixes"],
+            patterns=feature_filters["include_patterns"],
+        )
+    )
+    return list(dict.fromkeys(_existing_columns(available, selected)))
+
+
 def _load_labeled_cache(path: Path) -> pd.DataFrame:
     labeled = read_frame(path)
     return ensure_timestamp_columns(standardize_columns(labeled))
@@ -1099,11 +1254,17 @@ def _load_labeled_pvc_frame(
 ) -> pd.DataFrame:
     path = _labeled_pvc_path(args, config)
     filters, filter_summary = _labeled_pvc_date_filters(args, config)
+    columns = _labeled_pvc_read_columns(path, config)
     print_mapping(
         "labeled_pvc",
-        {"action": "read", "path": str(path), **filter_summary},
+        {
+            "action": "read",
+            "path": str(path),
+            "projected_columns": len(columns) if columns is not None else 0,
+            **filter_summary,
+        },
     )
-    return _filter_labeled_frame(read_frame(path, filters=filters), config)
+    return _filter_labeled_frame(read_frame(path, columns=columns, filters=filters), config)
 
 
 def _test_year_from_args(args: argparse.Namespace, config: dict, key: str) -> int | None:

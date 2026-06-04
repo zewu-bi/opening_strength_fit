@@ -145,6 +145,112 @@ class LabeledPvcSourceTest(unittest.TestCase):
             labeled.iloc[0]["postopen_v2_ask_volume_1_diff_1m"],
             25.0,
         )
+        self.assertIn("volume", labeled.columns)
+
+    def test_labeled_pvc_projects_columns_when_feature_includes_are_configured(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "labeled.parquet"
+            pd.DataFrame(
+                [
+                    {
+                        "date": "2022-01-04",
+                        "symbol": "000001.SZ",
+                        "timestamp": pd.Timestamp("2022-01-04 09:31:00"),
+                        "decision_time": "09:31:00",
+                        "decision_target_timestamp": pd.Timestamp(
+                            "2022-01-04 09:31:00"
+                        ),
+                        "decision_lag_seconds": 0.0,
+                        "label": 0.01,
+                        "target_label": 0.2,
+                        "valid_label": True,
+                        "keep_feature": 1.0,
+                        "unused_heavy_feature": 999.0,
+                    }
+                ]
+            ).to_parquet(path, index=False)
+
+            args = argparse.Namespace(labeled_input=None)
+            config = {
+                "data": {"source": "labeled_pvc", "labeled_path": str(path)},
+                "universe": {"enabled": False},
+                "sample": {
+                    "mode": "decision_points",
+                    "decision_times": ["09:31:00"],
+                    "decision_max_lag_seconds": 5,
+                },
+                "features": {"include_feature_columns": ["keep_feature"]},
+                "model": {"target_col": "target_label"},
+            }
+
+            labeled = _load_labeled_pvc_frame(args, config)
+
+        self.assertIn("keep_feature", labeled.columns)
+        self.assertIn("target_label", labeled.columns)
+        self.assertNotIn("unused_heavy_feature", labeled.columns)
+
+    def test_labeled_pvc_projection_keeps_postopen_transform_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "labeled.parquet"
+            rows = []
+            for minute, ask_volume in enumerate((100.0, 125.0)):
+                rows.append(
+                    {
+                        "date": "2022-01-04",
+                        "symbol": "000001.SZ",
+                        "timestamp": pd.Timestamp("2022-01-04 09:30:00")
+                        + pd.Timedelta(minutes=minute),
+                        "decision_time": f"09:{30 + minute:02d}:00",
+                        "decision_target_timestamp": pd.Timestamp(
+                            f"2022-01-04 09:{30 + minute:02d}:00"
+                        ),
+                        "decision_lag_seconds": 0.0,
+                        "ask_volume_1": ask_volume,
+                        "bid_volume_1": 200.0,
+                        "ask_price_1": 10.01,
+                        "bid_price_1": 9.99,
+                        "ask_depth_10": ask_volume,
+                        "bid_depth_10": 200.0,
+                        "depth_imbalance_10": 0.1,
+                        "spread_bps": 20.0,
+                        "mid_price": 10.0,
+                        "volume": 1000.0 + minute,
+                        "turnover": 10000.0 + minute,
+                        "label": 0.01,
+                        "target_label": 0.2,
+                        "valid_label": True,
+                        "unused_heavy_feature": 999.0,
+                    }
+                )
+            pd.DataFrame(rows).to_parquet(path, index=False)
+
+            args = argparse.Namespace(labeled_input=None)
+            config = {
+                "data": {"source": "labeled_pvc", "labeled_path": str(path)},
+                "universe": {"enabled": False},
+                "sample": {
+                    "mode": "decision_points",
+                    "decision_times": ["09:31:00"],
+                    "decision_max_lag_seconds": 5,
+                },
+                "features": {
+                    "include_postopen_v2": True,
+                    "postopen_v2_windows": [1],
+                    "postopen_v2_depth_levels": [10],
+                    "include_feature_prefixes": ["postopen_v2_"],
+                },
+                "model": {"target_col": "target_label"},
+            }
+
+            labeled = _load_labeled_pvc_frame(args, config)
+
+        self.assertAlmostEqual(
+            labeled.iloc[0]["postopen_v2_ask_volume_1_diff_1m"],
+            25.0,
+        )
+        self.assertNotIn("unused_heavy_feature", labeled.columns)
 
     def test_labeled_pvc_rolling_monthly_reads_needed_date_range(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -2,7 +2,7 @@
 id = "build_delay2_2022_next_close_labels_v1"
 kind = "next_close_label_cache"
 description = "Fetch 2022 ClickHouse next-close labels for delay2 base labeled cache v2 decision rows."
-status = "queued"
+status = "completed"
 
 [next_close_labels]
 input_path = "/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_base_labeled_v2/opening_2022_delay2_base_labeled_v2.parquet"

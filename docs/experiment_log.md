@@ -1549,7 +1549,19 @@ PVC 目录：
 - `build_delay2_2021_mixed_w030_target_v1` 至 `build_delay2_2024_mixed_w030_target_v1`，输出到
   `/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_mixed_w030_labeled_v1/`。
 - `lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1` 是单月 smoke：`2021-01` 至 `2023-12`
-  train，`2024-01` test，验证 36m rolling 输入链路后再开 2024 全年 12 shard。
+  train，`2024-01` test。它验证 36m rolling 输入链路；正式 2024 全年 12 shard 应迁移
+  2026-06-04 小缓存筛出的 `soft_core_reg_light` feature/model 口径。
+
+执行留痕：
+
+- `opening-strength-fit-20260604-next-close-v1` 首轮 next-close job 暴露配置 CLI 字段名问题；
+  `opening-strength-fit-20260604-next-close-v2` 修复后，`2021-2024` next-close label cache 全部完成。
+- `2021-2024` mixed-w030 target cache 随后全部完成。PVC metadata 检查显示 next-close 年度文件为
+  4 列、`0.07-0.08 GiB`；mixed 年度文件为 184 列、`4.81-5.45 GiB`，`target_label`
+  非空数分别为 `10,167,661 / 11,154,082 / 11,823,254 / 12,049,972`。
+- 原 full-feature 36m smoke 在读取阶段 RSS 接近 `489 GiB` 且尚未写输出，已停止。改为
+  `opening-strength-fit-20260604-next-close-v3`：labeled PVC 读取支持按 include feature filters 做列投影，
+  smoke 配置同步迁移到 `soft_core_reg_light`。
 
 ### Output 索引
 
