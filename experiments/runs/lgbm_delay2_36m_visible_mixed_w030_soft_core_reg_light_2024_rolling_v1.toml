@@ -2,7 +2,7 @@
 id = "lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1"
 kind = "exploration"
 description = "Formal 2024 12-month rolling validation: 36m train -> next 1m test, mixed w030 target, soft-core visible feature set, and light LightGBM regularization."
-status = "queued"
+status = "completed"
 
 [data]
 source = "labeled_pvc"
@@ -149,6 +149,7 @@ k8s_dir = "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_s
 
 [k8s]
 namespace = "bizewu"
+job_name = "os-lgbm-36m-2024-w030-baseline"
 image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"

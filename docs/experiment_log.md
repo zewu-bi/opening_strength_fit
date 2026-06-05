@@ -11,8 +11,14 @@
 - 训练主线改为单模型 mixed label：一分钟 VWAP short label 为主，小权重加入持有到第二天收盘的 long label。
 - 训练仍用 full universe；`pool_S`、`pool_M`、`pool_L` 只作为 TopN selection mask，指标在不同 mask 下分别汇总。
 - mixed label 已扫 `w_long=0.10 / 0.20 / 0.30`；结合 S/M/L 池内 Top100 excess，当前固定
-  `w_long=0.30`。固定权重后的 7 组 feature/model 小扫已晋级 `soft_core_reg_light`；下一步迁移到
-  `36m train -> next 1m test` 的 2024 全年 rolling。
+  `w_long=0.30`。固定权重后的 7 组 feature/model 小扫已晋级 `soft_core_reg_light`；迁移到
+  `36m train -> next 1m test` 的 2024 全年 rolling 后，正式模型展示名定为 `baseline`。
+- `baseline` 对应真实 run id
+  `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`。已同步并归档
+  `2024-01` 至 `2024-12` 全年结果；真实 run id 只作为 config / metrics / predictions 追溯键。
+- 同一 `baseline` 口径已提交 `36m train -> next 6m test` 半年 rolling 稳健性任务：
+  `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1`，
+  覆盖 `2018H1` 至 `2024H2` 共 14 个 folds。
 - 两模型 `final_score = alpha_rank - lambda * gap_risk_rank` 路线封存。它通过 rolling，说明短+长目标有信息，
   但当前不继续用两个模型定义目标。
 
@@ -28,6 +34,7 @@
 | 18m rolling `gap_penalty_030_p80` | +21.20 | +7.84 | 证明短+长目标跨月有信息。 |
 | S/M/L pool-internal mixed `w=0.30` | +10.0 / +12.2 / +14.1 | +6.6 / +9.0 / +9.4 | 固定单模型主线权重；三列为 pool_S/M/L。 |
 | `soft_core_reg_light` vs `w030` baseline | +0.24 / +0.31 / +0.58 | +0.92 / -0.01 / +1.17 | 固定权重后的 feature/model 候选；三列为 pool_S/M/L 的增量。 |
+| 36m `baseline` full year | +8.3 / +9.3 / +10.4 | +7.7 / +5.6 / +4.4 | 2024-01..2024-12 已同步归档；三列为 pool_S/M/L。 |
 
 ## 实验时间线
 
@@ -46,6 +53,8 @@
 | 2026-06-02 | mentor re-scope | 不继续两模型，改为直接训练 single mixed label。 |
 | 2026-06-03 | S/M/L mixed weight scan | `w_long=0.30` 在池内保住 short，并改善 next internal excess；固定为主线权重。 |
 | 2026-06-04 | w030 feature/model sweep | 7 组 18m 小缓存对照后，`soft_core_reg_light` 晋级为当前 feature/model 候选。 |
+| 2026-06-05 | 36m baseline full-year archive | 2024-01..2024-12 已同步归档；正式模型展示名定为 `baseline`，S/M/L 池内 short 和 next 均值均为正。 |
+| 2026-06-05 | 36m halfyear rolling submitted | 2015-2024 mixed cache 齐备后，提交 `36m train -> next 6m test` 半年 rolling，共 14 个 folds。 |
 
 ## 2026-05-20 小窗结果
 
@@ -1673,9 +1682,12 @@ PVC 目录：
   PVC 实查四个年度 parquet 大小约 `5.16 / 5.62 / 5.81 / 5.86 GB`。
 - `lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1` 已完成并同步，只作为链路 smoke。
 
-正式 12-shard run 已准备但未启动：
+正式 12-shard run 配置如下：
 
 ```text
+display alias:
+baseline
+
 config:
 experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1.toml
 
@@ -1692,6 +1704,58 @@ shards，`shard_parallelism=1`，feature/model 迁移 18m 晋级的 `soft_core_r
 `subsample=0.9`、`colsample_bytree=0.9`、`reg_alpha=0.01`、`reg_lambda=1.0`、`max_bin=63`。
 它不复用 smoke 的 `feature_limit=80` / `n_estimators=40`。
 
+### 36m baseline 全年结果归档
+
+这次 36m 正式 rolling 是大正式实验的第一个模型配置，因此在说明文档、图表和面向 mentor 的汇报里统一称为
+`baseline`。真实 run id 仍保留为：
+
+```text
+lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1
+```
+
+2026-06-05 使用 runbook 的 artifact sync 闭环重新同步并归档 12 个 OOS 月份：
+
+```bash
+osf-sync-experiment-artifacts \
+  --config experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1.toml \
+  --all
+```
+
+同步补齐了此前本地缺失的 `2024-11` / `2024-12` prediction shards，并重新合并
+`predictions_all.parquet`。全年 training metrics：
+
+| rows | test dates | symbols | features | group rank IC | rank IC IR | Top100 short mean bps |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 12,049,972 | 242 | 5,118 | 276 | 0.1601 | 1.7871 | +10.37 |
+
+S/M/L pool-internal Top100 excess 汇总如下，单位 bps；表内为 `short / next`：
+
+| display | pool_S | pool_M | pool_L |
+| --- | ---: | ---: | ---: |
+| `baseline` | +8.3 / +7.7 | +9.3 / +5.6 | +10.4 / +4.4 |
+
+补拉月份单独看：
+
+| month | pool_S | pool_M | pool_L |
+| --- | ---: | ---: | ---: |
+| 2024-11 | +7.4 / -23.7 | +8.2 / -25.0 | +8.8 / -26.5 |
+| 2024-12 | +6.5 / +23.9 | +7.6 / +21.5 | +8.4 / +21.2 |
+
+全年池内 short 12/12 个月为正；next 在 `pool_S/M/L` 分别为 `8/12`、`9/12`、`8/12`
+个月为正。Universe Top100 的 short internal excess 为 `+19.8 bps`，但 next internal excess 为
+`-14.2 bps`；因此当前结论仍以 S/M/L pool-internal 验收为主。
+
+轻量归档：
+
+```text
+experiments/results/metrics/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_metrics_by_year.csv
+experiments/results/metrics/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_metrics_by_month.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_pool_internal_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_pool_internal_month_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_pool_internal_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_rank_ic_with_mean.svg
+```
+
 为长任务过程反馈补充两个入口：
 
 - `osf-rolling-job-status`：把 Indexed Job pod index 映射回 rolling 月份，并打印每月 log 命令。
@@ -1701,9 +1765,116 @@ shards，`shard_parallelism=1`，feature/model 迁移 18m 晋级的 `soft_core_r
   universe / pool_S / pool_M / pool_L，输出 short/next Rank IC 与池内 Top100 excess 的
   summary、month、clock、group 四层 CSV。
 
-启动前仍需从当前 clean worktree build/push manifest 指定 image：
-`registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260604-36m-soft-core-v1`。
-本次只完成准备，不 apply 全量实验。
+2026-06-04 的准备记录保留在本节上方；当前事实以本小节的全年完成归档为准。
+
+## 2026-06-05 36m Halfyear Rolling Submission
+
+PVC 实查确认 `2015-2024` 三套年度 cache 已齐：
+
+```text
+/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_base_labeled_v2/
+/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_next_close_labels_v1/
+/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_mixed_w030_labeled_v1/
+```
+
+其中 mixed-w030 labeled cache 从 `opening_2015_delay2_mixed_w030_labeled_v1.parquet` 到
+`opening_2024_delay2_mixed_w030_labeled_v1.parquet` 共 10 个年度文件，总量约 `40 GB`。抽查日期范围：
+`2015` 为 `2015-01-05 -> 2015-12-31`，`2024` 为 `2024-01-02 -> 2024-12-31`。
+
+在同一 `baseline` feature/model 口径上新增半年 rolling 稳健性任务：
+
+```text
+run_id:
+lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1
+
+config:
+experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1.toml
+
+job manifest:
+experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_sharded_job.yaml
+
+rendered job name:
+os-lgbm-36m-2018-2024-w030-halfyear
+
+image:
+registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260605-halfyear-v1
+
+image digest:
+sha256:70b8fb9c395d62e49466754837cd52da7ce5bec0778e7fc310f8148ad593f38b
+```
+
+该 run 使用 `36m train -> next 6m test`，`2018-01` 至 `2024-12` 共 14 个 halfyear Indexed
+Job shards。每个 shard 只训练一次，预测对应 6 个月 OOS：
+
+```text
+2018-01..2018-06
+2018-07..2018-12
+2019-01..2019-06
+2019-07..2019-12
+2020-01..2020-06
+2020-07..2020-12
+2021-01..2021-06
+2021-07..2021-12
+2022-01..2022-06
+2022-07..2022-12
+2023-01..2023-06
+2023-07..2023-12
+2024-01..2024-06
+2024-07..2024-12
+```
+
+为避免把半年测试误渲染成 84 个单月 shard，本次补充了 `test_months` / `test_stride_months`
+支持：默认仍为单月 rolling；当 config 显式设置 `test_months=6`、`test_stride_months=6` 时，
+K8s renderer 会生成 14 个窗口起点 shard，并把每个 shard 的 `--test-start-month` /
+`--test-end-month` 传给训练入口。`osf-rolling-job-status` 和 artifact sync 也按窗口起点识别
+`month_YYYY-MM/` shard 目录。
+
+执行留痕：
+
+```text
+local checks:
+ruff targeted files passed
+pytest tests/test_rolling_windows.py tests/test_k8s_helpers.py tests/test_labeled_pvc_source.py -> 18 passed
+
+k8s dry-run:
+job.batch/os-lgbm-36m-2018-2024-w030-halfyear created (dry run)
+
+apply:
+job.batch/os-lgbm-36m-2018-2024-w030-halfyear created
+
+initial status:
+Running 0/14; first pod os-lgbm-36m-2018-2024-w030-halfyear-0-qp2k8 on node9
+```
+
+随后把本地 config / manifest 和正在运行的 Job 改为 4-way shard parallelism；确认资源可承载后继续提高到
+7-way shard parallelism：
+
+```text
+config:
+shard_parallelism = 7
+
+patch:
+job.batch/os-lgbm-36m-2018-2024-w030-halfyear patched to parallelism=4
+job.batch/os-lgbm-36m-2018-2024-w030-halfyear patched to parallelism=7
+
+status after patch:
+0/14 completed; active shards 0..6
+2018-01..2018-06 running on node9
+2018-07..2018-12 running on node9
+2019-01..2019-06 running on node15
+2019-07..2019-12 running on node7
+2020-01..2020-06 running on node9
+2020-07..2020-12 running on node15
+2021-01..2021-06 running on node7
+```
+
+首个 shard 日志确认依赖文件均 ready，且第一窗读取范围正确：
+
+```text
+running ... shard test=2018-01..2018-06 index=0
+date_start: 2015-01-01
+date_end: 2018-06-30
+```
 
 ### 归档和保留口径
 

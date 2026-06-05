@@ -14,15 +14,19 @@ precheck -> render job -> apply/wait -> sync artifacts -> audit/coverage -> anal
 36m smoke:
 experiments/runs/lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1.toml
 
-36m formal 2024 rolling, prepared but not launched:
+36m formal 2024 rolling baseline:
 experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1.toml
 experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_sharded_job.yaml
+
+36m halfyear rolling robustness:
+experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1.toml
+experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_sharded_job.yaml
 
 18m source feature/model config:
 experiments/runs/lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1.toml
 ```
 
-36m rolling 使用的 `2021-2024` cache：
+36m rolling 使用的 `2015-2024` cache：
 
 ```text
 base cache:
@@ -35,8 +39,12 @@ mixed w030 cache:
 /mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_mixed_w030_labeled_v1/
 ```
 
-2024 全年 12-shard rolling run 已准备为 `soft_core_reg_light` feature include/drop 规则和
-LightGBM 参数；启动前需从当前 clean worktree build/push 对应 image tag，再 dry-run/apply manifest。
+2024 全年 12-shard rolling run 的展示名为 `baseline`，底层是 `soft_core_reg_light`
+feature include/drop 规则和 LightGBM 参数。真实 run id 用于 config / metrics / predictions 追溯。
+已完成、同步并归档 `2024-01` 至 `2024-12` 全年结果。
+
+同一 `baseline` 口径已提交 `36m train -> next 6m test` 半年 rolling 稳健性任务，覆盖
+`2018H1` 至 `2024H2` 共 14 个 folds。
 
 ## 1. 预检
 
@@ -225,30 +233,99 @@ year_YYYY/
 
 并行度由 `[k8s].shard_parallelism` 控制。
 
-### 5.1 2024 全量 rolling 准备件
+K8s Job 命名约定：
 
-当前准备好的正式 run：
+- sharded rolling 必须在 TOML 的 `[k8s]` 里显式设置短 `job_name`。
+- 格式使用 `os-<model>-<window>-<year>-<target>-<display>`，例如
+  `os-lgbm-36m-2023-w030-baseline`。
+- 展示名沿用文档里的模型别名，例如当前正式模型叫 `baseline`。
+- 不要依赖 renderer 自动生成的 `opening-strength-...-<hash>` 名字；这类 hash 名只作为旧运行的追溯信息。
 
-```text
-run_id: lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1
-job:    opening-strength-lgbm-delay2-36m-mixed-w030-sharded-a99705d1
-image:  registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260604-36m-soft-core-v1
-status: queued, not applied
+```toml
+[k8s]
+job_name = "os-lgbm-36m-2023-w030-baseline"
+shard_parallelism = 1
 ```
 
-启动前只做 dry-run：
+### 5.1 2024 全量 rolling 准备件
+
+正式 baseline run：
+
+```text
+display: baseline
+run_id: lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1
+job:    os-lgbm-36m-2024-w030-baseline
+legacy current job: opening-strength-lgbm-delay2-36m-mixed-w030-sharded-a99705d1
+image:  registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260604-36m-soft-core-v1
+status: completed; synced and archived 2024-01..2024-12 on 2026-06-05
+```
+
+重新 apply 或补跑前先做 dry-run：
 
 ```bash
 hfcli kubectl --cluster research apply --dry-run=client \
   -f experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_sharded_job.yaml
 ```
 
-真正启动前先 build/push 当前 clean worktree 到 manifest 里的 image tag，或重新 render manifest 使用新 tag。
+重新启动或补跑前先 build/push 当前 clean worktree 到 manifest 里的 image tag，或重新 render manifest 使用新 tag。
 不要用旧 smoke image 直接 apply；旧 image 不包含新增正式 run config。
 
-### 5.2 Rolling 过程观测
+### 5.2 2018-2024 半年 rolling 稳健性任务
 
-Indexed Job 的 shard index 对应月份，使用：
+正式 baseline 的半年 rolling run：
+
+```text
+display: baseline halfyear robustness
+run_id: lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1
+job:    os-lgbm-36m-2018-2024-w030-halfyear
+image:  registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260605-halfyear-v1
+digest: sha256:70b8fb9c395d62e49466754837cd52da7ce5bec0778e7fc310f8148ad593f38b
+status: submitted on 2026-06-05; patched to 7-way shard parallelism
+```
+
+该 run 使用 `36m train -> next 6m test`，`2018-01` 至 `2024-12` 共 14 个半年 Indexed Job
+shards。每个 shard 只训练一次，并预测对应的 6 个月 OOS 窗口：
+
+```text
+2018-01..2018-06
+2018-07..2018-12
+...
+2024-01..2024-06
+2024-07..2024-12
+```
+
+渲染和提交前检查：
+
+```bash
+osf-render-k8s-job \
+  --config experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1.toml \
+  --sharded \
+  --image registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260605-halfyear-v1
+
+hfcli kubectl --cluster research apply --dry-run=client \
+  -f experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_sharded_job.yaml
+```
+
+当前已提交命令：
+
+```bash
+hfcli kubectl --cluster research delete job os-lgbm-36m-2018-2024-w030-halfyear \
+  --ignore-not-found -n bizewu
+hfcli kubectl --cluster research apply \
+  -f experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_sharded_job.yaml
+```
+
+当前并行度为 `shard_parallelism=7`。已对正在运行的 Job 执行：
+
+```bash
+hfcli kubectl --cluster research patch job os-lgbm-36m-2018-2024-w030-halfyear \
+  -n bizewu \
+  -p '{"spec":{"parallelism":7}}'
+```
+
+### 5.3 Rolling 过程观测
+
+Indexed Job 的 shard index 对应月份或半年窗口，使用：
 
 ```bash
 osf-rolling-job-status \
@@ -267,6 +344,14 @@ osf-rolling-job-status \
 
 ```bash
 hfcli kubectl --cluster research logs -n bizewu <pod-name> -f
+```
+
+半年 rolling 观测：
+
+```bash
+osf-rolling-job-status \
+  --config experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1.toml \
+  --job-name os-lgbm-36m-2018-2024-w030-halfyear
 ```
 
 ## 6. 同步产物
@@ -292,6 +377,8 @@ osf-sync-experiment-artifacts \
 
 `--allow-partial` 不写入 `experiments/results/`，只更新 `output/k8s/metrics/` 和
 `output/predictions/<run_id>/raw/predictions_YYYY-MM.parquet`，方便每个月完成后立即分析。
+对半年 rolling，raw predictions 文件名使用窗口标签，例如
+`predictions_2018-01_2018-06.parquet`，shard 目录仍以窗口起点命名为 `month_YYYY-MM/`。
 
 默认输出：
 
@@ -328,15 +415,26 @@ osf-summarize-opening-results \
 osf-compare-opening-results
 ```
 
-正式 36m rolling 的 S/M/L pool-internal 验收面板：
+正式 36m rolling 的 universe/S/M/L pool-internal 验收面板：
 
 ```bash
 osf-analyze-pool-internal-top100 \
   --predictions output/predictions/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1 \
   --next-close-label-input output/local/next_close_labels_2021_2024 \
   --run-id lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1 \
-  --variant soft_core_reg_light_36m_2024 \
-  --output-dir output/local/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_pool_internal
+  --variant baseline \
+  --output-dir output/local/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_pool_internal \
+  --report-dir output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_pool_internal \
+  --plot-prefix baseline \
+  --plot-variant-label baseline
+```
+
+当前全年图和归档副本保存在：
+
+```text
+output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_pool_internal/baseline_universe_sml_pool_internal_with_mean/baseline_universe_sml_top100_pool_internal_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_pool_internal_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_rank_ic_with_mean.svg
 ```
 
 该脚本输出：

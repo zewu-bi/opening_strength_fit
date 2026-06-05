@@ -35,10 +35,23 @@ lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1
 ```
 
 这套口径保留 decision-time 可见的核心盘口、集合竞价和开盘后轨迹特征，减少宽泛累计特征暴露，
-并使用轻度 LightGBM sampling / regularization。2024 全年全量验证已准备为
-`lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`：
-`36m train -> next 1m test`，覆盖 `2024-01` 至 `2024-12`。该 run 当前只完成配置和 Job
-manifest 准备，尚未启动全量实验。
+并使用轻度 LightGBM sampling / regularization。进入 36m 正式验证后，这个模型配置在说明文档和图表中
+简称为 `baseline`；真实 run id 保留为 artifact 追溯键：
+`lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`。
+它使用 `36m train -> next 1m test`，覆盖 `2024-01` 至 `2024-12`。当前已同步并归档
+`2024-01` 至 `2024-12` 全年结果。
+为了检查更早年份和更长 OOS 持有窗口的稳定性，已提交同一 `baseline` 口径的
+`36m train -> next 6m test` 半年 rolling：
+`lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1`，
+覆盖 `2018H1` 至 `2024H2` 共 14 个半年 folds。
+
+`baseline` 全年 S/M/L 池内 Top100 excess 为：
+
+```text
+pool_S: short +8.3 bps, next +7.7 bps
+pool_M: short +9.3 bps, next +5.6 bps
+pool_L: short +10.4 bps, next +4.4 bps
+```
 
 当前执行口径：
 
@@ -46,11 +59,12 @@ manifest 准备，尚未启动全量实验。
 | --- | --- |
 | sample slice | `09:31:00-09:40:00` |
 | label | mixed label, `w_long=0.30` |
-| feature/model | `soft_core_reg_light` |
+| feature/model | `baseline` (`soft_core_reg_light`) |
 | training universe | A 股 `00/30.SZ` 和 `60/68.SH` full universe |
 | selection masks | universe / `pool_S` / `pool_M` / `pool_L` |
 | main metrics | short Rank IC、池内 Top100 excess；next close 作为 tail 诊断和 mixed-label 定权参考 |
-| next validation | `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`，2024 全年 12 个 monthly rolling folds，prepared but not launched |
+| next validation | `baseline`，2024 全年 12 个 monthly rolling folds；run id `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`，已完成并归档 |
+| robustness validation | 同一 `baseline`，`36m train -> next 6m test` 半年 rolling；run id `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1`，覆盖 `2018H1..2024H2` |
 
 训练和全量打分使用 full universe。`pool_S`、`pool_M`、`pool_L` 作为 TopN selection mask；
 pool membership 作为输出标记，模型特征保持在 decision-time visible 信息集内。
@@ -110,7 +124,9 @@ label      = sell_vwap / buy_price - 1 - fee_bps / 10000
 | dirty-tail diagnostics | raw short score 带“短正长负”的拥挤追涨 tail；可见信息能识别其中一部分。 |
 | mentor re-scope | 从两模型 `alpha - risk` 切回直接训练 single mixed label。 |
 | S/M/L mixed label | 固定 `w_long=0.30`，在 S/M/L 池内保住 short 并改善 next internal excess。 |
-| feature/model sweep | 18m 小缓存上晋级 `soft_core_reg_light`，36m 全年 rolling 已准备、待启动。 |
+| feature/model sweep | 18m 小缓存上晋级 `soft_core_reg_light`，进入 36m 正式验证后命名为 `baseline`。 |
+| 36m baseline full year | `2024-01..2024-12` 已同步并归档；S/M/L short 和 next 池内 Top100 excess 均值均为正。 |
+| 36m halfyear rolling | 同一 `baseline` 口径已提交 `2018H1..2024H2` 半年 folds，用于稳健性和更早 OOS 检查。 |
 
 `09:30` 是单独 regime：它强，但主要混合集合竞价结果、第一张开盘盘口快照、时间坐标和缺失/0 模式。
 当前主优化放在 `09:31-09:40`。

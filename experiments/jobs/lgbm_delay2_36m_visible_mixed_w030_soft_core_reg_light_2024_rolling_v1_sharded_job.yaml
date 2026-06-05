@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: opening-strength-lgbm-delay2-36m-mixed-w030-sharded-a99705d1
+  name: os-lgbm-36m-2024-w030-baseline
   namespace: bizewu
 spec:
   backoffLimit: 0
