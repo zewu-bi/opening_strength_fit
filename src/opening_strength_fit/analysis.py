@@ -30,6 +30,33 @@ def month_periods(start_month: str, end_month: str) -> list[str]:
     return [str(month) for month in pd.period_range(start_month, end_month, freq="M")]
 
 
+def month_window_periods(
+    start_month: str,
+    end_month: str,
+    *,
+    test_months: int = 1,
+    stride_months: int | None = None,
+) -> list[tuple[str, str]]:
+    test_months = int(test_months)
+    stride_months = test_months if stride_months is None else int(stride_months)
+    if test_months < 1:
+        raise SystemExit("test_months must be >= 1")
+    if stride_months < 1:
+        raise SystemExit("stride_months must be >= 1")
+
+    start = pd.Period(start_month, freq="M")
+    end = pd.Period(end_month, freq="M")
+    windows: list[tuple[str, str]] = []
+    current = start
+    while current <= end:
+        window_end = current + test_months - 1
+        if window_end > end:
+            break
+        windows.append((str(current), str(window_end)))
+        current += stride_months
+    return windows
+
+
 def normalize_next_close_labels(
     frame: pd.DataFrame,
     *,

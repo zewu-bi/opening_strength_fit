@@ -26,6 +26,8 @@ class RunSpec:
     test_end_year: int
     test_start_month: str = ""
     test_end_month: str = ""
+    test_months: int = 1
+    test_stride_months: int = 1
     kind: str = "experiment"
 
     @property
@@ -83,6 +85,16 @@ def load_run_spec(path: str | Path) -> RunSpec:
         test_end_year=end_year,
         test_start_month=test_start_month,
         test_end_month=test_end_month,
+        test_months=int(config_value(config, "window", "test_months", 1) or 1),
+        test_stride_months=int(
+            config_value(
+                config,
+                "window",
+                "test_stride_months",
+                config_value(config, "window", "test_months", 1),
+            )
+            or 1
+        ),
         kind=str(config_value(config, "run", "kind", "experiment")),
     )
 

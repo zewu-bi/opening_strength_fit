@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from opening_strength_fit.analysis import month_periods, write_json
+from opening_strength_fit.analysis import month_window_periods, write_json
 from opening_strength_fit.commands.artifact_sync_remote import (
     fetch_binary_file,
     fetch_remote_file_if_exists,
@@ -89,13 +89,19 @@ def pull_shard_metrics(
     frames: list[pd.DataFrame] = []
     missing: list[str] = []
     if spec.test_start_month and spec.test_end_month:
-        for month in month_periods(spec.test_start_month, spec.test_end_month):
-            remote_path = f"{spec.pvc_dir}/month_{month}/metrics_by_year.csv"
-            local_path = raw_dir / f"metrics_by_year_{month}.csv"
+        for start_month, end_month in month_window_periods(
+            spec.test_start_month,
+            spec.test_end_month,
+            test_months=spec.test_months,
+            stride_months=spec.test_stride_months,
+        ):
+            label = start_month if start_month == end_month else f"{start_month}_{end_month}"
+            remote_path = f"{spec.pvc_dir}/month_{start_month}/metrics_by_year.csv"
+            local_path = raw_dir / f"metrics_by_year_{label}.csv"
             if fetch_remote_file_if_exists(hfcli, spec, pod_name, remote_path, local_path):
                 frames.append(pd.read_csv(local_path))
             else:
-                missing.append(month)
+                missing.append(label)
         if missing:
             if allow_partial and frames:
                 print(f"  {spec.run_id}: partial metrics; missing months {missing}")
@@ -233,10 +239,16 @@ def fetch_predictions(
         combined_stats = summarize_predictions(combined_path)
     elif spec.test_start_month and spec.test_end_month:
         missing_months: list[str] = []
-        for month in month_periods(spec.test_start_month, spec.test_end_month):
+        for start_month, end_month in month_window_periods(
+            spec.test_start_month,
+            spec.test_end_month,
+            test_months=spec.test_months,
+            stride_months=spec.test_stride_months,
+        ):
+            label = start_month if start_month == end_month else f"{start_month}_{end_month}"
             remote_candidates = [
-                f"{spec.pvc_dir}/month_{month}/predictions_{month}.parquet",
-                f"{spec.pvc_dir}/month_{month}/predictions.parquet",
+                f"{spec.pvc_dir}/month_{start_month}/predictions_{label}.parquet",
+                f"{spec.pvc_dir}/month_{start_month}/predictions.parquet",
             ]
             remote_path = next(
                 (
@@ -248,16 +260,16 @@ def fetch_predictions(
             )
             if not remote_path:
                 if allow_partial:
-                    missing_months.append(month)
+                    missing_months.append(label)
                     continue
-                raise SystemExit(f"no prediction parquet found for monthly shard {month}")
-            local_path = raw_dir / f"predictions_{month}.parquet"
+                raise SystemExit(f"no prediction parquet found for monthly shard {label}")
+            local_path = raw_dir / f"predictions_{label}.parquet"
             print(f"fetching {remote_path} -> {local_path}")
             fetch_binary_file(hfcli, spec.namespace, pod_name, remote_path, local_path)
             fetched_files.append(
                 {
                     "kind": "monthly",
-                    "month": month,
+                    "month": label,
                     "remote_path": remote_path,
                     "local_path": str(local_path),
                 }

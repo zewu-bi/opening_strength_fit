@@ -39,6 +39,8 @@ def build_training_parser(description: str) -> argparse.ArgumentParser:
     parser.add_argument("--test-start-year", type=int, default=None)
     parser.add_argument("--test-end-year", type=int, default=None)
     parser.add_argument("--train-months", type=int, default=None)
+    parser.add_argument("--test-months", type=int, default=None)
+    parser.add_argument("--test-stride-months", type=int, default=None)
     parser.add_argument("--test-start-month", default=None)
     parser.add_argument("--test-end-month", default=None)
     parser.add_argument(
@@ -49,7 +51,7 @@ def build_training_parser(description: str) -> argparse.ArgumentParser:
     parser.add_argument(
         "--rolling-monthly",
         action="store_true",
-        help="Use rolling N-month train windows and one calendar month tests.",
+        help="Use rolling N-month train windows and calendar month test windows.",
     )
     parser.add_argument(
         "--split-mode",

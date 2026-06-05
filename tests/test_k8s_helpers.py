@@ -69,8 +69,72 @@ class K8sHelperTest(unittest.TestCase):
         self.assertIn("completionMode: Indexed", manifest)
         self.assertIn("completions: 3", manifest)
         self.assertIn("JOB_COMPLETION_INDEX", manifest)
-        self.assertIn("MONTHS=(2021-08 2021-09 2021-10)", manifest)
+        self.assertIn("TEST_STARTS=(2021-08 2021-09 2021-10)", manifest)
+        self.assertIn("TEST_ENDS=(2021-08 2021-09 2021-10)", manifest)
         self.assertNotIn("for MONTH in", manifest)
+
+    def test_rolling_halfyear_sharded_job_uses_window_starts(self) -> None:
+        config = {
+            "run": {
+                "id": "lgbm_delay2_36m_halfyear_rolling_v1",
+                "kind": "exploration",
+            },
+            "window": {
+                "mode": "rolling_monthly",
+                "train_months": 36,
+                "test_months": 6,
+                "test_stride_months": 6,
+                "test_start_month": "2018-01",
+                "test_end_month": "2024-12",
+            },
+            "output": {"k8s_dir": "/mnt/output/opening_strength_fit/run"},
+            "k8s": {
+                "job_name": "os-lgbm-36m-2018-2024-w030-halfyear",
+                "resources": {"memory_limit": "512Gi"},
+            },
+        }
+
+        manifest = render_sharded_training_job(
+            Path("experiments/runs/rolling.toml"),
+            config,
+            "image:tag",
+        )
+
+        self.assertIn("completions: 14", manifest)
+        self.assertIn("TEST_STARTS=(2018-01 2018-07", manifest)
+        self.assertIn("2024-01 2024-07)", manifest)
+        self.assertIn("TEST_ENDS=(2018-06 2018-12", manifest)
+        self.assertIn("2024-06 2024-12)", manifest)
+        self.assertIn('--test-start-month "${TEST_START}"', manifest)
+        self.assertIn('--test-end-month "${TEST_END}"', manifest)
+
+    def test_sharded_job_respects_explicit_short_job_name(self) -> None:
+        config = {
+            "run": {
+                "id": "lgbm_delay2_36m_2023_mixed_w030_soft_core_reg_light_rolling_v1",
+                "kind": "exploration",
+            },
+            "window": {
+                "mode": "rolling_monthly",
+                "train_months": 36,
+                "test_start_month": "2023-01",
+                "test_end_month": "2023-12",
+            },
+            "output": {"k8s_dir": "/mnt/output/opening_strength_fit/os-lgbm-36m-2023-w030-baseline"},
+            "k8s": {
+                "job_name": "os-lgbm-36m-2023-w030-baseline",
+                "resources": {"memory_limit": "512Gi"},
+            },
+        }
+
+        manifest = render_sharded_training_job(
+            Path("experiments/runs/os-lgbm-36m-2023-w030-baseline.toml"),
+            config,
+            "image:tag",
+        )
+
+        self.assertIn("name: os-lgbm-36m-2023-w030-baseline", manifest)
+        self.assertNotIn("sharded-", manifest)
 
     def test_next_close_label_cache_uses_cache_builder_script(self) -> None:
         config = {"run": {"kind": "next_close_label_cache"}}

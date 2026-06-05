@@ -5,7 +5,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from opening_strength_fit.analysis import month_periods
+from opening_strength_fit.analysis import month_window_periods
 from opening_strength_fit.config import load_toml, run_id
 
 
@@ -74,10 +74,19 @@ def main() -> None:
     args = parse_args()
     config_path = Path(args.config)
     config = load_toml(config_path)
-    months = month_periods(
+    windows = month_window_periods(
         str(config["window"]["test_start_month"]),
         str(config["window"]["test_end_month"]),
+        test_months=int(config.get("window", {}).get("test_months", 1) or 1),
+        stride_months=int(
+            config.get("window", {}).get(
+                "test_stride_months",
+                config.get("window", {}).get("test_months", 1),
+            )
+            or 1
+        ),
     )
+    month_labels = [start if start == end else f"{start}..{end}" for start, end in windows]
     job_name = args.job_name or rendered_job_name(config_path, Path(args.jobs_dir), config)
 
     command = [
@@ -98,7 +107,7 @@ def main() -> None:
     items = payload.get("items", [])
     print(f"job: {job_name}")
     print(f"namespace: {args.namespace}")
-    print(f"months: {months[0]}..{months[-1]} ({len(months)})")
+    print(f"months: {month_labels[0]}..{month_labels[-1]} ({len(month_labels)})")
     if not items:
         print("pods: none found")
         print(
@@ -116,7 +125,7 @@ def main() -> None:
         month = ""
         if index_raw != "":
             index = int(index_raw)
-            month = months[index] if 0 <= index < len(months) else ""
+            month = month_labels[index] if 0 <= index < len(month_labels) else ""
         state, reason, finished = container_state(item)
         rows.append(
             {

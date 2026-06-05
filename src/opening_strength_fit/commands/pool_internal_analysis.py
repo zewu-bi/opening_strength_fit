@@ -9,6 +9,10 @@ import pandas as pd
 
 from opening_strength_fit.analysis import KEY_COLUMNS, NEXT_CLOSE_LABEL_COL, write_json
 from opening_strength_fit.io import read_frame
+from opening_strength_fit.pool_internal_plots import (
+    slug_label,
+    write_universe_sml_pool_internal_plots,
+)
 from opening_strength_fit.stock_pool import (
     DEFAULT_STOCK_POOL_PATHS,
     load_stock_pool,
@@ -46,6 +50,27 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--short-label-col", default="label")
     parser.add_argument("--next-label-col", default=NEXT_CLOSE_LABEL_COL)
     parser.add_argument("--top-n", type=int, default=100)
+    parser.add_argument(
+        "--report-dir",
+        default="",
+        help=(
+            "Optional report directory. When set, writes the universe/S/M/L "
+            "pool-internal excess and Rank IC SVG panels plus plot data."
+        ),
+    )
+    parser.add_argument(
+        "--plot-prefix",
+        default="",
+        help=(
+            "Filename/directory prefix for generated report plots. Defaults to "
+            "--variant when present, otherwise --run-id."
+        ),
+    )
+    parser.add_argument(
+        "--plot-variant-label",
+        default="",
+        help="Display label used in generated report plot titles. Defaults to --variant.",
+    )
     parser.add_argument(
         "--pool",
         action="append",
@@ -332,9 +357,21 @@ def main() -> None:
             summary.insert(1, "variant", args.variant)
 
     group_metrics.to_csv(output_dir / "pool_internal_group_metrics.csv", index=False)
-    month_summary.to_csv(output_dir / "pool_internal_month_summary.csv", index=False)
+    month_summary_path = output_dir / "pool_internal_month_summary.csv"
+    month_summary.to_csv(month_summary_path, index=False)
     clock_summary.to_csv(output_dir / "pool_internal_clock_summary.csv", index=False)
     summary.to_csv(output_dir / "pool_internal_summary.csv", index=False)
+    report_plots = {}
+    if args.report_dir:
+        plot_prefix = args.plot_prefix or slug_label(args.variant or args.run_id)
+        plot_variant_label = args.plot_variant_label or args.variant or args.run_id or plot_prefix
+        report_plots = write_universe_sml_pool_internal_plots(
+            month_summary,
+            Path(args.report_dir),
+            input_path=month_summary_path,
+            output_prefix=plot_prefix,
+            variant_label=plot_variant_label,
+        )
     write_json(
         output_dir / "pool_internal_trace.json",
         {
@@ -348,12 +385,17 @@ def main() -> None:
             "pools": list(pools),
             "top_n": args.top_n,
             "pool_date_lag_sessions": args.pool_date_lag_sessions,
+            "report_plots": report_plots,
         },
         ensure_ascii=True,
     )
 
     print("pool_internal_summary:")
     print(summary.to_string(index=False))
+    if report_plots:
+        print("\npool_internal_report_plots:")
+        for label, path in report_plots.items():
+            print(f"  {label}: {path}")
     print(f"\nwrote outputs: {output_dir}")
 
 

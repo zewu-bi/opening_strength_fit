@@ -86,6 +86,16 @@ def date_splits(labeled: pd.DataFrame, args: argparse.Namespace, config: dict):
                 if args.train_months is not None
                 else config_int(config, "window", "train_months", 12)
             ),
+            test_months=(
+                _arg_value(args, "test_months")
+                if _arg_value(args, "test_months") is not None
+                else config_int(config, "window", "test_months", 1)
+            ),
+            test_stride_months=(
+                _arg_value(args, "test_stride_months")
+                if _arg_value(args, "test_stride_months") is not None
+                else config_value(config, "window", "test_stride_months", None)
+            ),
             first_test_month=args.test_start_month
             or config_value(config, "window", "test_start_month", None),
             last_test_month=args.test_end_month

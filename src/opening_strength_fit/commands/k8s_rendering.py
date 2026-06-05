@@ -208,6 +208,33 @@ def _month_range_from_config(config: dict) -> list[str]:
     return [str(month) for month in pd.period_range(str(start), str(end), freq="M")]
 
 
+def _month_windows_from_config(config: dict) -> list[tuple[str, str]]:
+    months = _month_range_from_config(config)
+    test_months = int(get(config, "window", "test_months", 1) or 1)
+    stride_months = int(get(config, "window", "test_stride_months", test_months) or test_months)
+    if test_months < 1:
+        raise SystemExit("[window].test_months must be >= 1")
+    if stride_months < 1:
+        raise SystemExit("[window].test_stride_months must be >= 1")
+
+    first = pd.Period(months[0], freq="M")
+    last = pd.Period(months[-1], freq="M")
+    windows: list[tuple[str, str]] = []
+    test_start = first
+    while test_start <= last:
+        test_end = test_start + test_months - 1
+        if test_end > last:
+            break
+        windows.append((str(test_start), str(test_end)))
+        test_start += stride_months
+    if not windows:
+        raise SystemExit(
+            "sharded rolling monthly produced no test windows; check "
+            "[window].test_months/test_stride_months/test_start_month/test_end_month"
+        )
+    return windows
+
+
 def _shard_parallelism(config: dict, resources: dict) -> int:
     raw = get(config, "k8s", "shard_parallelism", resources.get("shard_parallelism", 1))
     return max(1, int(raw or 1))
@@ -375,7 +402,8 @@ def render_training_job(config_path: Path, config: dict, image: str) -> str:
 
 def render_sharded_training_job(config_path: Path, config: dict, image: str) -> str:
     run_id_value = run_id(config, config_path)
-    job_name = _k8s_job_name("opening-strength", run_id_value, "sharded")
+    explicit_job_name = str(get(config, "k8s", "job_name", "") or "").strip()
+    job_name = explicit_job_name or _k8s_job_name("opening-strength", run_id_value, "sharded")
     namespace = get(config, "k8s", "namespace", "bizewu")
     pull_secret = get(config, "k8s", "image_pull_secret", "highfort")
     pvc = get(config, "k8s", "pvc", "bizewu-private-data")
@@ -399,17 +427,21 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
     wait_for_paths = _wait_for_paths_yaml(config, indent=26)
     if _window_mode(config) == "rolling_monthly":
         env_from = _clickhouse_env_from(config, indent=22)
-        months_list = _month_range_from_config(config)
-        months = " ".join(months_list)
-        index_suffix_chars = 1 + len(str(len(months_list) - 1))
-        job_name = _k8s_job_name(
-            "opening-strength",
-            run_id_value,
-            "sharded",
-            max_length=KUBERNETES_NAME_LIMIT - index_suffix_chars,
-        )
+        month_windows = _month_windows_from_config(config)
+        test_starts = " ".join(start for start, _ in month_windows)
+        test_ends = " ".join(end for _, end in month_windows)
+        index_suffix_chars = 1 + len(str(len(month_windows) - 1))
+        if not explicit_job_name:
+            job_name = _k8s_job_name(
+                "opening-strength",
+                run_id_value,
+                "sharded",
+                max_length=KUBERNETES_NAME_LIMIT - index_suffix_chars,
+            )
         shard_parallelism = _shard_parallelism(config, resources)
         train_months = int(get(config, "window", "train_months", 12))
+        test_months = int(get(config, "window", "test_months", 1) or 1)
+        test_stride_months = int(get(config, "window", "test_stride_months", test_months) or test_months)
         done_file = (
             "rolling_summary.csv"
             if str(get(config, "run", "kind", "")).strip().lower()
@@ -426,7 +458,7 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
             spec:
               backoffLimit: 0
               completionMode: Indexed
-              completions: {len(months_list)}
+              completions: {len(month_windows)}
               parallelism: {shard_parallelism}
               ttlSecondsAfterFinished: 86400
               template:
@@ -458,34 +490,38 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
 {wait_for_paths.rstrip()}
                           ROOT={output_dir}
                           mkdir -p "${{ROOT}}"
-                          MONTHS=({months})
+                          TEST_STARTS=({test_starts})
+                          TEST_ENDS=({test_ends})
                           INDEX="${{JOB_COMPLETION_INDEX:-}}"
                           if [ -z "${{INDEX}}" ]; then
                             echo "missing JOB_COMPLETION_INDEX for indexed shard job" >&2
                             exit 1
                           fi
-                          if [ "${{INDEX}}" -lt 0 ] || [ "${{INDEX}}" -ge "${{#MONTHS[@]}}" ]; then
+                          if [ "${{INDEX}}" -lt 0 ] || [ "${{INDEX}}" -ge "${{#TEST_STARTS[@]}}" ]; then
                             echo "JOB_COMPLETION_INDEX out of range: ${{INDEX}}" >&2
                             exit 1
                           fi
 
-                          MONTH="${{MONTHS[${{INDEX}}]}}"
-                          OUT="${{ROOT}}/month_${{MONTH}}"
+                          TEST_START="${{TEST_STARTS[${{INDEX}}]}}"
+                          TEST_END="${{TEST_ENDS[${{INDEX}}]}}"
+                          OUT="${{ROOT}}/month_${{TEST_START}}"
                           if [ -f "${{OUT}}/{done_file}" ]; then
-                            echo "month ${{MONTH}}: metrics already exist, skipping ${{OUT}}"
+                            echo "test window ${{TEST_START}}..${{TEST_END}}: metrics already exist, skipping ${{OUT}}"
                             exit 0
                           fi
 
                           echo
-                          echo "running {run_id_value} shard month=${{MONTH}} index=${{INDEX}}"
+                          echo "running {run_id_value} shard test=${{TEST_START}}..${{TEST_END}} index=${{INDEX}}"
                           echo "output_dir=${{OUT}}"
 
                           {command} \\
                             --config {config_path.as_posix()} \\
                             --rolling-monthly \\
                             --train-months {train_months} \\
-                            --test-start-month "${{MONTH}}" \\
-                            --test-end-month "${{MONTH}}" \\
+                            --test-months {test_months} \\
+                            --test-stride-months {test_stride_months} \\
+                            --test-start-month "${{TEST_START}}" \\
+                            --test-end-month "${{TEST_END}}" \\
                             --output-dir "${{OUT}}"
                       volumeMounts:
                         - name: opening-strength-output

@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from opening_strength_fit.analysis import (
-    month_periods,
+    month_window_periods,
     write_artifact_fetch_trace,
     write_json,
 )
@@ -224,23 +224,29 @@ def pull_rolling_validation_shards(
 
     pulled: list[Path] = []
     missing_months: list[str] = []
-    months = month_periods(spec.test_start_month, spec.test_end_month)
-    for month in months:
-        shard_dir = output_dir / f"month_{month}"
+    windows = month_window_periods(
+        spec.test_start_month,
+        spec.test_end_month,
+        test_months=spec.test_months,
+        stride_months=spec.test_stride_months,
+    )
+    labels = [start if start == end else f"{start}_{end}" for start, end in windows]
+    for (start_month, _), label in zip(windows, labels, strict=True):
+        shard_dir = output_dir / f"month_{start_month}"
         shard_dir.mkdir(parents=True, exist_ok=True)
         found = False
         for name in ROLLING_VALIDATION_SHARD_ARTIFACTS:
-            remote_path = f"{spec.pvc_dir}/month_{month}/{name}"
+            remote_path = f"{spec.pvc_dir}/month_{start_month}/{name}"
             local_path = shard_dir / name
             if fetch_remote_file_if_exists(hfcli, spec, pod_name, remote_path, local_path):
                 pulled.append(local_path)
                 found = True
         if not found:
-            missing_months.append(month)
+            missing_months.append(label)
 
     combined = combine_rolling_validation_shards(
         output_dir,
-        months=months,
+        months=[start for start, _ in windows],
         missing_months=missing_months,
     )
     return [*pulled, *combined]

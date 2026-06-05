@@ -102,9 +102,21 @@ def monthly_rolling_date_splits(
     frame: pd.DataFrame,
     *,
     train_months: int = 12,
+    test_months: int = 1,
+    test_stride_months: int | None = None,
     first_test_month: str | None = None,
     last_test_month: str | None = None,
 ) -> list[DateSplit]:
+    train_months = int(train_months)
+    test_months = int(test_months)
+    test_stride_months = test_months if test_stride_months is None else int(test_stride_months)
+    if train_months < 1:
+        raise SystemExit("rolling monthly split needs train_months >= 1")
+    if test_months < 1:
+        raise SystemExit("rolling monthly split needs test_months >= 1")
+    if test_stride_months < 1:
+        raise SystemExit("rolling monthly split needs test_stride_months >= 1")
+
     dates = sorted(str(date) for date in frame["date"].dropna().unique())
     if len(dates) < 2:
         raise SystemExit("need at least two dates for train/test split")
@@ -114,15 +126,19 @@ def monthly_rolling_date_splits(
     if len(months) < 2:
         raise SystemExit("need at least two calendar months for rolling monthly split")
 
-    default_first_index = min(max(int(train_months), 1), len(months) - 1)
+    default_first_index = min(max(train_months, 1), len(months) - 1)
     first_period = (
         pd.Period(first_test_month, freq="M") if first_test_month else months[default_first_index]
     )
     last_period = pd.Period(last_test_month, freq="M") if last_test_month else months[-1]
 
     splits: list[DateSplit] = []
-    for test_month in pd.period_range(first_period, last_period, freq="M"):
-        train_start = test_month - int(train_months)
+    test_month = first_period
+    while test_month <= last_period:
+        test_end = test_month + test_months - 1
+        if test_end > last_period:
+            break
+        train_start = test_month - train_months
         train_end = test_month - 1
         train_dates = [
             date
@@ -130,10 +146,13 @@ def monthly_rolling_date_splits(
             if train_start <= pd.Period(pd.Timestamp(date), freq="M") <= train_end
         ]
         test_dates = [
-            date for date in dates if pd.Period(pd.Timestamp(date), freq="M") == test_month
+            date
+            for date in dates
+            if test_month <= pd.Period(pd.Timestamp(date), freq="M") <= test_end
         ]
         if train_dates and test_dates:
             splits.append(DateSplit(train_dates=train_dates, test_dates=test_dates))
+        test_month += test_stride_months
 
     if not splits:
         raise SystemExit(
