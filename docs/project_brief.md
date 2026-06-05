@@ -38,8 +38,8 @@ lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1
 并使用轻度 LightGBM sampling / regularization。进入 36m 正式验证后，这个模型配置在说明文档和图表中
 简称为 `baseline`；真实 run id 保留为 artifact 追溯键：
 `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`。
-它使用 `36m train -> next 1m test`，覆盖 `2024-01` 至 `2024-12`。当前已同步并归档
-`2024-01` 至 `2024-12` 全年结果。
+它使用 `36m train -> next 1m test`，覆盖 `2024-01` 至 `2024-12`。该月度 rolling
+已同步并归档 `2024-01` 至 `2024-12` 全年结果。
 为了检查更早年份和更长 OOS 持有窗口的稳定性，已提交同一 `baseline` 口径的
 `36m train -> next 6m test` 半年 rolling：
 `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1`，
@@ -63,7 +63,7 @@ pool_L: short +10.4 bps, next +4.4 bps
 | training universe | A 股 `00/30.SZ` 和 `60/68.SH` full universe |
 | selection masks | universe / `pool_S` / `pool_M` / `pool_L` |
 | main metrics | short Rank IC、池内 Top100 excess；next close 作为 tail 诊断和 mixed-label 定权参考 |
-| next validation | `baseline`，2024 全年 12 个 monthly rolling folds；run id `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`，已完成并归档 |
+| completed validation | `baseline`，2024 全年 12 个 monthly rolling folds；run id `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`，已完成并归档 |
 | robustness validation | 同一 `baseline`，`36m train -> next 6m test` 半年 rolling；run id `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1`，覆盖 `2018H1..2024H2` |
 
 训练和全量打分使用 full universe。`pool_S`、`pool_M`、`pool_L` 作为 TopN selection mask；

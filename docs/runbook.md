@@ -30,18 +30,17 @@ experiments/runs/lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1.toml
 
 ```text
 base cache:
-/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_base_labeled_v2/
+/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_base_labeled_v2/
 
 next-close labels:
-/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_next_close_labels_v1/
+/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/
 
 mixed w030 cache:
-/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_mixed_w030_labeled_v1/
+/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/
 ```
 
-2024 全年 12-shard rolling run 的展示名为 `baseline`，底层是 `soft_core_reg_light`
-feature include/drop 规则和 LightGBM 参数。真实 run id 用于 config / metrics / predictions 追溯。
-已完成、同步并归档 `2024-01` 至 `2024-12` 全年结果。
+当前判断、运行状态和实验结果见 [project_brief.md](project_brief.md) 和
+[experiment_log.md](experiment_log.md)。本 runbook 只保留可执行配置、命令和路径。
 
 同一 `baseline` 口径已提交 `36m train -> next 6m test` 半年 rolling 稳健性任务，覆盖
 `2018H1` 至 `2024H2` 共 14 个 folds。
@@ -247,28 +246,37 @@ job_name = "os-lgbm-36m-2023-w030-baseline"
 shard_parallelism = 1
 ```
 
-### 5.1 2024 全量 rolling 准备件
+### 5.1 2024 月度 rolling baseline
 
-正式 baseline run：
+正式 baseline run 的执行入口：
 
 ```text
 display: baseline
 run_id: lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1
 job:    os-lgbm-36m-2024-w030-baseline
-legacy current job: opening-strength-lgbm-delay2-36m-mixed-w030-sharded-a99705d1
 image:  registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260604-36m-soft-core-v1
-status: completed; synced and archived 2024-01..2024-12 on 2026-06-05
 ```
 
-重新 apply 或补跑前先做 dry-run：
+渲染、检查和启动：
+
+```bash
+osf-render-k8s-job \
+  --config experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1.toml \
+  --sharded \
+  --image registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260604-36m-soft-core-v1
+```
 
 ```bash
 hfcli kubectl --cluster research apply --dry-run=client \
   -f experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_sharded_job.yaml
+
+hfcli kubectl --cluster research delete job os-lgbm-36m-2024-w030-baseline \
+  --ignore-not-found -n bizewu
+hfcli kubectl --cluster research apply \
+  -f experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_sharded_job.yaml
 ```
 
 重新启动或补跑前先 build/push 当前 clean worktree 到 manifest 里的 image tag，或重新 render manifest 使用新 tag。
-不要用旧 smoke image 直接 apply；旧 image 不包含新增正式 run config。
 
 ### 5.2 2018-2024 半年 rolling 稳健性任务
 
@@ -429,14 +437,6 @@ osf-analyze-pool-internal-top100 \
   --plot-variant-label baseline
 ```
 
-当前全年图和归档副本保存在：
-
-```text
-output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_pool_internal/baseline_universe_sml_pool_internal_with_mean/baseline_universe_sml_top100_pool_internal_with_mean.svg
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_pool_internal_with_mean.svg
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_rank_ic_with_mean.svg
-```
-
 该脚本输出：
 
 ```text
@@ -445,6 +445,8 @@ pool_internal_month_summary.csv
 pool_internal_clock_summary.csv
 pool_internal_group_metrics.csv
 pool_internal_trace.json
+<plot-prefix>_universe_sml_pool_internal_with_mean/*.svg
+<plot-prefix>_universe_sml_rank_ic_with_mean/*.svg
 ```
 
 `predictions` 里不保留 `alpha_return_next_close`，这是训练防泄漏设计；分析前需要把 PVC 上的 next-close 年度
@@ -460,7 +462,7 @@ hfcli kubectl --cluster research run "${POD}" -n bizewu --restart=Never --image=
 hfcli kubectl --cluster research wait --for=condition=Ready pod/"${POD}" -n bizewu --timeout=300s
 for YEAR in 2021 2022 2023 2024; do
   hfcli kubectl --cluster research exec -n bizewu "${POD}" -- cat \
-    "/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_next_close_labels_v1/opening_${YEAR}_next_close_labels_v1.parquet" \
+    "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/opening_${YEAR}_next_close_labels_v1.parquet" \
     > "output/local/next_close_labels_2021_2024/opening_${YEAR}_next_close_labels_v1.parquet"
 done
 hfcli kubectl --cluster research delete pod "${POD}" -n bizewu --ignore-not-found
