@@ -11,10 +11,13 @@ from opening_strength_fit.commands.artifact_sync import (
     combine_metric_frames,  # noqa: E402
     combine_rolling_validation_shards,  # noqa: E402
     pull_gap_attribution_artifacts,  # noqa: E402
+    pull_next_close_labels,  # noqa: E402
     pull_rolling_validation_shards,  # noqa: E402
     pull_score_risk_artifacts,  # noqa: E402
     record_lightweight_artifacts,  # noqa: E402
+    record_metrics,  # noqa: E402
 )
+from opening_strength_fit.commands.artifact_sync_metrics import next_close_label_years  # noqa: E402
 from opening_strength_fit.k8s import RunSpec  # noqa: E402
 
 
@@ -72,6 +75,83 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
         self.assertEqual(monthly["test_month"].tolist(), ["2022-01", "2022-02"])
         self.assertEqual(int(yearly.loc[0, "test_rows"]), 4)
         self.assertAlmostEqual(float(yearly.loc[0, "top_score_mean_return"]), 0.04)
+
+    def test_record_metrics_archives_year_and_month_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metrics_dir = root / "metrics"
+            metrics_dir.mkdir()
+            (metrics_dir / "test_run_metrics_by_year.csv").write_text("year\n", encoding="utf-8")
+            (metrics_dir / "test_run_metrics_by_month.csv").write_text("month\n", encoding="utf-8")
+
+            paths = record_metrics("test_run", metrics_dir, root / "results")
+
+        self.assertEqual(
+            [path.name for path in paths],
+            ["test_run_metrics_by_year.csv", "test_run_metrics_by_month.csv"],
+        )
+
+    def test_next_close_label_years_use_halfyear_window_range(self) -> None:
+        spec = RunSpec(
+            run_id="halfyear",
+            pvc_dir="/mnt/output/opening_strength_fit/halfyear",
+            namespace="bizewu",
+            pvc="bizewu-private-data",
+            mount_path="/mnt/output",
+            pull_secret="highfort",
+            image="image",
+            test_start_year=0,
+            test_end_year=0,
+            test_start_month="2024-07",
+            test_end_month="2025-12",
+        )
+
+        self.assertEqual(next_close_label_years(spec), [2024, 2025])
+
+    def test_pull_next_close_labels_uses_standard_local_directory(self) -> None:
+        spec = RunSpec(
+            run_id="halfyear",
+            pvc_dir="/mnt/output/opening_strength_fit/halfyear",
+            namespace="bizewu",
+            pvc="bizewu-private-data",
+            mount_path="/mnt/output",
+            pull_secret="highfort",
+            image="image",
+            test_start_year=0,
+            test_end_year=0,
+            test_start_month="2025-01",
+            test_end_month="2025-12",
+        )
+
+        fetched_remote_paths = []
+
+        def fake_fetch(_hfcli, _spec, _pod, remote_path, local_path):
+            fetched_remote_paths.append(remote_path)
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            local_path.write_text("label\n", encoding="utf-8")
+            return True
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch(
+                "opening_strength_fit.commands.artifact_sync_metrics.fetch_remote_file_if_exists",
+                side_effect=fake_fetch,
+            ):
+                paths = pull_next_close_labels(
+                    "hfcli",
+                    spec,
+                    "helper-pod",
+                    Path(directory),
+                    label_pvc_dir="/labels",
+                )
+
+        self.assertEqual(
+            [path.as_posix() for path in paths],
+            [f"{directory}/next_close_labels_2025/opening_2025_next_close_labels_v1.parquet"],
+        )
+        self.assertEqual(
+            fetched_remote_paths,
+            ["/labels/opening_2025_next_close_labels_v1.parquet"],
+        )
 
     def test_score_risk_artifacts_are_pulled_to_local_run_dir(self) -> None:
         spec = RunSpec(

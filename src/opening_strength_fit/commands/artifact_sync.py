@@ -20,10 +20,12 @@ from opening_strength_fit.commands.artifact_sync_artifacts import (
     pull_rolling_validation_shards as pull_rolling_validation_shards,
 )
 from opening_strength_fit.commands.artifact_sync_metrics import (
+    DEFAULT_NEXT_CLOSE_LABEL_PVC_DIR,
     METRICS_SUFFIX,
     collect_run_statuses,
     fetch_predictions,
     pull_metrics,
+    pull_next_close_labels,
     record_metrics,
 )
 from opening_strength_fit.commands.artifact_sync_metrics import (
@@ -95,6 +97,8 @@ def main() -> None:
     parser.add_argument("--metrics-dir", default="output/k8s/metrics")
     parser.add_argument("--predictions-root", default="output/predictions")
     parser.add_argument("--artifacts-root", default="output/local")
+    parser.add_argument("--next-close-labels-root", default="output/local")
+    parser.add_argument("--next-close-label-pvc-dir", default=DEFAULT_NEXT_CLOSE_LABEL_PVC_DIR)
     parser.add_argument("--records-dir", default="experiments/results")
     parser.add_argument("--runs-dir", default="experiments/runs")
     parser.add_argument("--metrics", action="store_true", help="Fetch metrics CSVs.")
@@ -103,6 +107,11 @@ def main() -> None:
         "--artifacts",
         action="store_true",
         help="Fetch non-standard artifact files, currently score-risk sweep outputs.",
+    )
+    parser.add_argument(
+        "--next-close-labels",
+        action="store_true",
+        help="Fetch yearly next-close label shards needed by pool-internal analysis.",
     )
     parser.add_argument("--record", action="store_true", help="Archive fetched metrics.")
     parser.add_argument(
@@ -128,10 +137,18 @@ def main() -> None:
         raise SystemExit("pass at least one --config or --run")
     validate_specs(specs)
 
-    no_action = not (args.metrics or args.predictions or args.artifacts or args.record or args.all)
+    no_action = not (
+        args.metrics
+        or args.predictions
+        or args.artifacts
+        or args.next_close_labels
+        or args.record
+        or args.all
+    )
     fetch_metrics_flag = args.all or args.metrics or no_action
     fetch_predictions_flag = args.all or args.predictions or no_action
     fetch_artifacts_flag = args.all or args.artifacts or no_action
+    fetch_next_close_labels_flag = args.next_close_labels
     record_flag = args.all or args.record or no_action
     if args.allow_partial:
         record_flag = False
@@ -139,8 +156,14 @@ def main() -> None:
     metrics_dir = Path(args.metrics_dir)
     predictions_root = Path(args.predictions_root)
     artifacts_root = Path(args.artifacts_root)
+    next_close_labels_root = Path(args.next_close_labels_root)
     records_dir = Path(args.records_dir)
-    needs_pod = fetch_metrics_flag or fetch_predictions_flag or fetch_artifacts_flag
+    needs_pod = (
+        fetch_metrics_flag
+        or fetch_predictions_flag
+        or fetch_artifacts_flag
+        or fetch_next_close_labels_flag
+    )
     pod_name = args.pod
     created_temp_pod = False
     if needs_pod and not pod_name:
@@ -159,6 +182,7 @@ def main() -> None:
         print(f"  metrics: {fetch_metrics_flag}")
         print(f"  predictions: {fetch_predictions_flag}")
         print(f"  artifacts: {fetch_artifacts_flag}")
+        print(f"  next_close_labels: {fetch_next_close_labels_flag}")
         print(f"  record: {record_flag}")
         print(f"  allow_partial: {args.allow_partial}")
         for spec in specs:
@@ -224,6 +248,17 @@ def main() -> None:
                         artifacts_root,
                     )
                 print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
+        if fetch_next_close_labels_flag:
+            print("pulled_next_close_labels:")
+            for spec in specs:
+                paths = pull_next_close_labels(
+                    args.hfcli,
+                    spec,
+                    pod_name,
+                    next_close_labels_root,
+                    label_pvc_dir=args.next_close_label_pvc_dir,
+                )
+                print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
     finally:
         if created_temp_pod:
             delete_temp_pod(args.hfcli, specs[0].namespace, pod_name)
@@ -231,10 +266,10 @@ def main() -> None:
     if record_flag:
         print("recorded_metrics:")
         for spec in specs:
-            path = record_metrics(spec.run_id, metrics_dir, records_dir)
+            paths = record_metrics(spec.run_id, metrics_dir, records_dir)
             status = statuses.get(spec.run_id, "")
-            if path:
-                print(f"  {spec.run_id}: {path}")
+            if paths:
+                print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
                 if status and status != "completed":
                     print(
                         f"  {spec.run_id}: config status is {status!r}; confirm before final archive"

@@ -17,6 +17,11 @@ from opening_strength_fit.k8s import RunSpec
 from opening_strength_fit.reports import metrics_by_year_from_windows
 
 METRICS_SUFFIX = "_metrics_by_year.csv"
+MONTHLY_METRICS_SUFFIX = "_metrics_by_month.csv"
+DEFAULT_NEXT_CLOSE_LABEL_PVC_DIR = (
+    "/mnt/output/opening_strength_fit/cache/"
+    "opening_13y_201301_202512_delay2_next_close_labels_v1"
+)
 
 
 def pull_root_metrics(
@@ -334,6 +339,58 @@ def fetch_predictions(
     return combined_path
 
 
+def next_close_label_years(spec: RunSpec) -> list[int]:
+    if spec.test_start_month and spec.test_end_month:
+        start_year = int(spec.test_start_month.split("-", 1)[0])
+        end_year = int(spec.test_end_month.split("-", 1)[0])
+    else:
+        start_year = spec.test_start_year
+        end_year = spec.test_end_year
+    if start_year <= 0 or end_year <= 0:
+        return []
+    return list(range(start_year, end_year + 1))
+
+
+def next_close_label_output_dir(output_root: Path, years: list[int]) -> Path:
+    if not years:
+        raise ValueError("years must not be empty")
+    label = str(years[0]) if len(years) == 1 else f"{years[0]}_{years[-1]}"
+    return output_root / f"next_close_labels_{label}"
+
+
+def pull_next_close_labels(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    output_root: Path,
+    *,
+    label_pvc_dir: str = DEFAULT_NEXT_CLOSE_LABEL_PVC_DIR,
+) -> list[Path]:
+    years = next_close_label_years(spec)
+    if not years:
+        raise SystemExit(f"{spec.run_id}: config has no test years for next-close labels")
+    output_dir = next_close_label_output_dir(output_root, years)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    pulled: list[Path] = []
+    missing: list[int] = []
+    for year in years:
+        name = f"opening_{year}_next_close_labels_v1.parquet"
+        local_path = output_dir / name
+        if fetch_remote_file_if_exists(
+            hfcli,
+            spec,
+            pod_name,
+            f"{label_pvc_dir.rstrip('/')}/{name}",
+            local_path,
+        ):
+            pulled.append(local_path)
+        else:
+            missing.append(year)
+    if missing:
+        raise SystemExit(f"{spec.run_id}: missing next-close labels for years {missing}")
+    return pulled
+
+
 def collect_run_statuses(runs_dir: Path) -> dict[str, str]:
     statuses = {}
     for path in sorted(runs_dir.glob("*.toml")):
@@ -343,11 +400,14 @@ def collect_run_statuses(runs_dir: Path) -> dict[str, str]:
     return statuses
 
 
-def record_metrics(run_id: str, metrics_dir: Path, records_dir: Path) -> Path | None:
-    source = metrics_dir / f"{run_id}{METRICS_SUFFIX}"
-    if not source.exists():
-        return None
-    destination = records_dir / "metrics" / source.name
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, destination)
-    return destination
+def record_metrics(run_id: str, metrics_dir: Path, records_dir: Path) -> list[Path]:
+    records: list[Path] = []
+    for suffix in (METRICS_SUFFIX, MONTHLY_METRICS_SUFFIX):
+        source = metrics_dir / f"{run_id}{suffix}"
+        if not source.exists():
+            continue
+        destination = records_dir / "metrics" / source.name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        records.append(destination)
+    return records

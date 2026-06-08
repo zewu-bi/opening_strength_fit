@@ -387,8 +387,24 @@ osf-sync-experiment-artifacts \
 
 ```text
 output/k8s/metrics/<run_id>_metrics_by_year.csv
+output/k8s/metrics/<run_id>_metrics_by_month.csv
 output/predictions/<run_id>/predictions_all.parquet
 experiments/results/metrics/<run_id>_metrics_by_year.csv
+experiments/results/metrics/<run_id>_metrics_by_month.csv
+```
+
+pool-internal 分析需要 next-close 年度 label 时，可以复用同一个 sync helper pod 拉取：
+
+```bash
+osf-sync-experiment-artifacts \
+  --config experiments/runs/<run_id>.toml \
+  --next-close-labels
+```
+
+该命令按 config 的 test window 自动推断年份，输出到：
+
+```text
+output/local/next_close_labels_<year-or-range>/
 ```
 
 `score_risk_sweep` 的轻量 artifact：
@@ -438,6 +454,8 @@ osf-analyze-pool-internal-top100 \
 pool_internal_summary.csv
 pool_internal_month_summary.csv
 pool_internal_clock_summary.csv
+pool_internal_halfyear_summary.csv
+pool_internal_year_summary.csv
 pool_internal_group_metrics.csv
 pool_internal_trace.json
 <plot-prefix>_universe_sml_pool_internal_with_mean/*.svg
@@ -479,12 +497,20 @@ osf-analyze-pool-internal-top100 \
   --next-close-label-input output/local/next_close_labels_2020_2024 \
   --variant baseline_halfyear_2020_2024 \
   --output-dir output/local/<halfyear_run_id>_pool_internal_2020_2024 \
-  --report-dir output/reports/<halfyear_run_id>_pool_internal_2020_2024
+  --report-dir output/reports/<halfyear_run_id>_pool_internal_2020_2024 \
+  --weekly-report-dir output/reports/<halfyear_run_id>_weekly_2020_2024_trading_day_equal \
+  --weekly-output-prefix baseline_halfyear_2020_2024 \
+  --weekly-rolling-weeks 4 \
+  --records-dir experiments/results \
+  --record-prefix <halfyear_run_id>_2020_2024
 ```
 
-如果需要看周度稳定性，可以直接从上一步的 `pool_internal_group_metrics.csv` 生成 4 周滚动曲线。
-该命令先把同一 `pool x date` 的多个决策点聚成日度均值，再按交易日等权生成周度和滚动窗口，
-避免 1 个交易日的节假日周与 5 个交易日的正常周等权：
+传入 `--weekly-report-dir` 时，命令会顺手生成 4 周滚动周度诊断：先把同一 `pool x date`
+的多个决策点聚成日度均值，再按交易日等权生成周度和滚动窗口，避免 1 个交易日的节假日周与
+5 个交易日的正常周等权。传入 `--records-dir` / `--record-prefix` 时，会同步归档轻量
+pool-internal CSV 和 SVG 到 `experiments/results/backtests/`。
+
+仍然可以单独从已存在的 `pool_internal_group_metrics.csv` 重画周度图：
 
 ```bash
 osf-plot-weekly-pool-internal \
@@ -500,23 +526,7 @@ osf-plot-weekly-pool-internal \
 `<plot-prefix>_universe_sml_weekly_rolling_4w/*.svg`。
 
 `predictions` 里不保留 `alpha_return_next_close`，这是训练防泄漏设计；分析前需要把 PVC 上的 next-close 年度
-label 小文件拉到本地 `output/local/next_close_labels_2021_2024/`。这四个文件总量约 310 MiB，拉一次即可。
-
-```bash
-mkdir -p output/local/next_close_labels_2021_2024
-POD=opening-strength-next-close-pull
-IMAGE=registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260604-next-close-v6
-OVERRIDES='{"apiVersion":"v1","spec":{"imagePullSecrets":[{"name":"highfort"}],"containers":[{"name":"opening-strength-helper","image":"'"${IMAGE}"'","command":["/bin/sh","-c","sleep 3600"],"volumeMounts":[{"name":"opening-strength-output","mountPath":"/mnt/output"}]}],"volumes":[{"name":"opening-strength-output","persistentVolumeClaim":{"claimName":"bizewu-private-data"}}]}}'
-hfcli kubectl --cluster research delete pod "${POD}" -n bizewu --ignore-not-found
-hfcli kubectl --cluster research run "${POD}" -n bizewu --restart=Never --image="${IMAGE}" --overrides="${OVERRIDES}" --command -- /bin/sh -c 'sleep 3600'
-hfcli kubectl --cluster research wait --for=condition=Ready pod/"${POD}" -n bizewu --timeout=300s
-for YEAR in 2021 2022 2023 2024; do
-  hfcli kubectl --cluster research exec -n bizewu "${POD}" -- cat \
-    "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/opening_${YEAR}_next_close_labels_v1.parquet" \
-    > "output/local/next_close_labels_2021_2024/opening_${YEAR}_next_close_labels_v1.parquet"
-done
-hfcli kubectl --cluster research delete pod "${POD}" -n bizewu --ignore-not-found
-```
+label 小文件拉到本地；优先使用第 6 节的 `osf-sync-experiment-artifacts --next-close-labels`。
 
 Rolling short-vs-next tradeoff chart：
 
