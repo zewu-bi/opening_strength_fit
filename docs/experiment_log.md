@@ -2103,21 +2103,8 @@ mentor 后续指示：
 
 - `2020`、`2021` 年做日频的人不多，下一轮信号增强重点看 `2022-2025`。
 - 研究对象仍是开盘强势股本身，继续通过特征工程、训练权重和模型参数优化来加强信号。
-- 后续展示和验收主看 `pool_L`；S/M/L 和 universe 保留为历史归档和必要诊断，不再作为主展示面。
-- 原 `halfyear_window_2020_2025_weekly.svg` 单周图保留归档；新一轮图表用原 short / next 视图和
-  weekly cumulative 视图。新增 `osf-plot-weekly-pool-internal-cumulative` 负责从
-  `weekly_pool_internal_summary.csv` 生成累和图。
-
-已用现有 `2020-2025` weekly summary 生成 `pool_L` 累和参考图：
-
-```text
-experiments/results/backtests/halfyear_window_2020_2025_pool_l_weekly_cumulative.svg
-experiments/results/backtests/halfyear_window_2020_2025_pool_l_weekly_cumulative_plot_data.csv
-experiments/results/backtests/halfyear_window_2020_2025_pool_l_weekly_cumulative_trace.json
-```
-
-该参考图只包含 `pool_L`。截至 `2025-12-29`，weekly cumulative short / next internal excess
-约为 `+3415.1 / +4050.8 bps`。
+- 后续展示和验收主看 `pool_L`；S/M/L 和 universe 保留为历史归档和必要诊断。
+- 上一轮 `2020-2025` rolling summary 只保留四股池 short halfyear、next halfyear 和 weekly 三张核心图。
 
 ### 归档和保留口径
 
@@ -2155,7 +2142,7 @@ experiments/results/backtests/halfyear_window_2020_2025_pool_l_weekly_cumulative
 | `output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal` | halfyear mainline 2020-2024 的交易日等权 weekly / 4-week rolling pool-internal 诊断和 SVG。 |
 | `experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_*` | 2025 OOS extension 的 universe / S / M / L pool-internal、Rank IC、plot data 和分年/半年汇总。 |
 | `output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal` | 2025 OOS extension 的交易日等权 weekly / 4-week rolling pool-internal 诊断和 SVG。 |
-| `experiments/results/backtests/halfyear_window_2020_2025_*` | 2020-2025 合并视角的三张核心 SVG：short 半年度、next 半年度、weekly 单周折线；trace 记录输入 run 和 2024-09-30 / 2021-10-04 outlier。另有 `pool_l_weekly_cumulative` 作为后续 `pool_L` 主视角的累和图参考。 |
+| `experiments/results/backtests/halfyear_window_2020_2025_*` | 2020-2025 合并视角的三张核心 SVG：short 半年度、next 半年度、weekly 单周折线；trace 记录输入 run 和 2024-09-30 / 2021-10-04 outlier。 |
 | `experiments/results/backtests/gap_risk_penalized_attribution_v1_*` | rolling gap-risk Top100 替换归因的 outcome、feature exposure 和 residual-control 证据。 |
 | `output/local/<run_id>` | ignored artifact-sync buffer；不再作为唯一证据位置。 |
 | `output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw` | 18m rolling 各测试月 prediction shard，用于 alpha Top100 内 risk/short/next 相关诊断。 |

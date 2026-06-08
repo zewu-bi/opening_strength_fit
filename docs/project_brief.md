@@ -35,13 +35,13 @@ lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1
 ```
 
 这套口径保留 decision-time 可见的核心盘口、集合竞价和开盘后轨迹特征，减少宽泛累计特征暴露，
-并使用轻度 LightGBM sampling / regularization。进入 36m 正式验证后，这个模型配置在说明文档和图表中
-简称为 `baseline`；真实 run id 保留为 artifact 追溯键：
+并使用轻度 LightGBM sampling / regularization。这组结果是已归档验证；
+真实 run id 保留为 artifact 追溯键：
 `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`。
 它使用 `36m train -> next 1m test`，覆盖 `2024-01` 至 `2024-12`。该月度 rolling
 已同步并归档 `2024-01` 至 `2024-12` 全年结果。
 
-同一 `baseline` 口径的 `36m train -> next 6m test` 半年 rolling 已完成：
+同一 feature/model 口径的 `36m train -> next 6m test` 半年 rolling 已完成：
 `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1`，
 覆盖 `2018H1` 至 `2024H2` 共 14 个半年 folds。2020 年之前没有 S/M/L 股池日期，
 因此 `2018-2019` 只做 universe-only 分析；`2020-2024` 已完成 universe / S / M / L
@@ -53,11 +53,10 @@ lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1
 OOS extension 合并成 `2020-2025` rolling summary，并归档三张核心图：
 short halfyear、next halfyear 和 weekly。
 
-最新 mentor 指示：由于 `2020`、`2021` 年做日频的人不多，后续信号增强重点放在
-`2022-2025`；候选池展示和验收主看 `pool_L`。方法仍是特征工程、训练权重和模型调参，
-目标是继续做强开盘强势股信号，而不是围绕 2025 降档单独做专项解释。
+最新 mentor 指示：后续信号增强重点看 `2022-2025`；候选池展示和验收主看
+`pool_L`。方法仍是特征工程、训练权重和模型调参。
 
-`baseline` 全年 S/M/L 池内 Top100 excess 为：
+2024 全年 S/M/L 池内 Top100 excess 为：
 
 ```text
 pool_S: short +8.3 bps, next +7.7 bps
@@ -65,7 +64,7 @@ pool_M: short +9.3 bps, next +5.6 bps
 pool_L: short +10.4 bps, next +4.4 bps
 ```
 
-`baseline` 半年 rolling 的 2020-2024 S/M/L 池内 Top100 excess 为：
+半年 rolling 的 2020-2024 S/M/L 池内 Top100 excess 为：
 
 ```text
 pool_S: short +8.9 bps, next +12.0 bps
@@ -97,14 +96,14 @@ pool_L: short +11.1 bps, next +13.3 bps
 | --- | --- |
 | sample slice | `09:31:00-09:40:00` |
 | label | mixed label, `w_long=0.30` |
-| feature/model | `baseline` (`soft_core_reg_light`) |
+| feature/model | archived `soft_core_reg_light` validation |
 | training universe | A 股 `00/30.SZ` 和 `60/68.SH` full universe |
 | selection masks | 历史归档保留 universe / `pool_S` / `pool_M` / `pool_L`；后续主展示和验收聚焦 `pool_L` |
 | main metrics | short Rank IC、池内 Top100 excess；next close 作为 tail 诊断和 mixed-label 定权参考 |
-| completed validation | `baseline`，2024 全年 12 个 monthly rolling folds；run id `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`，已完成并归档 |
-| completed mainline | 同一 `baseline`，`36m train -> next 6m test` 半年 rolling；`2018H1..2024H2` 主线和 `2025H1..2025H2` OOS extension 均已完成并归档 |
-| current summary | `2020-2025` rolling summary 已归档；旧单周图保留为归档证据，已补充 `pool_L` weekly cumulative 参考图 |
-| next target | 聚焦 `2022-2025` 和 `pool_L`，继续做特征工程、训练权重和模型调参来加强开盘强势股信号 |
+| completed validation | `soft_core_reg_light`，2024 全年 12 个 monthly rolling folds；run id `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`，已完成并归档 |
+| completed mainline | 同一 feature/model 口径，`36m train -> next 6m test` 半年 rolling；`2018H1..2024H2` 主线和 `2025H1..2025H2` OOS extension 均已完成并归档 |
+| current summary | `2020-2025` rolling summary 已归档：short halfyear、next halfyear 和 weekly 三张核心图 |
+| next target | 聚焦 `2022-2025` 和 `pool_L`，继续做特征工程、训练权重和模型调参 |
 
 训练和全量打分仍使用 full universe。历史验证保留 `pool_S`、`pool_M`、`pool_L` 作为 TopN
 selection mask；后续按 mentor 指示主看 `pool_L`。pool membership 作为输出标记，模型特征保持在
@@ -154,9 +153,8 @@ label      = sell_vwap / buy_price - 1 - fee_bps / 10000
 | `next close` | mixed-label 定权和 dirty-tail 诊断口径。 |
 | `replay` | 验证和交易约束诊断工具。 |
 
-历史图表按 selection mask 分组或分面。baseline 一组通常有 `S/M/L` 三个柱子；baseline + 改进模型是
-6 个柱子；叠加 rolling 月份时优先用 small multiples。新一轮信号增强图表主看 `pool_L`，
-核心展示为 short、next 和 weekly cumulative。
+历史图表按 selection mask 分组或分面。已归档的 `2020-2025` rolling summary 保留
+short halfyear、next halfyear 和 weekly 三张四股池图。
 
 ## 关键里程碑
 
@@ -167,10 +165,10 @@ label      = sell_vwap / buy_price - 1 - fee_bps / 10000
 | dirty-tail diagnostics | raw short score 带“短正长负”的拥挤追涨 tail；可见信息能识别其中一部分。 |
 | mentor re-scope | 从两模型 `alpha - risk` 切回直接训练 single mixed label。 |
 | S/M/L mixed label | 固定 `w_long=0.30`，在 S/M/L 池内保住 short 并改善 next internal excess。 |
-| feature/model sweep | 18m 小缓存上晋级 `soft_core_reg_light`，进入 36m 正式验证后命名为 `baseline`。 |
-| 36m baseline full year | `2024-01..2024-12` 已同步并归档；S/M/L short 和 next 池内 Top100 excess 均值均为正。 |
-| 36m halfyear rolling mainline | 同一 `baseline` 口径已完成 `2018H1..2024H2` 半年 folds；2020-2024 S/M/L 与 2018-2019 universe-only 均已归档。 |
-| 2025 OOS extension | 同一 `baseline` 口径已完成 `2025H1..2025H2`；S/M/L 池内 short 与 next excess 均为正。 |
+| feature/model sweep | 18m 小缓存上晋级 `soft_core_reg_light`，随后完成 36m 归档验证。 |
+| 36m soft-core full year | `2024-01..2024-12` 已同步并归档；S/M/L short 和 next 池内 Top100 excess 均值均为正。 |
+| 36m halfyear rolling mainline | 同一 feature/model 口径已完成 `2018H1..2024H2` 半年 folds；2020-2024 S/M/L 与 2018-2019 universe-only 均已归档。 |
+| 2025 OOS extension | 同一 feature/model 口径已完成 `2025H1..2025H2`；S/M/L 池内 short 与 next excess 均为正。 |
 | 2020-2025 rolling summary | 合并视角已归档三张核心图；S/M/L 池内 short 与 next excess 均为正，作为当前总结材料。 |
 | next mentor direction | 后续重点做强 `2022-2025` 信号，展示和验收主看 `pool_L`，继续走特征工程和模型优化。 |
 

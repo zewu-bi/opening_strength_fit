@@ -14,7 +14,7 @@ precheck -> render job -> apply/wait -> sync artifacts -> audit/coverage -> anal
 36m smoke:
 experiments/runs/lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1.toml
 
-36m formal 2024 rolling baseline:
+36m archived 2024 rolling validation:
 experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1.toml
 experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_sharded_job.yaml
 
@@ -234,7 +234,7 @@ K8s Job 命名约定：
 - sharded rolling 必须在 TOML 的 `[k8s]` 里显式设置短 `job_name`。
 - 格式使用 `os-<model>-<window>-<year>-<target>-<display>`，例如
   `os-lgbm-36m-2023-w030-baseline`。
-- 展示名沿用文档里的模型别名，例如当前正式模型叫 `baseline`。
+- 展示名使用短标签，方便在 K8s 和图表中追溯同一 run family。
 - 不要依赖 renderer 自动生成的 `opening-strength-...-<hash>` 名字；这类 hash 名只作为旧运行的追溯信息。
 
 ```toml
@@ -243,12 +243,12 @@ job_name = "os-lgbm-36m-2023-w030-baseline"
 shard_parallelism = 1
 ```
 
-### 5.1 2024 月度 rolling baseline
+### 5.1 2024 月度 rolling validation
 
-正式 baseline run 的执行入口：
+已归档 2024 rolling run 的执行入口：
 
 ```text
-display: baseline
+display: soft-core monthly validation
 run_id: lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1
 job:    os-lgbm-36m-2024-w030-baseline
 image:  registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260604-36m-soft-core-v1
@@ -277,10 +277,10 @@ hfcli kubectl --cluster research apply \
 
 ### 5.2 2018-2024 半年 rolling job
 
-正式 baseline 的半年 rolling 执行入口：
+已归档半年 rolling run 的执行入口：
 
 ```text
-display: baseline halfyear
+display: soft-core halfyear validation
 run_id: lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1
 job:    os-lgbm-36m-2018-2024-w030-halfyear
 image:  registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260605-halfyear-v1
@@ -524,21 +524,6 @@ osf-plot-weekly-pool-internal \
 该脚本输出 `daily_pool_internal_summary.csv`、`weekly_pool_internal_summary.csv`、
 `weekly_pool_internal_overall_summary.csv`、`weekly_worst_windows.csv` 和
 `<plot-prefix>_universe_sml_weekly_rolling_4w/*.svg`。
-
-下一轮展示按 mentor 指示主看 `pool_L`，周频图改用累和视图。可从上一步生成的
-`weekly_pool_internal_summary.csv` 单独重画：
-
-```bash
-osf-plot-weekly-pool-internal-cumulative \
-  --weekly-summary output/reports/<run_id>_weekly_trading_day_equal/weekly_pool_internal_summary.csv \
-  --output-dir output/reports/<run_id>_weekly_cumulative \
-  --output-prefix <run_id> \
-  --plot-variant-label "<display label>" \
-  --pool L
-```
-
-旧的单周 / 4 周 rolling 周图脚本保留用于归档复核；新一轮核心图表使用 short、next 和
-weekly cumulative。
 
 `predictions` 里不保留 `alpha_return_next_close`，这是训练防泄漏设计；分析前需要把 PVC 上的 next-close 年度
 label 小文件拉到本地；优先使用第 6 节的 `osf-sync-experiment-artifacts --next-close-labels`。
