@@ -525,6 +525,21 @@ osf-plot-weekly-pool-internal \
 `weekly_pool_internal_overall_summary.csv`、`weekly_worst_windows.csv` 和
 `<plot-prefix>_universe_sml_weekly_rolling_4w/*.svg`。
 
+下一轮展示按 mentor 指示主看 `pool_L`，周频图改用累和视图。可从上一步生成的
+`weekly_pool_internal_summary.csv` 单独重画：
+
+```bash
+osf-plot-weekly-pool-internal-cumulative \
+  --weekly-summary output/reports/<run_id>_weekly_trading_day_equal/weekly_pool_internal_summary.csv \
+  --output-dir output/reports/<run_id>_weekly_cumulative \
+  --output-prefix <run_id> \
+  --plot-variant-label "<display label>" \
+  --pool L
+```
+
+旧的单周 / 4 周 rolling 周图脚本保留用于归档复核；新一轮核心图表使用 short、next 和
+weekly cumulative。
+
 `predictions` 里不保留 `alpha_return_next_close`，这是训练防泄漏设计；分析前需要把 PVC 上的 next-close 年度
 label 小文件拉到本地；优先使用第 6 节的 `osf-sync-experiment-artifacts --next-close-labels`。
 

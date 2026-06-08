@@ -8,6 +8,7 @@ import pandas as pd
 from opening_strength_fit.pool_internal_plots import (
     month_major_plot_data,
     write_universe_sml_pool_internal_plots,
+    write_weekly_pool_internal_cumulative_plot,
     write_weekly_pool_internal_rolling_plot,
 )
 
@@ -142,4 +143,40 @@ def test_write_weekly_pool_internal_rolling_plot(tmp_path) -> None:
 
     trace = json.loads(Path(paths["weekly_rolling_trace"]).read_text(encoding="utf-8"))
     assert trace["rolling_weeks"] == 4
+    assert trace["series"] == ["universe", "pool_S"]
+
+
+def test_write_weekly_pool_internal_cumulative_plot(tmp_path) -> None:
+    weekly_summary = pd.DataFrame(
+        {
+            "pool": ["universe", "universe", "pool_S", "pool_S"],
+            "week_start": ["2024-01-01", "2024-01-08", "2024-01-01", "2024-01-08"],
+            "short_internal_excess_bps": [10.0, -2.0, 8.0, 3.0],
+            "next_internal_excess_bps": [1.0, 4.0, -5.0, 6.0],
+            "trading_days": [5, 5, 5, 5],
+        }
+    )
+
+    paths = write_weekly_pool_internal_cumulative_plot(
+        weekly_summary,
+        tmp_path,
+        output_prefix="baseline",
+        output_name="baseline_weekly_cumulative",
+        variant_label="baseline cumulative",
+        pools=("universe", "pool_S"),
+    )
+
+    for path in paths.values():
+        assert Path(path).exists()
+
+    plot_data = pd.read_csv(paths["weekly_cumulative_plot_data"])
+    universe = plot_data.loc[plot_data["pool"].eq("universe")]
+    assert universe["short_cumulative_internal_excess_bps"].tolist() == [10.0, 8.0]
+    assert universe["next_cumulative_internal_excess_bps"].tolist() == [1.0, 5.0]
+
+    figure = Path(paths["weekly_cumulative_figure"])
+    assert "baseline cumulative: universe / S Top 100" in figure.read_text(encoding="utf-8")
+
+    trace = json.loads(Path(paths["weekly_cumulative_trace"]).read_text(encoding="utf-8"))
+    assert trace["metric"] == "weekly_pool_internal_excess_cumulative_sum"
     assert trace["series"] == ["universe", "pool_S"]

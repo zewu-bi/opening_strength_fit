@@ -256,10 +256,13 @@ def write_weekly_pool_internal_rolling_plot(
 
     chart_dir = output_dir / f"{output_prefix}_{pool_group_slug}_weekly_rolling_{rolling_weeks}w"
     plot_data_path = (
-        chart_dir / f"{output_prefix}_{pool_group_slug}_weekly_rolling_{rolling_weeks}w_plot_data.csv"
+        chart_dir
+        / f"{output_prefix}_{pool_group_slug}_weekly_rolling_{rolling_weeks}w_plot_data.csv"
     )
     figure = chart_dir / f"{output_prefix}_{pool_group_slug}_weekly_rolling_{rolling_weeks}w.svg"
-    trace = chart_dir / f"{output_prefix}_{pool_group_slug}_weekly_rolling_{rolling_weeks}w_trace.json"
+    trace = (
+        chart_dir / f"{output_prefix}_{pool_group_slug}_weekly_rolling_{rolling_weeks}w_trace.json"
+    )
     chart_dir.mkdir(parents=True, exist_ok=True)
     plot_data.to_csv(plot_data_path, index=False, float_format="%.6f")
 
@@ -313,6 +316,117 @@ def write_weekly_pool_internal_rolling_plot(
     }
 
 
+def write_weekly_pool_internal_cumulative_plot(
+    weekly_summary: pd.DataFrame,
+    output_dir: Path,
+    *,
+    input_path: Path | None = None,
+    output_prefix: str = "baseline",
+    output_name: str = "",
+    variant_label: str = "baseline",
+    pools: tuple[str, ...] = PLOT_POOLS,
+) -> dict[str, str]:
+    required = {
+        "pool",
+        "week_start",
+        "short_internal_excess_bps",
+        "next_internal_excess_bps",
+    }
+    missing = sorted(required - set(weekly_summary.columns))
+    if missing:
+        raise ValueError(f"weekly_summary missing columns: {missing}")
+
+    output_prefix = slug_label(output_prefix)
+    pools = tuple(pools)
+    pool_group_slug = _pool_group_slug(pools)
+    pool_group_title = _pool_group_title(pools)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    columns = ["pool", "week_start", "short_internal_excess_bps", "next_internal_excess_bps"]
+    if "trading_days" in weekly_summary.columns:
+        columns.append("trading_days")
+    plot_data = weekly_summary.loc[weekly_summary["pool"].isin(pools), columns].copy()
+    plot_data["week_start"] = pd.to_datetime(plot_data["week_start"], errors="coerce")
+    plot_data = plot_data.dropna(subset=["week_start"]).sort_values(["pool", "week_start"])
+    if plot_data.empty:
+        raise ValueError("weekly_summary has no rows for selected pools")
+
+    for column in ("short_internal_excess_bps", "next_internal_excess_bps"):
+        plot_data[column] = pd.to_numeric(plot_data[column], errors="coerce")
+    plot_data["variant"] = variant_label
+    for pool in pools:
+        mask = plot_data["pool"].eq(pool)
+        plot_data.loc[mask, "short_cumulative_internal_excess_bps"] = (
+            plot_data.loc[mask, "short_internal_excess_bps"].fillna(0.0).cumsum()
+        )
+        plot_data.loc[mask, "next_cumulative_internal_excess_bps"] = (
+            plot_data.loc[mask, "next_internal_excess_bps"].fillna(0.0).cumsum()
+        )
+
+    if output_name:
+        chart_dir = output_dir
+        file_stem = slug_label(output_name)
+    else:
+        file_stem = f"{output_prefix}_{pool_group_slug}_weekly_cumulative"
+        chart_dir = output_dir / file_stem
+    chart_dir.mkdir(parents=True, exist_ok=True)
+    plot_data_path = chart_dir / f"{file_stem}_plot_data.csv"
+    figure = chart_dir / f"{file_stem}.svg"
+    trace = chart_dir / f"{file_stem}_trace.json"
+
+    csv_data = plot_data.copy()
+    csv_data["week_start"] = csv_data["week_start"].dt.strftime("%Y-%m-%d")
+    csv_data.to_csv(plot_data_path, index=False, float_format="%.6f")
+
+    _write_two_panel_line_svg(
+        csv_data,
+        title=f"{variant_label}: {pool_group_title} Top 100 \u6c60\u5185\u8d85\u989d\u7d2f\u548c",
+        panels=[
+            {
+                "title": "\u77ed\u671f\u6536\u76ca\u7d2f\u548c",
+                "ylabel": "cumulative bps",
+                "column": "short_cumulative_internal_excess_bps",
+                "default_ylim": (-500.0, 7000.0),
+                "tick_step": 1000.0,
+                "tick_decimals": None,
+            },
+            {
+                "title": "\u9694\u591c\u6536\u76ca\u7d2f\u548c",
+                "ylabel": "cumulative bps",
+                "column": "next_cumulative_internal_excess_bps",
+                "default_ylim": (-2000.0, 5000.0),
+                "tick_step": 1000.0,
+                "tick_decimals": None,
+            },
+        ],
+        output_path=figure,
+        pools=pools,
+    )
+    write_json(
+        trace,
+        {
+            "input": str(input_path) if input_path is not None else None,
+            "plot_data": str(plot_data_path),
+            "figure": str(figure),
+            "variant_label": variant_label,
+            "series": list(pools),
+            "included_weeks": sorted(csv_data["week_start"].dropna().astype(str).unique()),
+            "metric": "weekly_pool_internal_excess_cumulative_sum",
+            "style": "manual svg two-panel cumulative weekly line figure for selected pools",
+            "cumulative_definition": (
+                "per-pool cumulative sum of weekly short/next internal excess bps; "
+                "weekly rows are expected to be precomputed by the caller"
+            ),
+        },
+        ensure_ascii=True,
+    )
+    return {
+        "weekly_cumulative_plot_data": str(plot_data_path),
+        "weekly_cumulative_figure": str(figure),
+        "weekly_cumulative_trace": str(trace),
+    }
+
+
 def _write_horizon_excess_rank_ic_plots(
     month_summary: pd.DataFrame,
     output_dir: Path,
@@ -351,12 +465,16 @@ def _write_horizon_excess_rank_ic_plots(
             pools=pools,
             variant_label=variant_label,
         )
-        chart_dir = output_dir / f"{output_prefix}_{pool_group_slug}_{slug}_excess_rank_ic_with_mean"
+        chart_dir = (
+            output_dir / f"{output_prefix}_{pool_group_slug}_{slug}_excess_rank_ic_with_mean"
+        )
         plot_data = (
             chart_dir
             / f"{output_prefix}_{pool_group_slug}_{slug}_excess_rank_ic_with_mean_plot_data.csv"
         )
-        figure = chart_dir / f"{output_prefix}_{pool_group_slug}_{slug}_excess_rank_ic_with_mean.svg"
+        figure = (
+            chart_dir / f"{output_prefix}_{pool_group_slug}_{slug}_excess_rank_ic_with_mean.svg"
+        )
         chart_dir.mkdir(parents=True, exist_ok=True)
         data.to_csv(plot_data, index=False, float_format="%.6f")
         _write_two_panel_bar_svg(
@@ -386,7 +504,8 @@ def _write_horizon_excess_rank_ic_plots(
             pools=pools,
         )
         _write_plot_trace(
-            chart_dir / f"{output_prefix}_{pool_group_slug}_{slug}_excess_rank_ic_with_mean_trace.json",
+            chart_dir
+            / f"{output_prefix}_{pool_group_slug}_{slug}_excess_rank_ic_with_mean_trace.json",
             input_path=input_path,
             plot_data=plot_data,
             figure=figure,
@@ -481,8 +600,7 @@ def _write_two_panel_bar_svg(
         total_group_width = min(110.0, group_step * 0.72)
         bar_width = min(34.0, (total_group_width - bar_gap * (pool_count - 1)) / pool_count)
     offsets = tuple(
-        (index - (pool_count - 1) / 2.0) * (bar_width + bar_gap)
-        for index in range(pool_count)
+        (index - (pool_count - 1) / 2.0) * (bar_width + bar_gap) for index in range(pool_count)
     )
     data_index = plot_data.set_index(["test_month", "pool"])
 

@@ -47,6 +47,16 @@ lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1
 因此 `2018-2019` 只做 universe-only 分析；`2020-2024` 已完成 universe / S / M / L
 池内 Top100 验收并归档。
 
+2025 OOS extension 也已完成，run id 为
+`lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1`，
+覆盖 `2025H1` 和 `2025H2` 两个半年 folds。随后已把 `2020-2024` 主线与 `2025`
+OOS extension 合并成 `2020-2025` rolling summary，并归档三张核心图：
+short halfyear、next halfyear 和 weekly。
+
+最新 mentor 指示：由于 `2020`、`2021` 年做日频的人不多，后续信号增强重点放在
+`2022-2025`；候选池展示和验收主看 `pool_L`。方法仍是特征工程、训练权重和模型调参，
+目标是继续做强开盘强势股信号，而不是围绕 2025 降档单独做专项解释。
+
 `baseline` 全年 S/M/L 池内 Top100 excess 为：
 
 ```text
@@ -65,6 +75,22 @@ pool_L: short +12.1 bps, next +14.3 bps
 
 2018-2019 universe-only short / next internal excess 为 `+28.4 / +10.1 bps`。
 
+2025 OOS extension 的 S/M/L 池内 Top100 excess 为：
+
+```text
+pool_S: short +5.1 bps, next +7.6 bps
+pool_M: short +5.6 bps, next +8.6 bps
+pool_L: short +6.2 bps, next +8.2 bps
+```
+
+2020-2025 合并 rolling summary 的 S/M/L 池内 Top100 excess 为：
+
+```text
+pool_S: short +8.3 bps, next +11.3 bps
+pool_M: short +9.8 bps, next +12.9 bps
+pool_L: short +11.1 bps, next +13.3 bps
+```
+
 当前执行口径：
 
 | item | current setting |
@@ -73,14 +99,16 @@ pool_L: short +12.1 bps, next +14.3 bps
 | label | mixed label, `w_long=0.30` |
 | feature/model | `baseline` (`soft_core_reg_light`) |
 | training universe | A 股 `00/30.SZ` 和 `60/68.SH` full universe |
-| selection masks | universe / `pool_S` / `pool_M` / `pool_L` |
+| selection masks | 历史归档保留 universe / `pool_S` / `pool_M` / `pool_L`；后续主展示和验收聚焦 `pool_L` |
 | main metrics | short Rank IC、池内 Top100 excess；next close 作为 tail 诊断和 mixed-label 定权参考 |
 | completed validation | `baseline`，2024 全年 12 个 monthly rolling folds；run id `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`，已完成并归档 |
-| completed mainline | 同一 `baseline`，`36m train -> next 6m test` 半年 rolling；run id `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1`，覆盖 `2018H1..2024H2`，已完成并归档 |
-| next target | 使用已齐备的 2025 cache 做 2025 OOS extension，或整理 mentor-facing summary |
+| completed mainline | 同一 `baseline`，`36m train -> next 6m test` 半年 rolling；`2018H1..2024H2` 主线和 `2025H1..2025H2` OOS extension 均已完成并归档 |
+| current summary | `2020-2025` rolling summary 已归档；旧单周图保留为归档证据，已补充 `pool_L` weekly cumulative 参考图 |
+| next target | 聚焦 `2022-2025` 和 `pool_L`，继续做特征工程、训练权重和模型调参来加强开盘强势股信号 |
 
-训练和全量打分使用 full universe。`pool_S`、`pool_M`、`pool_L` 作为 TopN selection mask；
-pool membership 作为输出标记，模型特征保持在 decision-time visible 信息集内。
+训练和全量打分仍使用 full universe。历史验证保留 `pool_S`、`pool_M`、`pool_L` 作为 TopN
+selection mask；后续按 mentor 指示主看 `pool_L`。pool membership 作为输出标记，模型特征保持在
+decision-time visible 信息集内。
 
 ## 研究口径
 
@@ -122,12 +150,13 @@ label      = sell_vwap / buy_price - 1 - fee_bps / 10000
 | --- | --- |
 | `Rank IC` | 同一 `date x decision_time` 横截面内的排序能力。 |
 | `Top100 excess` | 默认指池内 Top100 excess，即 Top100 均值减同一 selection mask 内全体候选均值。 |
-| `selection mask` | universe / `pool_S` / `pool_M` / `pool_L` 是同一模型的切片维度。 |
+| `selection mask` | universe / `pool_S` / `pool_M` / `pool_L` 是同一模型的切片维度；后续主看 `pool_L`。 |
 | `next close` | mixed-label 定权和 dirty-tail 诊断口径。 |
 | `replay` | 验证和交易约束诊断工具。 |
 
-图表按 selection mask 分组或分面。baseline 一组通常有 `S/M/L` 三个柱子；baseline + 改进模型是
-6 个柱子；叠加 rolling 月份时优先用 small multiples。
+历史图表按 selection mask 分组或分面。baseline 一组通常有 `S/M/L` 三个柱子；baseline + 改进模型是
+6 个柱子；叠加 rolling 月份时优先用 small multiples。新一轮信号增强图表主看 `pool_L`，
+核心展示为 short、next 和 weekly cumulative。
 
 ## 关键里程碑
 
@@ -141,6 +170,9 @@ label      = sell_vwap / buy_price - 1 - fee_bps / 10000
 | feature/model sweep | 18m 小缓存上晋级 `soft_core_reg_light`，进入 36m 正式验证后命名为 `baseline`。 |
 | 36m baseline full year | `2024-01..2024-12` 已同步并归档；S/M/L short 和 next 池内 Top100 excess 均值均为正。 |
 | 36m halfyear rolling mainline | 同一 `baseline` 口径已完成 `2018H1..2024H2` 半年 folds；2020-2024 S/M/L 与 2018-2019 universe-only 均已归档。 |
+| 2025 OOS extension | 同一 `baseline` 口径已完成 `2025H1..2025H2`；S/M/L 池内 short 与 next excess 均为正。 |
+| 2020-2025 rolling summary | 合并视角已归档三张核心图；S/M/L 池内 short 与 next excess 均为正，作为当前总结材料。 |
+| next mentor direction | 后续重点做强 `2022-2025` 信号，展示和验收主看 `pool_L`，继续走特征工程和模型优化。 |
 
 `09:30` 是单独 regime：它强，但主要混合集合竞价结果、第一张开盘盘口快照、时间坐标和缺失/0 模式。
 当前主优化放在 `09:31-09:40`。
