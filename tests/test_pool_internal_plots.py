@@ -180,3 +180,29 @@ def test_write_weekly_pool_internal_cumulative_plot(tmp_path) -> None:
     trace = json.loads(Path(paths["weekly_cumulative_trace"]).read_text(encoding="utf-8"))
     assert trace["metric"] == "weekly_pool_internal_excess_cumulative_sum"
     assert trace["series"] == ["universe", "pool_S"]
+
+
+def test_write_cumulative_plot_can_label_years_only(tmp_path) -> None:
+    daily_summary = pd.DataFrame(
+        {
+            "pool": ["pool_L", "pool_L", "pool_L"],
+            "week_start": ["2022-01-04", "2023-01-03", "2025-12-31"],
+            "short_internal_excess_bps": [10.0, 12.0, 8.0],
+            "next_internal_excess_bps": [1.0, -2.0, 3.0],
+        }
+    )
+
+    paths = write_weekly_pool_internal_cumulative_plot(
+        daily_summary,
+        tmp_path,
+        output_name="daily_cumulative",
+        variant_label="daily cumulative",
+        pools=("pool_L",),
+        x_label_mode="years_only",
+    )
+
+    figure_text = Path(paths["weekly_cumulative_figure"]).read_text(encoding="utf-8")
+    assert "2022-01-04" not in figure_text
+    assert "2025-12-31" not in figure_text
+    assert ">2022<" in figure_text
+    assert ">2025<" in figure_text

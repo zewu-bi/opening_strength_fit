@@ -17,8 +17,10 @@ completed mainline: 36m train -> next 6m test, 2018H1..2024H2 + 2025H1..2025H2 O
 halfyear run id: lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1
 2025 OOS run id: lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1
 k8s job aliases: os-lgbm-36m-2024-w030-baseline, os-lgbm-36m-2018-2024-w030-halfyear, os-lgbm-36m-2025-w030-halfyear
-current archive: 2024 monthly validation, 2018H1..2024H2 halfyear validation, 2025 OOS, and 2020-2025 rolling summary synced and archived
-current summary artifact: 2020-2025 rolling summary with short halfyear, next halfyear, and weekly views
+current archive: 2024 monthly validation, 2018H1..2024H2 halfyear validation, 2025 OOS, and 2020-2025 rolling-window summary synced and archived
+current summary artifact: 2020-2025 rolling-window summary with short halfyear, next halfyear, and weekly single-period views
+current baseline slice: 2022-2025 universe + pool_L quarterly excess/IC and daily cumulative archived
+next work: 2022-2025 pool_L feature engineering and model optimization
 ```
 
 ## 文档入口

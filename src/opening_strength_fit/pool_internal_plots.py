@@ -120,15 +120,23 @@ def write_universe_sml_pool_internal_plots(
                 "tick_step": 5.0,
                 "tick_decimals": None,
                 "label_decimals": 1,
+                "adaptive_ylim": True,
+                "include_zero": True,
+                "target_ticks": 6,
+                "min_tick_step": 5.0,
             },
             {
                 "title": "\u9694\u591c\u6536\u76ca",
                 "ylabel": "bps",
                 "column": "pool_internal_next_excess_bps",
                 "default_ylim": (-80.0, 100.0),
-                "tick_step": 20.0,
+                "tick_step": 10.0,
                 "tick_decimals": None,
                 "label_decimals": 1,
+                "adaptive_ylim": True,
+                "include_zero": True,
+                "target_ticks": 6,
+                "min_tick_step": 5.0,
             },
         ],
         output_path=excess_figure,
@@ -168,6 +176,10 @@ def write_universe_sml_pool_internal_plots(
                 "tick_step": 0.02,
                 "tick_decimals": 2,
                 "label_decimals": 3,
+                "adaptive_ylim": True,
+                "include_zero": True,
+                "target_ticks": 10,
+                "min_tick_step": 0.01,
             },
             {
                 "title": "\u9694\u591c Rank IC",
@@ -177,6 +189,10 @@ def write_universe_sml_pool_internal_plots(
                 "tick_step": 0.02,
                 "tick_decimals": 2,
                 "label_decimals": 3,
+                "adaptive_ylim": True,
+                "include_zero": True,
+                "target_ticks": 10,
+                "min_tick_step": 0.01,
             },
         ],
         output_path=rank_figure,
@@ -325,6 +341,7 @@ def write_weekly_pool_internal_cumulative_plot(
     output_name: str = "",
     variant_label: str = "baseline",
     pools: tuple[str, ...] = PLOT_POOLS,
+    x_label_mode: str = "dates_at_ends",
 ) -> dict[str, str]:
     required = {
         "pool",
@@ -362,6 +379,16 @@ def write_weekly_pool_internal_cumulative_plot(
         plot_data.loc[mask, "next_cumulative_internal_excess_bps"] = (
             plot_data.loc[mask, "next_internal_excess_bps"].fillna(0.0).cumsum()
         )
+    short_ylim, short_step = _nice_line_axis(
+        plot_data["short_cumulative_internal_excess_bps"],
+        include_zero=True,
+        target_ticks=9,
+    )
+    next_ylim, next_step = _nice_line_axis(
+        plot_data["next_cumulative_internal_excess_bps"],
+        include_zero=True,
+        target_ticks=9,
+    )
 
     if output_name:
         chart_dir = output_dir
@@ -384,23 +411,26 @@ def write_weekly_pool_internal_cumulative_plot(
         panels=[
             {
                 "title": "\u77ed\u671f\u6536\u76ca\u7d2f\u548c",
-                "ylabel": "cumulative bps",
+                "ylabel": "",
                 "column": "short_cumulative_internal_excess_bps",
-                "default_ylim": (-500.0, 7000.0),
-                "tick_step": 1000.0,
+                "default_ylim": short_ylim,
+                "tick_step": short_step,
                 "tick_decimals": None,
+                "fixed_ylim": True,
             },
             {
                 "title": "\u9694\u591c\u6536\u76ca\u7d2f\u548c",
-                "ylabel": "cumulative bps",
+                "ylabel": "",
                 "column": "next_cumulative_internal_excess_bps",
-                "default_ylim": (-2000.0, 5000.0),
-                "tick_step": 1000.0,
+                "default_ylim": next_ylim,
+                "tick_step": next_step,
                 "tick_decimals": None,
+                "fixed_ylim": True,
             },
         ],
         output_path=figure,
         pools=pools,
+        x_label_mode=x_label_mode,
     )
     write_json(
         trace,
@@ -417,6 +447,7 @@ def write_weekly_pool_internal_cumulative_plot(
                 "per-pool cumulative sum of weekly short/next internal excess bps; "
                 "weekly rows are expected to be precomputed by the caller"
             ),
+            "x_label_mode": x_label_mode,
         },
         ensure_ascii=True,
     )
@@ -486,9 +517,13 @@ def _write_horizon_excess_rank_ic_plots(
                     "ylabel": "bps",
                     "column": str(horizon["excess_col"]),
                     "default_ylim": horizon["excess_default_ylim"],
-                    "tick_step": 5.0 if slug == "short" else 20.0,
+                    "tick_step": 5.0 if slug == "short" else 10.0,
                     "tick_decimals": None,
                     "label_decimals": 1,
+                    "adaptive_ylim": True,
+                    "include_zero": True,
+                    "target_ticks": 6,
+                    "min_tick_step": 5.0,
                 },
                 {
                     "title": f"{horizon['label']} Rank IC",
@@ -498,6 +533,10 @@ def _write_horizon_excess_rank_ic_plots(
                     "tick_step": 0.02,
                     "tick_decimals": 2,
                     "label_decimals": 3,
+                    "adaptive_ylim": True,
+                    "include_zero": True,
+                    "target_ticks": 10,
+                    "min_tick_step": 0.01,
                 },
             ],
             output_path=figure,
@@ -626,12 +665,11 @@ def _write_two_panel_bar_svg(
         top = panel_tops[panel_index]
         bottom = top + panel_height
         column = str(panel["column"])
-        ymin, ymax = _nice_ylim(
-            plot_data[column].astype(float),
-            default=panel["default_ylim"],  # type: ignore[arg-type]
-            step=float(panel["tick_step"]),
+        ymin, ymax, tick_step = _panel_axis(
+            plot_data[column],
+            panel=panel,
         )
-        tick_values = _ticks(ymin, ymax, float(panel["tick_step"]))
+        tick_values = _ticks(ymin, ymax, tick_step)
         tick_decimals = panel["tick_decimals"]
         label_decimals = int(panel["label_decimals"])
 
@@ -727,6 +765,7 @@ def _write_two_panel_line_svg(
     panels: list[dict[str, object]],
     output_path: Path,
     pools: tuple[str, ...] = PLOT_POOLS,
+    x_label_mode: str = "dates_at_ends",
 ) -> None:
     pools = tuple(pools)
     if not pools:
@@ -751,19 +790,7 @@ def _write_two_panel_line_svg(
     def xmap(value: pd.Timestamp) -> float:
         return left + ((value - min_date).days / span_days) * chart_width
 
-    year_ticks = [
-        tick
-        for tick in pd.date_range(
-            pd.Timestamp(year=min_date.year, month=1, day=1),
-            pd.Timestamp(year=max_date.year + 1, month=1, day=1),
-            freq="YS",
-        )
-        if min_date <= tick <= max_date
-    ]
-    if min_date not in year_ticks:
-        year_ticks = [min_date, *year_ticks]
-    if max_date not in year_ticks:
-        year_ticks = [*year_ticks, max_date]
+    year_ticks = _line_x_ticks(min_date, max_date, mode=x_label_mode)
 
     lines = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
@@ -791,12 +818,11 @@ def _write_two_panel_line_svg(
         top = panel_tops[panel_index]
         bottom = top + panel_height
         column = str(panel["column"])
-        ymin, ymax = _nice_ylim(
-            data[column].astype(float),
-            default=panel["default_ylim"],  # type: ignore[arg-type]
-            step=float(panel["tick_step"]),
+        ymin, ymax, tick_step = _panel_axis(
+            data[column],
+            panel=panel,
         )
-        tick_values = _ticks(ymin, ymax, float(panel["tick_step"]))
+        tick_values = _ticks(ymin, ymax, tick_step)
         tick_decimals = panel["tick_decimals"]
 
         def ymap(
@@ -834,9 +860,12 @@ def _write_two_panel_line_svg(
                 'stroke="#ebe7de" stroke-width="1"/>'
             )
             if panel_index == 1:
-                label = tick.strftime("%Y")
-                if tick == min_date or tick == max_date:
-                    label = tick.strftime("%Y-%m-%d")
+                label = _line_x_tick_label(
+                    tick,
+                    min_date=min_date,
+                    max_date=max_date,
+                    mode=x_label_mode,
+                )
                 lines.append(
                     _svg_text(
                         x,
@@ -855,7 +884,9 @@ def _write_two_panel_line_svg(
             f'<line x1="{left:.1f}" y1="{bottom:.1f}" x2="{right:.1f}" y2="{bottom:.1f}" '
             'stroke="#928d84" stroke-width="1"/>'
         )
-        lines.append(_svg_text(24.0, top + panel_height / 2 + 6.0, str(panel["ylabel"]), size=18))
+        ylabel = str(panel.get("ylabel", ""))
+        if ylabel:
+            lines.append(_svg_text(24.0, top + panel_height / 2 + 6.0, ylabel, size=18))
 
         for pool in pools:
             item = data.loc[data["pool"].eq(pool)].dropna(subset=[column])
@@ -882,6 +913,52 @@ def _write_two_panel_line_svg(
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def _line_x_ticks(
+    min_date: pd.Timestamp,
+    max_date: pd.Timestamp,
+    *,
+    mode: str,
+) -> list[pd.Timestamp]:
+    if mode == "years_only":
+        ticks = [min_date]
+        ticks.extend(
+            pd.Timestamp(year=year, month=1, day=1)
+            for year in range(min_date.year + 1, max_date.year)
+        )
+        if max_date.year != min_date.year:
+            ticks.append(max_date)
+        return ticks
+
+    ticks = [
+        tick
+        for tick in pd.date_range(
+            pd.Timestamp(year=min_date.year, month=1, day=1),
+            pd.Timestamp(year=max_date.year + 1, month=1, day=1),
+            freq="YS",
+        )
+        if min_date <= tick <= max_date
+    ]
+    if min_date not in ticks:
+        ticks = [min_date, *ticks]
+    if max_date not in ticks:
+        ticks = [*ticks, max_date]
+    return ticks
+
+
+def _line_x_tick_label(
+    tick: pd.Timestamp,
+    *,
+    min_date: pd.Timestamp,
+    max_date: pd.Timestamp,
+    mode: str,
+) -> str:
+    if mode == "years_only":
+        return tick.strftime("%Y")
+    if tick == min_date or tick == max_date:
+        return tick.strftime("%Y-%m-%d")
+    return tick.strftime("%Y")
+
+
 def _nice_ylim(
     values: pd.Series, *, default: tuple[float, float], step: float
 ) -> tuple[float, float]:
@@ -893,6 +970,94 @@ def _nice_ylim(
         ymin = min(ymin, math.floor((observed_min - step) / step) * step)
         ymax = max(ymax, math.ceil((observed_max + step) / step) * step)
     return ymin, ymax
+
+
+def _panel_axis(values: pd.Series, *, panel: dict[str, object]) -> tuple[float, float, float]:
+    step = float(panel["tick_step"])
+    if bool(panel.get("fixed_ylim", False)):
+        ymin, ymax = panel["default_ylim"]  # type: ignore[misc]
+        return float(ymin), float(ymax), step
+    if not bool(panel.get("adaptive_ylim", False)):
+        ymin, ymax = _nice_ylim(
+            pd.to_numeric(values, errors="coerce"),
+            default=panel["default_ylim"],  # type: ignore[arg-type]
+            step=step,
+        )
+        return ymin, ymax, step
+    (ymin, ymax), step = _nice_adaptive_axis(
+        values,
+        default=panel["default_ylim"],  # type: ignore[arg-type]
+        include_zero=bool(panel.get("include_zero", True)),
+        target_ticks=int(panel.get("target_ticks", 7)),
+        min_step=float(panel.get("min_tick_step", 0.0)),
+    )
+    return ymin, ymax, step
+
+
+def _nice_adaptive_axis(
+    values: pd.Series,
+    *,
+    default: tuple[float, float],
+    include_zero: bool = False,
+    target_ticks: int = 7,
+    min_step: float = 0.0,
+    pad_fraction: float = 0.35,
+) -> tuple[tuple[float, float], float]:
+    finite = pd.to_numeric(values, errors="coerce").replace([float("inf"), float("-inf")], pd.NA)
+    finite = finite.dropna()
+    if finite.empty:
+        default_span = max(default[1] - default[0], 1e-9)
+        step = max(_nice_step(default_span / max(target_ticks, 1)), min_step)
+        return default, step
+
+    raw_min = float(finite.min())
+    raw_max = float(finite.max())
+    observed_min = min(raw_min, 0.0) if include_zero else raw_min
+    observed_max = max(raw_max, 0.0) if include_zero else raw_max
+    span = max(observed_max - observed_min, 1e-9)
+    step = max(_nice_step(span / max(target_ticks, 1)), min_step)
+    lower = observed_min - step * pad_fraction
+    upper = observed_max + step * pad_fraction
+    if include_zero and raw_min >= 0:
+        lower = 0.0
+    if include_zero and raw_max <= 0:
+        upper = 0.0
+    ymin = math.floor(lower / step) * step
+    ymax = math.ceil(upper / step) * step
+    if include_zero and raw_min >= 0:
+        ymin = 0.0
+    if include_zero and raw_max <= 0:
+        ymax = 0.0
+    if ymin == ymax:
+        ymax = ymin + step
+    return (float(ymin), float(ymax)), float(step)
+
+
+def _nice_line_axis(
+    values: pd.Series,
+    *,
+    include_zero: bool = False,
+    target_ticks: int = 8,
+) -> tuple[tuple[float, float], float]:
+    return _nice_adaptive_axis(
+        values,
+        default=(0.0, 1.0),
+        include_zero=include_zero,
+        target_ticks=target_ticks,
+        pad_fraction=0.25,
+    )
+
+
+def _nice_step(raw_step: float) -> float:
+    if raw_step <= 0 or not math.isfinite(raw_step):
+        return 1.0
+    exponent = math.floor(math.log10(raw_step))
+    base = 10**exponent
+    normalized = raw_step / base
+    for multiplier in (1.0, 2.0, 2.5, 5.0, 10.0):
+        if normalized <= multiplier:
+            return multiplier * base
+    return 10.0 * base
 
 
 def _ticks(start: float, stop: float, step: float) -> list[float]:

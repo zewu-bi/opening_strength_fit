@@ -77,8 +77,8 @@ CLI:
 - `osf-train` / `osf-run-experiment`: train/evaluate a configured experiment.
 - `osf-evaluate-predictions`: evaluate an existing prediction file.
 - `osf-analyze-pool-internal-top100`: join predictions with next-close labels and S/M/L pools to produce Top100 pool-internal short/next validation panels.
-- `osf-plot-weekly-pool-internal`: render trading-day-equal weekly and rolling pool-internal diagnostics from `pool_internal_group_metrics.csv`.
-- `osf-plot-weekly-pool-internal-cumulative`: render cumulative weekly short/next pool-internal excess from `weekly_pool_internal_summary.csv`.
+- `osf-plot-weekly-pool-internal`: render optional trading-day-equal weekly / 4w rolling pool-internal stability diagnostics from `pool_internal_group_metrics.csv`.
+- `osf-plot-weekly-pool-internal-cumulative`: render cumulative short/next pool-internal excess from pre-aggregated daily or weekly summary rows.
 - `osf-summarize-opening-results`: summarize metrics CSVs.
 - `osf-compare-opening-results`: compare archived model metrics.
 - `osf-run-rule-baselines`: evaluate simple visible-information rules.

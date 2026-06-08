@@ -20,6 +20,8 @@
   `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1`，
   覆盖 `2018H1` 至 `2024H2` 共 14 个 folds；2020-2024 S/M/L 与 2018-2019
   universe-only 分析均已同步并归档。
+- 2025 OOS extension 与 `2022-2025` baseline 切片均已归档；当前下一步进入
+  `2022-2025` / `pool_L` 的特征工程和模型优化，主展示使用 universe + `pool_L`。
 - S/M/L 股池文件覆盖 `2020-01-02` 至 `2025-12-31`；2018/2019 没有股池日期，只用 universe
   口径验收。
 - 两模型 `final_score = alpha_rank - lambda * gap_risk_rank` 路线封存。它通过 rolling，说明短+长目标有信息，
@@ -1958,7 +1960,7 @@ experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_l
 ```
 
 结论：halfyear mainline 已完成。2020-2024 S/M/L 下 short 60/60 月为正，next 43-44/60 月为正；
-2018-2019 universe-only 也稳定为正。后续 2025 OOS extension 和 `2020-2025` rolling summary
+2018-2019 universe-only 也稳定为正。后续 2025 OOS extension 和 `2020-2025` rolling-window summary
 已在下方小节完成并归档。
 
 周度补充诊断：新增 `osf-plot-weekly-pool-internal`，从
@@ -2104,7 +2106,43 @@ mentor 后续指示：
 - `2020`、`2021` 年做日频的人不多，下一轮信号增强重点看 `2022-2025`。
 - 研究对象仍是开盘强势股本身，继续通过特征工程、训练权重和模型参数优化来加强信号。
 - 后续展示和验收主看 `pool_L`；S/M/L 和 universe 保留为历史归档和必要诊断。
-- 上一轮 `2020-2025` rolling summary 只保留四股池 short halfyear、next halfyear 和 weekly 三张核心图。
+- 上一轮 `2020-2025` rolling-window summary 只保留四股池 short halfyear、next halfyear 和 weekly 单周期视图三张核心图；这里的 weekly 不是 4w rolling 诊断。
+
+### 2022-2025 baseline 归档
+
+按 mentor 指示切出 `2022-2025` baseline，输入为已归档的 halfyear mainline
+`2020-2024` pool-internal group metrics 与 2025 OOS extension group metrics。主展示使用
+universe + `pool_L`，不放 `pool_S/M`；short / next excess + Rank IC 按季度聚合，累计超额
+使用日度路径且横轴只标年份。
+
+整体汇总（2022-2025，date-clock group 等权）：
+
+| pool | short excess bps | short Rank IC | next excess bps | next Rank IC |
+| --- | ---: | ---: | ---: | ---: |
+| universe | +16.75 | 0.149 | -8.48 | 0.004 |
+| pool_L | +8.63 | 0.138 | +7.97 | 0.002 |
+
+解读：`pool_L` 的 short 与 next 内部超额均为正，适合作为下一轮信号增强验收对象；universe
+short 更强但 next 为负，保留为参照和 tail 诊断。
+
+归档文件：
+
+```text
+experiments/results/backtests/baseline_2022_2025_universe_pool_l_quarter_summary.csv
+experiments/results/backtests/baseline_2022_2025_universe_pool_l_daily_summary.csv
+experiments/results/backtests/baseline_2022_2025_quarter_universe_pool_l_short_excess_rank_ic_with_mean.svg
+experiments/results/backtests/baseline_2022_2025_quarter_universe_pool_l_short_excess_rank_ic_with_mean_plot_data.csv
+experiments/results/backtests/baseline_2022_2025_quarter_universe_pool_l_short_excess_rank_ic_with_mean_trace.json
+experiments/results/backtests/baseline_2022_2025_quarter_universe_pool_l_next_excess_rank_ic_with_mean.svg
+experiments/results/backtests/baseline_2022_2025_quarter_universe_pool_l_next_excess_rank_ic_with_mean_plot_data.csv
+experiments/results/backtests/baseline_2022_2025_quarter_universe_pool_l_next_excess_rank_ic_with_mean_trace.json
+experiments/results/backtests/baseline_2022_2025_universe_pool_l_daily_cumulative.svg
+experiments/results/backtests/baseline_2022_2025_universe_pool_l_daily_cumulative_plot_data.csv
+experiments/results/backtests/baseline_2022_2025_universe_pool_l_daily_cumulative_trace.json
+```
+
+下一步：围绕 `2022-2025` / `pool_L` 做特征工程、训练权重和模型参数优化；短期要求保持
+short excess 与 short IC，重点改善 next tail 稳定性。
 
 ### 归档和保留口径
 
@@ -2143,6 +2181,7 @@ mentor 后续指示：
 | `experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_*` | 2025 OOS extension 的 universe / S / M / L pool-internal、Rank IC、plot data 和分年/半年汇总。 |
 | `output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal` | 2025 OOS extension 的交易日等权 weekly / 4-week rolling pool-internal 诊断和 SVG。 |
 | `experiments/results/backtests/halfyear_window_2020_2025_*` | 2020-2025 合并视角的三张核心 SVG：short 半年度、next 半年度、weekly 单周折线；trace 记录输入 run 和 2024-09-30 / 2021-10-04 outlier。 |
+| `experiments/results/backtests/baseline_2022_2025_*` | 2022-2025 baseline 切片；主展示为 universe + `pool_L` 的季度 excess/IC 和日度累计超额曲线。 |
 | `experiments/results/backtests/gap_risk_penalized_attribution_v1_*` | rolling gap-risk Top100 替换归因的 outcome、feature exposure 和 residual-control 证据。 |
 | `output/local/<run_id>` | ignored artifact-sync buffer；不再作为唯一证据位置。 |
 | `output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw` | 18m rolling 各测试月 prediction shard，用于 alpha Top100 内 risk/short/next 相关诊断。 |

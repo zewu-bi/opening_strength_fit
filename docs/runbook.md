@@ -397,19 +397,15 @@ osf-analyze-pool-internal-top100 \
   --variant <variant_label> \
   --output-dir output/local/<run_id>_pool_internal \
   --report-dir output/reports/<run_id>_pool_internal \
-  --weekly-report-dir output/reports/<run_id>_weekly_trading_day_equal \
-  --weekly-output-prefix <variant_label> \
-  --weekly-rolling-weeks 4 \
   --records-dir experiments/results \
   --record-prefix <run_id>
 ```
 
-传入 `--weekly-report-dir` 时，命令会顺手生成 4 周滚动周度诊断：先把同一 `pool x date`
-的多个决策点聚成日度均值，再按交易日等权生成周度和滚动窗口，避免 1 个交易日的节假日周与
-5 个交易日的正常周等权。传入 `--records-dir` / `--record-prefix` 时，会同步归档轻量
+传入 `--records-dir` / `--record-prefix` 时，会同步归档轻量
 pool-internal CSV 和 SVG 到 `experiments/results/backtests/`。
 
-仍然可以单独从已存在的 `pool_internal_group_metrics.csv` 重画周度图：
+周度 4w rolling 只作为稳定性补充诊断，不是 baseline summary 默认口径。需要检查周度稳定性时，
+可以单独从已存在的 `pool_internal_group_metrics.csv` 重画：
 
 ```bash
 osf-plot-weekly-pool-internal \
@@ -423,6 +419,11 @@ osf-plot-weekly-pool-internal \
 该脚本输出 `daily_pool_internal_summary.csv`、`weekly_pool_internal_summary.csv`、
 `weekly_pool_internal_overall_summary.csv`、`weekly_worst_windows.csv` 和
 `<plot-prefix>_universe_sml_weekly_rolling_4w/*.svg`。
+
+若只是做 `2022-2025` baseline 展示，主图按 mentor 口径主看 `pool_L`，并加入
+`universe` 作为参照；`pool_S/M` 不进主展示。short / next excess + Rank IC 使用季度聚合，
+横轴使用 `2022Q1` 这类标签。累计超额曲线优先用日度路径，横轴只标年份。周度图可作为附录，
+且应先做日度聚合再按周求和后累加，避免把周均值直接累加导致尺度失真。
 
 `predictions` 里不保留 `alpha_return_next_close`，这是训练防泄漏设计；分析前需要把 PVC 上的 next-close 年度
 label 小文件拉到本地；优先使用第 6 节的 `osf-sync-experiment-artifacts --next-close-labels`。
