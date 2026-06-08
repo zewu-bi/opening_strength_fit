@@ -8,25 +8,12 @@ Scope: runnable configs, commands, paths, sync steps, and troubleshooting.
 precheck -> render job -> apply/wait -> sync artifacts -> audit/coverage -> analysis
 ```
 
-## 当前可运行配置
+## 配置和输入
 
-```text
-36m smoke:
-experiments/runs/lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1.toml
+实验配置放在 `experiments/runs/*.toml`，K8s manifest 由 `osf-render-k8s-job` 写到
+`experiments/jobs/`。历史 run、数字和归档路径见 [experiment_log.md](experiment_log.md)。
 
-36m archived 2024 rolling validation:
-experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1.toml
-experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_sharded_job.yaml
-
-36m halfyear rolling job:
-experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1.toml
-experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_sharded_job.yaml
-
-18m source feature/model config:
-experiments/runs/lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1.toml
-```
-
-36m rolling 使用的 `2015-2024` cache：
+常用 PVC cache：
 
 ```text
 base cache:
@@ -39,8 +26,7 @@ mixed w030 cache:
 /mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/
 ```
 
-当前判断、运行状态和实验结果见 [project_brief.md](project_brief.md) 和
-[experiment_log.md](experiment_log.md)。本 runbook 只保留可执行配置、命令和路径。
+当前判断见 [project_brief.md](project_brief.md)。本 runbook 只保留操作步骤、命令模板和排查口径。
 
 ## 1. 预检
 
@@ -103,9 +89,9 @@ CLI 快速试验：
 
 ```bash
 osf-train \
-  --config experiments/runs/lgbm_delay2_postopen_0931_0940_baseline_v1.toml \
+  --config experiments/runs/<run_id>.toml \
   --pool S \
-  --output-dir output/local/lgbm_delay2_postopen_pool_s_selection
+  --output-dir output/local/<run_id>_pool_s_selection
 ```
 
 `--pool S|M|L` 映射到：
@@ -232,114 +218,39 @@ year_YYYY/
 K8s Job 命名约定：
 
 - sharded rolling 必须在 TOML 的 `[k8s]` 里显式设置短 `job_name`。
-- 格式使用 `os-<model>-<window>-<year>-<target>-<display>`，例如
-  `os-lgbm-36m-2023-w030-baseline`。
+- 格式使用 `os-<model>-<window>-<period>-<target>-<display>`，例如
+  `os-lgbm-36m-2026-w030-mainline`。
 - 展示名使用短标签，方便在 K8s 和图表中追溯同一 run family。
 - 不要依赖 renderer 自动生成的 `opening-strength-...-<hash>` 名字；这类 hash 名只作为旧运行的追溯信息。
 
 ```toml
 [k8s]
-job_name = "os-lgbm-36m-2023-w030-baseline"
+job_name = "os-lgbm-36m-2026-w030-mainline"
 shard_parallelism = 1
-```
-
-### 5.1 2024 月度 rolling validation
-
-已归档 2024 rolling run 的执行入口：
-
-```text
-display: soft-core monthly validation
-run_id: lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1
-job:    os-lgbm-36m-2024-w030-baseline
-image:  registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260604-36m-soft-core-v1
-```
-
-渲染、检查和启动：
-
-```bash
-osf-render-k8s-job \
-  --config experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1.toml \
-  --sharded \
-  --image registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260604-36m-soft-core-v1
-```
-
-```bash
-hfcli kubectl --cluster research apply --dry-run=client \
-  -f experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_sharded_job.yaml
-
-hfcli kubectl --cluster research delete job os-lgbm-36m-2024-w030-baseline \
-  --ignore-not-found -n bizewu
-hfcli kubectl --cluster research apply \
-  -f experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_sharded_job.yaml
-```
-
-重新启动或补跑前先 build/push 当前 clean worktree 到 manifest 里的 image tag，或重新 render manifest 使用新 tag。
-
-### 5.2 2018-2024 半年 rolling job
-
-已归档半年 rolling run 的执行入口：
-
-```text
-display: soft-core halfyear validation
-run_id: lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1
-job:    os-lgbm-36m-2018-2024-w030-halfyear
-image:  registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260605-halfyear-v1
-```
-
-该 run 使用 `36m train -> next 6m test`，`2018-01` 至 `2024-12` 共 14 个半年 Indexed Job
-shards。每个 shard 只训练一次，并预测对应的 6 个月 OOS 窗口：
-
-```text
-2018-01..2018-06
-2018-07..2018-12
-...
-2024-01..2024-06
-2024-07..2024-12
-```
-
-渲染和提交前检查：
-
-```bash
-osf-render-k8s-job \
-  --config experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1.toml \
-  --sharded \
-  --image registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260605-halfyear-v1
-
-hfcli kubectl --cluster research apply --dry-run=client \
-  -f experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_sharded_job.yaml
-```
-
-启动或重启：
-
-```bash
-hfcli kubectl --cluster research delete job os-lgbm-36m-2018-2024-w030-halfyear \
-  --ignore-not-found -n bizewu
-hfcli kubectl --cluster research apply \
-  -f experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_sharded_job.yaml
 ```
 
 调整正在运行的 Indexed Job 并行度：
 
 ```bash
-hfcli kubectl --cluster research patch job os-lgbm-36m-2018-2024-w030-halfyear \
+hfcli kubectl --cluster research patch job <job-name> \
   -n bizewu \
   -p '{"spec":{"parallelism":<parallelism>}}'
 ```
 
-### 5.3 Rolling 过程观测
+### 5.1 Rolling 过程观测
 
 Indexed Job 的 shard index 对应月份或半年窗口，使用：
 
 ```bash
 osf-rolling-job-status \
-  --config experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1.toml
+  --config experiments/runs/<rolling_run_id>.toml
 ```
 
 输出会列出 `index -> month -> pod -> phase`，并打印每个月对应的 log 命令。看最近日志：
 
 ```bash
 osf-rolling-job-status \
-  --config experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1.toml \
+  --config experiments/runs/<rolling_run_id>.toml \
   --tail 160
 ```
 
@@ -349,12 +260,12 @@ osf-rolling-job-status \
 hfcli kubectl --cluster research logs -n bizewu <pod-name> -f
 ```
 
-半年 rolling 观测：
+指定 Job 名观测：
 
 ```bash
 osf-rolling-job-status \
-  --config experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1.toml \
-  --job-name os-lgbm-36m-2018-2024-w030-halfyear
+  --config experiments/runs/<rolling_run_id>.toml \
+  --job-name <job-name>
 ```
 
 ## 6. 同步产物
@@ -434,18 +345,18 @@ osf-summarize-opening-results \
 osf-compare-opening-results
 ```
 
-正式 36m rolling 的 universe/S/M/L pool-internal 验收面板：
+universe/S/M/L pool-internal 验收面板：
 
 ```bash
 osf-analyze-pool-internal-top100 \
-  --predictions output/predictions/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1 \
-  --next-close-label-input output/local/next_close_labels_2021_2024 \
-  --run-id lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1 \
-  --variant baseline \
-  --output-dir output/local/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_pool_internal \
-  --report-dir output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_pool_internal \
-  --plot-prefix baseline \
-  --plot-variant-label baseline
+  --predictions output/predictions/<run_id> \
+  --next-close-label-input output/local/next_close_labels_<year-or-range> \
+  --run-id <run_id> \
+  --variant <variant_label> \
+  --output-dir output/local/<run_id>_pool_internal \
+  --report-dir output/reports/<run_id>_pool_internal \
+  --plot-prefix <variant_label> \
+  --plot-variant-label "<display label>"
 ```
 
 该脚本输出：
@@ -462,47 +373,35 @@ pool_internal_trace.json
 <plot-prefix>_universe_sml_rank_ic_with_mean/*.svg
 ```
 
-S/M/L 股池文件当前覆盖 `2020-01-02` 至 `2025-12-31`。2020 年之前没有 S/M/L 股池文件；
-分析 halfyear 任务的 2018/2019 shard 时只跑 universe 口径：
+2020 年以前没有 S/M/L 股池文件；分析早期 shard 时只跑 universe 口径：
 
 ```bash
 osf-analyze-pool-internal-top100 \
-  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2018-01_2018-06.parquet \
-  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2018-07_2018-12.parquet \
-  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2019-01_2019-06.parquet \
-  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2019-07_2019-12.parquet \
-  --next-close-label-input output/local/next_close_labels_2018_2019 \
+  --predictions output/predictions/<run_id>/raw/predictions_<window>.parquet \
+  --next-close-label-input output/local/next_close_labels_<year-or-range> \
   --pool universe \
-  --variant baseline_pre2020_universe \
-  --output-dir output/local/<halfyear_run_id>_pre2020_universe_pool_internal \
-  --report-dir output/reports/<halfyear_run_id>_pre2020_universe_pool_internal
+  --variant <variant_label>_universe \
+  --output-dir output/local/<run_id>_universe_pool_internal \
+  --report-dir output/reports/<run_id>_universe_pool_internal
 ```
 
 该模式会输出 `<plot-prefix>_universe_*` SVG / plot data，不要求 S/M/L 股池存在。
 
-2020-2024 halfyear shard 可以跑完整 universe / S / M / L：
+多 shard 可以重复传入 `--predictions`，完整 universe / S / M / L 口径示例：
 
 ```bash
 osf-analyze-pool-internal-top100 \
-  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2020-01_2020-06.parquet \
-  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2020-07_2020-12.parquet \
-  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2021-01_2021-06.parquet \
-  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2021-07_2021-12.parquet \
-  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2022-01_2022-06.parquet \
-  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2022-07_2022-12.parquet \
-  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2023-01_2023-06.parquet \
-  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2023-07_2023-12.parquet \
-  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2024-01_2024-06.parquet \
-  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2024-07_2024-12.parquet \
-  --next-close-label-input output/local/next_close_labels_2020_2024 \
-  --variant baseline_halfyear_2020_2024 \
-  --output-dir output/local/<halfyear_run_id>_pool_internal_2020_2024 \
-  --report-dir output/reports/<halfyear_run_id>_pool_internal_2020_2024 \
-  --weekly-report-dir output/reports/<halfyear_run_id>_weekly_2020_2024_trading_day_equal \
-  --weekly-output-prefix baseline_halfyear_2020_2024 \
+  --predictions output/predictions/<run_id>/raw/predictions_<window_1>.parquet \
+  --predictions output/predictions/<run_id>/raw/predictions_<window_2>.parquet \
+  --next-close-label-input output/local/next_close_labels_<year-or-range> \
+  --variant <variant_label> \
+  --output-dir output/local/<run_id>_pool_internal \
+  --report-dir output/reports/<run_id>_pool_internal \
+  --weekly-report-dir output/reports/<run_id>_weekly_trading_day_equal \
+  --weekly-output-prefix <variant_label> \
   --weekly-rolling-weeks 4 \
   --records-dir experiments/results \
-  --record-prefix <halfyear_run_id>_2020_2024
+  --record-prefix <run_id>
 ```
 
 传入 `--weekly-report-dir` 时，命令会顺手生成 4 周滚动周度诊断：先把同一 `pool x date`
@@ -514,10 +413,10 @@ pool-internal CSV 和 SVG 到 `experiments/results/backtests/`。
 
 ```bash
 osf-plot-weekly-pool-internal \
-  --group-metrics experiments/results/backtests/<halfyear_run_id>_2020_2024_pool_internal_group_metrics.csv \
-  --output-dir output/reports/<halfyear_run_id>_weekly_2020_2024_trading_day_equal \
-  --output-prefix baseline_halfyear_2020_2024 \
-  --plot-variant-label "baseline halfyear 2020-2024" \
+  --group-metrics experiments/results/backtests/<run_id>_pool_internal_group_metrics.csv \
+  --output-dir output/reports/<run_id>_weekly_trading_day_equal \
+  --output-prefix <variant_label> \
+  --plot-variant-label "<display label>" \
   --rolling-weeks 4
 ```
 
