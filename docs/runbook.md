@@ -482,6 +482,23 @@ osf-analyze-pool-internal-top100 \
   --report-dir output/reports/<halfyear_run_id>_pool_internal_2020_2024
 ```
 
+如果需要看周度稳定性，可以直接从上一步的 `pool_internal_group_metrics.csv` 生成 4 周滚动曲线。
+该命令先把同一 `pool x date` 的多个决策点聚成日度均值，再按交易日等权生成周度和滚动窗口，
+避免 1 个交易日的节假日周与 5 个交易日的正常周等权：
+
+```bash
+osf-plot-weekly-pool-internal \
+  --group-metrics experiments/results/backtests/<halfyear_run_id>_2020_2024_pool_internal_group_metrics.csv \
+  --output-dir output/reports/<halfyear_run_id>_weekly_2020_2024_trading_day_equal \
+  --output-prefix baseline_halfyear_2020_2024 \
+  --plot-variant-label "baseline halfyear 2020-2024" \
+  --rolling-weeks 4
+```
+
+该脚本输出 `daily_pool_internal_summary.csv`、`weekly_pool_internal_summary.csv`、
+`weekly_pool_internal_overall_summary.csv`、`weekly_worst_windows.csv` 和
+`<plot-prefix>_universe_sml_weekly_rolling_4w/*.svg`。
+
 `predictions` 里不保留 `alpha_return_next_close`，这是训练防泄漏设计；分析前需要把 PVC 上的 next-close 年度
 label 小文件拉到本地 `output/local/next_close_labels_2021_2024/`。这四个文件总量约 310 MiB，拉一次即可。
 

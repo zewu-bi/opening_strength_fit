@@ -8,6 +8,7 @@ import pandas as pd
 from opening_strength_fit.pool_internal_plots import (
     month_major_plot_data,
     write_universe_sml_pool_internal_plots,
+    write_weekly_pool_internal_rolling_plot,
 )
 
 
@@ -112,3 +113,33 @@ def test_write_universe_only_pool_internal_plots(tmp_path) -> None:
     )
     trace = json.loads(trace_path.read_text(encoding="utf-8"))
     assert trace["series"] == ["universe"]
+
+
+def test_write_weekly_pool_internal_rolling_plot(tmp_path) -> None:
+    weekly_summary = pd.DataFrame(
+        {
+            "pool": ["universe", "universe", "pool_S", "pool_S"],
+            "week_start": ["2024-01-01", "2024-01-08", "2024-01-01", "2024-01-08"],
+            "short_internal_excess_bps_rolling_4w": [10.0, 12.0, 8.0, 9.0],
+            "next_internal_excess_bps_rolling_4w": [1.0, -2.0, 3.0, 4.0],
+        }
+    )
+
+    paths = write_weekly_pool_internal_rolling_plot(
+        weekly_summary,
+        tmp_path,
+        output_prefix="baseline",
+        variant_label="baseline weekly",
+        pools=("universe", "pool_S"),
+        rolling_weeks=4,
+    )
+
+    for path in paths.values():
+        assert Path(path).exists()
+
+    figure = Path(paths["weekly_rolling_figure"])
+    assert "baseline weekly: universe / S Top 100" in figure.read_text(encoding="utf-8")
+
+    trace = json.loads(Path(paths["weekly_rolling_trace"]).read_text(encoding="utf-8"))
+    assert trace["rolling_weeks"] == 4
+    assert trace["series"] == ["universe", "pool_S"]

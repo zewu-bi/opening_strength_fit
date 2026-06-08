@@ -213,6 +213,106 @@ def write_universe_sml_pool_internal_plots(
     }
 
 
+def write_weekly_pool_internal_rolling_plot(
+    weekly_summary: pd.DataFrame,
+    output_dir: Path,
+    *,
+    input_path: Path | None = None,
+    output_prefix: str = "baseline",
+    variant_label: str = "baseline",
+    pools: tuple[str, ...] = PLOT_POOLS,
+    rolling_weeks: int = 4,
+) -> dict[str, str]:
+    required = {
+        "pool",
+        "week_start",
+        f"short_internal_excess_bps_rolling_{rolling_weeks}w",
+        f"next_internal_excess_bps_rolling_{rolling_weeks}w",
+    }
+    missing = sorted(required - set(weekly_summary.columns))
+    if missing:
+        raise ValueError(f"weekly_summary missing columns: {missing}")
+
+    output_prefix = slug_label(output_prefix)
+    pools = tuple(pools)
+    pool_group_slug = _pool_group_slug(pools)
+    pool_group_title = _pool_group_title(pools)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    short_col = f"short_internal_excess_bps_rolling_{rolling_weeks}w"
+    next_col = f"next_internal_excess_bps_rolling_{rolling_weeks}w"
+    plot_data = weekly_summary.loc[
+        weekly_summary["pool"].isin(pools),
+        ["pool", "week_start", short_col, next_col],
+    ].copy()
+    plot_data = plot_data.rename(
+        columns={
+            short_col: "short_internal_excess_bps_rolling",
+            next_col: "next_internal_excess_bps_rolling",
+        }
+    )
+    plot_data["variant"] = variant_label
+    plot_data["week_start"] = pd.to_datetime(plot_data["week_start"]).dt.strftime("%Y-%m-%d")
+
+    chart_dir = output_dir / f"{output_prefix}_{pool_group_slug}_weekly_rolling_{rolling_weeks}w"
+    plot_data_path = (
+        chart_dir / f"{output_prefix}_{pool_group_slug}_weekly_rolling_{rolling_weeks}w_plot_data.csv"
+    )
+    figure = chart_dir / f"{output_prefix}_{pool_group_slug}_weekly_rolling_{rolling_weeks}w.svg"
+    trace = chart_dir / f"{output_prefix}_{pool_group_slug}_weekly_rolling_{rolling_weeks}w_trace.json"
+    chart_dir.mkdir(parents=True, exist_ok=True)
+    plot_data.to_csv(plot_data_path, index=False, float_format="%.6f")
+
+    _write_two_panel_line_svg(
+        plot_data,
+        title=(
+            f"{variant_label}: {pool_group_title} Top 100 \u6c60\u5185\u8d85\u989d "
+            f"{rolling_weeks}\u5468\u6eda\u52a8"
+        ),
+        panels=[
+            {
+                "title": f"\u77ed\u671f\u6536\u76ca {rolling_weeks}\u5468\u6eda\u52a8",
+                "ylabel": "bps",
+                "column": "short_internal_excess_bps_rolling",
+                "default_ylim": (-10.0, 50.0),
+                "tick_step": 10.0,
+                "tick_decimals": None,
+            },
+            {
+                "title": f"\u9694\u591c\u6536\u76ca {rolling_weeks}\u5468\u6eda\u52a8",
+                "ylabel": "bps",
+                "column": "next_internal_excess_bps_rolling",
+                "default_ylim": (-120.0, 160.0),
+                "tick_step": 40.0,
+                "tick_decimals": None,
+            },
+        ],
+        output_path=figure,
+        pools=pools,
+    )
+    write_json(
+        trace,
+        {
+            "input": str(input_path) if input_path is not None else None,
+            "plot_data": str(plot_data_path),
+            "figure": str(figure),
+            "variant_label": variant_label,
+            "series": list(pools),
+            "included_weeks": sorted(plot_data["week_start"].dropna().astype(str).unique()),
+            "rolling_weeks": rolling_weeks,
+            "weighting": "weekly_summary precomputed by caller; intended CLI uses trading-day equal rolling windows",
+            "metric": "weekly_pool_internal_excess_rolling",
+            "style": "manual svg two-panel weekly line figure for selected pools",
+        },
+        ensure_ascii=True,
+    )
+    return {
+        "weekly_rolling_plot_data": str(plot_data_path),
+        "weekly_rolling_figure": str(figure),
+        "weekly_rolling_trace": str(trace),
+    }
+
+
 def _write_horizon_excess_rank_ic_plots(
     month_summary: pd.DataFrame,
     output_dir: Path,
@@ -495,6 +595,168 @@ def _write_two_panel_bar_svg(
                         fill=PLOT_COLORS[pool],
                         anchor="middle",
                     )
+                )
+
+    lines.append("</svg>")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _write_two_panel_line_svg(
+    plot_data: pd.DataFrame,
+    *,
+    title: str,
+    panels: list[dict[str, object]],
+    output_path: Path,
+    pools: tuple[str, ...] = PLOT_POOLS,
+) -> None:
+    pools = tuple(pools)
+    if not pools:
+        raise ValueError("at least one pool is required for plotting")
+    data = plot_data.copy()
+    data["week_start"] = pd.to_datetime(data["week_start"], errors="coerce")
+    data = data.dropna(subset=["week_start"]).sort_values(["pool", "week_start"])
+    if data.empty:
+        raise ValueError("weekly plot data is empty")
+
+    width = 1600
+    height = 900
+    left = 86.0
+    right = 1562.0
+    panel_tops = (145.0, 550.0)
+    panel_height = 310.0
+    chart_width = right - left
+    min_date = data["week_start"].min()
+    max_date = data["week_start"].max()
+    span_days = max((max_date - min_date).days, 1)
+
+    def xmap(value: pd.Timestamp) -> float:
+        return left + ((value - min_date).days / span_days) * chart_width
+
+    year_ticks = [
+        tick
+        for tick in pd.date_range(
+            pd.Timestamp(year=min_date.year, month=1, day=1),
+            pd.Timestamp(year=max_date.year + 1, month=1, day=1),
+            freq="YS",
+        )
+        if min_date <= tick <= max_date
+    ]
+    if min_date not in year_ticks:
+        year_ticks = [min_date, *year_ticks]
+    if max_date not in year_ticks:
+        year_ticks = [*year_ticks, max_date]
+
+    lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        f'<rect width="{width}" height="{height}" fill="#fbfaf7"/>',
+        _svg_text(width / 2, 42, title, size=34, weight=800, anchor="middle"),
+    ]
+    legend_item_width = 230.0
+    legend_start = (
+        438.0 if pools == PLOT_POOLS else width / 2 - (legend_item_width * len(pools)) / 2
+    )
+    legend_y = 80.0
+    for index, pool in enumerate(pools):
+        x = legend_start + legend_item_width * index
+        lines.append(
+            f'<line x1="{x:.1f}" y1="{legend_y - 3:.1f}" x2="{x + 34.0:.1f}" '
+            f'y2="{legend_y - 3:.1f}" stroke="{PLOT_COLORS[pool]}" stroke-width="5"/>'
+        )
+        lines.append(
+            f'<circle cx="{x + 17.0:.1f}" cy="{legend_y - 3:.1f}" r="4.5" '
+            f'fill="{PLOT_COLORS[pool]}"/>'
+        )
+        lines.append(_svg_text(x + 46.0, legend_y + 3.0, pool, size=19, fill="#262626"))
+
+    for panel_index, panel in enumerate(panels):
+        top = panel_tops[panel_index]
+        bottom = top + panel_height
+        column = str(panel["column"])
+        ymin, ymax = _nice_ylim(
+            data[column].astype(float),
+            default=panel["default_ylim"],  # type: ignore[arg-type]
+            step=float(panel["tick_step"]),
+        )
+        tick_values = _ticks(ymin, ymax, float(panel["tick_step"]))
+        tick_decimals = panel["tick_decimals"]
+
+        def ymap(
+            value: float,
+            *,
+            bottom: float = bottom,
+            ymin: float = ymin,
+            ymax: float = ymax,
+        ) -> float:
+            return bottom - (value - ymin) / (ymax - ymin) * panel_height
+
+        lines.append(_svg_text(left, top - 22.0, str(panel["title"]), size=28, weight=800))
+        for tick in tick_values:
+            y = ymap(tick)
+            is_zero = abs(tick) < 1e-12
+            lines.append(
+                f'<line x1="{left:.1f}" y1="{y:.1f}" x2="{right:.1f}" y2="{y:.1f}" '
+                f'stroke="{"#b8b2a8" if is_zero else "#dedbd4"}" '
+                f'stroke-width="{1.3 if is_zero else 1.0}"/>'
+            )
+            lines.append(
+                _svg_text(
+                    left - 14.0,
+                    y + 5.0,
+                    _format_tick(tick, tick_decimals),
+                    size=16,
+                    fill="#3a3a3a",
+                    anchor="end",
+                )
+            )
+        for tick in year_ticks:
+            x = xmap(tick)
+            lines.append(
+                f'<line x1="{x:.1f}" y1="{top:.1f}" x2="{x:.1f}" y2="{bottom:.1f}" '
+                'stroke="#ebe7de" stroke-width="1"/>'
+            )
+            if panel_index == 1:
+                label = tick.strftime("%Y")
+                if tick == min_date or tick == max_date:
+                    label = tick.strftime("%Y-%m-%d")
+                lines.append(
+                    _svg_text(
+                        x,
+                        bottom + 35.0,
+                        label,
+                        size=18,
+                        fill="#3a3a3a",
+                        anchor="middle",
+                    )
+                )
+        lines.append(
+            f'<line x1="{left:.1f}" y1="{top:.1f}" x2="{left:.1f}" y2="{bottom:.1f}" '
+            'stroke="#928d84" stroke-width="1"/>'
+        )
+        lines.append(
+            f'<line x1="{left:.1f}" y1="{bottom:.1f}" x2="{right:.1f}" y2="{bottom:.1f}" '
+            'stroke="#928d84" stroke-width="1"/>'
+        )
+        lines.append(_svg_text(24.0, top + panel_height / 2 + 6.0, str(panel["ylabel"]), size=18))
+
+        for pool in pools:
+            item = data.loc[data["pool"].eq(pool)].dropna(subset=[column])
+            if item.empty:
+                continue
+            points = [
+                f"{xmap(row.week_start):.1f},{ymap(float(getattr(row, column))):.1f}"
+                for row in item.itertuples(index=False)
+            ]
+            lines.append(
+                f'<polyline points="{" ".join(points)}" fill="none" '
+                f'stroke="{PLOT_COLORS[pool]}" stroke-width="3.0" stroke-linejoin="round" '
+                'stroke-linecap="round"/>'
+            )
+            for row in item.iloc[:: max(1, len(item) // 24)].itertuples(index=False):
+                lines.append(
+                    f'<circle cx="{xmap(row.week_start):.1f}" '
+                    f'cy="{ymap(float(getattr(row, column))):.1f}" r="2.6" '
+                    f'fill="{PLOT_COLORS[pool]}"/>'
                 )
 
     lines.append("</svg>")

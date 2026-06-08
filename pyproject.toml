@@ -47,6 +47,7 @@ osf-inspect-labeled-cache = "opening_strength_fit.cli.inspect_labeled_cache:main
 osf-plot-lgbm-delay-decay = "opening_strength_fit.cli.plot_lgbm_delay_decay:main"
 osf-plot-rolling-validation-tradeoff = "opening_strength_fit.cli.plot_rolling_validation_tradeoff:main"
 osf-plot-signal-baseline-panels = "opening_strength_fit.cli.plot_signal_baseline_panels:main"
+osf-plot-weekly-pool-internal = "opening_strength_fit.cli.plot_weekly_pool_internal:main"
 osf-prepare-research-dataset = "opening_strength_fit.cli.prepare_research_dataset:main"
 osf-probe-clickhouse-data = "opening_strength_fit.cli.probe_clickhouse_data:main"
 osf-render-k8s-job = "opening_strength_fit.cli.render_k8s_job:main"

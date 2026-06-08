@@ -1961,6 +1961,25 @@ experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_l
 2018-2019 universe-only 也稳定为正。下一步可以利用已齐备的 2025 cache 做 2025 OOS extension，
 或先整理 mentor-facing summary。
 
+周度补充诊断：新增 `osf-plot-weekly-pool-internal`，从
+`pool_internal_group_metrics.csv` 直接生成交易日等权的 weekly / 4-week rolling 图表。口径为先把
+同一 `pool x date` 的多个决策点聚成日度均值，再按交易日数加权 4 周窗口，避免单交易日节假日周被自然周等权放大。
+2020-2024 S/M/L 的 short 周度仍非常稳，positive weeks 分别为 `254/256`、`255/256`、`255/256`，
+4 周滚动最差仍为正：pool_S / M / L = `+1.15 / +1.81 / +2.05 bps`。next 的周度稳定性弱于 short，
+positive weeks 为 `154/256`、`161/256`、`160/256`，4 周滚动最差为
+`-47.63 / -47.97 / -50.73 bps`。此前自然周等权看到的 universe next 约 `250 bps`
+高点主要来自单交易日周；交易日等权后该 4 周峰值降至约 `174 bps`。
+
+本地输出：
+
+```text
+output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal/daily_pool_internal_summary.csv
+output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal/weekly_pool_internal_summary.csv
+output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal/weekly_pool_internal_overall_summary.csv
+output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal/weekly_worst_windows.csv
+output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal/baseline_halfyear_2020_2024_universe_sml_weekly_rolling_4w/baseline_halfyear_2020_2024_universe_sml_weekly_rolling_4w.svg
+```
+
 ### 归档和保留口径
 
 - 按用户要求，`build_delay2_2024_cache_v1` 已停止；旧 2023/2024 v1 cache 和过期派生 cache 已从 PVC 清掉。
@@ -1994,6 +2013,7 @@ experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_l
 | `experiments/results/metrics/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_metrics_by_*` | halfyear mainline 的 14/14 shard 训练 metrics，含 yearly / monthly 汇总。 |
 | `experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe_*` | halfyear mainline 的 2018-2019 universe-only pool-internal / Rank IC 分析。 |
 | `experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024_*` | halfyear mainline 的 2020-2024 universe / S / M / L pool-internal、Rank IC 和分年/半年汇总。 |
+| `output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal` | halfyear mainline 2020-2024 的交易日等权 weekly / 4-week rolling pool-internal 诊断和 SVG。 |
 | `experiments/results/backtests/gap_risk_penalized_attribution_v1_*` | rolling gap-risk Top100 替换归因的 outcome、feature exposure 和 residual-control 证据。 |
 | `output/local/<run_id>` | ignored artifact-sync buffer；不再作为唯一证据位置。 |
 | `output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw` | 18m rolling 各测试月 prediction shard，用于 alpha Top100 内 risk/short/next 相关诊断。 |
