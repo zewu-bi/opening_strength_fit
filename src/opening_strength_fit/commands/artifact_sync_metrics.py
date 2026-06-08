@@ -19,8 +19,7 @@ from opening_strength_fit.reports import metrics_by_year_from_windows
 METRICS_SUFFIX = "_metrics_by_year.csv"
 MONTHLY_METRICS_SUFFIX = "_metrics_by_month.csv"
 DEFAULT_NEXT_CLOSE_LABEL_PVC_DIR = (
-    "/mnt/output/opening_strength_fit/cache/"
-    "opening_13y_201301_202512_delay2_next_close_labels_v1"
+    "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1"
 )
 
 

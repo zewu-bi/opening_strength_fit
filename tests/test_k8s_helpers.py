@@ -120,7 +120,9 @@ class K8sHelperTest(unittest.TestCase):
                 "test_start_month": "2023-01",
                 "test_end_month": "2023-12",
             },
-            "output": {"k8s_dir": "/mnt/output/opening_strength_fit/os-lgbm-36m-2023-w030-baseline"},
+            "output": {
+                "k8s_dir": "/mnt/output/opening_strength_fit/os-lgbm-36m-2023-w030-baseline"
+            },
             "k8s": {
                 "job_name": "os-lgbm-36m-2023-w030-baseline",
                 "resources": {"memory_limit": "512Gi"},

@@ -441,7 +441,9 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
         shard_parallelism = _shard_parallelism(config, resources)
         train_months = int(get(config, "window", "train_months", 12))
         test_months = int(get(config, "window", "test_months", 1) or 1)
-        test_stride_months = int(get(config, "window", "test_stride_months", test_months) or test_months)
+        test_stride_months = int(
+            get(config, "window", "test_stride_months", test_months) or test_months
+        )
         done_file = (
             "rolling_summary.csv"
             if str(get(config, "run", "kind", "")).strip().lower()

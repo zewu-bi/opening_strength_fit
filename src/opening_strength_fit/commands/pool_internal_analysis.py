@@ -601,7 +601,10 @@ def main() -> None:
         weekly_outputs = write_weekly_outputs(
             group_metrics,
             Path(args.weekly_report_dir),
-            output_prefix=args.weekly_output_prefix or args.plot_prefix or args.variant or args.run_id,
+            output_prefix=args.weekly_output_prefix
+            or args.plot_prefix
+            or args.variant
+            or args.run_id,
             variant_label=args.plot_variant_label or args.variant or args.run_id,
             pools=tuple("universe" if pool == "universe" else f"pool_{pool}" for pool in pools),
             rolling_weeks=args.weekly_rolling_weeks,
@@ -637,9 +640,7 @@ def main() -> None:
         trace_payload["record_paths"] = [str(path) for path in record_paths]
         write_json(trace_path, trace_payload, ensure_ascii=True)
         destination = (
-            Path(args.records_dir)
-            / "backtests"
-            / f"{record_prefix}_pool_internal_trace.json"
+            Path(args.records_dir) / "backtests" / f"{record_prefix}_pool_internal_trace.json"
         )
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(trace_path, destination)
