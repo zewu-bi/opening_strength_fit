@@ -2061,6 +2061,42 @@ output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfy
 output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal/baseline_halfyear_2025_universe_sml_weekly_rolling_4w/baseline_halfyear_2025_universe_sml_weekly_rolling_4w.svg
 ```
 
+### 2020-2025 halfyear rolling 合并归档（三年训练、半年预测）
+
+将主线 `36m train -> next 6m test` 的 `2020-2024` 与 `2025` OOS extension 合并成
+`2020-2025` 统一视角。口径仍为 delay2、mixed `w=0.30` target、soft-core visible feature set、
+light LightGBM regularization、Top100 pool-internal 评估；S/M/L 股池覆盖 `2020-01-02` 至
+`2025-12-31`。
+
+核心结论：
+
+- short leg：universe 最强，2020-2024 中枢高，2025 明显降档但仍为正。
+- next-close leg：universe 从 2022H2 后经常转弱，2024-2025 负段明显；S/M/L 内部 next 超额更稳。
+- weekly 单周图的 2024 年末附近尖峰主要来自 `2024-09-30` 国庆长假前单日周；
+  `2024-09-30` universe 单周 next 内部超额约 `+596.6 bps`，是跨长假 next-close
+  标签和行情 outlier，不是合并/画图错误。
+- weekly 单周图的 `2021-10-04` 周只有 `2021-10-08` 一个交易日；short 内部超额在四个池子
+  均小幅转负（universe 约 `-2.9 bps`），主要由 `09:36-09:39` 的 top100 跑输拖下；
+  同周 next 内部超额才是主要负异常（universe 约 `-338.9 bps`）。
+
+整体汇总（2020-2025，date-clock group 等权）：
+
+| pool | short excess bps | short Rank IC | next excess bps | next Rank IC |
+| --- | ---: | ---: | ---: | ---: |
+| universe | +20.22 | 0.167 | -1.26 | 0.010 |
+| pool_S | +8.29 | 0.134 | +11.27 | 0.008 |
+| pool_M | +9.81 | 0.145 | +12.88 | 0.008 |
+| pool_L | +11.14 | 0.152 | +13.31 | 0.009 |
+
+本轮按用户要求只保留 3 张核心归档图：
+
+```text
+experiments/results/backtests/halfyear_window_2020_2025_short_halfyear.svg
+experiments/results/backtests/halfyear_window_2020_2025_next_halfyear.svg
+experiments/results/backtests/halfyear_window_2020_2025_weekly.svg
+experiments/results/backtests/halfyear_window_2020_2025_trace.json
+```
+
 ### 归档和保留口径
 
 - 按用户要求，`build_delay2_2024_cache_v1` 已停止；旧 2023/2024 v1 cache 和过期派生 cache 已从 PVC 清掉。
@@ -2097,6 +2133,7 @@ output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfy
 | `output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal` | halfyear mainline 2020-2024 的交易日等权 weekly / 4-week rolling pool-internal 诊断和 SVG。 |
 | `experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_*` | 2025 OOS extension 的 universe / S / M / L pool-internal、Rank IC、plot data 和分年/半年汇总。 |
 | `output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal` | 2025 OOS extension 的交易日等权 weekly / 4-week rolling pool-internal 诊断和 SVG。 |
+| `experiments/results/backtests/halfyear_window_2020_2025_*` | 2020-2025 合并视角的三张核心 SVG：short 半年度、next 半年度、weekly 单周折线；trace 记录输入 run 和 2024-09-30 / 2021-10-04 outlier。 |
 | `experiments/results/backtests/gap_risk_penalized_attribution_v1_*` | rolling gap-risk Top100 替换归因的 outcome、feature exposure 和 residual-control 证据。 |
 | `output/local/<run_id>` | ignored artifact-sync buffer；不再作为唯一证据位置。 |
 | `output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw` | 18m rolling 各测试月 prediction shard，用于 alpha Top100 内 risk/short/next 相关诊断。 |
