@@ -18,7 +18,7 @@ experiments/runs/lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1.toml
 experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1.toml
 experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_sharded_job.yaml
 
-36m halfyear rolling robustness:
+36m halfyear rolling job:
 experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1.toml
 experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_sharded_job.yaml
 
@@ -41,9 +41,6 @@ mixed w030 cache:
 
 当前判断、运行状态和实验结果见 [project_brief.md](project_brief.md) 和
 [experiment_log.md](experiment_log.md)。本 runbook 只保留可执行配置、命令和路径。
-
-同一 `baseline` 口径已提交 `36m train -> next 6m test` 半年 rolling 稳健性任务，覆盖
-`2018H1` 至 `2024H2` 共 14 个 folds。
 
 ## 1. 预检
 
@@ -278,17 +275,15 @@ hfcli kubectl --cluster research apply \
 
 重新启动或补跑前先 build/push 当前 clean worktree 到 manifest 里的 image tag，或重新 render manifest 使用新 tag。
 
-### 5.2 2018-2024 半年 rolling 稳健性任务
+### 5.2 2018-2024 半年 rolling job
 
-正式 baseline 的半年 rolling run：
+正式 baseline 的半年 rolling 执行入口：
 
 ```text
-display: baseline halfyear robustness
+display: baseline halfyear
 run_id: lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1
 job:    os-lgbm-36m-2018-2024-w030-halfyear
 image:  registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260605-halfyear-v1
-digest: sha256:70b8fb9c395d62e49466754837cd52da7ce5bec0778e7fc310f8148ad593f38b
-status: submitted on 2026-06-05; patched to 7-way shard parallelism
 ```
 
 该 run 使用 `36m train -> next 6m test`，`2018-01` 至 `2024-12` 共 14 个半年 Indexed Job
@@ -314,7 +309,7 @@ hfcli kubectl --cluster research apply --dry-run=client \
   -f experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_sharded_job.yaml
 ```
 
-当前已提交命令：
+启动或重启：
 
 ```bash
 hfcli kubectl --cluster research delete job os-lgbm-36m-2018-2024-w030-halfyear \
@@ -323,12 +318,12 @@ hfcli kubectl --cluster research apply \
   -f experiments/jobs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_sharded_job.yaml
 ```
 
-当前并行度为 `shard_parallelism=7`。已对正在运行的 Job 执行：
+调整正在运行的 Indexed Job 并行度：
 
 ```bash
 hfcli kubectl --cluster research patch job os-lgbm-36m-2018-2024-w030-halfyear \
   -n bizewu \
-  -p '{"spec":{"parallelism":7}}'
+  -p '{"spec":{"parallelism":<parallelism>}}'
 ```
 
 ### 5.3 Rolling 过程观测
@@ -379,12 +374,12 @@ Rolling 仍在运行时，只同步已完成月份：
 
 ```bash
 osf-sync-experiment-artifacts \
-  --config experiments/runs/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1.toml \
+  --config experiments/runs/<rolling_run_id>.toml \
   --metrics --predictions --allow-partial
 ```
 
 `--allow-partial` 不写入 `experiments/results/`，只更新 `output/k8s/metrics/` 和
-`output/predictions/<run_id>/raw/predictions_YYYY-MM.parquet`，方便每个月完成后立即分析。
+`output/predictions/<run_id>/raw/predictions_YYYY-MM.parquet`，方便每个 shard/window 完成后立即分析。
 对半年 rolling，raw predictions 文件名使用窗口标签，例如
 `predictions_2018-01_2018-06.parquet`，shard 目录仍以窗口起点命名为 `month_YYYY-MM/`。
 
@@ -447,6 +442,44 @@ pool_internal_group_metrics.csv
 pool_internal_trace.json
 <plot-prefix>_universe_sml_pool_internal_with_mean/*.svg
 <plot-prefix>_universe_sml_rank_ic_with_mean/*.svg
+```
+
+S/M/L 股池文件当前覆盖 `2020-01-02` 至 `2025-12-31`。2020 年之前没有 S/M/L 股池文件；
+分析 halfyear 任务的 2018/2019 shard 时只跑 universe 口径：
+
+```bash
+osf-analyze-pool-internal-top100 \
+  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2018-01_2018-06.parquet \
+  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2018-07_2018-12.parquet \
+  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2019-01_2019-06.parquet \
+  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2019-07_2019-12.parquet \
+  --next-close-label-input output/local/next_close_labels_2018_2019 \
+  --pool universe \
+  --variant baseline_pre2020_universe \
+  --output-dir output/local/<halfyear_run_id>_pre2020_universe_pool_internal \
+  --report-dir output/reports/<halfyear_run_id>_pre2020_universe_pool_internal
+```
+
+该模式会输出 `<plot-prefix>_universe_*` SVG / plot data，不要求 S/M/L 股池存在。
+
+2020-2024 halfyear shard 可以跑完整 universe / S / M / L：
+
+```bash
+osf-analyze-pool-internal-top100 \
+  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2020-01_2020-06.parquet \
+  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2020-07_2020-12.parquet \
+  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2021-01_2021-06.parquet \
+  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2021-07_2021-12.parquet \
+  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2022-01_2022-06.parquet \
+  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2022-07_2022-12.parquet \
+  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2023-01_2023-06.parquet \
+  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2023-07_2023-12.parquet \
+  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2024-01_2024-06.parquet \
+  --predictions output/predictions/<halfyear_run_id>/raw/predictions_2024-07_2024-12.parquet \
+  --next-close-label-input output/local/next_close_labels_2020_2024 \
+  --variant baseline_halfyear_2020_2024 \
+  --output-dir output/local/<halfyear_run_id>_pool_internal_2020_2024 \
+  --report-dir output/reports/<halfyear_run_id>_pool_internal_2020_2024
 ```
 
 `predictions` 里不保留 `alpha_return_next_close`，这是训练防泄漏设计；分析前需要把 PVC 上的 next-close 年度

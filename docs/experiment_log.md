@@ -16,9 +16,12 @@
 - `baseline` 对应真实 run id
   `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`。已同步并归档
   `2024-01` 至 `2024-12` 全年结果；真实 run id 只作为 config / metrics / predictions 追溯键。
-- 同一 `baseline` 口径已提交 `36m train -> next 6m test` 半年 rolling 稳健性任务：
+- 同一 `baseline` 口径的 `36m train -> next 6m test` 半年 rolling 已完成：
   `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1`，
-  覆盖 `2018H1` 至 `2024H2` 共 14 个 folds。
+  覆盖 `2018H1` 至 `2024H2` 共 14 个 folds；2020-2024 S/M/L 与 2018-2019
+  universe-only 分析均已同步并归档。
+- S/M/L 股池文件覆盖 `2020-01-02` 至 `2025-12-31`；2018/2019 没有股池日期，只用 universe
+  口径验收。
 - 两模型 `final_score = alpha_rank - lambda * gap_risk_rank` 路线封存。它通过 rolling，说明短+长目标有信息，
   但当前不继续用两个模型定义目标。
 
@@ -35,6 +38,7 @@
 | S/M/L pool-internal mixed `w=0.30` | +10.0 / +12.2 / +14.1 | +6.6 / +9.0 / +9.4 | 固定单模型主线权重；三列为 pool_S/M/L。 |
 | `soft_core_reg_light` vs `w030` baseline | +0.24 / +0.31 / +0.58 | +0.92 / -0.01 / +1.17 | 固定权重后的 feature/model 候选；三列为 pool_S/M/L 的增量。 |
 | 36m `baseline` full year | +8.3 / +9.3 / +10.4 | +7.7 / +5.6 / +4.4 | 2024-01..2024-12 已同步归档；三列为 pool_S/M/L。 |
+| 36m halfyear `baseline` 2020-2024 | +8.9 / +10.7 / +12.1 | +12.0 / +13.7 / +14.3 | 半年 rolling 已完成；三列为 pool_S/M/L。 |
 
 ## 实验时间线
 
@@ -54,7 +58,8 @@
 | 2026-06-03 | S/M/L mixed weight scan | `w_long=0.30` 在池内保住 short，并改善 next internal excess；固定为主线权重。 |
 | 2026-06-04 | w030 feature/model sweep | 7 组 18m 小缓存对照后，`soft_core_reg_light` 晋级为当前 feature/model 候选。 |
 | 2026-06-05 | 36m baseline full-year archive | 2024-01..2024-12 已同步归档；正式模型展示名定为 `baseline`，S/M/L 池内 short 和 next 均值均为正。 |
-| 2026-06-05 | 36m halfyear rolling submitted | 2015-2024 mixed cache 齐备后，提交 `36m train -> next 6m test` 半年 rolling，共 14 个 folds。 |
+| 2026-06-05 | 36m halfyear rolling mainline running | 2015-2024 mixed cache 齐备后，提交并运行 `36m train -> next 6m test` 半年 rolling，共 14 个 folds。 |
+| 2026-06-08 | 36m halfyear rolling archive | PVC 上 14/14 folds 完成；补齐本地 `2024H1` shard，归档 2018-2019 universe-only 和 2020-2024 S/M/L 分析。 |
 
 ## 2026-05-20 小窗结果
 
@@ -1767,21 +1772,21 @@ experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_l
 
 2026-06-04 的准备记录保留在本节上方；当前事实以本小节的全年完成归档为准。
 
-## 2026-06-05 36m Halfyear Rolling Submission
+## 2026-06-05 36m Halfyear Rolling Mainline Running
 
-PVC 实查确认 `2015-2024` 三套年度 cache 已齐：
+PVC 当前实查确认 13y 三套年度 cache 已齐；halfyear run 使用其中 `2015-2024` 年度文件：
 
 ```text
-/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_base_labeled_v2/
-/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_next_close_labels_v1/
-/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_mixed_w030_labeled_v1/
+/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_base_labeled_v2/
+/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/
+/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/
 ```
 
 其中 mixed-w030 labeled cache 从 `opening_2015_delay2_mixed_w030_labeled_v1.parquet` 到
-`opening_2024_delay2_mixed_w030_labeled_v1.parquet` 共 10 个年度文件，总量约 `40 GB`。抽查日期范围：
+`opening_2024_delay2_mixed_w030_labeled_v1.parquet` 共 10 个年度文件用于本 run。抽查日期范围：
 `2015` 为 `2015-01-05 -> 2015-12-31`，`2024` 为 `2024-01-02 -> 2024-12-31`。
 
-在同一 `baseline` feature/model 口径上新增半年 rolling 稳健性任务：
+在同一 `baseline` feature/model 口径上新增半年 rolling 主线任务：
 
 ```text
 run_id:
@@ -1868,6 +1873,18 @@ status after patch:
 2021-01..2021-06 running on node7
 ```
 
+运行中状态复核：
+
+```text
+checked: 2026-06-05
+job: os-lgbm-36m-2018-2024-w030-halfyear
+status: 1/14 succeeded; 7 active shards running
+completed: 2018-01..2018-06 at 2026-06-05T06:55:43Z
+running: 2018-07..2018-12, 2019-01..2019-06, 2019-07..2019-12,
+         2020-01..2020-06, 2020-07..2020-12, 2021-01..2021-06,
+         2021-07..2021-12
+```
+
 首个 shard 日志确认依赖文件均 ready，且第一窗读取范围正确：
 
 ```text
@@ -1875,6 +1892,74 @@ running ... shard test=2018-01..2018-06 index=0
 date_start: 2015-01-01
 date_end: 2018-06-30
 ```
+
+### 2020 年前 universe-only 分析
+
+2020 年之前没有可用的 S/M/L 股池文件，因此 `2018-01..2019-12` 已完成 shard 只按
+`universe` 口径做 pool-internal Top100 / Rank IC 分析。输入只包含 4 个 pre-2020 prediction
+shard，并 join 本地 `output/local/next_close_labels_2018_2019/`：
+
+| period | short internal excess bps | next internal excess bps | short Rank IC | next Rank IC | positive months short / next |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `2018H1` | +33.10 | +22.29 | 0.324 | 0.041 | 6 / 5 |
+| `2018H2` | +25.29 | -1.45 | 0.285 | 0.027 | 6 / 3 |
+| `2019H1` | +31.68 | +6.14 | 0.275 | 0.035 | 6 / 3 |
+| `2019H2` | +24.05 | +13.90 | 0.264 | 0.038 | 6 / 4 |
+| `2018-2019 mean` | +28.43 | +10.07 | 0.287 | 0.035 | 24 / 15 |
+
+结论：pre-2020 universe-only 下 short signal 很稳，24/24 个月 Top100 池内超额为正；
+next-close 也转正但稳定性弱于 short，15/24 个月为正。轻量归档：
+
+```text
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe_pool_internal_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe_pool_internal_halfyear_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe_pool_internal_month_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe_pool_internal_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe_rank_ic_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe_short_excess_rank_ic_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe_next_excess_rank_ic_with_mean.svg
+```
+
+### 2026-06-08 Halfyear Completion and 2020-2024 S/M/L
+
+2026-06-08 复查集群时，`os-lgbm-36m-2018-2024-w030-halfyear` Job 已不在运行态；
+PVC run 目录下 14 个 `month_YYYY-MM/` shard 均有 `metrics_by_year.csv` 和 `predictions.parquet`。
+本地补拉此前缺失的 `2024-01..2024-06` prediction/metrics shard 后，重新合并：
+
+```text
+local raw prediction shards: 14/14
+predictions_all.parquet rows: 70,380,134
+date range: 2018-01-02 -> 2024-12-31
+symbols: 5,315
+```
+
+S/M/L 股池当前覆盖 `2020-01-02` 至 `2025-12-31`，因此 `2020-2024` 可以做完整
+universe / S / M / L 验收。2020-2024 summary：
+
+| pool | short internal excess bps | next internal excess bps | short Rank IC | next Rank IC | positive months short / next |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| universe | +22.15 | +1.93 | 0.174 | 0.011 | 60 / 29 |
+| pool_S | +8.93 | +12.00 | 0.137 | 0.010 | 60 / 43 |
+| pool_M | +10.66 | +13.73 | 0.149 | 0.010 | 60 / 44 |
+| pool_L | +12.14 | +14.34 | 0.157 | 0.010 | 60 / 43 |
+
+轻量归档：
+
+```text
+experiments/results/metrics/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_metrics_by_year.csv
+experiments/results/metrics/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_metrics_by_month.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024_pool_internal_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024_pool_internal_halfyear_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024_pool_internal_year_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024_pool_internal_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024_rank_ic_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024_short_excess_rank_ic_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024_next_excess_rank_ic_with_mean.svg
+```
+
+结论：halfyear mainline 已完成。2020-2024 S/M/L 下 short 60/60 月为正，next 43-44/60 月为正；
+2018-2019 universe-only 也稳定为正。下一步可以利用已齐备的 2025 cache 做 2025 OOS extension，
+或先整理 mentor-facing summary。
 
 ### 归档和保留口径
 
@@ -1906,6 +1991,9 @@ date_end: 2018-06-30
 | `experiments/results/backtests/pool_internal_top100_w020_w030_*` | `w=0.20 / 0.30` 在 S/M/L 内部的 Top100 excess summary / month summary。 |
 | `experiments/results/backtests/pool_internal_top100_w010_w030_*` | raw alpha、mixed `w=0.10`、mixed `w=0.30` 的四张 monthly pool-internal SVG 和 plot data。 |
 | `experiments/results/backtests/pool_internal_monthly_rank_ic_3models.csv` | raw alpha、mixed `w=0.10`、`gap 0.30 p80` 对应四图的 monthly Rank IC 表。 |
+| `experiments/results/metrics/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_metrics_by_*` | halfyear mainline 的 14/14 shard 训练 metrics，含 yearly / monthly 汇总。 |
+| `experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe_*` | halfyear mainline 的 2018-2019 universe-only pool-internal / Rank IC 分析。 |
+| `experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024_*` | halfyear mainline 的 2020-2024 universe / S / M / L pool-internal、Rank IC 和分年/半年汇总。 |
 | `experiments/results/backtests/gap_risk_penalized_attribution_v1_*` | rolling gap-risk Top100 替换归因的 outcome、feature exposure 和 residual-control 证据。 |
 | `output/local/<run_id>` | ignored artifact-sync buffer；不再作为唯一证据位置。 |
 | `output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw` | 18m rolling 各测试月 prediction shard，用于 alpha Top100 内 risk/short/next 相关诊断。 |

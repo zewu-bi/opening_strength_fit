@@ -40,10 +40,12 @@ lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1
 `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`。
 它使用 `36m train -> next 1m test`，覆盖 `2024-01` 至 `2024-12`。该月度 rolling
 已同步并归档 `2024-01` 至 `2024-12` 全年结果。
-为了检查更早年份和更长 OOS 持有窗口的稳定性，已提交同一 `baseline` 口径的
-`36m train -> next 6m test` 半年 rolling：
+
+同一 `baseline` 口径的 `36m train -> next 6m test` 半年 rolling 已完成：
 `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1`，
-覆盖 `2018H1` 至 `2024H2` 共 14 个半年 folds。
+覆盖 `2018H1` 至 `2024H2` 共 14 个半年 folds。2020 年之前没有 S/M/L 股池日期，
+因此 `2018-2019` 只做 universe-only 分析；`2020-2024` 已完成 universe / S / M / L
+池内 Top100 验收并归档。
 
 `baseline` 全年 S/M/L 池内 Top100 excess 为：
 
@@ -52,6 +54,16 @@ pool_S: short +8.3 bps, next +7.7 bps
 pool_M: short +9.3 bps, next +5.6 bps
 pool_L: short +10.4 bps, next +4.4 bps
 ```
+
+`baseline` 半年 rolling 的 2020-2024 S/M/L 池内 Top100 excess 为：
+
+```text
+pool_S: short +8.9 bps, next +12.0 bps
+pool_M: short +10.7 bps, next +13.7 bps
+pool_L: short +12.1 bps, next +14.3 bps
+```
+
+2018-2019 universe-only short / next internal excess 为 `+28.4 / +10.1 bps`。
 
 当前执行口径：
 
@@ -64,7 +76,8 @@ pool_L: short +10.4 bps, next +4.4 bps
 | selection masks | universe / `pool_S` / `pool_M` / `pool_L` |
 | main metrics | short Rank IC、池内 Top100 excess；next close 作为 tail 诊断和 mixed-label 定权参考 |
 | completed validation | `baseline`，2024 全年 12 个 monthly rolling folds；run id `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`，已完成并归档 |
-| robustness validation | 同一 `baseline`，`36m train -> next 6m test` 半年 rolling；run id `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1`，覆盖 `2018H1..2024H2` |
+| completed mainline | 同一 `baseline`，`36m train -> next 6m test` 半年 rolling；run id `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1`，覆盖 `2018H1..2024H2`，已完成并归档 |
+| next target | 使用已齐备的 2025 cache 做 2025 OOS extension，或整理 mentor-facing summary |
 
 训练和全量打分使用 full universe。`pool_S`、`pool_M`、`pool_L` 作为 TopN selection mask；
 pool membership 作为输出标记，模型特征保持在 decision-time visible 信息集内。
@@ -81,8 +94,9 @@ current optimization slice: 09:31:00 - 09:40:00
 ```
 
 外部候选股池来自 `lml.bzw@ssd/data/pool_{L,M,S}.parquet`，三份文件是
-`date x symbol` bool 宽表，当前观察为嵌套池 `pool_S ⊂ pool_M ⊂ pool_L`。读取和配置方法见
-[runbook.md](runbook.md#2-外部股池)。
+`date x symbol` bool 宽表，当前覆盖 `2020-01-02` 至 `2025-12-31`，
+并观察为嵌套池 `pool_S ⊂ pool_M ⊂ pool_L`。读取和配置方法见
+[runbook.md](runbook.md#2-外部股池)。2020 年以前没有股池日期，历史 shard 只做 universe 分析。
 
 短线收益 label：
 
@@ -126,7 +140,7 @@ label      = sell_vwap / buy_price - 1 - fee_bps / 10000
 | S/M/L mixed label | 固定 `w_long=0.30`，在 S/M/L 池内保住 short 并改善 next internal excess。 |
 | feature/model sweep | 18m 小缓存上晋级 `soft_core_reg_light`，进入 36m 正式验证后命名为 `baseline`。 |
 | 36m baseline full year | `2024-01..2024-12` 已同步并归档；S/M/L short 和 next 池内 Top100 excess 均值均为正。 |
-| 36m halfyear rolling | 同一 `baseline` 口径已提交 `2018H1..2024H2` 半年 folds，用于稳健性和更早 OOS 检查。 |
+| 36m halfyear rolling mainline | 同一 `baseline` 口径已完成 `2018H1..2024H2` 半年 folds；2020-2024 S/M/L 与 2018-2019 universe-only 均已归档。 |
 
 `09:30` 是单独 regime：它强，但主要混合集合竞价结果、第一张开盘盘口快照、时间坐标和缺失/0 模式。
 当前主优化放在 `09:31-09:40`。

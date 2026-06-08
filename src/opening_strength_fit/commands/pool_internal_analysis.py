@@ -365,12 +365,14 @@ def main() -> None:
     if args.report_dir:
         plot_prefix = args.plot_prefix or slug_label(args.variant or args.run_id)
         plot_variant_label = args.plot_variant_label or args.variant or args.run_id or plot_prefix
+        plot_pools = tuple("universe" if pool == "universe" else f"pool_{pool}" for pool in pools)
         report_plots = write_universe_sml_pool_internal_plots(
             month_summary,
             Path(args.report_dir),
             input_path=month_summary_path,
             output_prefix=plot_prefix,
             variant_label=plot_variant_label,
+            pools=plot_pools,
         )
     write_json(
         output_dir / "pool_internal_trace.json",

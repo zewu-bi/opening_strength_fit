@@ -14,10 +14,11 @@ formal model alias: baseline
 feature/model: soft_core_reg_light
 completed validation: 36m train -> next 1m test, 2024-01..2024-12
 baseline run id: lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1
-active robustness: 36m train -> next 6m test, 2018H1..2024H2
+completed mainline: 36m train -> next 6m test, 2018H1..2024H2
 halfyear run id: lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1
 k8s job aliases: os-lgbm-36m-2024-w030-baseline, os-lgbm-36m-2018-2024-w030-halfyear
-current archive: 2024-01..2024-12 monthly baseline synced and archived
+current archive: 2024 monthly baseline and 2018H1..2024H2 halfyear baseline synced and archived
+next target: 2025 OOS extension / mentor-facing summary
 ```
 
 ## 文档入口

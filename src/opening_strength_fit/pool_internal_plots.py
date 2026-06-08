@@ -80,13 +80,18 @@ def write_universe_sml_pool_internal_plots(
     input_path: Path | None = None,
     output_prefix: str = "baseline",
     variant_label: str = "baseline",
+    pools: tuple[str, ...] = PLOT_POOLS,
 ) -> dict[str, str]:
     output_prefix = slug_label(output_prefix)
+    pools = tuple(pools)
+    pool_group_slug = _pool_group_slug(pools)
+    pool_group_title = _pool_group_title(pools)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     excess_data = month_major_plot_data(
         month_summary,
         value_cols=["short_internal_excess_bps", "next_internal_excess_bps"],
+        pools=pools,
         variant_label=variant_label,
     ).rename(
         columns={
@@ -94,16 +99,18 @@ def write_universe_sml_pool_internal_plots(
             "next_internal_excess_bps": "pool_internal_next_excess_bps",
         }
     )
-    excess_dir = output_dir / f"{output_prefix}_universe_sml_pool_internal_with_mean"
+    excess_dir = output_dir / f"{output_prefix}_{pool_group_slug}_pool_internal_with_mean"
     excess_plot_data = (
-        excess_dir / f"{output_prefix}_universe_sml_pool_internal_with_mean_plot_data.csv"
+        excess_dir / f"{output_prefix}_{pool_group_slug}_pool_internal_with_mean_plot_data.csv"
     )
-    excess_figure = excess_dir / f"{output_prefix}_universe_sml_top100_pool_internal_with_mean.svg"
+    excess_figure = (
+        excess_dir / f"{output_prefix}_{pool_group_slug}_top100_pool_internal_with_mean.svg"
+    )
     excess_dir.mkdir(parents=True, exist_ok=True)
     excess_data.to_csv(excess_plot_data, index=False, float_format="%.6f")
     _write_two_panel_bar_svg(
         excess_data,
-        title=f"{variant_label}: universe / S / M / L Top 100 \u6c60\u5185\u8d85\u989d",
+        title=f"{variant_label}: {pool_group_title} Top 100 \u6c60\u5185\u8d85\u989d",
         panels=[
             {
                 "title": "\u77ed\u671f\u6536\u76ca",
@@ -125,30 +132,33 @@ def write_universe_sml_pool_internal_plots(
             },
         ],
         output_path=excess_figure,
+        pools=pools,
     )
     _write_plot_trace(
-        excess_dir / f"{output_prefix}_universe_sml_pool_internal_with_mean_trace.json",
+        excess_dir / f"{output_prefix}_{pool_group_slug}_pool_internal_with_mean_trace.json",
         input_path=input_path,
         plot_data=excess_plot_data,
         figure=excess_figure,
         variant_label=variant_label,
         included_months=_summary_months(month_summary),
         metric="pool_internal_top100_excess_bps",
+        pools=pools,
     )
 
     rank_data = month_major_plot_data(
         month_summary,
         value_cols=["short_rank_ic", "next_rank_ic"],
+        pools=pools,
         variant_label=variant_label,
     )
-    rank_dir = output_dir / f"{output_prefix}_universe_sml_rank_ic_with_mean"
-    rank_plot_data = rank_dir / f"{output_prefix}_universe_sml_rank_ic_with_mean_plot_data.csv"
-    rank_figure = rank_dir / f"{output_prefix}_universe_sml_rank_ic_with_mean.svg"
+    rank_dir = output_dir / f"{output_prefix}_{pool_group_slug}_rank_ic_with_mean"
+    rank_plot_data = rank_dir / f"{output_prefix}_{pool_group_slug}_rank_ic_with_mean_plot_data.csv"
+    rank_figure = rank_dir / f"{output_prefix}_{pool_group_slug}_rank_ic_with_mean.svg"
     rank_dir.mkdir(parents=True, exist_ok=True)
     rank_data.to_csv(rank_plot_data, index=False, float_format="%.6f")
     _write_two_panel_bar_svg(
         rank_data,
-        title=f"{variant_label}: universe / S / M / L Rank IC",
+        title=f"{variant_label}: {pool_group_title} Rank IC",
         panels=[
             {
                 "title": "\u77ed\u671f Rank IC",
@@ -170,15 +180,28 @@ def write_universe_sml_pool_internal_plots(
             },
         ],
         output_path=rank_figure,
+        pools=pools,
     )
     _write_plot_trace(
-        rank_dir / f"{output_prefix}_universe_sml_rank_ic_with_mean_trace.json",
+        rank_dir / f"{output_prefix}_{pool_group_slug}_rank_ic_with_mean_trace.json",
         input_path=input_path,
         plot_data=rank_plot_data,
         figure=rank_figure,
         variant_label=variant_label,
         included_months=_summary_months(month_summary),
         metric="rank_ic",
+        pools=pools,
+    )
+
+    horizon_plots = _write_horizon_excess_rank_ic_plots(
+        month_summary,
+        output_dir,
+        input_path=input_path,
+        output_prefix=output_prefix,
+        variant_label=variant_label,
+        pools=pools,
+        pool_group_slug=pool_group_slug,
+        pool_group_title=pool_group_title,
     )
 
     return {
@@ -186,7 +209,112 @@ def write_universe_sml_pool_internal_plots(
         "pool_internal_figure": str(excess_figure),
         "rank_ic_plot_data": str(rank_plot_data),
         "rank_ic_figure": str(rank_figure),
+        **horizon_plots,
     }
+
+
+def _write_horizon_excess_rank_ic_plots(
+    month_summary: pd.DataFrame,
+    output_dir: Path,
+    *,
+    input_path: Path | None,
+    output_prefix: str,
+    variant_label: str,
+    pools: tuple[str, ...],
+    pool_group_slug: str,
+    pool_group_title: str,
+) -> dict[str, str]:
+    outputs: dict[str, str] = {}
+    horizons = (
+        {
+            "slug": "short",
+            "label": "\u77ed\u671f",
+            "excess_col": "short_internal_excess_bps",
+            "rank_ic_col": "short_rank_ic",
+            "excess_default_ylim": (-5.0, 40.0),
+            "rank_default_ylim": (0.0, 0.22),
+        },
+        {
+            "slug": "next",
+            "label": "\u9694\u591c",
+            "excess_col": "next_internal_excess_bps",
+            "rank_ic_col": "next_rank_ic",
+            "excess_default_ylim": (-80.0, 100.0),
+            "rank_default_ylim": (-0.08, 0.10),
+        },
+    )
+    for horizon in horizons:
+        slug = str(horizon["slug"])
+        data = month_major_plot_data(
+            month_summary,
+            value_cols=[str(horizon["excess_col"]), str(horizon["rank_ic_col"])],
+            pools=pools,
+            variant_label=variant_label,
+        )
+        chart_dir = output_dir / f"{output_prefix}_{pool_group_slug}_{slug}_excess_rank_ic_with_mean"
+        plot_data = (
+            chart_dir
+            / f"{output_prefix}_{pool_group_slug}_{slug}_excess_rank_ic_with_mean_plot_data.csv"
+        )
+        figure = chart_dir / f"{output_prefix}_{pool_group_slug}_{slug}_excess_rank_ic_with_mean.svg"
+        chart_dir.mkdir(parents=True, exist_ok=True)
+        data.to_csv(plot_data, index=False, float_format="%.6f")
+        _write_two_panel_bar_svg(
+            data,
+            title=f"{variant_label}: {pool_group_title} {horizon['label']} excess / Rank IC",
+            panels=[
+                {
+                    "title": f"{horizon['label']} Top 100 \u6c60\u5185\u8d85\u989d",
+                    "ylabel": "bps",
+                    "column": str(horizon["excess_col"]),
+                    "default_ylim": horizon["excess_default_ylim"],
+                    "tick_step": 5.0 if slug == "short" else 20.0,
+                    "tick_decimals": None,
+                    "label_decimals": 1,
+                },
+                {
+                    "title": f"{horizon['label']} Rank IC",
+                    "ylabel": "IC",
+                    "column": str(horizon["rank_ic_col"]),
+                    "default_ylim": horizon["rank_default_ylim"],
+                    "tick_step": 0.02,
+                    "tick_decimals": 2,
+                    "label_decimals": 3,
+                },
+            ],
+            output_path=figure,
+            pools=pools,
+        )
+        _write_plot_trace(
+            chart_dir / f"{output_prefix}_{pool_group_slug}_{slug}_excess_rank_ic_with_mean_trace.json",
+            input_path=input_path,
+            plot_data=plot_data,
+            figure=figure,
+            variant_label=variant_label,
+            included_months=_summary_months(month_summary),
+            metric=f"{slug}_pool_internal_excess_rank_ic",
+            pools=pools,
+        )
+        outputs[f"{slug}_excess_rank_ic_plot_data"] = str(plot_data)
+        outputs[f"{slug}_excess_rank_ic_figure"] = str(figure)
+    return outputs
+
+
+def _pool_group_slug(pools: tuple[str, ...]) -> str:
+    if pools == PLOT_POOLS:
+        return "universe_sml"
+    return slug_label("_".join(pools))
+
+
+def _pool_group_title(pools: tuple[str, ...]) -> str:
+    if pools == PLOT_POOLS:
+        return "universe / S / M / L"
+    labels = {
+        "pool_S": "S",
+        "pool_M": "M",
+        "pool_L": "L",
+    }
+    return " / ".join(labels.get(pool, pool) for pool in pools)
 
 
 def _summary_months(month_summary: pd.DataFrame) -> list[str]:
@@ -202,6 +330,7 @@ def _write_plot_trace(
     variant_label: str,
     included_months: list[str],
     metric: str,
+    pools: tuple[str, ...] = PLOT_POOLS,
 ) -> None:
     write_json(
         path,
@@ -210,11 +339,11 @@ def _write_plot_trace(
             "plot_data": str(plot_data),
             "figure": str(figure),
             "variant_label": variant_label,
-            "series": list(PLOT_POOLS),
+            "series": list(pools),
             "included_months": included_months,
             "mean": "simple average across monthly summary rows",
             "metric": metric,
-            "style": "manual svg matching mentor-facing universe/S/M/L two-panel figure",
+            "style": "manual svg two-panel figure for selected pools",
         },
         ensure_ascii=True,
     )
@@ -226,9 +355,14 @@ def _write_two_panel_bar_svg(
     title: str,
     panels: list[dict[str, object]],
     output_path: Path,
+    pools: tuple[str, ...] = PLOT_POOLS,
 ) -> None:
     categories = [item for item in plot_data["test_month"].astype(str).unique() if item != "Mean"]
     categories.append("Mean")
+    pools = tuple(pools)
+    pool_count = len(pools)
+    if pool_count <= 0:
+        raise ValueError("at least one pool is required for plotting")
 
     width = 1600
     height = 900
@@ -239,13 +373,16 @@ def _write_two_panel_bar_svg(
     chart_width = right - left
     group_step = chart_width / len(categories)
     centers = [left + group_step * (index + 0.5) for index in range(len(categories))]
-    bar_width = min(24.0, group_step * 0.17)
-    bar_gap = min(7.0, group_step * 0.05)
-    offsets = (
-        -(1.5 * bar_width + 1.5 * bar_gap),
-        -(0.5 * bar_width + 0.5 * bar_gap),
-        0.5 * bar_width + 0.5 * bar_gap,
-        1.5 * bar_width + 1.5 * bar_gap,
+    if pools == PLOT_POOLS:
+        bar_width = min(24.0, group_step * 0.17)
+        bar_gap = min(7.0, group_step * 0.05)
+    else:
+        bar_gap = min(7.0, group_step * 0.05)
+        total_group_width = min(110.0, group_step * 0.72)
+        bar_width = min(34.0, (total_group_width - bar_gap * (pool_count - 1)) / pool_count)
+    offsets = tuple(
+        (index - (pool_count - 1) / 2.0) * (bar_width + bar_gap)
+        for index in range(pool_count)
     )
     data_index = plot_data.set_index(["test_month", "pool"])
 
@@ -254,10 +391,13 @@ def _write_two_panel_bar_svg(
         f'<rect width="{width}" height="{height}" fill="#fbfaf7"/>',
         _svg_text(width / 2, 42, title, size=34, weight=800, anchor="middle"),
     ]
-    legend_start = 438.0
+    legend_item_width = 230.0
+    legend_start = (
+        438.0 if pools == PLOT_POOLS else width / 2 - (legend_item_width * pool_count) / 2
+    )
     legend_y = 80.0
-    for index, pool in enumerate(PLOT_POOLS):
-        x = legend_start + 230.0 * index
+    for index, pool in enumerate(pools):
+        x = legend_start + legend_item_width * index
         lines.append(
             f'<rect x="{x:.1f}" y="{legend_y - 12:.1f}" width="34" height="18" '
             f'fill="{PLOT_COLORS[pool]}"/>'
@@ -334,7 +474,7 @@ def _write_two_panel_bar_svg(
                         anchor="middle",
                     )
                 )
-            for pool_index, pool in enumerate(PLOT_POOLS):
+            for pool_index, pool in enumerate(pools):
                 value = float(data_index.loc[(category, pool), column])
                 x = center_x + offsets[pool_index] - bar_width / 2
                 value_y = ymap(value)

@@ -79,3 +79,36 @@ def test_write_universe_sml_pool_internal_plots(tmp_path) -> None:
     )
     trace = json.loads(trace_path.read_text(encoding="utf-8"))
     assert trace["included_months"] == ["2024-01", "2024-02"]
+
+
+def test_write_universe_only_pool_internal_plots(tmp_path) -> None:
+    month_summary = _month_summary().loc[lambda frame: frame["pool"].eq("universe")]
+
+    paths = write_universe_sml_pool_internal_plots(
+        month_summary,
+        tmp_path,
+        output_prefix="pre2020",
+        variant_label="baseline pre2020 universe",
+        pools=("universe",),
+    )
+
+    for path in paths.values():
+        assert Path(path).exists()
+
+    excess_figure = (
+        tmp_path
+        / "pre2020_universe_pool_internal_with_mean"
+        / "pre2020_universe_top100_pool_internal_with_mean.svg"
+    )
+    assert excess_figure.exists()
+    assert "baseline pre2020 universe: universe Top 100" in excess_figure.read_text(
+        encoding="utf-8"
+    )
+
+    trace_path = (
+        tmp_path
+        / "pre2020_universe_rank_ic_with_mean"
+        / "pre2020_universe_rank_ic_with_mean_trace.json"
+    )
+    trace = json.loads(trace_path.read_text(encoding="utf-8"))
+    assert trace["series"] == ["universe"]
