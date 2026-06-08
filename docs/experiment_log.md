@@ -1980,6 +1980,87 @@ output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_
 output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal/baseline_halfyear_2020_2024_universe_sml_weekly_rolling_4w/baseline_halfyear_2020_2024_universe_sml_weekly_rolling_4w.svg
 ```
 
+### 2026-06-08 2025 Halfyear OOS Extension
+
+`os-lgbm-36m-2025-w030-halfyear` 两个 halfyear shard 均已完成：
+
+```text
+2025-01..2025-06: Succeeded, finished 2026-06-08T06:35:32Z
+2025-07..2025-12: Succeeded, finished 2026-06-08T06:36:45Z
+```
+
+已同步到本地：
+
+```text
+output/predictions/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/raw/predictions_2025-01_2025-06.parquet
+output/predictions/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/raw/predictions_2025-07_2025-12.parquet
+output/predictions/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/predictions_all.parquet
+output/local/next_close_labels_2025/opening_2025_next_close_labels_v1.parquet
+experiments/results/metrics/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_metrics_by_year.csv
+experiments/results/metrics/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_metrics_by_month.csv
+```
+
+Training metrics：2025 全年 `group_rank_ic_mean = 0.1316`，`group_rank_ic_ir = 1.4753`，
+`test_rows = 12,311,200`，`test_dates = 243`，`symbols = 5,195`，features 仍为 276。
+
+2025 universe / S / M / L pool-internal Top100 summary：
+
+| pool | short internal excess bps | next internal excess bps | short Rank IC | next Rank IC | positive months short / next |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| universe | +10.63 | -17.18 | 0.132 | 0.004 | 12 / 4 |
+| pool_S | +5.09 | +7.62 | 0.116 | 0.000 | 12 / 8 |
+| pool_M | +5.60 | +8.64 | 0.125 | 0.000 | 12 / 7 |
+| pool_L | +6.19 | +8.19 | 0.129 | 0.001 | 12 / 8 |
+
+半年拆分：
+
+| pool | half | short internal excess bps | next internal excess bps | short Rank IC | next Rank IC | positive months short / next |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| universe | H1 | +12.75 | -22.76 | 0.135 | 0.000 | 6 / 1 |
+| universe | H2 | +8.52 | -12.42 | 0.127 | 0.005 | 6 / 3 |
+| pool_S | H1 | +5.09 | +2.78 | 0.128 | -0.002 | 6 / 3 |
+| pool_S | H2 | +5.01 | +11.22 | 0.104 | 0.000 | 6 / 5 |
+| pool_M | H1 | +5.64 | +4.24 | 0.134 | -0.001 | 6 / 3 |
+| pool_M | H2 | +5.50 | +12.07 | 0.115 | -0.000 | 6 / 4 |
+| pool_L | H1 | +6.34 | +3.36 | 0.137 | -0.000 | 6 / 4 |
+| pool_L | H2 | +6.00 | +11.88 | 0.121 | 0.001 | 6 / 4 |
+
+结论：2025 OOS 的 short leg 明显弱于 2020-2024，但仍保持 12/12 月为正；S/M/L 内 next-close
+为正，且 H2 明显好于 H1。universe next-close 为负，说明 2025 的 next leg 更依赖池内选择口径。
+
+周度补充诊断使用同一交易日等权口径生成：
+
+| pool | weeks | short positive weeks | short 4w worst bps | next positive weeks | next 4w worst bps |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| universe | 53 | 51 | +5.90 | 18 | -63.82 |
+| pool_S | 53 | 52 | +3.32 | 30 | -31.27 |
+| pool_M | 53 | 52 | +3.73 | 30 | -41.65 |
+| pool_L | 53 | 52 | +4.03 | 31 | -46.09 |
+
+轻量归档：
+
+```text
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_pool_internal_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_pool_internal_month_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_pool_internal_halfyear_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_pool_internal_year_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_pool_internal_group_metrics.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_pool_internal_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_rank_ic_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_short_excess_rank_ic_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_next_excess_rank_ic_with_mean.svg
+```
+
+周度输出：
+
+```text
+output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal/daily_pool_internal_summary.csv
+output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal/weekly_pool_internal_summary.csv
+output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal/weekly_pool_internal_overall_summary.csv
+output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal/weekly_worst_windows.csv
+output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal/baseline_halfyear_2025_universe_sml_weekly_rolling_4w/baseline_halfyear_2025_universe_sml_weekly_rolling_4w.svg
+```
+
 ### 归档和保留口径
 
 - 按用户要求，`build_delay2_2024_cache_v1` 已停止；旧 2023/2024 v1 cache 和过期派生 cache 已从 PVC 清掉。
@@ -2014,6 +2095,8 @@ output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_
 | `experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe_*` | halfyear mainline 的 2018-2019 universe-only pool-internal / Rank IC 分析。 |
 | `experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024_*` | halfyear mainline 的 2020-2024 universe / S / M / L pool-internal、Rank IC 和分年/半年汇总。 |
 | `output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal` | halfyear mainline 2020-2024 的交易日等权 weekly / 4-week rolling pool-internal 诊断和 SVG。 |
+| `experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_*` | 2025 OOS extension 的 universe / S / M / L pool-internal、Rank IC、plot data 和分年/半年汇总。 |
+| `output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal` | 2025 OOS extension 的交易日等权 weekly / 4-week rolling pool-internal 诊断和 SVG。 |
 | `experiments/results/backtests/gap_risk_penalized_attribution_v1_*` | rolling gap-risk Top100 替换归因的 outcome、feature exposure 和 residual-control 证据。 |
 | `output/local/<run_id>` | ignored artifact-sync buffer；不再作为唯一证据位置。 |
 | `output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw` | 18m rolling 各测试月 prediction shard，用于 alpha Top100 内 risk/short/next 相关诊断。 |
