@@ -458,6 +458,132 @@ def write_weekly_pool_internal_cumulative_plot(
     }
 
 
+def write_daily_pool_internal_cumulative_plot(
+    daily_summary: pd.DataFrame,
+    output_dir: Path,
+    *,
+    input_path: Path | None = None,
+    output_prefix: str = "baseline",
+    output_name: str = "",
+    variant_label: str = "baseline",
+    pools: tuple[str, ...] = PLOT_POOLS,
+    x_label_mode: str = "years_only",
+) -> dict[str, str]:
+    required = {
+        "pool",
+        "date",
+        "short_internal_excess_bps",
+        "next_internal_excess_bps",
+    }
+    missing = sorted(required - set(daily_summary.columns))
+    if missing:
+        raise ValueError(f"daily_summary missing columns: {missing}")
+
+    output_prefix = slug_label(output_prefix)
+    pools = tuple(pools)
+    pool_group_slug = _pool_group_slug(pools)
+    pool_group_title = _pool_group_title(pools)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    columns = ["pool", "date", "short_internal_excess_bps", "next_internal_excess_bps"]
+    plot_data = daily_summary.loc[daily_summary["pool"].isin(pools), columns].copy()
+    plot_data["date"] = pd.to_datetime(plot_data["date"], errors="coerce")
+    plot_data = plot_data.dropna(subset=["date"]).sort_values(["pool", "date"])
+    if plot_data.empty:
+        raise ValueError("daily_summary has no rows for selected pools")
+
+    for column in ("short_internal_excess_bps", "next_internal_excess_bps"):
+        plot_data[column] = (
+            pd.to_numeric(plot_data[column], errors="coerce").astype("float64").round(6)
+        )
+    plot_data["variant"] = variant_label
+    for pool in pools:
+        mask = plot_data["pool"].eq(pool)
+        plot_data.loc[mask, "short_cumulative_internal_excess_bps"] = (
+            plot_data.loc[mask, "short_internal_excess_bps"].fillna(0.0).cumsum()
+        )
+        plot_data.loc[mask, "next_cumulative_internal_excess_bps"] = (
+            plot_data.loc[mask, "next_internal_excess_bps"].fillna(0.0).cumsum()
+        )
+    short_ylim, short_step = _nice_line_axis(
+        plot_data["short_cumulative_internal_excess_bps"],
+        include_zero=True,
+        target_ticks=9,
+    )
+    next_ylim, next_step = _nice_line_axis(
+        plot_data["next_cumulative_internal_excess_bps"],
+        include_zero=True,
+        target_ticks=9,
+    )
+
+    if output_name:
+        chart_dir = output_dir
+        file_stem = slug_label(output_name)
+    else:
+        file_stem = f"{output_prefix}_{pool_group_slug}_daily_cumulative"
+        chart_dir = output_dir / file_stem
+    chart_dir.mkdir(parents=True, exist_ok=True)
+    plot_data_path = chart_dir / f"{file_stem}_plot_data.csv"
+    figure = chart_dir / f"{file_stem}.svg"
+    trace = chart_dir / f"{file_stem}_trace.json"
+
+    csv_data = plot_data.rename(columns={"date": "week_start"}).copy()
+    csv_data["week_start"] = csv_data["week_start"].dt.strftime("%Y-%m-%d")
+    csv_data.to_csv(plot_data_path, index=False, float_format="%.6f")
+
+    _write_two_panel_line_svg(
+        csv_data,
+        title=f"{variant_label}: {pool_group_title} Top 100 \u6c60\u5185\u8d85\u989d\u65e5\u5ea6\u7d2f\u548c",
+        panels=[
+            {
+                "title": "\u77ed\u671f\u6536\u76ca\u7d2f\u548c",
+                "ylabel": "",
+                "column": "short_cumulative_internal_excess_bps",
+                "default_ylim": short_ylim,
+                "tick_step": short_step,
+                "tick_decimals": None,
+                "fixed_ylim": True,
+            },
+            {
+                "title": "\u9694\u591c\u6536\u76ca\u7d2f\u548c",
+                "ylabel": "",
+                "column": "next_cumulative_internal_excess_bps",
+                "default_ylim": next_ylim,
+                "tick_step": next_step,
+                "tick_decimals": None,
+                "fixed_ylim": True,
+            },
+        ],
+        output_path=figure,
+        pools=pools,
+        x_label_mode=x_label_mode,
+    )
+    write_json(
+        trace,
+        {
+            "input": str(input_path) if input_path is not None else None,
+            "plot_data": str(plot_data_path),
+            "figure": str(figure),
+            "variant_label": variant_label,
+            "series": list(pools),
+            "included_dates": sorted(csv_data["week_start"].dropna().astype(str).unique()),
+            "metric": "daily_pool_internal_excess_cumulative_sum",
+            "style": "manual svg two-panel cumulative daily line figure for selected pools",
+            "cumulative_definition": (
+                "per-pool cumulative sum of daily short/next internal excess bps; "
+                "daily rows are averaged across decision clocks before plotting"
+            ),
+            "x_label_mode": x_label_mode,
+        },
+        ensure_ascii=True,
+    )
+    return {
+        "daily_cumulative_plot_data": str(plot_data_path),
+        "daily_cumulative_figure": str(figure),
+        "daily_cumulative_trace": str(trace),
+    }
+
+
 def _write_horizon_excess_rank_ic_plots(
     month_summary: pd.DataFrame,
     output_dir: Path,

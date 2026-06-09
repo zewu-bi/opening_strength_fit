@@ -3,7 +3,11 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from opening_strength_fit.commands.pool_internal_analysis import halfyear_summary, year_summary
+from opening_strength_fit.commands.pool_internal_analysis import (
+    halfyear_summary,
+    prediction_files,
+    year_summary,
+)
 
 
 def _month_row(month: str, short_bps: float, next_bps: float) -> dict[str, object]:
@@ -45,3 +49,16 @@ def test_pool_internal_halfyear_and_year_summaries() -> None:
     assert year["months"] == 3
     assert year["short_positive_months"] == 3
     assert year["next_internal_excess_bps"] == pytest.approx(7.0 / 3.0)
+
+
+def test_prediction_files_can_read_k8s_shard_layout(tmp_path) -> None:
+    first = tmp_path / "month_2022-01" / "predictions.parquet"
+    second = tmp_path / "month_2022-07" / "predictions_2022.parquet"
+    first.parent.mkdir()
+    second.parent.mkdir()
+    first.write_text("first", encoding="utf-8")
+    second.write_text("second", encoding="utf-8")
+
+    paths = prediction_files(tmp_path)
+
+    assert paths == [first, second]

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from opening_strength_fit.commands.k8s_analysis_rendering import render_pool_internal_analysis_job
 from opening_strength_fit.config import config_value as get
 from opening_strength_fit.config import load_toml, run_id, slug
 
@@ -116,6 +117,21 @@ def _wait_for_paths_yaml(config: dict, indent: int) -> str:
 
     timeout_seconds = int(get(config, "k8s", "wait_for_path_timeout_seconds", 21600))
     interval_seconds = int(get(config, "k8s", "wait_for_path_interval_seconds", 60))
+    return _wait_for_specific_paths_yaml(
+        paths,
+        timeout_seconds=timeout_seconds,
+        interval_seconds=interval_seconds,
+        indent=indent,
+    )
+
+
+def _wait_for_specific_paths_yaml(
+    paths: list[str],
+    *,
+    timeout_seconds: int,
+    interval_seconds: int,
+    indent: int,
+) -> str:
     quoted_paths = " ".join(f'"{path.replace(chr(34), chr(92) + chr(34))}"' for path in paths)
     return textwrap.indent(
         textwrap.dedent(
@@ -316,16 +332,28 @@ def _clickhouse_env_from(config: dict, indent: int = 18) -> str:
     secret = str(get(config, "k8s", "clickhouse_secret", "") or "")
     if not secret:
         return ""
-    return textwrap.indent(
-        textwrap.dedent(
-            f"""\
-            envFrom:
-              - secretRef:
-                  name: {secret}
-            """
-        ),
-        " " * indent,
-    )
+    return _env_from_secrets_yaml([secret], indent=indent)
+
+
+def _env_from_secrets_yaml(secret_names: list[str], indent: int = 18) -> str:
+    unique_names = []
+    seen = set()
+    for name in secret_names:
+        item = str(name).strip()
+        if item and item not in seen:
+            unique_names.append(item)
+            seen.add(item)
+    if not unique_names:
+        return ""
+    lines = ["envFrom:"]
+    for name in unique_names:
+        lines.extend(
+            [
+                "  - secretRef:",
+                f"      name: {name}",
+            ]
+        )
+    return textwrap.indent("\n".join(lines) + "\n", " " * indent)
 
 
 def render_training_job(config_path: Path, config: dict, image: str) -> str:
@@ -628,6 +656,11 @@ def main() -> None:
         action="store_true",
         help="Render a sequential per-year or per-month training job.",
     )
+    parser.add_argument(
+        "--analysis",
+        action="store_true",
+        help="Render a cluster-side pool-internal analysis job for the configured run.",
+    )
     args = parser.parse_args()
 
     config_path = Path(args.config)
@@ -635,6 +668,16 @@ def main() -> None:
     run_id_value = run_id(config, config_path)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.analysis:
+        analysis_path = output_dir / f"{run_id_value}_pool_internal_analysis_job.yaml"
+        analysis_path.write_text(
+            render_pool_internal_analysis_job(config_path, config, args.image),
+            encoding="utf-8",
+        )
+        print("rendered_k8s_jobs:")
+        print(f"  analysis: {analysis_path}")
+        return
 
     suffix = "_sharded" if args.sharded else ""
     training_path = output_dir / f"{run_id_value}{suffix}_job.yaml"

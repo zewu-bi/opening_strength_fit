@@ -29,6 +29,11 @@ class RunSpec:
     test_months: int = 1
     test_stride_months: int = 1
     kind: str = "experiment"
+    local_dir: str = ""
+    pool_internal_analysis_enabled: bool = False
+    pool_internal_analysis_dir: str = ""
+    pool_internal_record_prefix: str = ""
+    pool_internal_archive_profile: str = ""
 
     @property
     def job_name(self) -> str:
@@ -47,11 +52,44 @@ def _year_from_month(value: object, default: int) -> int:
     return int(str(value).split("-", 1)[0])
 
 
+def _nested_mapping(config: dict, *keys: str) -> dict:
+    values = config
+    for key in keys:
+        value = values.get(key, {}) if isinstance(values, dict) else {}
+        if not isinstance(value, dict):
+            return {}
+        values = value
+    return values
+
+
+def _nested_bool(config: dict, keys: tuple[str, ...], default: bool) -> bool:
+    values = _nested_mapping(config, *keys[:-1])
+    value = values.get(keys[-1], default)
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return bool(value)
+
+
+def _nested_str(config: dict, keys: tuple[str, ...], default: str) -> str:
+    values = _nested_mapping(config, *keys[:-1])
+    value = values.get(keys[-1], default)
+    return default if value is None else str(value)
+
+
 def load_run_spec(path: str | Path) -> RunSpec:
     config_path = Path(path)
     config = load_toml(config_path)
     run_id_value = run_id(config, config_path)
     mount_path = str(config_value(config, "k8s", "mount_path", "/mnt/output"))
+    pvc_dir = str(
+        config_value(
+            config,
+            "output",
+            "k8s_dir",
+            f"{mount_path}/opening_strength_fit/{run_id_value}",
+        )
+    )
+    default_pool_internal_dir = f"{pvc_dir.rstrip('/')}/analysis/pool_internal_top100"
     start_year = _year_from_date(
         config_value(config, "window", "test_start_date", None),
         0,
@@ -68,14 +106,7 @@ def load_run_spec(path: str | Path) -> RunSpec:
         end_year = _year_from_month(test_end_month, start_year)
     return RunSpec(
         run_id=run_id_value,
-        pvc_dir=str(
-            config_value(
-                config,
-                "output",
-                "k8s_dir",
-                f"{mount_path}/opening_strength_fit/{run_id_value}",
-            )
-        ),
+        pvc_dir=pvc_dir,
         namespace=str(config_value(config, "k8s", "namespace", "bizewu")),
         pvc=str(config_value(config, "k8s", "pvc", "bizewu-private-data")),
         mount_path=mount_path,
@@ -96,6 +127,27 @@ def load_run_spec(path: str | Path) -> RunSpec:
             or 1
         ),
         kind=str(config_value(config, "run", "kind", "experiment")),
+        local_dir=str(config_value(config, "output", "local_dir", "") or ""),
+        pool_internal_analysis_enabled=_nested_bool(
+            config,
+            ("analysis", "pool_internal", "enabled"),
+            False,
+        ),
+        pool_internal_analysis_dir=_nested_str(
+            config,
+            ("analysis", "pool_internal", "output_dir"),
+            default_pool_internal_dir,
+        ),
+        pool_internal_record_prefix=_nested_str(
+            config,
+            ("analysis", "pool_internal", "record_prefix"),
+            run_id_value,
+        ),
+        pool_internal_archive_profile=_nested_str(
+            config,
+            ("analysis", "pool_internal", "archive", "profile"),
+            "",
+        ),
     )
 
 

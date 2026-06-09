@@ -5,6 +5,7 @@ from pathlib import Path
 
 from opening_strength_fit.commands.k8s_rendering import (
     _k8s_job_name,  # noqa: E402
+    render_pool_internal_analysis_job,  # noqa: E402
     render_sharded_training_job,  # noqa: E402
     training_command,  # noqa: E402
 )
@@ -142,6 +143,63 @@ class K8sHelperTest(unittest.TestCase):
         config = {"run": {"kind": "next_close_label_cache"}}
 
         self.assertEqual(training_command(config), "osf-build-next-close-labels")
+
+    def test_pool_internal_analysis_job_uses_cluster_artifacts(self) -> None:
+        config = {
+            "run": {
+                "id": "lgbm_delay2_36m_2022_2025_pool_l_reg_mid_v1",
+                "kind": "exploration",
+            },
+            "window": {
+                "mode": "rolling_monthly",
+                "train_months": 36,
+                "test_months": 6,
+                "test_stride_months": 6,
+                "test_start_month": "2022-01",
+                "test_end_month": "2022-12",
+            },
+            "evaluation": {"top_n": 100},
+            "output": {
+                "k8s_dir": "/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_pool_l_reg_mid_v1"
+            },
+            "k8s": {
+                "namespace": "bizewu",
+                "pvc": "bizewu-private-data",
+                "clickhouse_secret": "opening-strength-clickhouse",
+            },
+            "analysis": {
+                "pool_internal": {
+                    "enabled": True,
+                    "job_name": "os-analyze-36m-2225-regmid",
+                    "variant": "reg_mid",
+                    "env_secrets": ["xy-fit-ceph-credentials"],
+                    "pools": ["universe", "L"],
+                    "resources": {"memory_limit": "384Gi"},
+                }
+            },
+        }
+
+        manifest = render_pool_internal_analysis_job(
+            Path("experiments/runs/lgbm_delay2_36m_2022_2025_pool_l_reg_mid_v1.toml"),
+            config,
+            "image:tag",
+        )
+
+        self.assertIn("name: os-analyze-36m-2225-regmid", manifest)
+        self.assertIn("name: opening-strength-clickhouse", manifest)
+        self.assertIn("name: xy-fit-ceph-credentials", manifest)
+        self.assertIn(
+            "/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_pool_l_reg_mid_v1/month_2022-01/predictions.parquet",
+            manifest,
+        )
+        self.assertIn(
+            "/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_pool_l_reg_mid_v1/month_2022-07/predictions.parquet",
+            manifest,
+        )
+        self.assertIn("--predictions \\", manifest)
+        self.assertIn("--pool \\\n                universe", manifest)
+        self.assertIn("--pool \\\n                L", manifest)
+        self.assertIn("memory: 384Gi", manifest)
 
 
 if __name__ == "__main__":

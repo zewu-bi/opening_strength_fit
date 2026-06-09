@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-DEFAULT_REPLAY_ROOT = "output/reports/opening_intraday_lgbm_delay_replays"
+DEFAULT_REPLAY_ROOT = "output/legacy/reports/opening_intraday_lgbm_delay_replays"
 DEFAULT_SCENARIO = "proxy_top20"
 RUN_COLORS = {
     "Universe": "#1f77b4",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,7 +15,11 @@ from opening_strength_fit.analysis import (
 from opening_strength_fit.commands.alpha_conditioned_rolling_validation import (
     summarize_group_metrics as summarize_rolling_group_metrics,
 )
-from opening_strength_fit.commands.artifact_sync_remote import fetch_remote_file_if_exists
+from opening_strength_fit.commands.artifact_sync_remote import (
+    fetch_remote_directory_if_exists,
+    fetch_remote_file_if_exists,
+)
+from opening_strength_fit.commands.pool_internal_analysis import record_pool_internal_outputs
 from opening_strength_fit.k8s import RunSpec
 
 SCORE_RISK_ARTIFACTS = (
@@ -43,6 +48,17 @@ GAP_ATTRIBUTION_ARTIFACTS = (
     "gap_attribution_residual_penalized_vs_kept.csv",
     "gap_attribution_trace.json",
 )
+DEFAULT_ARTIFACTS_ROOT = Path("output/artifacts")
+PRESENTATION_CORE_ARCHIVE_PROFILE = "presentation_core"
+PRESENTATION_CORE_REPORT_KEYS = {
+    "short_excess_rank_ic_plot_data",
+    "short_excess_rank_ic_figure",
+    "next_excess_rank_ic_plot_data",
+    "next_excess_rank_ic_figure",
+    "daily_cumulative_plot_data",
+    "daily_cumulative_figure",
+    "daily_cumulative_trace",
+}
 
 
 def is_score_risk_sweep(spec: RunSpec) -> bool:
@@ -57,18 +73,29 @@ def is_gap_attribution(spec: RunSpec) -> bool:
     return spec.kind == "gap_risk_attribution"
 
 
+def is_pool_internal_analysis(spec: RunSpec) -> bool:
+    return spec.pool_internal_analysis_enabled
+
+
 def is_non_standard_artifact_run(spec: RunSpec) -> bool:
     return is_score_risk_sweep(spec) or is_rolling_validation(spec) or is_gap_attribution(spec)
+
+
+def local_artifact_dir(spec: RunSpec, output_root: Path | None) -> Path:
+    if output_root is None and spec.local_dir:
+        return Path(spec.local_dir)
+    root = DEFAULT_ARTIFACTS_ROOT if output_root is None else output_root
+    return root / spec.run_id
 
 
 def pull_artifact_set(
     hfcli: str,
     spec: RunSpec,
     pod_name: str,
-    output_root: Path,
+    output_root: Path | None,
     artifact_names: tuple[str, ...],
 ) -> tuple[Path, list[Path], list[str]]:
-    output_dir = output_root / spec.run_id
+    output_dir = local_artifact_dir(spec, output_root)
     output_dir.mkdir(parents=True, exist_ok=True)
     pulled: list[Path] = []
     missing: list[str] = []
@@ -103,7 +130,7 @@ def pull_score_risk_artifacts(
     hfcli: str,
     spec: RunSpec,
     pod_name: str,
-    output_root: Path,
+    output_root: Path | None,
 ) -> list[Path]:
     output_dir, pulled, missing = pull_artifact_set(
         hfcli,
@@ -122,7 +149,7 @@ def pull_rolling_validation_artifacts(
     hfcli: str,
     spec: RunSpec,
     pod_name: str,
-    output_root: Path,
+    output_root: Path | None,
 ) -> list[Path]:
     output_dir, pulled, missing = pull_artifact_set(
         hfcli,
@@ -156,7 +183,7 @@ def pull_gap_attribution_artifacts(
     hfcli: str,
     spec: RunSpec,
     pod_name: str,
-    output_root: Path,
+    output_root: Path | None,
 ) -> list[Path]:
     output_dir, pulled, missing = pull_artifact_set(
         hfcli,
@@ -169,6 +196,65 @@ def pull_gap_attribution_artifacts(
         raise SystemExit(f"{spec.run_id}: no gap-attribution artifacts found under {spec.pvc_dir}")
     record_artifact_fetch(spec, output_dir, pulled, missing)
     return pulled
+
+
+def pull_pool_internal_analysis_artifacts(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    output_root: Path | None,
+) -> list[Path]:
+    if not spec.pool_internal_analysis_enabled:
+        return []
+    output_dir = local_artifact_dir(spec, output_root)
+    if not fetch_remote_directory_if_exists(
+        hfcli,
+        spec,
+        pod_name,
+        spec.pool_internal_analysis_dir,
+        output_dir,
+    ):
+        raise SystemExit(
+            f"{spec.run_id}: no pool-internal analysis artifacts found under "
+            f"{spec.pool_internal_analysis_dir}"
+        )
+    _prune_pool_internal_artifacts_for_archive_profile(spec, output_dir)
+    pulled = sorted(path for path in output_dir.rglob("*") if path.is_file())
+    record_artifact_fetch(spec, output_dir, pulled, [])
+    return pulled
+
+
+def _prune_pool_internal_artifacts_for_archive_profile(
+    spec: RunSpec,
+    output_dir: Path,
+) -> None:
+    if spec.pool_internal_archive_profile != PRESENTATION_CORE_ARCHIVE_PROFILE:
+        return
+    trace_path = output_dir / "pool_internal_trace.json"
+    if not trace_path.exists():
+        return
+    payload = json.loads(trace_path.read_text(encoding="utf-8"))
+    report_plots = payload.get("report_plots", {})
+    if not isinstance(report_plots, dict):
+        return
+    payload["report_plots"] = {
+        key: value for key, value in report_plots.items() if key in PRESENTATION_CORE_REPORT_KEYS
+    }
+    keep_dirs = set()
+    for value in payload["report_plots"].values():
+        parts = Path(str(value)).parts
+        if "reports" in parts:
+            index = parts.index("reports")
+            if index + 1 < len(parts):
+                keep_dirs.add(parts[index + 1])
+    reports_dir = output_dir / "reports"
+    if reports_dir.exists():
+        for path in reports_dir.iterdir():
+            if path.is_dir() and path.name not in keep_dirs:
+                shutil.rmtree(path)
+            elif path.is_file():
+                path.unlink()
+    write_json(trace_path, payload, ensure_ascii=True)
 
 
 def combine_rolling_validation_shards(
@@ -262,11 +348,24 @@ def record_artifact_file(source: Path, destination: Path) -> Path | None:
 
 def record_lightweight_artifacts(
     spec: RunSpec,
-    artifacts_root: Path,
+    artifacts_root: Path | None,
     records_dir: Path,
 ) -> list[Path]:
-    output_dir = artifacts_root / spec.run_id
+    output_dir = local_artifact_dir(spec, artifacts_root)
     backtests_dir = records_dir / "backtests"
+    if is_pool_internal_analysis(spec):
+        report_plots = _local_pool_internal_report_plots(
+            spec,
+            output_dir,
+        )
+        record_prefix = spec.pool_internal_record_prefix or spec.run_id
+        return record_pool_internal_outputs(
+            output_dir=output_dir,
+            records_dir=records_dir,
+            record_prefix=record_prefix,
+            report_plots=report_plots,
+            record_subdir=record_prefix,
+        )
     if is_score_risk_sweep(spec):
         records = [
             (
@@ -275,45 +374,47 @@ def record_lightweight_artifacts(
             ),
         ]
     elif is_rolling_validation(spec):
+        archive_dir = backtests_dir / spec.run_id
         records = [
             (
                 output_dir / "rolling_summary.csv",
-                backtests_dir / f"{spec.run_id}_summary.csv",
+                archive_dir / "summary.csv",
             ),
             (
                 output_dir / "rolling_month_summary.csv",
-                backtests_dir / f"{spec.run_id}_month_summary.csv",
+                archive_dir / "month_summary.csv",
             ),
             (
                 output_dir / "rolling_trace.json",
-                backtests_dir / f"{spec.run_id}_trace.json",
+                archive_dir / "trace.json",
             ),
         ]
     elif is_gap_attribution(spec):
+        archive_dir = backtests_dir / spec.run_id
         records = [
             (
                 output_dir / "gap_attribution_outcomes_by_month.csv",
-                backtests_dir / f"{spec.run_id}_outcomes_by_month.csv",
+                archive_dir / "outcomes_by_month.csv",
             ),
             (
                 output_dir / "gap_attribution_outcomes_overall.csv",
-                backtests_dir / f"{spec.run_id}_outcomes_overall.csv",
+                archive_dir / "outcomes_overall.csv",
             ),
             (
                 output_dir / "gap_attribution_feature_exposure_overall.csv",
-                backtests_dir / f"{spec.run_id}_feature_exposure_overall.csv",
+                archive_dir / "feature_exposure_overall.csv",
             ),
             (
                 output_dir / "gap_attribution_penalized_feature_delta.csv",
-                backtests_dir / f"{spec.run_id}_penalized_feature_delta.csv",
+                archive_dir / "penalized_feature_delta.csv",
             ),
             (
                 output_dir / "gap_attribution_residual_penalized_vs_kept.csv",
-                backtests_dir / f"{spec.run_id}_residual_penalized_vs_kept.csv",
+                archive_dir / "residual_penalized_vs_kept.csv",
             ),
             (
                 output_dir / "gap_attribution_trace.json",
-                backtests_dir / f"{spec.run_id}_trace.json",
+                archive_dir / "trace.json",
             ),
         ]
     else:
@@ -324,3 +425,27 @@ def record_lightweight_artifacts(
         for source, destination in records
         if (path := record_artifact_file(source, destination)) is not None
     ]
+
+
+def _local_pool_internal_report_plots(spec: RunSpec, output_dir: Path) -> dict[str, str]:
+    trace_path = output_dir / "pool_internal_trace.json"
+    if not trace_path.exists():
+        return {}
+    payload = json.loads(trace_path.read_text(encoding="utf-8"))
+    remote_plots = payload.get("report_plots", {})
+    if not isinstance(remote_plots, dict):
+        return {}
+    local_plots: dict[str, str] = {}
+    remote_root = spec.pool_internal_analysis_dir.rstrip("/")
+    for key, raw_path in remote_plots.items():
+        remote_path = str(raw_path)
+        if remote_path.startswith(f"{remote_root}/"):
+            local_path = output_dir / remote_path[len(remote_root) + 1 :]
+        elif remote_path == remote_root:
+            local_path = output_dir
+        else:
+            matches = sorted(output_dir.rglob(Path(remote_path).name))
+            local_path = matches[0] if matches else output_dir / Path(remote_path).name
+        if local_path.exists():
+            local_plots[str(key)] = str(local_path)
+    return local_plots

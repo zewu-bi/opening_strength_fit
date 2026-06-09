@@ -29,8 +29,10 @@ from opening_strength_fit.commands.next_close_label_cache import fetch_next_clos
 from opening_strength_fit.io import read_frame as shared_read_frame
 from opening_strength_fit.model import corr
 
-DEFAULT_INPUT = "output/predictions/lgbm_opening_1y_next_month_delay2/predictions_all.parquet"
-DEFAULT_OUTPUT_DIR = "output/reports/experiment0_delay2_four_panel_baseline"
+DEFAULT_INPUT = (
+    "output/legacy/predictions/lgbm_opening_1y_next_month_delay2/predictions_all.parquet"
+)
+DEFAULT_OUTPUT_DIR = "output/legacy/reports/experiment0_delay2_four_panel_baseline"
 DEFAULT_CLOSE_OFFSET_US = 54_000_000_000
 DEFAULT_CLOSE_LOOKBACK_SECONDS = 1_800
 STALE_OUTPUTS = ("next_close_top100_return_by_minute.png",)

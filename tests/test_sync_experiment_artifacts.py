@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,6 +13,7 @@ from opening_strength_fit.commands.artifact_sync import (
     combine_rolling_validation_shards,  # noqa: E402
     pull_gap_attribution_artifacts,  # noqa: E402
     pull_next_close_labels,  # noqa: E402
+    pull_pool_internal_analysis_artifacts,  # noqa: E402
     pull_rolling_validation_shards,  # noqa: E402
     pull_score_risk_artifacts,  # noqa: E402
     record_lightweight_artifacts,  # noqa: E402
@@ -90,6 +92,17 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
             [path.name for path in paths],
             ["test_run_metrics_by_year.csv", "test_run_metrics_by_month.csv"],
         )
+
+    def test_record_metrics_accepts_results_metrics_as_source(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            metrics_dir = root / "results" / "metrics"
+            metrics_dir.mkdir(parents=True)
+            (metrics_dir / "test_run_metrics_by_year.csv").write_text("year\n", encoding="utf-8")
+
+            paths = record_metrics("test_run", metrics_dir, root / "results")
+
+        self.assertEqual(paths, [metrics_dir / "test_run_metrics_by_year.csv"])
 
     def test_next_close_label_years_use_halfyear_window_range(self) -> None:
         spec = RunSpec(
@@ -213,7 +226,7 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            output_dir = root / "local" / spec.run_id
+            output_dir = root / "artifacts" / spec.run_id
             output_dir.mkdir(parents=True)
             (output_dir / "rolling_summary.csv").write_text(
                 "summary\n",
@@ -231,18 +244,205 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
 
             paths = record_lightweight_artifacts(
                 spec,
-                root / "local",
+                root / "artifacts",
                 root / "results",
             )
 
         self.assertEqual(
-            [path.name for path in paths],
+            [path.relative_to(Path(directory) / "results").as_posix() for path in paths],
             [
-                "rolling_alpha_conditioned_top100_validation_v1_summary.csv",
-                "rolling_alpha_conditioned_top100_validation_v1_month_summary.csv",
-                "rolling_alpha_conditioned_top100_validation_v1_trace.json",
+                "backtests/rolling_alpha_conditioned_top100_validation_v1/summary.csv",
+                "backtests/rolling_alpha_conditioned_top100_validation_v1/month_summary.csv",
+                "backtests/rolling_alpha_conditioned_top100_validation_v1/trace.json",
             ],
         )
+
+    def test_pool_internal_analysis_artifacts_pull_and_record(self) -> None:
+        spec = RunSpec(
+            run_id="lgbm_delay2_36m_2022_2025_pool_l_reg_mid_v1",
+            pvc_dir="/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_pool_l_reg_mid_v1",
+            namespace="bizewu",
+            pvc="bizewu-private-data",
+            mount_path="/mnt/output",
+            pull_secret="highfort",
+            image="image",
+            test_start_year=0,
+            test_end_year=0,
+            test_start_month="2022-01",
+            test_end_month="2025-12",
+            kind="exploration",
+            pool_internal_analysis_enabled=True,
+            pool_internal_analysis_dir="/mnt/output/opening_strength_fit/run/analysis/pool_internal_top100",
+            pool_internal_record_prefix="reg_mid_record",
+        )
+
+        def fake_fetch(_hfcli, _spec, _pod, _remote_dir, local_dir):
+            local_dir.mkdir(parents=True, exist_ok=True)
+            (local_dir / "pool_internal_summary.csv").write_text(
+                "pool,short_internal_excess_bps\npool_L,1.0\n",
+                encoding="utf-8",
+            )
+            (local_dir / "pool_internal_month_summary.csv").write_text(
+                "pool,test_month\npool_L,2022-01\n",
+                encoding="utf-8",
+            )
+            (local_dir / "pool_internal_clock_summary.csv").write_text(
+                "pool,clock\npool_L,09:31\n",
+                encoding="utf-8",
+            )
+            (local_dir / "pool_internal_group_metrics.csv").write_text(
+                "pool,date\npool_L,2022-01-04\n",
+                encoding="utf-8",
+            )
+            (local_dir / "pool_internal_halfyear_summary.csv").write_text(
+                "pool,year,half\npool_L,2022,H1\n",
+                encoding="utf-8",
+            )
+            (local_dir / "pool_internal_year_summary.csv").write_text(
+                "pool,year\npool_L,2022\n",
+                encoding="utf-8",
+            )
+            report = (
+                local_dir
+                / "reports"
+                / "reg_mid_universe_sml_pool_internal_with_mean"
+                / "reg_mid_universe_sml_top100_pool_internal_with_mean.svg"
+            )
+            report.parent.mkdir(parents=True)
+            report.write_text("<svg />\n", encoding="utf-8")
+            plot_data = report.with_name(
+                "reg_mid_universe_sml_pool_internal_with_mean_plot_data.csv"
+            )
+            plot_data.write_text("test_month,pool\nMean,pool_L\n", encoding="utf-8")
+            trace = {
+                "report_plots": {
+                    "pool_internal_figure": (
+                        "/mnt/output/opening_strength_fit/run/analysis/pool_internal_top100/"
+                        "reports/reg_mid_universe_sml_pool_internal_with_mean/"
+                        "reg_mid_universe_sml_top100_pool_internal_with_mean.svg"
+                    ),
+                    "pool_internal_plot_data": (
+                        "/mnt/output/opening_strength_fit/run/analysis/pool_internal_top100/"
+                        "reports/reg_mid_universe_sml_pool_internal_with_mean/"
+                        "reg_mid_universe_sml_pool_internal_with_mean_plot_data.csv"
+                    ),
+                }
+            }
+            (local_dir / "pool_internal_trace.json").write_text(
+                json.dumps(trace),
+                encoding="utf-8",
+            )
+            return True
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch(
+                "opening_strength_fit.commands.artifact_sync_artifacts.fetch_remote_directory_if_exists",
+                side_effect=fake_fetch,
+            ):
+                pulled = pull_pool_internal_analysis_artifacts(
+                    "hfcli",
+                    spec,
+                    "helper-pod",
+                    root / "artifacts",
+                )
+            recorded = record_lightweight_artifacts(
+                spec,
+                root / "artifacts",
+                root / "results",
+            )
+
+        self.assertIn(root / "artifacts" / spec.run_id / "pool_internal_summary.csv", pulled)
+        recorded_rel = [path.relative_to(root / "results").as_posix() for path in recorded]
+        self.assertIn(
+            "backtests/reg_mid_record/pool_internal_summary.csv",
+            recorded_rel,
+        )
+        self.assertIn(
+            "backtests/reg_mid_record/pool_internal_with_mean.svg",
+            recorded_rel,
+        )
+
+    def test_presentation_core_archive_profile_prunes_reports_from_config(self) -> None:
+        spec = RunSpec(
+            run_id="presentation_run",
+            pvc_dir="/mnt/output/opening_strength_fit/presentation_run",
+            namespace="bizewu",
+            pvc="bizewu-private-data",
+            mount_path="/mnt/output",
+            pull_secret="highfort",
+            image="image",
+            test_start_year=0,
+            test_end_year=0,
+            kind="pool_internal_analysis",
+            pool_internal_analysis_enabled=True,
+            pool_internal_analysis_dir="/mnt/output/opening_strength_fit/presentation_run/analysis",
+            pool_internal_archive_profile="presentation_core",
+        )
+
+        def fake_fetch(_hfcli, _spec, _pod, _remote_dir, local_dir):
+            local_dir.mkdir(parents=True)
+            keep = local_dir / "reports" / "variant_universe_pool_l_short_excess_rank_ic_with_mean"
+            stale = local_dir / "reports" / "variant_universe_sml_short_excess_rank_ic_with_mean"
+            drop = local_dir / "reports" / "variant_rank_ic_with_mean"
+            keep.mkdir(parents=True)
+            stale.mkdir(parents=True)
+            drop.mkdir(parents=True)
+            (keep / "keep.svg").write_text("<svg />\n", encoding="utf-8")
+            (stale / "stale.svg").write_text("<svg />\n", encoding="utf-8")
+            (drop / "drop.svg").write_text("<svg />\n", encoding="utf-8")
+            (local_dir / "pool_internal_trace.json").write_text(
+                json.dumps(
+                    {
+                        "report_plots": {
+                            "short_excess_rank_ic_figure": (
+                                "/mnt/output/opening_strength_fit/presentation_run/analysis/"
+                                "reports/variant_universe_pool_l_short_excess_rank_ic_with_mean/"
+                                "keep.svg"
+                            ),
+                            "rank_ic_figure": (
+                                "/mnt/output/opening_strength_fit/presentation_run/analysis/"
+                                "reports/variant_rank_ic_with_mean/drop.svg"
+                            ),
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            return True
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch(
+                "opening_strength_fit.commands.artifact_sync_artifacts.fetch_remote_directory_if_exists",
+                side_effect=fake_fetch,
+            ):
+                pull_pool_internal_analysis_artifacts(
+                    "hfcli",
+                    spec,
+                    "helper-pod",
+                    root,
+                )
+            output_dir = root / spec.run_id
+            trace = json.loads((output_dir / "pool_internal_trace.json").read_text())
+
+            self.assertTrue(
+                (
+                    output_dir
+                    / "reports"
+                    / "variant_universe_pool_l_short_excess_rank_ic_with_mean"
+                ).exists()
+            )
+            self.assertFalse(
+                (
+                    output_dir / "reports" / "variant_universe_sml_short_excess_rank_ic_with_mean"
+                ).exists()
+            )
+            self.assertFalse((output_dir / "reports" / "variant_rank_ic_with_mean").exists())
+            self.assertEqual(
+                set(trace["report_plots"]),
+                {"short_excess_rank_ic_figure"},
+            )
 
     def test_rolling_validation_shards_are_combined_locally(self) -> None:
         rows = [

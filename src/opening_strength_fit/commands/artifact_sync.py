@@ -9,9 +9,12 @@ from opening_strength_fit.commands.artifact_sync_artifacts import (
 from opening_strength_fit.commands.artifact_sync_artifacts import (
     is_gap_attribution,
     is_non_standard_artifact_run,
+    is_pool_internal_analysis,
     is_rolling_validation,
     is_score_risk_sweep,
+    local_artifact_dir,
     pull_gap_attribution_artifacts,
+    pull_pool_internal_analysis_artifacts,
     pull_rolling_validation_artifacts,
     pull_score_risk_artifacts,
     record_lightweight_artifacts,
@@ -38,6 +41,10 @@ from opening_strength_fit.k8s import (
     ensure_temp_pod,
     load_run_spec,
 )
+
+DEFAULT_METRICS_DIR = "experiments/results/metrics"
+DEFAULT_PARTIAL_METRICS_DIR = "output/artifacts/_partial_metrics"
+DEFAULT_METRIC_SHARDS_ROOT = "output/artifacts"
 
 
 def parse_run(value: str) -> tuple[str, str]:
@@ -86,7 +93,7 @@ def validate_specs(specs: list[RunSpec]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Sync K8s PVC metrics/predictions and archive lightweight records."
+        description="Sync K8s PVC metrics and lightweight analysis artifacts."
     )
     parser.add_argument("--config", action="append", type=load_run_spec)
     parser.add_argument("--run", action="append", type=parse_run)
@@ -94,19 +101,52 @@ def main() -> None:
     parser.add_argument("--hfcli", default="hfcli")
     parser.add_argument("--pod", default="")
     parser.add_argument("--timeout", default="300s")
-    parser.add_argument("--metrics-dir", default="output/k8s/metrics")
-    parser.add_argument("--predictions-root", default="output/predictions")
-    parser.add_argument("--artifacts-root", default="output/local")
-    parser.add_argument("--next-close-labels-root", default="output/local")
+    parser.add_argument(
+        "--metrics-dir",
+        default=DEFAULT_METRICS_DIR,
+        help="Directory for synced metrics CSVs. Defaults to the formal results archive.",
+    )
+    parser.add_argument(
+        "--partial-metrics-dir",
+        default=DEFAULT_PARTIAL_METRICS_DIR,
+        help="Directory for --allow-partial metrics so incomplete runs do not touch results.",
+    )
+    parser.add_argument(
+        "--metric-shards-root",
+        default=DEFAULT_METRIC_SHARDS_ROOT,
+        help="Ignored root for raw sharded metrics fetched before local combination.",
+    )
+    parser.add_argument("--predictions-root", default="output/legacy/predictions")
+    parser.add_argument(
+        "--artifacts-root",
+        default="",
+        help=(
+            "Override the local artifact mirror root. Defaults to each run config's "
+            "[output].local_dir, falling back to output/artifacts/<run_id>."
+        ),
+    )
+    parser.add_argument("--next-close-labels-root", default="output/legacy/labels")
     parser.add_argument("--next-close-label-pvc-dir", default=DEFAULT_NEXT_CLOSE_LABEL_PVC_DIR)
     parser.add_argument("--records-dir", default="experiments/results")
     parser.add_argument("--runs-dir", default="experiments/runs")
     parser.add_argument("--metrics", action="store_true", help="Fetch metrics CSVs.")
-    parser.add_argument("--predictions", action="store_true", help="Fetch prediction parquet.")
+    parser.add_argument(
+        "--predictions",
+        action="store_true",
+        help="Fetch prediction parquet explicitly. Cluster-side analysis artifacts do not need this.",
+    )
     parser.add_argument(
         "--artifacts",
         action="store_true",
-        help="Fetch non-standard artifact files, currently score-risk sweep outputs.",
+        help=(
+            "Fetch lightweight artifact files, including cluster-side pool-internal "
+            "analysis outputs and non-standard sweep outputs."
+        ),
+    )
+    parser.add_argument(
+        "--analysis-artifacts",
+        action="store_true",
+        help="Alias for --artifacts when the config declares cluster-side analysis.",
     )
     parser.add_argument(
         "--next-close-labels",
@@ -115,7 +155,12 @@ def main() -> None:
     )
     parser.add_argument("--record", action="store_true", help="Archive fetched metrics.")
     parser.add_argument(
-        "--all", action="store_true", help="Fetch metrics, fetch predictions, and archive metrics."
+        "--all",
+        action="store_true",
+        help=(
+            "Fetch metrics and lightweight cluster-side artifacts, then archive them. "
+            "Prediction parquet is only fetched with --predictions."
+        ),
     )
     parser.add_argument(
         "--allow-partial",
@@ -141,23 +186,29 @@ def main() -> None:
         args.metrics
         or args.predictions
         or args.artifacts
+        or args.analysis_artifacts
         or args.next_close_labels
         or args.record
         or args.all
     )
     fetch_metrics_flag = args.all or args.metrics or no_action
-    fetch_predictions_flag = args.all or args.predictions or no_action
-    fetch_artifacts_flag = args.all or args.artifacts or no_action
+    fetch_predictions_flag = args.predictions
+    fetch_artifacts_flag = args.all or args.artifacts or args.analysis_artifacts or no_action
     fetch_next_close_labels_flag = args.next_close_labels
     record_flag = args.all or args.record or no_action
     if args.allow_partial:
         record_flag = False
 
-    metrics_dir = Path(args.metrics_dir)
-    predictions_root = Path(args.predictions_root)
-    artifacts_root = Path(args.artifacts_root)
-    next_close_labels_root = Path(args.next_close_labels_root)
     records_dir = Path(args.records_dir)
+    metrics_dir = Path(args.metrics_dir)
+    if args.metrics_dir == DEFAULT_METRICS_DIR:
+        metrics_dir = records_dir / "metrics"
+    if args.allow_partial and args.metrics_dir == DEFAULT_METRICS_DIR:
+        metrics_dir = Path(args.partial_metrics_dir)
+    metric_shards_root = Path(args.metric_shards_root)
+    predictions_root = Path(args.predictions_root)
+    artifacts_root = Path(args.artifacts_root) if args.artifacts_root else None
+    next_close_labels_root = Path(args.next_close_labels_root)
     needs_pod = (
         fetch_metrics_flag
         or fetch_predictions_flag
@@ -180,8 +231,12 @@ def main() -> None:
         print("sync_plan:")
         print(f"  pod: {pod_name or '<none>'}")
         print(f"  metrics: {fetch_metrics_flag}")
+        print(f"  metrics_dir: {metrics_dir}")
         print(f"  predictions: {fetch_predictions_flag}")
         print(f"  artifacts: {fetch_artifacts_flag}")
+        if fetch_artifacts_flag or record_flag:
+            for spec in specs:
+                print(f"  artifact_dir[{spec.run_id}]: {local_artifact_dir(spec, artifacts_root)}")
         print(f"  next_close_labels: {fetch_next_close_labels_flag}")
         print(f"  record: {record_flag}")
         print(f"  allow_partial: {args.allow_partial}")
@@ -194,6 +249,9 @@ def main() -> None:
         if fetch_metrics_flag:
             print("pulled_metrics:")
             for spec in specs:
+                if spec.kind == "pool_internal_analysis" and not args.metrics:
+                    print(f"  {spec.run_id}: skipped metrics for {spec.kind}")
+                    continue
                 if is_non_standard_artifact_run(spec) and not args.metrics:
                     print(f"  {spec.run_id}: skipped metrics for {spec.kind}")
                     continue
@@ -203,6 +261,7 @@ def main() -> None:
                     pod_name,
                     metrics_dir,
                     allow_partial=args.allow_partial,
+                    raw_root=metric_shards_root,
                 )
                 print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
         if fetch_predictions_flag:
@@ -222,6 +281,15 @@ def main() -> None:
         if fetch_artifacts_flag:
             print("pulled_artifacts:")
             for spec in specs:
+                if is_pool_internal_analysis(spec):
+                    paths = pull_pool_internal_analysis_artifacts(
+                        args.hfcli,
+                        spec,
+                        pod_name,
+                        artifacts_root,
+                    )
+                    print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
+                    continue
                 if not is_non_standard_artifact_run(spec):
                     if args.artifacts:
                         print(f"  {spec.run_id}: no artifact sync configured")
@@ -266,6 +334,9 @@ def main() -> None:
     if record_flag:
         print("recorded_metrics:")
         for spec in specs:
+            if spec.kind == "pool_internal_analysis" and not args.metrics:
+                print(f"  {spec.run_id}: no metrics to record for {spec.kind}")
+                continue
             paths = record_metrics(spec.run_id, metrics_dir, records_dir)
             status = statuses.get(spec.run_id, "")
             if paths:
@@ -287,6 +358,8 @@ def main() -> None:
             )
             if paths:
                 print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
+            elif is_pool_internal_analysis(spec):
+                print(f"  {spec.run_id}: no pool-internal analysis artifacts to record")
             elif is_non_standard_artifact_run(spec):
                 print(f"  {spec.run_id}: no lightweight artifacts to record")
 

@@ -51,7 +51,9 @@ RESULT_COLUMNS = {
     "top_n",
 }
 
-DEFAULT_RUNS = (("gbm", "output/k8s/metrics/gbm_opening_1y_next_month_metrics_by_year.csv"),)
+DEFAULT_RUNS = (
+    ("gbm", "experiments/results/metrics/gbm_opening_1y_next_month_metrics_by_year.csv"),
+)
 
 
 def parse_run(value: str) -> tuple[str, Path]:
@@ -275,7 +277,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--output-dir",
-        default="output/reports/opening_model_comparison",
+        default="output/legacy/reports/opening_model_comparison",
         help="Directory for comparison CSV, Markdown, and PNG output.",
     )
     args = parser.parse_args()

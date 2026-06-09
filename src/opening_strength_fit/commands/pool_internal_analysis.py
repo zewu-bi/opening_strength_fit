@@ -10,11 +10,13 @@ import pandas as pd
 
 from opening_strength_fit.analysis import KEY_COLUMNS, NEXT_CLOSE_LABEL_COL, write_json
 from opening_strength_fit.commands.weekly_pool_internal_plots import (
+    build_daily_summary,
     build_weekly_pool_internal_summaries,
 )
 from opening_strength_fit.io import read_frame
 from opening_strength_fit.pool_internal_plots import (
     slug_label,
+    write_daily_pool_internal_cumulative_plot,
     write_universe_sml_pool_internal_plots,
     write_weekly_pool_internal_rolling_plot,
 )
@@ -77,6 +79,12 @@ def parse_args() -> argparse.Namespace:
         help="Display label used in generated report plot titles. Defaults to --variant.",
     )
     parser.add_argument(
+        "--plot-period",
+        choices=["month", "quarter"],
+        default="month",
+        help="Period aggregation used for report bar plots. Defaults to month.",
+    )
+    parser.add_argument(
         "--pool",
         action="append",
         choices=["universe", "S", "M", "L"],
@@ -116,10 +124,30 @@ def prediction_files(path: Path) -> list[Path]:
     combined = path / "predictions_all.parquet"
     if combined.exists():
         return [combined]
+    single = path / "predictions.parquet"
+    if single.exists():
+        return [single]
+    sharded_files = prediction_shard_files(path)
+    if sharded_files:
+        return sharded_files
     files = sorted(path.glob("predictions_*.parquet"))
     if files:
         return files
     raise SystemExit(f"no prediction parquet files found under: {path}")
+
+
+def prediction_shard_files(path: Path) -> list[Path]:
+    files: list[Path] = []
+    for prefix in ("month_", "year_"):
+        for shard_dir in sorted(item for item in path.glob(f"{prefix}*") if item.is_dir()):
+            single = shard_dir / "predictions.parquet"
+            if single.exists():
+                files.append(single)
+                continue
+            shard_files = sorted(shard_dir.glob("predictions_*.parquet"))
+            if shard_files:
+                files.extend(shard_files)
+    return files
 
 
 def next_close_files(path: Path, years: set[str]) -> list[Path]:
@@ -151,7 +179,12 @@ def normalize_keys(frame: pd.DataFrame) -> pd.DataFrame:
 def read_predictions(paths: list[str], *, score_col: str, short_label_col: str) -> pd.DataFrame:
     required = [*KEY_COLUMNS, score_col, short_label_col]
     files = [file for raw in paths for file in prediction_files(Path(raw))]
-    frames = [read_frame(file, columns=required) for file in files]
+    print(f"reading_predictions: files={len(files)}")
+    frames = []
+    for file in files:
+        frame = read_frame(file, columns=required)
+        print(f"  {file}: rows={len(frame)}")
+        frames.append(frame)
     if not frames:
         raise SystemExit("no prediction files supplied")
     return normalize_keys(pd.concat(frames, ignore_index=True))
@@ -160,7 +193,12 @@ def read_predictions(paths: list[str], *, score_col: str, short_label_col: str) 
 def read_next_close_labels(path: str, *, years: set[str], next_label_col: str) -> pd.DataFrame:
     required = [*KEY_COLUMNS, next_label_col]
     files = next_close_files(Path(path), years)
-    frames = [read_frame(file, columns=required) for file in files]
+    print(f"reading_next_close_labels: files={len(files)} years={','.join(sorted(years))}")
+    frames = []
+    for file in files:
+        frame = read_frame(file, columns=required)
+        print(f"  {file}: rows={len(frame)}")
+        frames.append(frame)
     if not frames:
         raise SystemExit("no next-close label files supplied")
     labels = normalize_keys(pd.concat(frames, ignore_index=True))
@@ -262,14 +300,19 @@ def evaluate_pool(
     ]
 
 
-def summarize_groups(group_metrics: pd.DataFrame, by: list[str]) -> pd.DataFrame:
+def summarize_groups(
+    group_metrics: pd.DataFrame,
+    by: list[str],
+    *,
+    month_col: str = "test_month",
+) -> pd.DataFrame:
     if group_metrics.empty:
         return pd.DataFrame()
     out = (
         group_metrics.groupby(by, sort=False)
         .agg(
             groups=("short_internal_excess_bps", "size"),
-            months=("test_month", "nunique"),
+            months=(month_col, "nunique"),
             candidate_rows=("candidate_rows", "mean"),
             selected_rows=("selected_rows", "mean"),
             pool_short_mean_bps=("pool_short_mean_bps", "mean"),
@@ -372,6 +415,17 @@ def year_summary(month_summary: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def quarter_summary(group_metrics: pd.DataFrame) -> pd.DataFrame:
+    if group_metrics.empty:
+        return pd.DataFrame()
+    frame = group_metrics.copy()
+    frame["_source_month"] = frame["test_month"]
+    frame["test_month"] = (
+        pd.to_datetime(frame["date"], errors="coerce").dt.to_period("Q").astype(str)
+    )
+    return summarize_groups(frame, ["pool", "test_month"], month_col="_source_month")
+
+
 def _csv_ready(frame: pd.DataFrame) -> pd.DataFrame:
     out = frame.copy()
     for column in out.columns:
@@ -447,41 +501,56 @@ def record_pool_internal_outputs(
     records_dir: Path,
     record_prefix: str,
     report_plots: dict[str, str],
+    record_subdir: str = "",
 ) -> list[Path]:
-    backtests_dir = records_dir / "backtests"
+    backtests_dir = records_dir / "backtests" / record_subdir
+
+    def record_name(suffix: str) -> str:
+        return suffix if record_subdir else f"{record_prefix}_{suffix}"
+
     records = [
-        (output_dir / "pool_internal_summary.csv", f"{record_prefix}_pool_internal_summary.csv"),
+        (output_dir / "pool_internal_summary.csv", record_name("pool_internal_summary.csv")),
+        (
+            output_dir / "pool_internal_quarter_summary.csv",
+            record_name("pool_internal_quarter_summary.csv"),
+        ),
+        (
+            output_dir / "daily_pool_internal_summary.csv",
+            record_name("daily_pool_internal_summary.csv"),
+        ),
         (
             output_dir / "pool_internal_month_summary.csv",
-            f"{record_prefix}_pool_internal_month_summary.csv",
+            record_name("pool_internal_month_summary.csv"),
         ),
         (
             output_dir / "pool_internal_clock_summary.csv",
-            f"{record_prefix}_pool_internal_clock_summary.csv",
+            record_name("pool_internal_clock_summary.csv"),
         ),
         (
             output_dir / "pool_internal_group_metrics.csv",
-            f"{record_prefix}_pool_internal_group_metrics.csv",
+            record_name("pool_internal_group_metrics.csv"),
         ),
         (
             output_dir / "pool_internal_halfyear_summary.csv",
-            f"{record_prefix}_pool_internal_halfyear_summary.csv",
+            record_name("pool_internal_halfyear_summary.csv"),
         ),
         (
             output_dir / "pool_internal_year_summary.csv",
-            f"{record_prefix}_pool_internal_year_summary.csv",
+            record_name("pool_internal_year_summary.csv"),
         ),
-        (output_dir / "pool_internal_trace.json", f"{record_prefix}_pool_internal_trace.json"),
+        (output_dir / "pool_internal_trace.json", record_name("pool_internal_trace.json")),
     ]
     plot_records = {
-        "pool_internal_plot_data": f"{record_prefix}_pool_internal_plot_data.csv",
-        "pool_internal_figure": f"{record_prefix}_pool_internal_with_mean.svg",
-        "rank_ic_plot_data": f"{record_prefix}_rank_ic_plot_data.csv",
-        "rank_ic_figure": f"{record_prefix}_rank_ic_with_mean.svg",
-        "short_excess_rank_ic_plot_data": f"{record_prefix}_short_excess_rank_ic_plot_data.csv",
-        "short_excess_rank_ic_figure": f"{record_prefix}_short_excess_rank_ic_with_mean.svg",
-        "next_excess_rank_ic_plot_data": f"{record_prefix}_next_excess_rank_ic_plot_data.csv",
-        "next_excess_rank_ic_figure": f"{record_prefix}_next_excess_rank_ic_with_mean.svg",
+        "pool_internal_plot_data": record_name("pool_internal_plot_data.csv"),
+        "pool_internal_figure": record_name("pool_internal_with_mean.svg"),
+        "rank_ic_plot_data": record_name("rank_ic_plot_data.csv"),
+        "rank_ic_figure": record_name("rank_ic_with_mean.svg"),
+        "short_excess_rank_ic_plot_data": record_name("short_excess_rank_ic_plot_data.csv"),
+        "short_excess_rank_ic_figure": record_name("short_excess_rank_ic_with_mean.svg"),
+        "next_excess_rank_ic_plot_data": record_name("next_excess_rank_ic_plot_data.csv"),
+        "next_excess_rank_ic_figure": record_name("next_excess_rank_ic_with_mean.svg"),
+        "daily_cumulative_plot_data": record_name("daily_cumulative_plot_data.csv"),
+        "daily_cumulative_figure": record_name("daily_cumulative.svg"),
     }
     for key, name in plot_records.items():
         if key in report_plots:
@@ -493,7 +562,7 @@ def record_pool_internal_outputs(
         if trace_path.exists():
             trace_name = name.replace("_plot_data.csv", "_trace.json")
             if trace_name.endswith("_pool_internal_trace.json"):
-                trace_name = f"{record_prefix}_pool_internal_with_mean_trace.json"
+                trace_name = record_name("pool_internal_with_mean_trace.json")
             records.append((trace_path, trace_name))
 
     copied: list[Path] = []
@@ -535,6 +604,10 @@ def main() -> None:
     missing_next = int(frame[args.next_label_col].isna().sum())
     if missing_next:
         print(f"warning: missing next-close labels for {missing_next} prediction rows")
+    print(
+        f"analysis_frame: prediction_rows={len(predictions)} "
+        f"label_rows={len(labels)} joined_rows={len(frame)}"
+    )
 
     group_frames = []
     for pool in pools:
@@ -543,6 +616,7 @@ def main() -> None:
             pool_name = "universe"
         else:
             pool_path = DEFAULT_STOCK_POOL_PATHS[pool]
+            print(f"loading_stock_pool: pool={pool} path={pool_path}")
             pool_frame = frame.loc[
                 stock_pool_membership_mask(
                     frame,
@@ -551,6 +625,7 @@ def main() -> None:
                 )
             ].copy()
             pool_name = f"pool_{pool}"
+        print(f"evaluating_pool: pool={pool_name} rows={len(pool_frame)}")
         group_frames.append(
             evaluate_pool(
                 pool_frame,
@@ -564,6 +639,7 @@ def main() -> None:
 
     group_metrics = pd.concat(group_frames, ignore_index=True) if group_frames else pd.DataFrame()
     month_summary = summarize_groups(group_metrics, ["pool", "test_month"])
+    quarterly = quarter_summary(group_metrics)
     clock_summary = summarize_groups(group_metrics, ["pool", "clock"])
     halfyear = halfyear_summary(month_summary)
     yearly = year_summary(month_summary)
@@ -579,23 +655,47 @@ def main() -> None:
     group_metrics.to_csv(output_dir / "pool_internal_group_metrics.csv", index=False)
     month_summary_path = output_dir / "pool_internal_month_summary.csv"
     month_summary.to_csv(month_summary_path, index=False)
+    quarter_summary_path = output_dir / "pool_internal_quarter_summary.csv"
+    quarterly.to_csv(quarter_summary_path, index=False)
     clock_summary.to_csv(output_dir / "pool_internal_clock_summary.csv", index=False)
     halfyear.to_csv(output_dir / "pool_internal_halfyear_summary.csv", index=False)
     yearly.to_csv(output_dir / "pool_internal_year_summary.csv", index=False)
     summary.to_csv(output_dir / "pool_internal_summary.csv", index=False)
+    plot_pools = tuple("universe" if pool == "universe" else f"pool_{pool}" for pool in pools)
+    daily = pd.DataFrame()
+    if not group_metrics.empty:
+        daily = build_daily_summary(group_metrics, pools=plot_pools)
+    daily_summary_path = output_dir / "daily_pool_internal_summary.csv"
+    _csv_ready(daily).to_csv(daily_summary_path, index=False)
     report_plots = {}
     if args.report_dir:
         plot_prefix = args.plot_prefix or slug_label(args.variant or args.run_id)
         plot_variant_label = args.plot_variant_label or args.variant or args.run_id or plot_prefix
-        plot_pools = tuple("universe" if pool == "universe" else f"pool_{pool}" for pool in pools)
+        plot_summary = quarterly if args.plot_period == "quarter" else month_summary
+        plot_summary_path = (
+            quarter_summary_path if args.plot_period == "quarter" else month_summary_path
+        )
         report_plots = write_universe_sml_pool_internal_plots(
-            month_summary,
+            plot_summary,
             Path(args.report_dir),
-            input_path=month_summary_path,
+            input_path=plot_summary_path,
             output_prefix=plot_prefix,
             variant_label=plot_variant_label,
             pools=plot_pools,
         )
+        if not daily.empty:
+            report_plots.update(
+                write_daily_pool_internal_cumulative_plot(
+                    daily,
+                    Path(args.report_dir) / "cumulative",
+                    input_path=daily_summary_path,
+                    output_prefix=plot_prefix,
+                    output_name=f"{plot_prefix}_{'_'.join(plot_pools)}_daily_cumulative",
+                    variant_label=plot_variant_label,
+                    pools=plot_pools,
+                    x_label_mode="years_only",
+                )
+            )
     weekly_outputs = {}
     if args.weekly_report_dir:
         weekly_outputs = write_weekly_outputs(
@@ -621,6 +721,7 @@ def main() -> None:
         "pools": list(pools),
         "top_n": args.top_n,
         "pool_date_lag_sessions": args.pool_date_lag_sessions,
+        "plot_period": args.plot_period,
         "report_plots": report_plots,
         "weekly_outputs": weekly_outputs,
         "record_paths": [],

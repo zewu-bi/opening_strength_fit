@@ -26,9 +26,9 @@ from opening_strength_fit.io import frame_columns
 from opening_strength_fit.io import read_frame as shared_read_frame
 
 DEFAULT_INPUT = (
-    "output/predictions/lgbm_delay2_postopen_0931_0940_baseline_v1/predictions_all.parquet"
+    "output/legacy/predictions/lgbm_delay2_postopen_0931_0940_baseline_v1/predictions_all.parquet"
 )
-DEFAULT_OUTPUT_DIR = "output/reports/lgbm_delay2_postopen_tail_guards_v1"
+DEFAULT_OUTPUT_DIR = "output/legacy/reports/lgbm_delay2_postopen_tail_guards_v1"
 DEFAULT_CLOSE_OFFSET_US = 54_000_000_000
 DEFAULT_CLOSE_LOOKBACK_SECONDS = 1_800
 KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")

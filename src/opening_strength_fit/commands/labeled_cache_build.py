@@ -24,7 +24,8 @@ def main() -> None:
     config = load_toml(args.config) if args.config else {}
     run_name = run_id(config, args.config) if args.config else "labeled_cache"
     output_dir = Path(
-        args.output_dir or config_str(config, "output", "local_dir", f"output/local/{run_name}")
+        args.output_dir
+        or config_str(config, "output", "local_dir", f"output/legacy/analysis/{run_name}")
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 

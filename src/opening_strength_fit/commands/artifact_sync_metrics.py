@@ -87,8 +87,9 @@ def pull_shard_metrics(
     output_dir: Path,
     *,
     allow_partial: bool = False,
+    raw_root: Path | None = None,
 ) -> list[Path]:
-    raw_dir = output_dir / spec.run_id / "raw_metrics"
+    raw_dir = (raw_root or output_dir) / spec.run_id / "raw_metrics"
     raw_dir.mkdir(parents=True, exist_ok=True)
     frames: list[pd.DataFrame] = []
     missing: list[str] = []
@@ -156,6 +157,7 @@ def pull_metrics(
     output_dir: Path,
     *,
     allow_partial: bool = False,
+    raw_root: Path | None = None,
 ) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
     pulled = pull_root_metrics(hfcli, spec, pod_name, output_dir)
@@ -167,6 +169,7 @@ def pull_metrics(
         pod_name,
         output_dir,
         allow_partial=allow_partial,
+        raw_root=raw_root,
     )
 
 
@@ -407,6 +410,7 @@ def record_metrics(run_id: str, metrics_dir: Path, records_dir: Path) -> list[Pa
             continue
         destination = records_dir / "metrics" / source.name
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
+        if source.resolve() != destination.resolve():
+            shutil.copy2(source, destination)
         records.append(destination)
     return records

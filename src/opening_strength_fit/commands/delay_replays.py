@@ -190,12 +190,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--prediction-root",
-        default="output/predictions",
+        default="output/legacy/predictions",
         help="Directory containing <run_id>/predictions_all.parquet.",
     )
     parser.add_argument(
         "--output-root",
-        default="output/reports/opening_intraday_lgbm_delay_replays",
+        default="output/legacy/reports/opening_intraday_lgbm_delay_replays",
         help="Root directory for per-scenario replay outputs.",
     )
     parser.add_argument(

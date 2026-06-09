@@ -22,10 +22,10 @@ from opening_strength_fit.commands.opening_backtest_constraints import (
 )
 
 DEFAULT_RUNS = (
-    ("gbm", "output/predictions/gbm_opening_1y_next_month/predictions_all.parquet"),
+    ("gbm", "output/legacy/predictions/gbm_opening_1y_next_month/predictions_all.parquet"),
     (
         "gbm_strong",
-        "output/predictions/gbm_opening_1y_next_month_strong/predictions_all.parquet",
+        "output/legacy/predictions/gbm_opening_1y_next_month_strong/predictions_all.parquet",
     ),
 )
 DEFAULT_ENTRY_TIMES = ("09:30:00", "09:32:00", "09:34:00", "09:36:00", "09:38:00")
@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
             "GBM strong 1y next-month runs if omitted."
         ),
     )
-    parser.add_argument("--output-dir", default="output/reports/opening_intraday_top20_1y")
+    parser.add_argument("--output-dir", default="output/legacy/reports/opening_intraday_top20_1y")
     parser.add_argument("--top-n", type=int, default=20)
     parser.add_argument(
         "--entry-time",

@@ -41,15 +41,15 @@ from opening_strength_fit.commands.horizon_reporting import (
 )
 from opening_strength_fit.io import write_frame
 
-DEFAULT_OUTPUT_ROOT = "output/reports/opening_alpha_horizon_decay_delay2_cohort_avg"
+DEFAULT_OUTPUT_ROOT = "output/legacy/reports/opening_alpha_horizon_decay_delay2_cohort_avg"
 DEFAULT_RUNS = (
     (
         "Universe",
-        "output/predictions/lgbm_opening_1y_next_month_delay2/predictions_all.parquet",
+        "output/legacy/predictions/lgbm_opening_1y_next_month_delay2/predictions_all.parquet",
     ),
     (
         "Strong",
-        "output/predictions/lgbm_opening_1y_next_month_strong_delay2/predictions_all.parquet",
+        "output/legacy/predictions/lgbm_opening_1y_next_month_strong_delay2/predictions_all.parquet",
     ),
 )
 DEFAULT_HORIZONS = (

@@ -14,9 +14,9 @@ import pandas as pd
 from opening_strength_fit.analysis import write_json
 
 DEFAULT_INPUT = (
-    "experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1_month_summary.csv"
+    "experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1/month_summary.csv"
 )
-DEFAULT_OUTPUT_DIR = "output/reports/rolling_alpha_conditioned_top100_validation_v1"
+DEFAULT_OUTPUT_DIR = "output/legacy/reports/rolling_alpha_conditioned_top100_validation_v1"
 DEFAULT_VARIANTS = (
     "alpha_rank=Baseline",
     "gap_penalty_030_p80=Gap 0.30 p80",

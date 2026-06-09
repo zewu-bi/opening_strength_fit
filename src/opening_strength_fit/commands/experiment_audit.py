@@ -7,6 +7,7 @@ from pathlib import Path
 from opening_strength_fit.config import load_toml
 
 JOB_SUFFIXES = (
+    ("_pool_internal_analysis_job.yaml", "pool_internal_analysis"),
     ("_sharded_job.yaml", "sharded_training"),
     ("_job.yaml", "training"),
 )
@@ -51,7 +52,7 @@ def collect_runs(runs_dir: Path) -> dict[str, RunRecord]:
             selection_mode=str(evaluation.get("selection_mode", "symbol_day")),
             tick_path=str(data.get("tick_path", "")),
             pvc_dir=pvc_dir,
-            local_dir=str(output.get("local_dir", f"output/local/{run_id}")),
+            local_dir=str(output.get("local_dir", f"output/legacy/analysis/{run_id}")),
         )
     return runs
 
@@ -96,11 +97,16 @@ def is_artifact_run(record: RunRecord) -> bool:
         "score_risk_sweep",
         "alpha_conditioned_rolling_validation",
         "gap_risk_attribution",
+        "pool_internal_analysis",
     }
 
 
 def is_exploration_run(record: RunRecord) -> bool:
     return record.kind == "exploration"
+
+
+def is_pool_internal_analysis_run(record: RunRecord, kinds: set[str]) -> bool:
+    return record.kind == "pool_internal_analysis" and "pool_internal_analysis" in kinds
 
 
 def format_bool(value: bool) -> str:
@@ -154,11 +160,12 @@ def main() -> None:
         job_kinds = jobs.get(run_id, set())
         is_cache = is_artifact_run(record)
         is_exploration = is_exploration_run(record)
+        is_pool_analysis = is_pool_internal_analysis_run(record, job_kinds)
         has_jobs = has_training_job(job_kinds)
         has_metrics = run_id in metrics
         is_running = record.status in ACTIVE_STATUSES
         is_completed = record.status == COMPLETED_STATUS
-        if not has_jobs:
+        if not has_jobs and not is_pool_analysis:
             errors.append(f"{run_id}: missing training job yaml")
 
         if record.status not in KNOWN_STATUSES:
