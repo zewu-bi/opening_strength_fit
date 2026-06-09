@@ -69,21 +69,7 @@ set -a; . ./.env; set +a
 ```
 
 项目原生支持 `bucket@ssd/path.parquet` 形式的股池路径。需要快速核对 Ceph 文件时，可以复用
-`xy_fit` 的 venv：
-
-```bash
-cd /home/hefu/projects/xy_fit
-set -a; . "$(git rev-parse --show-toplevel)/.env"; set +a
-
-.venv/bin/python - <<'PY'
-from xyfit.io import build_client
-
-client = build_client()
-resp = client.list_objects_v2(Bucket="lml.bzw", Prefix="data/")
-for item in sorted(resp.get("Contents", []), key=lambda x: x["LastModified"], reverse=True):
-    print(item["LastModified"], item["Size"], item["Key"])
-PY
-```
+`xy_fit` 的 venv 和 `xyfit.io.build_client()` 列 `Bucket="lml.bzw", Prefix="data/"`。
 
 CLI 快速试验：
 
@@ -112,13 +98,8 @@ TopN 从池内候选里选。保守日期口径加：
 TOML 模板见
 [experiments/config_templates/stock_pool_selection.toml](../experiments/config_templates/stock_pool_selection.toml)。
 
-开启 `filter_selection=true` 后，`metrics_by_year.csv` 的 TopN 汇总使用池内候选行；
-`predictions*.parquet` 保留全 universe 打分并额外写出 `stock_pool_member`。同时输出：
-
-```text
-score_buckets_<period>_stock_pool.csv
-score_buckets_stock_pool.csv
-```
+开启 `filter_selection=true` 后，TopN 汇总使用池内候选行；`predictions*.parquet` 保留全
+universe 打分并额外写出 `stock_pool_member` 和 stock-pool score buckets。
 
 ## 3. 本地 Smoke
 
@@ -172,28 +153,10 @@ local artifact pull: output/artifacts/<run_id>/  # compact analysis artifacts on
 
 `*.tmp.parquet`、`*.parquet.lock` 和 heartbeat 文件表示 cache 正在写入。
 
-当前 workflow 的正式落点：
-
-```text
-experiments/results/metrics/             # tracked training/evaluation metrics evidence
-experiments/results/backtests/           # tracked compact analysis evidence
-output/artifacts/<run_id>/               # current 2022-2025 cluster-side analysis local mirror
-output/artifacts/_partial_metrics/       # ignored partial metrics from --allow-partial
-```
-
-`osf-sync-experiment-artifacts` 默认使用 run config 里的 `[output].local_dir` 作为
-artifact 本地镜像；没有配置时才回落到 `output/artifacts/<run_id>/`。`output/artifacts/`
-保持窄视图：只放当前 `2022-2025` baseline 和正在比较的 pool_L 优化实验。历史 artifact
-拉取和 raw shard metrics 放到 `output/legacy/artifacts/`。
-
-旧本地分析和 debug 输出统一收进 `output/legacy/`，不再占用顶层目录：
-
-```text
-output/legacy/predictions/<run_id>/       # optional prediction parquet pulls; delete/re-sync as needed
-output/legacy/analysis/<name>/            # local smoke, scratch, and one-off analysis
-output/legacy/labels/next_close_labels_*/ # local next-close label shards for legacy/debug
-output/legacy/reports/<name>/             # standalone local reports and heavy diagnostics
-```
+正式落点：tracked evidence 写入 `experiments/results/{metrics,backtests}/`；当前集群侧分析镜像写入
+`output/artifacts/<run_id>/` 或 config 的 `[output].local_dir`；partial metrics 写入
+`output/artifacts/_partial_metrics/`；旧 pulls、prediction parquet、本地分析、label shards 和重报告统一放
+`output/legacy/{artifacts,predictions,analysis,labels,reports}/`。
 
 ## 5. 构建和 K8s
 
@@ -321,33 +284,21 @@ stock pools:       lml.bzw@ssd/data/pool_{S,M,L}.parquet
 
 ### 5.2 Rolling 过程观测
 
-Indexed Job 的 shard index 对应月份或半年窗口，使用：
+Indexed Job 的 shard index 对应月份或半年窗口：
 
 ```bash
 osf-rolling-job-status \
   --config experiments/runs/<rolling_run_id>.toml
-```
 
-输出会列出 `index -> month -> pod -> phase`，并打印每个月对应的 log 命令。看最近日志：
-
-```bash
 osf-rolling-job-status \
   --config experiments/runs/<rolling_run_id>.toml \
   --tail 160
-```
 
-也可以直接跟随当前 pod：
-
-```bash
-hfcli kubectl --cluster research logs -n bizewu <pod-name> -f
-```
-
-指定 Job 名观测：
-
-```bash
 osf-rolling-job-status \
   --config experiments/runs/<rolling_run_id>.toml \
   --job-name <job-name>
+
+hfcli kubectl --cluster research logs -n bizewu <pod-name> -f
 ```
 
 ## 6. 同步产物
@@ -383,39 +334,17 @@ osf-sync-experiment-artifacts \
 ```text
 experiments/results/metrics/<run_id>_metrics_by_year.csv
 experiments/results/metrics/<run_id>_metrics_by_month.csv
-output/artifacts/<run_id>/pool_internal_summary.csv
-output/artifacts/<run_id>/pool_internal_month_summary.csv
-output/artifacts/<run_id>/pool_internal_clock_summary.csv
-output/artifacts/<run_id>/pool_internal_halfyear_summary.csv
-output/artifacts/<run_id>/pool_internal_year_summary.csv
-output/artifacts/<run_id>/pool_internal_group_metrics.csv
-output/artifacts/<run_id>/pool_internal_trace.json
-output/artifacts/<run_id>/reports/**/*.csv
-output/artifacts/<run_id>/reports/**/*.svg
-experiments/results/backtests/<record-prefix>/pool_internal_*.csv
-experiments/results/backtests/<record-prefix>/*_with_mean.svg
+output/artifacts/<run_id>/pool_internal_{summary,month_summary,clock_summary,halfyear_summary,year_summary,group_metrics,trace}.*
+output/artifacts/<run_id>/reports/**/*.{csv,svg}
+experiments/results/backtests/<record-prefix>/{pool_internal_*.csv,*_with_mean.svg}
 ```
 
 pool-internal 分析不再把 next-close label 拉到本地。正式 analysis Job 直接读取 PVC 上的
 `next_close_label_input`。`--next-close-labels` 仅保留给旧本地分析和排查使用。
 
-历史 `score_risk_sweep` 的轻量 artifact：
-
-```text
-output/legacy/artifacts/<run_id>/score_risk_summary.csv
-output/legacy/artifacts/<run_id>/score_risk_minute_summary.csv
-output/legacy/artifacts/<run_id>/score_risk_group_metrics.csv
-output/legacy/artifacts/<run_id>/score_risk_trace.json
-experiments/results/backtests/<run_id>_summary.csv
-```
-
-`alpha_conditioned_rolling_validation` 会同步 root-level
-`rolling_summary.csv` / `rolling_month_summary.csv` / `rolling_group_metrics.csv`；root summary 缺失时，
-sync 会拉取 `month_YYYY-MM/` shards 并本地合并。正式归档写到
-`experiments/results/backtests/<run_id>/`。
-
-`gap_risk_attribution` 同步 outcome / exposure / residual-control 轻量 CSV，并归档到
-`experiments/results/backtests/<run_id>/`。
+非标准轻量 artifact：`score_risk_sweep`、`alpha_conditioned_rolling_validation`、
+`gap_risk_attribution` 会同步各自 summary/trace CSV；rolling root summary 缺失时会拉取
+`month_YYYY-MM/` shards 并本地合并；正式归档写入 `experiments/results/backtests/`。
 
 ## 7. 分析命令
 
@@ -457,16 +386,13 @@ pools = ["universe"]
 该模式会输出 `<plot-prefix>_universe_*` SVG / plot data，不要求 S/M/L 股池存在。
 
 本地 `osf-analyze-pool-internal-top100` 只作为 smoke / legacy fallback；正式结果不要再先拉
-prediction parquet 到本地。需要小样本调试时，它仍可直接读取本地路径或 PVC 风格的
-`month_*` / `year_*` 目录：
+prediction parquet 到本地。小样本调试可直接读本地路径或 PVC 风格的 `month_*` / `year_*` 目录：
 
 ```bash
 osf-analyze-pool-internal-top100 \
   --predictions /mnt/output/opening_strength_fit/<run_id> \
   --next-close-label-input /mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1 \
-  --variant <variant_label> \
-  --output-dir /mnt/output/opening_strength_fit/<run_id>/analysis/pool_internal_top100 \
-  --report-dir /mnt/output/opening_strength_fit/<run_id>/analysis/pool_internal_top100/reports
+  --variant <variant_label>
 ```
 
 本地归档由 `osf-sync-experiment-artifacts --all` 完成。
@@ -483,48 +409,16 @@ osf-plot-weekly-pool-internal \
   --rolling-weeks 4
 ```
 
-该脚本输出 `daily_pool_internal_summary.csv`、`weekly_pool_internal_summary.csv`、
-`weekly_pool_internal_overall_summary.csv`、`weekly_worst_windows.csv` 和
-`<plot-prefix>_universe_pool_l_weekly_rolling_4w/*.svg`。
+该脚本输出 daily/weekly summary、worst windows 和 `<plot-prefix>_*_weekly_rolling_4w/*.svg`。
 
 周度图可作为附录；应先做日度聚合再按周求和后累加，避免把周均值直接累加导致尺度失真。
 
 `predictions` 里不保留 `alpha_return_next_close`，这是训练防泄漏设计；cluster-side analysis
 直接在 PVC 上 join next-close 年度 label，不再通过本地 label cache 完成正式分析。
 
-Rolling short-vs-next tradeoff chart：
-
-```bash
-osf-plot-rolling-validation-tradeoff \
-  --input experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1/month_summary.csv \
-  --output-dir output/legacy/reports/rolling_alpha_conditioned_top100_validation_v1
-```
-
-Feature dependence audit：
-
-```bash
-osf-audit-feature-dependence \
-  --config experiments/runs/lgbm_delay2_feature_dependence_v1.toml \
-  --output-dir output/legacy/analysis/lgbm_delay2_feature_dependence_v1
-```
-
-Replay / horizon diagnostics：
-
-```bash
-osf-run-lgbm-delay-replays --check-interface-only
-osf-run-lgbm-delay-replays
-osf-plot-lgbm-delay-decay
-
-osf-run-alpha-horizon-decay \
-  --decision-time 09:30:00 \
-  --horizon 1m --horizon 2m --horizon 5m --horizon 10m \
-  --horizon close --horizon next_close \
-  --no-sampled-intraday \
-  --clickhouse-intraday-labels \
-  --clickhouse-close-labels \
-  --allow-missing-horizons \
-  --output-root output/legacy/reports/opening_alpha_horizon_decay_delay2_clickhouse_point_0930_selected
-```
+Legacy diagnostics entrypoints: `osf-plot-rolling-validation-tradeoff`、
+`osf-audit-feature-dependence`、`osf-run-lgbm-delay-replays`、`osf-plot-lgbm-delay-decay`、
+`osf-run-alpha-horizon-decay`。旧结果和重报告写到 `output/legacy/`。
 
 ## 8. 排查
 

@@ -67,6 +67,7 @@ Library:
 - `src/opening_strength_fit/training.py`: unified training pipeline, configured feature transforms/filters, and output writer.
 - `src/opening_strength_fit/evaluation.py`: score buckets and top-score summaries.
 - `src/opening_strength_fit/reports.py`: compact dataset summaries, metrics reporting, and yearly aggregation.
+- `src/opening_strength_fit/pool_internal_plots.py` / `pool_internal_plot_svg.py`: pool-internal plot specs and SVG rendering.
 - `src/opening_strength_fit/rolling.py`: chronological, annual, and monthly split helpers.
 - `src/opening_strength_fit/rules.py`: non-ML baseline scores.
 - `src/opening_strength_fit/alpha_conditioning.py`: alpha-conditioned risk target, section-scoped LightGBM fit, scoring, and group-rank helpers.
