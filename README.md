@@ -11,14 +11,7 @@ Current snapshot:
 sample window: 09:30:00-09:40:00, current slice 09:31:00-09:40:00
 main label: mixed short + next-close label, w_long = 0.30
 archived feature/model: soft_core_reg_light
-completed validation: 36m train -> next 1m test, 2024-01..2024-12
-validation run id: lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1
-completed mainline: 36m train -> next 6m test, 2018H1..2024H2 + 2025H1..2025H2 OOS
-halfyear run id: lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1
-2025 OOS run id: lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1
-k8s job aliases: os-lgbm-36m-2024-w030-baseline, os-lgbm-36m-2018-2024-w030-halfyear, os-lgbm-36m-2025-w030-halfyear
-current archive: 2024 monthly validation, 2018H1..2024H2 halfyear validation, 2025 OOS, and 2020-2025 rolling-window summary synced and archived
-current summary artifact: 2020-2025 rolling-window summary with short halfyear, next halfyear, and weekly single-period views
+completed archive: 2024 monthly validation, 2018H1..2025H2 halfyear/OOS, and 2020-2025 rolling-window summary
 current baseline slice: 2022-2025 universe + pool_L cluster-side quarterly excess/IC and daily cumulative archived
 next work: 2022-2025 pool_L feature engineering and model optimization
 ```

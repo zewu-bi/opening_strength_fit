@@ -444,9 +444,10 @@ pool_internal_trace.json
 reports/cumulative/<plot-prefix>_universe_pool_l_daily_cumulative.svg
 ```
 
-2022-2025 当前主展示只使用 `universe` 和 `pool_L`，`plot_period = "quarter"`；不要把
-`pool_S/M` 或月度图作为主图。2020 年以前没有 S/M/L 股池文件；分析早期 shard 时在 TOML
-里把池限制到 universe：
+2022-2025 主展示只使用 `universe` 和 `pool_L`，`plot_period = "quarter"`；short / next
+excess + Rank IC 使用季度聚合，累计超额曲线优先用日度路径且横轴只标年份。不要把
+`pool_S/M`、月度图或周度图作为主图。2020 年以前没有 S/M/L 股池文件；分析早期 shard 时
+在 TOML 里把池限制到 universe：
 
 ```toml
 [analysis.pool_internal]
@@ -486,10 +487,7 @@ osf-plot-weekly-pool-internal \
 `weekly_pool_internal_overall_summary.csv`、`weekly_worst_windows.csv` 和
 `<plot-prefix>_universe_pool_l_weekly_rolling_4w/*.svg`。
 
-若只是做 `2022-2025` baseline 展示，主图按 mentor 口径主看 `pool_L`，并加入
-`universe` 作为参照；`pool_S/M` 不进主展示。short / next excess + Rank IC 使用季度聚合，
-横轴使用 `2022Q1` 这类标签。累计超额曲线优先用日度路径，横轴只标年份。周度图可作为附录，
-且应先做日度聚合再按周求和后累加，避免把周均值直接累加导致尺度失真。
+周度图可作为附录；应先做日度聚合再按周求和后累加，避免把周均值直接累加导致尺度失真。
 
 `predictions` 里不保留 `alpha_return_next_close`，这是训练防泄漏设计；cluster-side analysis
 直接在 PVC 上 join next-close 年度 label，不再通过本地 label cache 完成正式分析。

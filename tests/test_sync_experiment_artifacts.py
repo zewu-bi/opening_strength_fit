@@ -53,6 +53,36 @@ def _run_spec(run_id: str, **overrides) -> RunSpec:
     return RunSpec(**values)
 
 
+def _rolling_row(
+    month: str,
+    *,
+    date_day: str = "02",
+    short_mean: float = 1.0,
+    short_excess: float = 2.0,
+    next_mean: float = -1.0,
+    next_excess: float = -2.0,
+    gap_rank: float = 0.1,
+    binary_rank: float = 0.2,
+) -> dict[str, object]:
+    return {
+        "test_month": month,
+        "variant": "alpha_rank",
+        "risk_model": "",
+        "penalty": 0.0,
+        "candidate_alpha_rank_min": 0.0,
+        "date": f"{month}-{date_day}",
+        "clock": "09:31",
+        "candidate_rows": 100,
+        "selected_rows": 100,
+        "short_top_mean_bps": short_mean,
+        "short_top_excess_bps": short_excess,
+        "next_top_mean_bps": next_mean,
+        "next_top_excess_bps": next_excess,
+        "selected_gap_risk_rank": gap_rank,
+        "selected_binary_risk_rank": binary_rank,
+    }
+
+
 class SyncExperimentArtifactsTest(unittest.TestCase):
     def test_yearly_shard_metrics_are_combined_locally(self) -> None:
         frames = [
@@ -416,40 +446,17 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
 
     def test_rolling_validation_shards_are_combined_locally(self) -> None:
         rows = [
-            {
-                "test_month": "2021-08",
-                "variant": "alpha_rank",
-                "risk_model": "",
-                "penalty": 0.0,
-                "candidate_alpha_rank_min": 0.0,
-                "date": "2021-08-02",
-                "clock": "09:31",
-                "candidate_rows": 100,
-                "selected_rows": 100,
-                "short_top_mean_bps": 1.0,
-                "short_top_excess_bps": 2.0,
-                "next_top_mean_bps": -1.0,
-                "next_top_excess_bps": -2.0,
-                "selected_gap_risk_rank": 0.1,
-                "selected_binary_risk_rank": 0.2,
-            },
-            {
-                "test_month": "2021-09",
-                "variant": "alpha_rank",
-                "risk_model": "",
-                "penalty": 0.0,
-                "candidate_alpha_rank_min": 0.0,
-                "date": "2021-09-01",
-                "clock": "09:31",
-                "candidate_rows": 100,
-                "selected_rows": 100,
-                "short_top_mean_bps": 3.0,
-                "short_top_excess_bps": 4.0,
-                "next_top_mean_bps": 5.0,
-                "next_top_excess_bps": 6.0,
-                "selected_gap_risk_rank": 0.3,
-                "selected_binary_risk_rank": 0.4,
-            },
+            _rolling_row("2021-08"),
+            _rolling_row(
+                "2021-09",
+                date_day="01",
+                short_mean=3.0,
+                short_excess=4.0,
+                next_mean=5.0,
+                next_excess=6.0,
+                gap_rank=0.3,
+                binary_rank=0.4,
+            ),
         ]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -482,23 +489,7 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
             test_end_month="2021-08",
             kind="alpha_conditioned_rolling_validation",
         )
-        row = {
-            "test_month": "2021-08",
-            "variant": "alpha_rank",
-            "risk_model": "",
-            "penalty": 0.0,
-            "candidate_alpha_rank_min": 0.0,
-            "date": "2021-08-02",
-            "clock": "09:31",
-            "candidate_rows": 100,
-            "selected_rows": 100,
-            "short_top_mean_bps": 1.0,
-            "short_top_excess_bps": 2.0,
-            "next_top_mean_bps": -1.0,
-            "next_top_excess_bps": -2.0,
-            "selected_gap_risk_rank": 0.1,
-            "selected_binary_risk_rank": 0.2,
-        }
+        row = _rolling_row("2021-08")
 
         def fake_fetch(_hfcli, _spec, _pod, remote_path, local_path):
             if not remote_path.endswith("rolling_group_metrics.csv"):

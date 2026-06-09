@@ -76,7 +76,7 @@ CLI:
 
 - `osf-train` / `osf-run-experiment`: train/evaluate a configured experiment.
 - `osf-evaluate-predictions`: evaluate an existing prediction file.
-- `osf-analyze-pool-internal-top100`: join predictions with next-close labels and configured selection masks to produce Top100 pool-internal short/next validation panels; current 2022-2025 official views use universe + pool_L quarterly panels and execute inside K8s against PVC/S3 paths.
+- `osf-analyze-pool-internal-top100`: join predictions with next-close labels and selection masks to produce Top100 pool-internal validation panels.
 - `osf-plot-weekly-pool-internal`: render optional trading-day-equal weekly / 4w rolling pool-internal stability diagnostics from `pool_internal_group_metrics.csv`.
 - `osf-plot-weekly-pool-internal-cumulative`: render cumulative short/next pool-internal excess from pre-aggregated daily or weekly summary rows.
 - `osf-summarize-opening-results`: summarize metrics CSVs.
@@ -125,10 +125,5 @@ CLI:
 
 ## Ignored Outputs
 
-- `output/artifacts/<run_id>/`: current 2022-2025 cluster-side analysis local mirrors; keep this view narrow, currently baseline plus the active pool_L optimization runs. Configured `[output].local_dir` is the default local mirror path for artifact sync.
-- `output/artifacts/_partial_metrics/`: partial metrics from `--allow-partial`; not formal evidence.
-- `output/legacy/artifacts/<run_id>/`: previous artifact pulls and raw shard metrics kept for debug/history.
-- `output/legacy/predictions/<run_id>/`: optional debug/legacy prediction pulls and small fetch traces; parquet files are disposable and not canonical evidence.
-- `output/legacy/analysis/<name>/`: local analysis, smoke, and scratch command outputs.
-- `output/legacy/labels/next_close_labels_<years>/`: local next-close label shards for legacy/debug analysis.
-- `output/legacy/reports/`: standalone local PNG/SVG/markdown reports and heavy diagnostics.
+- `output/artifacts/<run_id>/` and `output/artifacts/_partial_metrics/`: current local mirrors and partial metrics; ignored.
+- `output/legacy/{artifacts,predictions,analysis,labels,reports}/`: old pulls, debug prediction/label/report state, smoke output, and heavy diagnostics; ignored.
