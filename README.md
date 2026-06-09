@@ -19,7 +19,7 @@ halfyear run id: lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_202
 k8s job aliases: os-lgbm-36m-2024-w030-baseline, os-lgbm-36m-2018-2024-w030-halfyear, os-lgbm-36m-2025-w030-halfyear
 current archive: 2024 monthly validation, 2018H1..2024H2 halfyear validation, 2025 OOS, and 2020-2025 rolling-window summary synced and archived
 current summary artifact: 2020-2025 rolling-window summary with short halfyear, next halfyear, and weekly single-period views
-current baseline slice: 2022-2025 universe + pool_L quarterly excess/IC and daily cumulative archived
+current baseline slice: 2022-2025 universe + pool_L cluster-side quarterly excess/IC and daily cumulative archived
 next work: 2022-2025 pool_L feature engineering and model optimization
 ```
 
@@ -45,5 +45,6 @@ make ci
 make contracts
 ```
 
-K8s 标准闭环见 [docs/runbook.md](docs/runbook.md)。大体积 predictions、models、PNGs 和临时报告保留在
-ignored `output/`；可提交轻量证据放在 `experiments/results/`。
+K8s 标准闭环见 [docs/runbook.md](docs/runbook.md)。可提交轻量证据放在
+`experiments/results/`；大体积 predictions 只按需拉到 ignored `output/` 做 debug，
+用后可删。

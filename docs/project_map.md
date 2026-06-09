@@ -76,7 +76,7 @@ CLI:
 
 - `osf-train` / `osf-run-experiment`: train/evaluate a configured experiment.
 - `osf-evaluate-predictions`: evaluate an existing prediction file.
-- `osf-analyze-pool-internal-top100`: join predictions with next-close labels and S/M/L pools to produce Top100 pool-internal short/next validation panels.
+- `osf-analyze-pool-internal-top100`: join predictions with next-close labels and configured selection masks to produce Top100 pool-internal short/next validation panels; current 2022-2025 official views use universe + pool_L quarterly panels and execute inside K8s against PVC/S3 paths.
 - `osf-plot-weekly-pool-internal`: render optional trading-day-equal weekly / 4w rolling pool-internal stability diagnostics from `pool_internal_group_metrics.csv`.
 - `osf-plot-weekly-pool-internal-cumulative`: render cumulative short/next pool-internal excess from pre-aggregated daily or weekly summary rows.
 - `osf-summarize-opening-results`: summarize metrics CSVs.
@@ -108,8 +108,8 @@ Library:
 
 CLI:
 
-- `osf-render-k8s-job`: render training, feature-audit, cache-transform, and sharded K8s manifests.
-- `osf-sync-experiment-artifacts`: pull metrics/predictions from PVC, combine shard metrics, and archive lightweight metrics.
+- `osf-render-k8s-job`: render training, feature-audit, cache-transform, sharded training, and cluster-side pool-internal analysis K8s manifests.
+- `osf-sync-experiment-artifacts`: pull metrics and lightweight cluster-side analysis artifacts from PVC, combine shard metrics, and archive compact evidence. Prediction parquet sync is explicit debug/legacy behavior.
 - `osf-rolling-job-status`: map K8s Indexed Job pods back to rolling months and print per-month log commands.
 - `osf-audit-experiments`: check config/job/metrics alignment.
 - `osf-check-project-contracts`: check CLI, config, directory, and K8s entrypoint contracts.
@@ -120,12 +120,15 @@ CLI:
 - `experiments/jobs/*.yaml`: rendered K8s jobs.
 - `experiments/config_templates/`: reusable TOML snippets for run configs.
 - `experiments/results/metrics/`: tracked metrics CSV evidence.
-- `experiments/results/backtests/`: tracked replay, horizon-decay, sweep, and rolling summaries.
+- `experiments/results/backtests/`: tracked replay, horizon-decay, sweep, and rolling summaries. Multi-file pool-internal archives use `backtests/<record_prefix>/`.
 - `*_sharded_job.yaml`: monthly/yearly sharded K8s jobs.
 
 ## Ignored Outputs
 
-- `output/predictions/<run_id>/`: pulled parquet predictions.
-- `output/k8s/metrics/`: raw pulled metrics before archive.
-- `output/reports/`: local PNGs, markdown reports, and heavy diagnostics.
-- `output/local/`: ignored artifact-sync and scratch buffer; lightweight evidence is archived under `experiments/results/`.
+- `output/artifacts/<run_id>/`: current 2022-2025 cluster-side analysis local mirrors; keep this view narrow, currently baseline plus the active pool_L optimization runs. Configured `[output].local_dir` is the default local mirror path for artifact sync.
+- `output/artifacts/_partial_metrics/`: partial metrics from `--allow-partial`; not formal evidence.
+- `output/legacy/artifacts/<run_id>/`: previous artifact pulls and raw shard metrics kept for debug/history.
+- `output/legacy/predictions/<run_id>/`: optional debug/legacy prediction pulls and small fetch traces; parquet files are disposable and not canonical evidence.
+- `output/legacy/analysis/<name>/`: local analysis, smoke, and scratch command outputs.
+- `output/legacy/labels/next_close_labels_<years>/`: local next-close label shards for legacy/debug analysis.
+- `output/legacy/reports/`: standalone local PNG/SVG/markdown reports and heavy diagnostics.

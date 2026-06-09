@@ -56,6 +56,10 @@ short halfyear、next halfyear 和 weekly 单周期视图。
 最新 mentor 指示：后续信号增强重点看 `2022-2025`；候选池展示和验收主看
 `pool_L`。`2022-2025` baseline 已按 universe + `pool_L` 归档，主图为季度
 short / next excess + Rank IC，以及日度累计超额曲线。下一步进入特征工程和模型优化。
+从当前 `2022-2025` 新实验 sweep 开始，正式预测结果分析迁到集群侧：训练 Job 在 PVC 上写
+raw predictions，analysis Job 在 PVC/S3 附近 join next-close labels 和 config 指定的 selection
+masks 并写 compact CSV / JSON / SVG artifacts；当前 `2022-2025` 主展示只配置 universe + `pool_L`
+且按季度画图，本地只同步这些分析产物，不再把全量 prediction parquet 作为正式分析输入。
 
 2024 全年 S/M/L 池内 Top100 excess 为：
 
@@ -98,8 +102,14 @@ universe: short +16.8 bps, next -8.5 bps, short IC 0.149, next IC 0.004
 pool_L:   short  +8.6 bps, next +8.0 bps, short IC 0.138, next IC 0.002
 ```
 
-该 baseline 归档到 `experiments/results/backtests/baseline_2022_2025_*`。主展示保留
+该 baseline 由集群侧 analysis Job 重跑并归档到
+`experiments/results/backtests/baseline_2022_2025_cluster/`。主展示保留
 universe 作为参照、`pool_L` 作为验收对象；`pool_S/M` 不进主展示。
+
+2022-2025 首轮试水优化已归档三组：强正则 `reg_strong`、重 bagging `bagging`、去
+`preopen_*` + 中正则 `no_preopen_reg_mid`。三组都没有超过 baseline；`bagging` 最接近但无增量，
+`reg_strong` 系统性变弱，`no_preopen_reg_mid` 说明 preopen 不能整族删除。下一步不再补齐粗粒度
+正则/降权 sweep，而是转向更细粒度 feature engineering。
 
 当前执行口径：
 
@@ -114,7 +124,9 @@ universe 作为参照、`pool_L` 作为验收对象；`pool_S/M` 不进主展示
 | completed validation | `soft_core_reg_light`，2024 全年 12 个 monthly rolling folds；run id `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`，已完成并归档 |
 | completed mainline | 同一 feature/model 口径，`36m train -> next 6m test` 半年 rolling；`2018H1..2024H2` 主线和 `2025H1..2025H2` OOS extension 均已完成并归档 |
 | current summary | `2022-2025` baseline 已归档：universe + `pool_L` 季度 excess/IC 和日度累计曲线 |
-| next target | 聚焦 `2022-2025` 和 `pool_L`，进入特征工程、训练权重和模型调参 |
+| completed pilot sweep | `reg_strong` / `bagging` / `no_preopen_reg_mid` 已归档，均未超过 baseline |
+| next target | 聚焦 `2022-2025` 和 `pool_L`，进入细粒度特征工程和轻量常规模型调参 |
+| analysis workflow | 从 `2022-2025` sweep 起，正式 pool-internal 分析在 K8s 内完成，本地同步 compact artifacts |
 
 训练和全量打分仍使用 full universe。历史验证保留 `pool_S`、`pool_M`、`pool_L` 作为 TopN
 selection mask；后续按 mentor 指示主看 `pool_L`，并保留 universe 作为主展示参照。
@@ -182,7 +194,8 @@ short halfyear、next halfyear 和 weekly 单周期视图三张四股池图；�
 | 36m halfyear rolling mainline | 同一 feature/model 口径已完成 `2018H1..2024H2` 半年 folds；2020-2024 S/M/L 与 2018-2019 universe-only 均已归档。 |
 | 2025 OOS extension | 同一 feature/model 口径已完成 `2025H1..2025H2`；S/M/L 池内 short 与 next excess 均为正。 |
 | 2020-2025 rolling-window summary | 合并视角已归档三张核心图；S/M/L 池内 short 与 next excess 均为正，作为当前总结材料。 |
-| 2022-2025 baseline | universe + `pool_L` 季度 excess/IC 和日度累计曲线已归档；`pool_L` short/next 均为正，universe next 为负，后续优化主看 `pool_L`。 |
+| 2022-2025 baseline | 集群侧 universe + `pool_L` 季度 excess/IC 和日度累计曲线已归档；`pool_L` short/next 均为正，universe next 为负，后续优化主看 `pool_L`。 |
+| 2022-2025 first pilot sweep | 强正则、重 bagging、去 `preopen_*` 三组试水均未超过 baseline；baseline 局部健康，下一步转向细粒度特征工程。 |
 | next mentor direction | 后续重点做强 `2022-2025` 信号，展示使用 universe + `pool_L`，验收主看 `pool_L`，继续走特征工程和模型优化。 |
 
 `09:30` 是单独 regime：它强，但主要混合集合竞价结果、第一张开盘盘口快照、时间坐标和缺失/0 模式。

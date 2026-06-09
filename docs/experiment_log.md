@@ -60,7 +60,7 @@
 | 2026-06-03 | S/M/L mixed weight scan | `w_long=0.30` 在池内保住 short，并改善 next internal excess；固定为主线权重。 |
 | 2026-06-04 | w030 feature/model sweep | 7 组 18m 小缓存对照后，`soft_core_reg_light` 晋级为当前 feature/model 候选。 |
 | 2026-06-05 | 36m baseline full-year archive | 2024-01..2024-12 已同步归档；正式模型展示名定为 `baseline`，S/M/L 池内 short 和 next 均值均为正。 |
-| 2026-06-05 | 36m halfyear rolling mainline running | 2015-2024 mixed cache 齐备后，提交并运行 `36m train -> next 6m test` 半年 rolling，共 14 个 folds。 |
+| 2026-06-05 | 36m halfyear rolling mainline running | 13y mixed cache 中 2015-2024 shard 齐备后，提交并运行 `36m train -> next 6m test` 半年 rolling，共 14 个 folds。 |
 | 2026-06-08 | 36m halfyear rolling archive | PVC 上 14/14 folds 完成；补齐本地 `2024H1` shard，归档 2018-2019 universe-only 和 2020-2024 S/M/L 分析。 |
 
 ## 2026-05-20 小窗结果
@@ -94,7 +94,7 @@ experiments/results/metrics/opening_1y_next_month_corrected_score_buckets.csv
 | `ridge_opening_1y_next_month` | 0.0799 | 1.4788 | +18.96 | 54.4% |
 
 旧开盘短周期 Top20 replay 轻量摘要归档到
-`experiments/results/backtests/opening_intraday_top20_1y_next_month_*`。旧普通 GBM mean cycle return 约
+`experiments/results/backtests/opening_intraday_top20_1y_next_month/`。旧普通 GBM mean cycle return 约
 `+42.21 bps`，19 个测试日均为正。该结果只说明短周期方向性值得继续验证，不代表 T+1 可交易收益。
 
 ## 2026-05-22 本地实验清理
@@ -117,7 +117,7 @@ delay0/1/2 one-year labeled cache 已在 PVC 完整落盘：
 
 三份 cache 均为 12,308,573 行，并包含 `entry_delay_seconds`、`entry_max_tick_gap_seconds` 和
 `entry_delay_ticks`。六个 CPU LightGBM 训练 Job 已完成，metrics 已归档到
-`experiments/results/metrics/`，predictions 已拉回到 `output/predictions/<run_id>/predictions_all.parquet`。
+`experiments/results/metrics/`，predictions 已拉回到 `output/legacy/predictions/<run_id>/predictions_all.parquet`。
 
 年度 metrics：
 
@@ -133,9 +133,9 @@ delay0/1/2 one-year labeled cache 已在 PVC 完整落盘：
 标准 replay 归档文件：
 
 ```text
-experiments/results/backtests/opening_intraday_lgbm_delay_replays_scenario_summary.csv
-experiments/results/backtests/opening_intraday_lgbm_delay_replays_delay_scan_proxy_top20.csv
-experiments/results/backtests/opening_intraday_lgbm_delay_replays_trace.json
+experiments/results/backtests/opening_intraday_lgbm_delay_replays/scenario_summary.csv
+experiments/results/backtests/opening_intraday_lgbm_delay_replays/delay_scan_proxy_top20.csv
+experiments/results/backtests/opening_intraday_lgbm_delay_replays/trace.json
 ```
 
 无约束 Top20 replay：
@@ -165,12 +165,12 @@ delay2 约束场景：
 轻量证据：
 
 ```text
-experiments/results/backtests/opening_alpha_horizon_decay_delay2_0930_summary.csv
-experiments/results/backtests/opening_alpha_horizon_decay_delay2_0930_trace.json
-experiments/results/backtests/opening_alpha_horizon_decay_delay2_open10_summary.csv
-experiments/results/backtests/opening_alpha_horizon_decay_delay2_open10_trace.json
-experiments/results/backtests/opening_alpha_horizon_decay_delay2_0930_vs_open10_summary.csv
-experiments/results/backtests/opening_alpha_horizon_decay_delay2_close_next_close_by_decision_minute.csv
+experiments/results/backtests/opening_alpha_horizon_decay_delay2/0930_summary.csv
+experiments/results/backtests/opening_alpha_horizon_decay_delay2/0930_trace.json
+experiments/results/backtests/opening_alpha_horizon_decay_delay2/open10_summary.csv
+experiments/results/backtests/opening_alpha_horizon_decay_delay2/open10_trace.json
+experiments/results/backtests/opening_alpha_horizon_decay_delay2/0930_vs_open10_summary.csv
+experiments/results/backtests/opening_alpha_horizon_decay_delay2/close_next_close_by_decision_minute.csv
 ```
 
 group rank IC：
@@ -222,10 +222,10 @@ K8s 训练完成：
 
 ```text
 run:     lgbm_delay2_postopen_v1
-image:   registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260526-postopen-v1
+image:   registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260526-postopen-v1
 output:  /mnt/output/opening_strength_fit/lgbm_delay2_postopen_v1
-local:   output/predictions/lgbm_delay2_postopen_v1/predictions_all.parquet
-report:  output/reports/lgbm_delay2_postopen_v1_four_panel/signal_baseline_four_panel.png
+local:   output/legacy/predictions/lgbm_delay2_postopen_v1/predictions_all.parquet
+report:  output/legacy/reports/lgbm_delay2_postopen_v1_four_panel/signal_baseline_four_panel.png
 ```
 
 训练 metrics：
@@ -255,10 +255,10 @@ report:  output/reports/lgbm_delay2_postopen_v1_four_panel/signal_baseline_four_
 
 ```text
 run:     lgbm_delay2_postopen_no_preopen_v1
-image:   registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260527-no-preopen-v1
+image:   registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260527-no-preopen-v1
 output:  /mnt/output/opening_strength_fit/lgbm_delay2_postopen_no_preopen_v1
-local:   output/predictions/lgbm_delay2_postopen_no_preopen_v1/predictions_all.parquet
-report:  output/reports/lgbm_delay2_postopen_no_preopen_v1_four_panel/signal_baseline_four_panel.png
+local:   output/legacy/predictions/lgbm_delay2_postopen_no_preopen_v1/predictions_all.parquet
+report:  output/legacy/reports/lgbm_delay2_postopen_no_preopen_v1_four_panel/signal_baseline_four_panel.png
 ```
 
 训练 metrics：
@@ -290,10 +290,10 @@ gap slope/curve、相对开盘的队列/深度/价差轨迹、短 tick trade-vs-
 
 ```text
 run:     lgbm_delay2_postopen_v2
-image:   registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260527-postopen-v2-oomfix
+image:   registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260527-postopen-v2-oomfix
 output:  /mnt/output/opening_strength_fit/lgbm_delay2_postopen_v2
-local:   output/predictions/lgbm_delay2_postopen_v2/predictions_all.parquet
-report:  output/reports/lgbm_delay2_postopen_v2_four_panel/signal_baseline_four_panel.png
+local:   output/legacy/predictions/lgbm_delay2_postopen_v2/predictions_all.parquet
+report:  output/legacy/reports/lgbm_delay2_postopen_v2_four_panel/signal_baseline_four_panel.png
 ```
 
 训练 metrics：
@@ -310,31 +310,6 @@ report:  output/reports/lgbm_delay2_postopen_v2_four_panel/signal_baseline_four_
 | short Top100 excess | +2.82 bps |
 | next-close Rank IC | +0.0008 |
 | next-close Top100 excess | -2.48 bps |
-
-短周期主线明显强于旧 delay2 baseline，也好于 `postopen_v1` / no-preopen 分支；但 next-close Top100
-excess 没有同步增强。结论：v2 盘口/队列/成交冲击特征对开盘短周期有效，下一步重点看
-`lgbm_delay2_feature_dependence_v1` 的 grouped importance、permutation 和 drop-retrain ablation，
-确认增益主要来自哪些特征组。
-
-`lgbm_delay2_feature_dependence_v1` 轻量版已完成：只跑 feature importance 和 cross-section permutation，
-跳过 drop-retrain ablation。第一次任务卡在 node7 的 PVC read，进程处于 `D (disk sleep)`；重调度到 node8
-后正常读完。中途修复了全空特征被 imputer 跳过后 importance 长度不一致的问题。
-归档文件在 `experiments/results/feature_audits/lgbm_delay2_feature_dependence_v1/`。
-
-Permutation 结果显示，v2 增益不是主要来源；模型更依赖原始盘口深度和 v1 决策点动态特征：
-
-| group | features | rank IC drop | Top100 drop bps |
-| --- | ---: | ---: | ---: |
-| `orderbook_depth` | 47 | 0.0484 | 4.03 |
-| `postopen_v1` | 82 | 0.0319 | 10.40 |
-| `postopen_v2` | 239 | 0.0140 | 4.46 |
-| `preopen` | 6 | 0.0066 | 1.67 |
-| `momentum` | 4 | 0.0037 | 0.70 |
-| `trade_flow` | 12 | 0.0003 | 1.64 |
-| `raw_cumulative_trade` | 2 | -0.0000 | 0.03 |
-
-结论：`postopen_v2` 有增量，但新增 239 个特征换来的依赖强度有限；下一步优先修剪/重做 v2 中全空或弱贡献特征，
-并重点保留 `orderbook_depth` 和 `postopen_v1` 这两组。
 
 ## 2026-05-27 Target Alignment and v3 Direction
 
@@ -442,9 +417,9 @@ decision points，避免只改 TOML 却仍混入 `09:30`。本次 K8s 日志确�
 
 ```text
 run:       lgbm_delay2_postopen_0931_0940_baseline_v1
-image:     registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260527-postopen-0931-v1
+image:     registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260527-postopen-0931-v1
 output:    /mnt/output/opening_strength_fit/lgbm_delay2_postopen_0931_0940_baseline_v1
-local:     output/predictions/lgbm_delay2_postopen_0931_0940_baseline_v1/predictions_all.parquet
+local:     output/legacy/predictions/lgbm_delay2_postopen_0931_0940_baseline_v1/predictions_all.parquet
 dataset:   11,161,615 rows, time_min 09:31:00, time_max 09:40:05
 ```
 
@@ -523,7 +498,7 @@ turnover/chase 特征做局部约束，而不是一次性剔除所有 `other` �
 sweep。输入为 baseline predictions 和同口径 next-close labels，输出在：
 
 ```text
-output/reports/lgbm_delay2_postopen_tail_guards_v1/
+output/legacy/reports/lgbm_delay2_postopen_tail_guards_v1/
 ```
 
 关键结果：
@@ -778,7 +753,7 @@ final     = alpha_rank - lambda * conditional_risk_rank
 按 conditional risk 路线挂起新一轮 K8s jobs，镜像 tag：
 
 ```text
-registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260528-conditional-risk-v1
+registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260528-conditional-risk-v1
 ```
 
 已提交 job：
@@ -853,7 +828,7 @@ Risk-model metrics：
 已挂起镜像：
 
 ```text
-registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260529-alpha-conditioned-risk-v2
+registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260529-alpha-conditioned-risk-v2
 ```
 
 Jobs：
@@ -963,7 +938,7 @@ Rescue note:
   `month_YYYY-MM/rolling_*.csv` 和 `month_YYYY-MM/predictions.parquet`，root 目录保留共享
   `clickhouse_next_close_labels.parquet`；`sync_experiment_artifacts.py --all` 负责拉取、合并 root-level
   `rolling_summary.csv` / `rolling_month_summary.csv`，并把轻量 summary 归档到 `experiments/results/backtests/`。
-- 救援镜像：`registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260529-rolling-sharded-rescue`。
+- 救援镜像：`registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260529-rolling-sharded-rescue`。
 - Job YAML：`experiments/jobs/rolling_alpha_conditioned_top100_validation_v1_sharded_job.yaml`。
 - 二次 OOM 复盘：上述 sharded YAML 仍是单 Pod 内的 shell loop，2021-08 shard 完成后同一 cgroup 进入
   2021-09，再次读全量 18m cache（约 15.2M 行、490 列）并训练，最终在 256Gi limit 下 OOMKilled。
@@ -978,12 +953,12 @@ Rescue note:
 Artifacts:
 
 ```text
-experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1_summary.csv
-experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1_month_summary.csv
-experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1_trace.json
-output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw/predictions_2021-08.parquet
+experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1/summary.csv
+experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1/month_summary.csv
+experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1/trace.json
+output/legacy/predictions/rolling_alpha_conditioned_top100_validation_v1/raw/predictions_2021-08.parquet
 ...
-output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw/predictions_2022-01.parquet
+output/legacy/predictions/rolling_alpha_conditioned_top100_validation_v1/raw/predictions_2022-01.parquet
 ```
 
 合并口径：
@@ -1048,12 +1023,12 @@ Risk-score diagnostic inside alpha Top100:
 Artifacts:
 
 ```text
-experiments/results/backtests/gap_risk_penalized_attribution_v1_outcomes_by_month.csv
-experiments/results/backtests/gap_risk_penalized_attribution_v1_outcomes_overall.csv
-experiments/results/backtests/gap_risk_penalized_attribution_v1_feature_exposure_overall.csv
-experiments/results/backtests/gap_risk_penalized_attribution_v1_penalized_feature_delta.csv
-experiments/results/backtests/gap_risk_penalized_attribution_v1_residual_penalized_vs_kept.csv
-experiments/results/backtests/gap_risk_penalized_attribution_v1_trace.json
+experiments/results/backtests/gap_risk_penalized_attribution_v1/outcomes_by_month.csv
+experiments/results/backtests/gap_risk_penalized_attribution_v1/outcomes_overall.csv
+experiments/results/backtests/gap_risk_penalized_attribution_v1/feature_exposure_overall.csv
+experiments/results/backtests/gap_risk_penalized_attribution_v1/penalized_feature_delta.csv
+experiments/results/backtests/gap_risk_penalized_attribution_v1/residual_penalized_vs_kept.csv
+experiments/results/backtests/gap_risk_penalized_attribution_v1/trace.json
 ```
 
 Top100 replacement summary:
@@ -1111,7 +1086,7 @@ train_label = xs_norm(short_label) + w_long * xs_norm(long_label)
 | 1 | 先扫 `w_long` | 短 label 是主体，长 label 只加小成分；用 short / next 的 Rank IC 和 Top100 选权重，不要把模型练成 next-close selector。 |
 | 2 | 训练 full universe | 不用 S/M/L 过滤训练，也不把 membership 当特征；pool 只作为 TopN selection mask。 |
 | 3 | 按 mask 汇总同一组指标 | universe / S / M / L 只是筛选口径；同一模型在每个 mask 下分别报 short / next Rank IC 和 Top100。 |
-| 4 | 固定权重后做 S/M/L 信号增强 | 重点做特征工程、训练权重和模型调参，主目标回到 S/M/L 池内 Rank IC 和池内 Top100 excess。 |
+| 4 | 固定权重后做 S/M/L 信号增强 | 重点做特征工程和常规模型调参，主目标回到 S/M/L 池内 Rank IC 和池内 Top100 excess。 |
 
 画图口径：
 
@@ -1147,8 +1122,8 @@ K8s sharded job 已完成并同步：
 ```text
 job: opening-strength-lgbm-delay2-18m-postopen-mi-sharded-358fb69d
 metrics: experiments/results/metrics/lgbm_delay2_18m_postopen_mixed_w010_rolling_v1_metrics_by_year.csv
-predictions: output/predictions/lgbm_delay2_18m_postopen_mixed_w010_rolling_v1/predictions_all.parquet
-four panel: output/reports/lgbm_delay2_18m_postopen_mixed_w010_rolling_v1_four_panel/signal_baseline_four_panel.png
+predictions: output/legacy/predictions/lgbm_delay2_18m_postopen_mixed_w010_rolling_v1/predictions_all.parquet
+four panel: output/legacy/reports/lgbm_delay2_18m_postopen_mixed_w010_rolling_v1_four_panel/signal_baseline_four_panel.png
 gate summary: experiments/results/backtests/lgbm_delay2_18m_postopen_mixed_w010_rolling_v1_signal_gate_summary.csv
 ```
 
@@ -1182,9 +1157,9 @@ S/M/L selection-mask 重算进一步修正：池内 next tail 已经明显不同
 等权平均，单位是 bps：
 
 ```text
-experiments/results/backtests/pool_selection_top100_w010_vs_risk_summary.csv
-experiments/results/backtests/pool_selection_top100_w010_vs_risk_month_summary.csv
-output/local/pool_selection_top100_w010_vs_risk/pool_selection_group_metrics.csv
+experiments/results/backtests/pool_selection_top100_w010_vs_risk/summary.csv
+experiments/results/backtests/pool_selection_top100_w010_vs_risk/month_summary.csv
+output/legacy/analysis/pool_selection_top100_w010_vs_risk/pool_selection_group_metrics.csv
 ```
 
 | pool | score | avg candidates | short Top100 excess | next Top100 excess | next positive months | next positive minutes |
@@ -1232,11 +1207,11 @@ pool_internal_excess = pool 内 Top100 平均收益 - 同一 date x minute pool 
 ```
 
 ```text
-experiments/results/backtests/pool_internal_top100_w010_vs_risk_summary.csv
-experiments/results/backtests/pool_internal_top100_w010_vs_risk_month_summary.csv
-experiments/results/backtests/pool_internal_top100_w010_vs_risk_mean_by_pool.csv
-experiments/results/backtests/pool_internal_top100_w010_vs_risk_mean_by_pool.svg
-output/reports/pool_selection_top100_w010_vs_risk/sml_model_comparison_pool_internal_big.png
+experiments/results/backtests/pool_internal_top100_w010_vs_risk/summary.csv
+experiments/results/backtests/pool_internal_top100_w010_vs_risk/month_summary.csv
+experiments/results/backtests/pool_internal_top100_w010_vs_risk/mean_by_pool.csv
+experiments/results/backtests/pool_internal_top100_w010_vs_risk/mean_by_pool.svg
+output/legacy/reports/pool_selection_top100_w010_vs_risk/sml_model_comparison_pool_internal_big.png
 ```
 
 | pool | score | pool short mean | short internal excess | pool next mean | next internal excess | next positive months | next positive minutes |
@@ -1263,16 +1238,16 @@ excess，代价是 `pool_L` short internal excess 下降更明显；`w=0.10` 的
 “短期收益”，下半区为“隔夜收益”，纵轴为各自候选域内部 Top100 excess：
 
 ```text
-output/reports/pool_selection_top100_w010_vs_risk/monthly_pool_internal_3models/universe_top100_pool_internal_with_mean.svg
-output/reports/pool_selection_top100_w010_vs_risk/monthly_pool_internal_3models/pool_S_top100_pool_internal_with_mean.svg
-output/reports/pool_selection_top100_w010_vs_risk/monthly_pool_internal_3models/pool_M_top100_pool_internal_with_mean.svg
-output/reports/pool_selection_top100_w010_vs_risk/monthly_pool_internal_3models/pool_L_top100_pool_internal_with_mean.svg
-output/reports/pool_selection_top100_w010_vs_risk/monthly_pool_internal_3models/monthly_pool_internal_3models_with_mean_plot_data.csv
-experiments/results/backtests/pool_internal_top100_w010_vs_risk_universe_with_mean.svg
-experiments/results/backtests/pool_internal_top100_w010_vs_risk_pool_S_with_mean.svg
-experiments/results/backtests/pool_internal_top100_w010_vs_risk_pool_M_with_mean.svg
-experiments/results/backtests/pool_internal_top100_w010_vs_risk_pool_L_with_mean.svg
-experiments/results/backtests/pool_internal_top100_w010_vs_risk_monthly_plot_data.csv
+output/legacy/reports/pool_selection_top100_w010_vs_risk/monthly_pool_internal_3models/universe_top100_pool_internal_with_mean.svg
+output/legacy/reports/pool_selection_top100_w010_vs_risk/monthly_pool_internal_3models/pool_S_top100_pool_internal_with_mean.svg
+output/legacy/reports/pool_selection_top100_w010_vs_risk/monthly_pool_internal_3models/pool_M_top100_pool_internal_with_mean.svg
+output/legacy/reports/pool_selection_top100_w010_vs_risk/monthly_pool_internal_3models/pool_L_top100_pool_internal_with_mean.svg
+output/legacy/reports/pool_selection_top100_w010_vs_risk/monthly_pool_internal_3models/monthly_pool_internal_3models_with_mean_plot_data.csv
+experiments/results/backtests/pool_internal_top100_w010_vs_risk/universe_with_mean.svg
+experiments/results/backtests/pool_internal_top100_w010_vs_risk/pool_S_with_mean.svg
+experiments/results/backtests/pool_internal_top100_w010_vs_risk/pool_M_with_mean.svg
+experiments/results/backtests/pool_internal_top100_w010_vs_risk/pool_L_with_mean.svg
+experiments/results/backtests/pool_internal_top100_w010_vs_risk/monthly_plot_data.csv
 ```
 
 补充同一四图对应的 monthly Rank IC 表：
@@ -1295,8 +1270,8 @@ S/M/L 池内 Top100 excess 表；相对 universe 的 pool-selection 表不作为
 ```text
 experiments/results/metrics/lgbm_delay2_18m_postopen_mixed_w020_rolling_v1_metrics_by_year.csv
 experiments/results/metrics/lgbm_delay2_18m_postopen_mixed_w030_rolling_v1_metrics_by_year.csv
-experiments/results/backtests/pool_internal_top100_w020_w030_summary.csv
-experiments/results/backtests/pool_internal_top100_w020_w030_month_summary.csv
+experiments/results/backtests/pool_internal_top100_w020_w030/summary.csv
+experiments/results/backtests/pool_internal_top100_w020_w030/month_summary.csv
 ```
 
 池内 Top100 excess，单位 bps，按 1220 个 `date x minute` group 汇总：
@@ -1313,12 +1288,12 @@ experiments/results/backtests/pool_internal_top100_w020_w030_month_summary.csv
 把 raw alpha、mixed `w=0.10`、mixed `w=0.30` 放到同一张四图口径下比较，新归档：
 
 ```text
-experiments/results/backtests/pool_internal_top100_w010_w030_universe_with_mean.svg
-experiments/results/backtests/pool_internal_top100_w010_w030_pool_S_with_mean.svg
-experiments/results/backtests/pool_internal_top100_w010_w030_pool_M_with_mean.svg
-experiments/results/backtests/pool_internal_top100_w010_w030_pool_L_with_mean.svg
-experiments/results/backtests/pool_internal_top100_w010_w030_monthly_plot_data.csv
-output/reports/pool_selection_top100_w010_w030/monthly_pool_internal_3models/
+experiments/results/backtests/pool_internal_top100_w010_w030/universe_with_mean.svg
+experiments/results/backtests/pool_internal_top100_w010_w030/pool_S_with_mean.svg
+experiments/results/backtests/pool_internal_top100_w010_w030/pool_M_with_mean.svg
+experiments/results/backtests/pool_internal_top100_w010_w030/pool_L_with_mean.svg
+experiments/results/backtests/pool_internal_top100_w010_w030/monthly_plot_data.csv
+output/legacy/reports/pool_selection_top100_w010_w030/monthly_pool_internal_3models/
 ```
 
 四图 mean：
@@ -1375,14 +1350,14 @@ universe / pool_S / pool_M / pool_L 池内 Top100 口径。每组都完成 `2021
 6 / 6 rolling monthly shards；未保留的异常任务已清理，不作为 canceled 实验记录。结果文件：
 
 ```text
-output/local/w030_regroup_analysis/pool_internal_summary.csv
-output/local/w030_regroup_analysis/pool_internal_month_summary.csv
-output/local/w030_regroup_analysis/pool_internal_clock_summary.csv
-output/local/w030_regroup_analysis/pool_internal_group_metrics.csv
-output/local/w030_regroup_analysis/pool_rank_ic_group_metrics.csv
-output/local/w030_regroup_analysis/universe_target_metric_summary.csv
+output/legacy/analysis/w030_regroup_analysis/pool_internal_summary.csv
+output/legacy/analysis/w030_regroup_analysis/pool_internal_month_summary.csv
+output/legacy/analysis/w030_regroup_analysis/pool_internal_clock_summary.csv
+output/legacy/analysis/w030_regroup_analysis/pool_internal_group_metrics.csv
+output/legacy/analysis/w030_regroup_analysis/pool_rank_ic_group_metrics.csv
+output/legacy/analysis/w030_regroup_analysis/universe_target_metric_summary.csv
 experiments/results/metrics/<run_id>_metrics_by_year.csv
-output/predictions/<run_id>/predictions_all.parquet
+output/legacy/predictions/<run_id>/predictions_all.parquet
 ```
 
 主结论：`soft_core_reg_light` 是唯一值得晋级的候选。它把特征数从 442 降到 276，在 universe 和
@@ -1484,7 +1459,6 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `lgbm_delay2_postopen_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_v1/` |
 | `lgbm_delay2_postopen_no_preopen_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_no_preopen_v1/` |
 | `lgbm_delay2_postopen_v2` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_v2/` |
-| `lgbm_delay2_feature_dependence_v1` | feature_audit | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_feature_dependence_v1/` |
 | `build_delay2_xs_demean_cache_v1` | cache_transform | completed | `/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_xs_demean_labeled.parquet` |
 | `lgbm_delay2_postopen_v2_xs_demean_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_v2_xs_demean_v1/` |
 | `lgbm_delay2_postopen_0931_0940_baseline_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_postopen_0931_0940_baseline_v1/` |
@@ -1527,6 +1501,9 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `score_alpha_conditioned_top100_sweep_v3_p90` | score_risk_sweep | completed | `/mnt/output/opening_strength_fit/score_alpha_conditioned_top100_sweep_v3_p90/` |
 | `rolling_alpha_conditioned_top100_validation_v1` | alpha_conditioned_rolling_validation | completed | `/mnt/output/opening_strength_fit/rolling_alpha_conditioned_top100_validation_v1/` |
 | `gap_risk_penalized_attribution_v1` | gap_risk_attribution | completed | `/mnt/output/opening_strength_fit/gap_risk_penalized_attribution_v1/` |
+| `lgbm_delay2_36m_2022_2025_pool_l_reg_strong_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_pool_l_reg_strong_v1/` |
+| `lgbm_delay2_36m_2022_2025_pool_l_bagging_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_pool_l_bagging_v1/` |
+| `lgbm_delay2_36m_2022_2025_pool_l_no_preopen_reg_mid_v1` | exploration | completed | `/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_pool_l_no_preopen_reg_mid_v1/` |
 
 ### Run 索引
 
@@ -1546,7 +1523,6 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `lgbm_opening_1y_next_month_strong_delay1` | completed | CPU LightGBM strong delay1；group rank IC = 0.1389，Top20 mean = +17.17 bps。 |
 | `lgbm_opening_1y_next_month_strong_delay2` | completed | CPU LightGBM strong delay2；group rank IC = 0.1298，Top20 mean = +12.60 bps。 |
 | `lgbm_delay2_postopen_v2` | completed | post-open v1 plus v2 queue/depth-shape/trade-impact features；group rank IC = 0.1394，Top100 mean = +14.01 bps。 |
-| `lgbm_delay2_feature_dependence_v1` | completed | grouped feature importance 和 permutation；postopen/orderbook 依赖强于 preopen。 |
 | `build_delay2_xs_demean_cache_v1` | completed | 生成 delay2 横截面去均值 `target_label` cache，原始 `label` 保留用于评估。 |
 | `lgbm_delay2_postopen_v2_xs_demean_v1` | completed | v2 特征、`target_label` 训练；group rank IC = 0.1406，Top100 mean = +14.05 bps。 |
 | `lgbm_delay2_postopen_0931_0940_baseline_v1` | completed | 排除特殊 `09:30`，只训练/评估 `09:31-09:40`；group rank IC = 0.1360，Top100 mean = +13.45 bps。 |
@@ -1602,10 +1578,13 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 | `lgbm_delay2_18m_postopen_mixed_w030_soft_core_no_preopen_reg_mid_v1` | completed | soft feature regroup + 中正则并去掉 `preopen_*`；诊断集合竞价依赖。 |
 | `lgbm_delay2_18m_postopen_mixed_w030_no_preopen_reg_mid_v1` | completed | full postopen v2 + 中正则并去掉 `preopen_*`；对照 soft-core 去 preopen，隔离 full-feature 下的集合竞价依赖。 |
 | `lgbm_delay2_18m_postopen_mixed_w030_drop_raw_reg_mid_v1` | completed | full postopen v2 + 中正则，只去掉 `volume` / `turnover` / `iopv`；隔离 raw cumulative trade 噪声。 |
+| `lgbm_delay2_36m_2022_2025_pool_l_reg_strong_v1` | completed | 2022-2025 首轮试水强正则；pool_L short / next excess = +8.11 / +6.46 bps，系统性弱于 baseline。 |
+| `lgbm_delay2_36m_2022_2025_pool_l_bagging_v1` | completed | 2022-2025 首轮试水重 bagging；pool_L short / next excess = +8.59 / +7.87 bps，最接近 baseline 但无增量。 |
+| `lgbm_delay2_36m_2022_2025_pool_l_no_preopen_reg_mid_v1` | completed | 2022-2025 首轮试水去 `preopen_*` + 中正则；pool_L short / next excess = +8.35 / +7.39 bps，说明 preopen 不能整族删除。 |
 
 ## 2026-06-03 Cache v2 Rebuild Prep
 
-用户确认主线改为 3 年训练、12 个月滚动测试，基础数据需要覆盖 2015-2024。按新口径处理：
+用户确认主线改为 3 年训练、12 个月滚动测试，基础数据至少需要覆盖 2015-2024；当前统一使用 13y/2013-2025 cache 路径。按新口径处理：
 
 - 停止仍在跑的 `opening-strength-build-delay2-2024-cache-v1`。
 - 提交 ClickHouse tick JSON object 序列化修复：`8149ad8 Handle JSON object fields in ClickHouse ticks`。
@@ -1616,13 +1595,13 @@ PVC labeled cache 中的延迟成交 label。不同口径不要直接横向混�
 - 新增 `scripts/inspect_labeled_cache.py`，用于在 PVC 上轻量检查 schema / row count / required columns。
 - 新增年度基础 cache v2 run/job：
   `build_delay2_2015_cache_v2` 至 `build_delay2_2024_cache_v2`，统一写到
-  `/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_base_labeled_v2/`。
+  `/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_base_labeled_v2/`。
 - labeled PVC 读取顺序改为先在完整 cache 上构造 postopen 特征，再按实验 `decision_times` 过滤；
   因此只看 `09:31-09:40` 时仍能让 `09:31` 使用 cache 中的 `09:30` context。
 
 ## 2026-06-04 Cache v2 2021-2024 Pull
 
-`opening-strength-fit-20260603-cache-v2` 已从干净 `HEAD` build/push，digest：
+`20260603-cache-v2` 已从干净 `HEAD` build/push，digest：
 
 ```text
 sha256:612d8dcb5389e26094d5118ceeddc289e1483ef357f1a9f0b3ed116c837845b6
@@ -1640,7 +1619,7 @@ sha256:612d8dcb5389e26094d5118ceeddc289e1483ef357f1a9f0b3ed116c837845b6
 PVC 目录：
 
 ```text
-/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_base_labeled_v2/
+/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_base_labeled_v2/
 ```
 
 每个 shard 都有 `.parquet`、`.parquet.lock.done` 和 `.parquet.manifest.json`；manifest 检查
@@ -1656,17 +1635,17 @@ PVC 目录：
 新增年度前置 run/job：
 
 - `build_delay2_2021_next_close_labels_v1` 至 `build_delay2_2024_next_close_labels_v1`，输出到
-  `/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_next_close_labels_v1/`。
+  `/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/`。
 - `build_delay2_2021_mixed_w030_target_v1` 至 `build_delay2_2024_mixed_w030_target_v1`，输出到
-  `/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_mixed_w030_labeled_v1/`。
+  `/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/`。
 - `lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1` 是单月 smoke：`2021-01` 至 `2023-12`
   train，`2024-01` test。它验证 36m rolling 输入链路；正式 2024 全年 12 shard 应迁移
   2026-06-04 小缓存筛出的 `soft_core_reg_light` feature/model 口径。
 
 执行留痕：
 
-- `opening-strength-fit-20260604-next-close-v1` 首轮 next-close job 暴露配置 CLI 字段名问题；
-  `opening-strength-fit-20260604-next-close-v2` 修复后，`2021-2024` next-close label cache 全部完成。
+- `20260604-next-close-v1` 首轮 next-close job 暴露配置 CLI 字段名问题；
+  `20260604-next-close-v2` 修复后，`2021-2024` next-close label cache 全部完成。
 - `2021-2024` mixed-w030 target cache 随后全部完成。PVC metadata 检查显示 next-close 年度文件为
   4 列、`0.07-0.08 GiB`；mixed 年度文件为 184 列、`4.81-5.45 GiB`，`target_label`
   非空数分别为 `10,167,661 / 11,154,082 / 11,823,254 / 12,049,972`。
@@ -1683,9 +1662,9 @@ PVC 目录：
 - `osf-audit-experiments` 输出 `alignment_ok: yes`。
 - `osf-check-project-contracts` 输出 `contracts_ok: yes`。
 - `2021-2024` next-close label cache 已在 PVC：
-  `/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_next_close_labels_v1/`。
+  `/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/`。
 - `2021-2024` mixed-w030 derived cache 已按年度 shard 存在：
-  `/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_mixed_w030_labeled_v1/`。
+  `/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/`。
   PVC 实查四个年度 parquet 大小约 `5.16 / 5.62 / 5.81 / 5.86 GB`。
 - `lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1` 已完成并同步，只作为链路 smoke。
 
@@ -1757,10 +1736,10 @@ S/M/L pool-internal Top100 excess 汇总如下，单位 bps；表内为 `short /
 ```text
 experiments/results/metrics/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_metrics_by_year.csv
 experiments/results/metrics/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_metrics_by_month.csv
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_pool_internal_summary.csv
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_pool_internal_month_summary.csv
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_pool_internal_with_mean.svg
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1_rank_ic_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1/pool_internal_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1/pool_internal_month_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1/pool_internal_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1/rank_ic_with_mean.svg
 ```
 
 为长任务过程反馈补充两个入口：
@@ -1804,7 +1783,7 @@ rendered job name:
 os-lgbm-36m-2018-2024-w030-halfyear
 
 image:
-registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260605-halfyear-v1
+registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260605-halfyear-v1
 
 image digest:
 sha256:70b8fb9c395d62e49466754837cd52da7ce5bec0778e7fc310f8148ad593f38b
@@ -1899,7 +1878,7 @@ date_end: 2018-06-30
 
 2020 年之前没有可用的 S/M/L 股池文件，因此 `2018-01..2019-12` 已完成 shard 只按
 `universe` 口径做 pool-internal Top100 / Rank IC 分析。输入只包含 4 个 pre-2020 prediction
-shard，并 join 本地 `output/local/next_close_labels_2018_2019/`：
+shard，并 join 本地 `output/legacy/labels/next_close_labels_2018_2019/`：
 
 | period | short internal excess bps | next internal excess bps | short Rank IC | next Rank IC | positive months short / next |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -1913,13 +1892,13 @@ shard，并 join 本地 `output/local/next_close_labels_2018_2019/`：
 next-close 也转正但稳定性弱于 short，15/24 个月为正。轻量归档：
 
 ```text
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe_pool_internal_summary.csv
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe_pool_internal_halfyear_summary.csv
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe_pool_internal_month_summary.csv
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe_pool_internal_with_mean.svg
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe_rank_ic_with_mean.svg
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe_short_excess_rank_ic_with_mean.svg
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe_next_excess_rank_ic_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe/pool_internal_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe/pool_internal_halfyear_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe/pool_internal_month_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe/pool_internal_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe/rank_ic_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe/short_excess_rank_ic_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe/next_excess_rank_ic_with_mean.svg
 ```
 
 ### 2026-06-08 Halfyear Completion and 2020-2024 S/M/L
@@ -1950,13 +1929,13 @@ universe / S / M / L 验收。2020-2024 summary：
 ```text
 experiments/results/metrics/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_metrics_by_year.csv
 experiments/results/metrics/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_metrics_by_month.csv
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024_pool_internal_summary.csv
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024_pool_internal_halfyear_summary.csv
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024_pool_internal_year_summary.csv
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024_pool_internal_with_mean.svg
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024_rank_ic_with_mean.svg
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024_short_excess_rank_ic_with_mean.svg
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024_next_excess_rank_ic_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024/pool_internal_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024/pool_internal_halfyear_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024/pool_internal_year_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024/pool_internal_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024/rank_ic_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024/short_excess_rank_ic_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024/next_excess_rank_ic_with_mean.svg
 ```
 
 结论：halfyear mainline 已完成。2020-2024 S/M/L 下 short 60/60 月为正，next 43-44/60 月为正；
@@ -1975,11 +1954,11 @@ positive weeks 为 `154/256`、`161/256`、`160/256`，4 周滚动最差为
 本地输出：
 
 ```text
-output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal/daily_pool_internal_summary.csv
-output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal/weekly_pool_internal_summary.csv
-output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal/weekly_pool_internal_overall_summary.csv
-output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal/weekly_worst_windows.csv
-output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal/baseline_halfyear_2020_2024_universe_sml_weekly_rolling_4w/baseline_halfyear_2020_2024_universe_sml_weekly_rolling_4w.svg
+output/legacy/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal/daily_pool_internal_summary.csv
+output/legacy/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal/weekly_pool_internal_summary.csv
+output/legacy/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal/weekly_pool_internal_overall_summary.csv
+output/legacy/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal/weekly_worst_windows.csv
+output/legacy/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal/baseline_halfyear_2020_2024_universe_sml_weekly_rolling_4w/baseline_halfyear_2020_2024_universe_sml_weekly_rolling_4w.svg
 ```
 
 ### 2026-06-08 2025 Halfyear OOS Extension
@@ -1994,10 +1973,10 @@ output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_
 已同步到本地：
 
 ```text
-output/predictions/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/raw/predictions_2025-01_2025-06.parquet
-output/predictions/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/raw/predictions_2025-07_2025-12.parquet
-output/predictions/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/predictions_all.parquet
-output/local/next_close_labels_2025/opening_2025_next_close_labels_v1.parquet
+output/legacy/predictions/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/raw/predictions_2025-01_2025-06.parquet
+output/legacy/predictions/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/raw/predictions_2025-07_2025-12.parquet
+output/legacy/predictions/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/predictions_all.parquet
+output/legacy/labels/next_close_labels_2025/opening_2025_next_close_labels_v1.parquet
 experiments/results/metrics/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_metrics_by_year.csv
 experiments/results/metrics/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_metrics_by_month.csv
 ```
@@ -2042,25 +2021,25 @@ Training metrics：2025 全年 `group_rank_ic_mean = 0.1316`，`group_rank_ic_ir
 轻量归档：
 
 ```text
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_pool_internal_summary.csv
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_pool_internal_month_summary.csv
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_pool_internal_halfyear_summary.csv
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_pool_internal_year_summary.csv
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_pool_internal_group_metrics.csv
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_pool_internal_with_mean.svg
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_rank_ic_with_mean.svg
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_short_excess_rank_ic_with_mean.svg
-experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_next_excess_rank_ic_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025/pool_internal_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025/pool_internal_month_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025/pool_internal_halfyear_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025/pool_internal_year_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025/pool_internal_group_metrics.csv
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025/pool_internal_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025/rank_ic_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025/short_excess_rank_ic_with_mean.svg
+experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025/next_excess_rank_ic_with_mean.svg
 ```
 
 周度输出：
 
 ```text
-output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal/daily_pool_internal_summary.csv
-output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal/weekly_pool_internal_summary.csv
-output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal/weekly_pool_internal_overall_summary.csv
-output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal/weekly_worst_windows.csv
-output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal/baseline_halfyear_2025_universe_sml_weekly_rolling_4w/baseline_halfyear_2025_universe_sml_weekly_rolling_4w.svg
+output/legacy/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal/daily_pool_internal_summary.csv
+output/legacy/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal/weekly_pool_internal_summary.csv
+output/legacy/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal/weekly_pool_internal_overall_summary.csv
+output/legacy/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal/weekly_worst_windows.csv
+output/legacy/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal/baseline_halfyear_2025_universe_sml_weekly_rolling_4w/baseline_halfyear_2025_universe_sml_weekly_rolling_4w.svg
 ```
 
 ### 2020-2025 halfyear rolling 合并归档（三年训练、半年预测）
@@ -2093,10 +2072,10 @@ light LightGBM regularization、Top100 pool-internal 评估；S/M/L 股池覆盖
 原始 `2020-2025` 合并归档按用户要求只保留 3 张核心图和 trace：
 
 ```text
-experiments/results/backtests/halfyear_window_2020_2025_short_halfyear.svg
-experiments/results/backtests/halfyear_window_2020_2025_next_halfyear.svg
-experiments/results/backtests/halfyear_window_2020_2025_weekly.svg
-experiments/results/backtests/halfyear_window_2020_2025_trace.json
+experiments/results/backtests/halfyear_window_2020_2025/short_halfyear.svg
+experiments/results/backtests/halfyear_window_2020_2025/next_halfyear.svg
+experiments/results/backtests/halfyear_window_2020_2025/weekly.svg
+experiments/results/backtests/halfyear_window_2020_2025/trace.json
 ```
 
 ### Mentor direction for next signal enhancement
@@ -2104,16 +2083,18 @@ experiments/results/backtests/halfyear_window_2020_2025_trace.json
 mentor 后续指示：
 
 - `2020`、`2021` 年做日频的人不多，下一轮信号增强重点看 `2022-2025`。
-- 研究对象仍是开盘强势股本身，继续通过特征工程、训练权重和模型参数优化来加强信号。
+- 研究对象仍是开盘强势股本身，继续通过特征工程和常规模型参数优化来加强信号。
 - 后续展示和验收主看 `pool_L`；S/M/L 和 universe 保留为历史归档和必要诊断。
 - 上一轮 `2020-2025` rolling-window summary 只保留四股池 short halfyear、next halfyear 和 weekly 单周期视图三张核心图；这里的 weekly 不是 4w rolling 诊断。
 
 ### 2022-2025 baseline 归档
 
-按 mentor 指示切出 `2022-2025` baseline，输入为已归档的 halfyear mainline
-`2020-2024` pool-internal group metrics 与 2025 OOS extension group metrics。主展示使用
-universe + `pool_L`，不放 `pool_S/M`；short / next excess + Rank IC 按季度聚合，累计超额
-使用日度路径且横轴只标年份。
+按 mentor 指示切出 `2022-2025` baseline。旧本地版本曾由 halfyear mainline
+`2020-2024` pool-internal group metrics 与 2025 OOS extension group metrics 拼接生成；
+现在正式归档已由集群侧 `baseline_2022_2025_cluster_analysis_v1` 取代。集群 Job 直接读取
+PVC 上 2022H1..2024H2 与 2025H1..2025H2 prediction shards，在容器内拼接并 join PVC
+next-close labels。主展示使用 universe + `pool_L`，不放 `pool_S/M`；short / next excess +
+Rank IC 按季度聚合，累计超额使用日度路径且横轴只标年份。
 
 整体汇总（2022-2025，date-clock group 等权）：
 
@@ -2128,21 +2109,68 @@ short 更强但 next 为负，保留为参照和 tail 诊断。
 归档文件：
 
 ```text
-experiments/results/backtests/baseline_2022_2025_universe_pool_l_quarter_summary.csv
-experiments/results/backtests/baseline_2022_2025_universe_pool_l_daily_summary.csv
-experiments/results/backtests/baseline_2022_2025_quarter_universe_pool_l_short_excess_rank_ic_with_mean.svg
-experiments/results/backtests/baseline_2022_2025_quarter_universe_pool_l_short_excess_rank_ic_with_mean_plot_data.csv
-experiments/results/backtests/baseline_2022_2025_quarter_universe_pool_l_short_excess_rank_ic_with_mean_trace.json
-experiments/results/backtests/baseline_2022_2025_quarter_universe_pool_l_next_excess_rank_ic_with_mean.svg
-experiments/results/backtests/baseline_2022_2025_quarter_universe_pool_l_next_excess_rank_ic_with_mean_plot_data.csv
-experiments/results/backtests/baseline_2022_2025_quarter_universe_pool_l_next_excess_rank_ic_with_mean_trace.json
-experiments/results/backtests/baseline_2022_2025_universe_pool_l_daily_cumulative.svg
-experiments/results/backtests/baseline_2022_2025_universe_pool_l_daily_cumulative_plot_data.csv
-experiments/results/backtests/baseline_2022_2025_universe_pool_l_daily_cumulative_trace.json
+experiments/runs/baseline_2022_2025_cluster_analysis_v1.toml
+experiments/jobs/baseline_2022_2025_cluster_analysis_v1_pool_internal_analysis_job.yaml
+experiments/results/backtests/baseline_2022_2025_cluster/pool_internal_summary.csv
+experiments/results/backtests/baseline_2022_2025_cluster/pool_internal_quarter_summary.csv
+experiments/results/backtests/baseline_2022_2025_cluster/daily_pool_internal_summary.csv
+experiments/results/backtests/baseline_2022_2025_cluster/short_excess_rank_ic_with_mean.svg
+experiments/results/backtests/baseline_2022_2025_cluster/next_excess_rank_ic_with_mean.svg
+experiments/results/backtests/baseline_2022_2025_cluster/daily_cumulative.svg
+output/artifacts/baseline_2022_2025_cluster_analysis_v1/
 ```
 
-下一步：围绕 `2022-2025` / `pool_L` 做特征工程、训练权重和模型参数优化；短期要求保持
-short excess 与 short IC，重点改善 next tail 稳定性。
+### 2022-2025 首轮试水优化归档
+
+围绕 `2022-2025` / `pool_L` 先跑三组低风险特征/模型优化试水，并统一使用集群侧
+pool-internal analysis 归档。三组均为 full universe 训练、`pool_L` 主验收：
+
+1. `reg_strong`：保留 soft-core feature set，显著加强 LightGBM 正则和叶子约束
+   (`num_leaves=31`, `min_child_samples=600`, `subsample=0.80`, `colsample_bytree=0.80`,
+   `reg_lambda=4.0`)。
+2. `bagging`：保留 baseline feature set，轻微增加树数并加重 row/column bagging
+   (`n_estimators=420`, `subsample=0.75`, `colsample_bytree=0.75`, `reg_lambda=2.0`)。
+3. `no_preopen_reg_mid`：去掉 `preopen_*` 特征族，并使用中等正则
+   (`num_leaves=47`, `min_child_samples=400`, `subsample=0.85`, `colsample_bytree=0.85`)。
+
+`pool_L` 总体结果如下，单位 bps；delta 均相对集群侧 2022-2025 baseline：
+
+| variant | short excess | next excess | short IC | next IC | next positive months | short delta | next delta |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| baseline | +8.626 | +7.974 | 0.1380 | 0.0017 | 32 / 48 | +0.000 | +0.000 |
+| `reg_strong` | +8.111 | +6.459 | 0.1369 | -0.0001 | 30 / 48 | -0.515 | -1.515 |
+| `bagging` | +8.591 | +7.874 | 0.1380 | 0.0015 | 31 / 48 | -0.035 | -0.100 |
+| `no_preopen_reg_mid` | +8.348 | +7.388 | 0.1373 | 0.0012 | 32 / 48 | -0.279 | -0.585 |
+
+结论：
+
+- 三组都没有打过 baseline；这说明当前 `soft_core_reg_light` baseline 的局部位置是健康的。
+- `reg_strong` 系统性变差，强正则方向先停。
+- `bagging` 最接近 baseline，但只是贴近而无增量；重 bagging 不能作为下一步主方向。
+- `no_preopen_reg_mid` 小幅变差，说明 `preopen_*` 不能整族删除；后续如果动 preopen，只做子特征级筛选。
+
+归档文件：
+
+```text
+experiments/runs/lgbm_delay2_36m_2022_2025_pool_l_reg_strong_v1.toml
+experiments/runs/lgbm_delay2_36m_2022_2025_pool_l_bagging_v1.toml
+experiments/runs/lgbm_delay2_36m_2022_2025_pool_l_no_preopen_reg_mid_v1.toml
+experiments/jobs/lgbm_delay2_36m_2022_2025_pool_l_reg_strong_v1_sharded_job.yaml
+experiments/jobs/lgbm_delay2_36m_2022_2025_pool_l_bagging_v1_sharded_job.yaml
+experiments/jobs/lgbm_delay2_36m_2022_2025_pool_l_no_preopen_reg_mid_v1_sharded_job.yaml
+experiments/jobs/lgbm_delay2_36m_2022_2025_pool_l_reg_strong_v1_pool_internal_analysis_job.yaml
+experiments/jobs/lgbm_delay2_36m_2022_2025_pool_l_bagging_v1_pool_internal_analysis_job.yaml
+experiments/jobs/lgbm_delay2_36m_2022_2025_pool_l_no_preopen_reg_mid_v1_pool_internal_analysis_job.yaml
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_pilot_sweep_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_{reg_strong,bagging,no_preopen_reg_mid}_v1_*
+```
+
+未完成的 `reg_mid`、`drop_return_reg_mid`、`guard_weighted` 已按用户要求停止并移出当前归档口径；
+后续不再把它们作为主线完整性的要求。
+
+下一步：围绕 `2022-2025` / `pool_L` 做更细粒度的特征工程，优先拆分 preopen / postopen /
+盘口深度 / 成交流子族，保留 short excess 与 short IC 的同时寻找 next tail 稳定性增量；不要继续押
+粗粒度正则、重 bagging 或整族删特征。
 
 ### 归档和保留口径
 
@@ -2151,37 +2179,44 @@ short excess 与 short IC，重点改善 next tail 稳定性。
   作为历史证据保留。guard、clean target、two-model alpha-risk、risk penalty 和 attribution 路线都属于这类证据。
 - 已运行过的 `experiments/jobs/*.yaml` 是轻量 K8s manifest trace，用来把结果追溯回可执行 Job。
 - 本地 `__pycache__`、`.pytest_cache`、`*.egg-info` 可直接清理；`.venv`、`.env` 和 ignored `output/`
-  不作为项目级瘦身目标。
+  通常不作为项目级瘦身目标。例外是 `output/legacy/predictions/**/*.parquet`：这些只是可重拉的
+  debug 本地副本，用后可删。
 
-### Output 索引
+### 本地结果索引
 
-本地 `output/` 只保留能追溯到上述 run/job 的产物：
+正式证据优先看 `experiments/results/**`。历史轻量摘要多为 `backtests/<prefix>_*` 平铺文件；
+新的多文件 pool-internal 归档使用 `backtests/<record_prefix>/` 子目录。`output/artifacts/**`
+只放当前 `2022-2025` baseline 和 pool_L 优化实验的集群侧 compact analysis 本地同步副本，方便查看完整
+CSV / JSON / SVG 包；`output/legacy/**` 只保留旧本地分析和 debug 产物；prediction parquet 可缺省，
+按需从 PVC 重拉。
 
 | local path | source |
 | --- | --- |
-| `output/predictions/<run_id>/predictions_all.parquet` | 对应 `experiments/runs/<run_id>.toml`、K8s training job 和 sync 记录。 |
-| `output/k8s/metrics/<run_id>_metrics_by_year.csv` | 从对应 PVC run output 拉回的 raw metrics。 |
-| `output/reports/opening_1m3d_*` | 小窗 Ridge/GBM 归档实验对比和校正指标。 |
-| `output/reports/opening_1y_next_month_*` | 一年训练、次月测试 Ridge/GBM 归档实验对比和校正指标。 |
-| `output/reports/opening_intraday_top20_1y_next_month` | 旧 GBM/strong baseline replay，对应 `opening_intraday_top20_1y_next_month_*` 归档摘要。 |
-| `output/reports/opening_intraday_lgbm_delay_replays` | LightGBM delay0/1/2 标准 replay，对应 `opening_intraday_lgbm_delay_replays_*` 归档摘要。 |
-| `output/reports/opening_alpha_horizon_decay_delay2_*` | delay2 horizon decay，对应 `opening_alpha_horizon_decay_delay2_*` 归档摘要。 |
-| `output/reports/opening_delay2_signal_baseline` | delay2 保守 baseline 的分钟四曲线，用于当前 feature-strengthening 门槛。 |
-| `output/local/score_learned_risk_sweep_v1` | learned-risk sweep artifact；轻量 summary 归档到 `experiments/results/backtests/score_learned_risk_sweep_v1_summary.csv`。 |
-| `experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1_*` | 18m rolling validation 的轻量 summary / month summary / trace；可重画 short-vs-next tradeoff 图。 |
+| `output/legacy/predictions/<run_id>/predictions_all.parquet` | 可选本地 debug 副本；对应 `experiments/runs/<run_id>.toml`、K8s training job 和 sync 记录，可删除后按需重拉。 |
+| `experiments/results/metrics/<run_id>_metrics_by_year.csv` | 从对应 PVC run output 拉回的 raw metrics。 |
+| `output/legacy/reports/opening_1m3d_*` | 小窗 Ridge/GBM 归档实验对比和校正指标。 |
+| `output/legacy/reports/opening_1y_next_month_*` | 一年训练、次月测试 Ridge/GBM 归档实验对比和校正指标。 |
+| `output/legacy/reports/opening_intraday_top20_1y_next_month` | 旧 GBM/strong baseline replay，对应 `experiments/results/backtests/opening_intraday_top20_1y_next_month/` 归档摘要。 |
+| `output/legacy/reports/opening_intraday_lgbm_delay_replays` | LightGBM delay0/1/2 标准 replay，对应 `experiments/results/backtests/opening_intraday_lgbm_delay_replays/` 归档摘要。 |
+| `output/legacy/reports/opening_alpha_horizon_decay_delay2_*` | delay2 horizon decay，对应 `experiments/results/backtests/opening_alpha_horizon_decay_delay2/` 归档摘要。 |
+| `output/legacy/reports/opening_delay2_signal_baseline` | delay2 保守 baseline 的分钟四曲线，用于当前 feature-strengthening 门槛。 |
+| `output/legacy/artifacts/score_learned_risk_sweep_v1` | 旧 learned-risk sweep artifact；轻量 summary 归档到 `experiments/results/backtests/score_learned_risk_sweep_v1_summary.csv`。 |
+| `experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1/` | 18m rolling validation 的轻量 summary / month summary / trace；可重画 short-vs-next tradeoff 图。 |
 | `experiments/results/backtests/lgbm_delay2_18m_postopen_mixed_w010_rolling_v1_signal_gate_summary.csv` | mixed label `w_long=0.10` rolling short / next gate 摘要。 |
-| `experiments/results/backtests/pool_internal_top100_w010_vs_risk_*` | raw alpha、mixed `w=0.10`、gap-risk score 的 pool-internal summary / month summary / mean-by-pool 图表。 |
-| `experiments/results/backtests/pool_internal_top100_w020_w030_*` | `w=0.20 / 0.30` 在 S/M/L 内部的 Top100 excess summary / month summary。 |
-| `experiments/results/backtests/pool_internal_top100_w010_w030_*` | raw alpha、mixed `w=0.10`、mixed `w=0.30` 的四张 monthly pool-internal SVG 和 plot data。 |
+| `experiments/results/backtests/pool_internal_top100_w010_vs_risk/` | raw alpha、mixed `w=0.10`、gap-risk score 的 pool-internal summary / month summary / mean-by-pool 图表。 |
+| `experiments/results/backtests/pool_internal_top100_w020_w030/` | `w=0.20 / 0.30` 在 S/M/L 内部的 Top100 excess summary / month summary。 |
+| `experiments/results/backtests/pool_internal_top100_w010_w030/` | raw alpha、mixed `w=0.10`、mixed `w=0.30` 的四张 monthly pool-internal SVG 和 plot data。 |
 | `experiments/results/backtests/pool_internal_monthly_rank_ic_3models.csv` | raw alpha、mixed `w=0.10`、`gap 0.30 p80` 对应四图的 monthly Rank IC 表。 |
 | `experiments/results/metrics/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_metrics_by_*` | halfyear mainline 的 14/14 shard 训练 metrics，含 yearly / monthly 汇总。 |
-| `experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe_*` | halfyear mainline 的 2018-2019 universe-only pool-internal / Rank IC 分析。 |
-| `experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024_*` | halfyear mainline 的 2020-2024 universe / S / M / L pool-internal、Rank IC 和分年/半年汇总。 |
-| `output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal` | halfyear mainline 2020-2024 的交易日等权 weekly / 4-week rolling pool-internal 诊断和 SVG。 |
-| `experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025_*` | 2025 OOS extension 的 universe / S / M / L pool-internal、Rank IC、plot data 和分年/半年汇总。 |
-| `output/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal` | 2025 OOS extension 的交易日等权 weekly / 4-week rolling pool-internal 诊断和 SVG。 |
-| `experiments/results/backtests/halfyear_window_2020_2025_*` | 2020-2025 合并视角的三张核心 SVG：short 半年度、next 半年度、weekly 单周折线；trace 记录输入 run 和 2024-09-30 / 2021-10-04 outlier。 |
-| `experiments/results/backtests/baseline_2022_2025_*` | 2022-2025 baseline 切片；主展示为 universe + `pool_L` 的季度 excess/IC 和日度累计超额曲线。 |
-| `experiments/results/backtests/gap_risk_penalized_attribution_v1_*` | rolling gap-risk Top100 替换归因的 outcome、feature exposure 和 residual-control 证据。 |
-| `output/local/<run_id>` | ignored artifact-sync buffer；不再作为唯一证据位置。 |
-| `output/predictions/rolling_alpha_conditioned_top100_validation_v1/raw` | 18m rolling 各测试月 prediction shard，用于 alpha Top100 内 risk/short/next 相关诊断。 |
+| `experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_pre2020_universe/` | halfyear mainline 的 2018-2019 universe-only pool-internal / Rank IC 分析。 |
+| `experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_2020_2024/` | halfyear mainline 的 2020-2024 universe / S / M / L pool-internal、Rank IC 和分年/半年汇总。 |
+| `output/legacy/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1_weekly_2020_2024_trading_day_equal` | halfyear mainline 2020-2024 的交易日等权 weekly / 4-week rolling pool-internal 诊断和 SVG。 |
+| `experiments/results/backtests/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_2025/` | 2025 OOS extension 的 universe / S / M / L pool-internal、Rank IC、plot data 和分年/半年汇总。 |
+| `output/legacy/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal` | 2025 OOS extension 的交易日等权 weekly / 4-week rolling pool-internal 诊断和 SVG。 |
+| `experiments/results/backtests/halfyear_window_2020_2025/` | 2020-2025 合并视角的三张核心 SVG：short 半年度、next 半年度、weekly 单周折线；trace 记录输入 run 和 2024-09-30 / 2021-10-04 outlier。 |
+| `experiments/results/backtests/baseline_2022_2025_cluster/` | 集群侧 2022-2025 baseline 切片；主展示为 universe + `pool_L` 的季度 excess/IC 和日度累计超额曲线。 |
+| `experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_<variant>_v1/` | 2022-2025 首轮试水优化归档；包含 `reg_strong`、`bagging`、`no_preopen_reg_mid` 的集群侧 pool-internal summary / plot data / SVG，以及 flat `pilot_sweep_summary.csv`。 |
+| `experiments/results/backtests/gap_risk_penalized_attribution_v1/` | rolling gap-risk Top100 替换归因的 outcome、feature exposure 和 residual-control 证据。 |
+| `output/artifacts/<run_id>` | 当前 2022-2025 cluster baseline / pool_L 优化实验的本地查看副本；正式摘要另归档到 `experiments/results/backtests/`。 |
+| `output/legacy/artifacts/<run_id>` | 旧 artifact 拉取和 raw shard metrics，保留给 debug / history。 |
+| `output/legacy/predictions/rolling_alpha_conditioned_top100_validation_v1/raw` | 18m rolling 各测试月 prediction shard，用于 alpha Top100 内 risk/short/next 相关诊断。 |
