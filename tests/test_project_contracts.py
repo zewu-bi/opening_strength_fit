@@ -6,9 +6,24 @@ import sys
 import tomllib
 from pathlib import Path
 
+from opening_strength_fit.commands.experiment_audit import RunRecord, metrics_status
 from opening_strength_fit.commands.project_contracts import collect_errors
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _audit_record(*, kind: str, status: str) -> RunRecord:
+    return RunRecord(
+        run_id="test_run",
+        config_path=Path("experiments/runs/test_run.toml"),
+        kind=kind,
+        model="lightgbm",
+        status=status,
+        selection_mode="cross_section",
+        tick_path="",
+        pvc_dir="/mnt/output/test_run",
+        local_dir="output/legacy/analysis/test_run",
+    )
 
 
 def test_project_contracts_are_satisfied() -> None:
@@ -37,3 +52,14 @@ def test_experiment_registry_is_aligned() -> None:
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_experiment_audit_metrics_status_distinguishes_artifact_runs() -> None:
+    artifact = _audit_record(kind="labeled_cache", status="completed")
+    completed_training = _audit_record(kind="experiment", status="completed")
+    queued_training = _audit_record(kind="experiment", status="queued")
+
+    assert metrics_status(artifact, has_metrics=False) == "n/a"
+    assert metrics_status(artifact, has_metrics=True) == "unexpected"
+    assert metrics_status(completed_training, has_metrics=False) == "missing"
+    assert metrics_status(queued_training, has_metrics=False) == "pending"

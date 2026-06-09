@@ -109,8 +109,14 @@ def is_pool_internal_analysis_run(record: RunRecord, kinds: set[str]) -> bool:
     return record.kind == "pool_internal_analysis" and "pool_internal_analysis" in kinds
 
 
-def format_bool(value: bool) -> str:
-    return "yes" if value else "no"
+def metrics_status(record: RunRecord, *, has_metrics: bool) -> str:
+    if is_artifact_run(record):
+        return "unexpected" if has_metrics else "n/a"
+    if has_metrics:
+        return "yes"
+    if record.status in ACTIVE_STATUSES:
+        return "pending"
+    return "missing"
 
 
 def print_table(records: list[dict[str, str]]) -> None:
@@ -194,7 +200,7 @@ def main() -> None:
                 "model": record.kind if (is_cache or is_exploration) else record.model,
                 "selection": record.selection_mode,
                 "jobs": ",".join(sorted(job_kinds)) if job_kinds else "missing",
-                "metrics": format_bool(has_metrics),
+                "metrics": metrics_status(record, has_metrics=has_metrics),
                 "pvc_dir": record.pvc_dir,
             }
         )
