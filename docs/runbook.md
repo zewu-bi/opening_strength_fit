@@ -101,35 +101,7 @@ TOML 模板见
 开启 `filter_selection=true` 后，TopN 汇总使用池内候选行；`predictions*.parquet` 保留全
 universe 打分并额外写出 `stock_pool_member` 和 stock-pool score buckets。
 
-## 3. 本地 Smoke
-
-```bash
-osf-inspect-dataset \
-  --symbol 000001.SZ 000925.SZ 600519.SH 601318.SH 300750.SZ \
-  --date 2021-09-22 2021-09-23 \
-  --config experiments/runs/gbm_opening_1y_next_month.toml \
-  --preview-rows 3 \
-  --label-preview-rows 3 \
-  --labeled-output output/legacy/analysis/inspect_smoke/multi_symbol_2021-09-22_2021-09-23_labeled.parquet
-
-osf-train \
-  --config experiments/runs/gbm_opening_1y_next_month.toml \
-  --input output/legacy/analysis/inspect_smoke/multi_symbol_2021-09-22_2021-09-23_labeled.parquet \
-  --input-kind labeled \
-  --split-mode chronological \
-  --test-start-date 2021-09-23 \
-  --test-end-date 2021-09-23 \
-  --feature-limit 80 \
-  --top-n 2 \
-  --output-dir output/legacy/analysis/gbm_opening_1y_next_month_multi_symbol_smoke
-
-osf-summarize-opening-results \
-  --input-dir output/legacy/analysis/gbm_opening_1y_next_month_multi_symbol_smoke
-```
-
-长窗口 labeled dataset 走 PVC cache 或专门的 cache build Job。
-
-## 4. 实验配置
+## 3. 实验配置
 
 正式实验通常对应三类文件：
 
@@ -158,7 +130,7 @@ local artifact pull: output/artifacts/<run_id>/  # compact analysis artifacts on
 `output/artifacts/_partial_metrics/`；旧 pulls、prediction parquet、本地分析、label shards 和重报告统一放
 `output/legacy/{artifacts,predictions,analysis,labels,reports}/`。
 
-## 5. 构建和 K8s
+## 4. 构建和 K8s
 
 集群命令统一使用 `hfcli kubectl --cluster research ...`，namespace 使用 `bizewu`。
 
@@ -225,7 +197,7 @@ hfcli kubectl --cluster research patch job <job-name> \
   -p '{"spec":{"parallelism":<parallelism>}}'
 ```
 
-### 5.1 集群侧分析 Job
+### 4.1 集群侧分析 Job
 
 从 `2022-2025` 这一轮新实验开始，正式预测结果分析改为集群侧完成。训练 Job 只负责在
 PVC 上写 metrics 和 raw predictions；pool-internal Top100 / Rank IC / plot data / SVG
@@ -282,7 +254,7 @@ stock pools:       lml.bzw@ssd/data/pool_{S,M,L}.parquet
 /mnt/output/opening_strength_fit/<run_id>/analysis/pool_internal_top100/
 ```
 
-### 5.2 Rolling 过程观测
+### 4.2 Rolling 过程观测
 
 Indexed Job 的 shard index 对应月份或半年窗口：
 
@@ -301,7 +273,7 @@ osf-rolling-job-status \
 hfcli kubectl --cluster research logs -n bizewu <pod-name> -f
 ```
 
-## 6. 同步产物
+## 5. 同步产物
 
 metrics、cluster-side analysis artifacts 和轻量归档统一使用：
 
@@ -346,7 +318,7 @@ pool-internal 分析不再把 next-close label 拉到本地。正式 analysis Jo
 `gap_risk_attribution` 会同步各自 summary/trace CSV；rolling root summary 缺失时会拉取
 `month_YYYY-MM/` shards 并本地合并；正式归档写入 `experiments/results/backtests/`。
 
-## 7. 分析命令
+## 6. 分析命令
 
 Metrics：
 
@@ -357,7 +329,7 @@ osf-summarize-opening-results \
 osf-compare-opening-results
 ```
 
-2022-2025 universe + pool_L pool-internal 验收面板按第 5.1 节运行 analysis Job，再按第 6 节
+2022-2025 universe + pool_L pool-internal 验收面板按第 4.1 节运行 analysis Job，再按第 5 节
 `osf-sync-experiment-artifacts --all` 同步。核心输出：
 
 ```text
@@ -385,7 +357,7 @@ pools = ["universe"]
 
 该模式会输出 `<plot-prefix>_universe_*` SVG / plot data，不要求 S/M/L 股池存在。
 
-本地 `osf-analyze-pool-internal-top100` 只作为 smoke / legacy fallback；正式结果不要再先拉
+本地 `osf-analyze-pool-internal-top100` 只作为 legacy fallback；正式结果不要再先拉
 prediction parquet 到本地。小样本调试可直接读本地路径或 PVC 风格的 `month_*` / `year_*` 目录：
 
 ```bash
@@ -420,7 +392,7 @@ Legacy diagnostics entrypoints: `osf-plot-rolling-validation-tradeoff`、
 `osf-audit-feature-dependence`、`osf-run-lgbm-delay-replays`、`osf-plot-lgbm-delay-decay`、
 `osf-run-alpha-horizon-decay`。旧结果和重报告写到 `output/legacy/`。
 
-## 8. 排查
+## 7. 排查
 
 | symptom | action |
 | --- | --- |

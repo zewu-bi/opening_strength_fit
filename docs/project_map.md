@@ -127,4 +127,4 @@ CLI:
 ## Ignored Outputs
 
 - `output/artifacts/<run_id>/` and `output/artifacts/_partial_metrics/`: current local mirrors and partial metrics; ignored.
-- `output/legacy/{artifacts,predictions,analysis,labels,reports}/`: old pulls, debug prediction/label/report state, smoke output, and heavy diagnostics; ignored.
+- `output/legacy/{artifacts,predictions,analysis,labels,reports}/`: old pulls, debug prediction/label/report state, local analysis output, and heavy diagnostics; ignored.

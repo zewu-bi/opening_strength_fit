@@ -21,7 +21,7 @@ next work: 2022-2025 pool_L feature engineering and model optimization
 | 文件 | 内容 |
 | --- | --- |
 | [docs/project_brief.md](docs/project_brief.md) | 研究目标、核心口径、当前主线和关键里程碑。 |
-| [docs/runbook.md](docs/runbook.md) | 本地 smoke、K8s Job、artifact sync、replay 和排查命令。 |
+| [docs/runbook.md](docs/runbook.md) | K8s Job、artifact sync、analysis 和排查命令。 |
 | [docs/experiment_log.md](docs/experiment_log.md) | 实验事实源：run、数字、K8s 输出、配置索引。 |
 | [docs/project_map.md](docs/project_map.md) | 文件、模块和 CLI 索引。 |
 | [experiments/README.md](experiments/README.md) | Run config 目录约定、run kind 映射和 TOML 模板入口。 |

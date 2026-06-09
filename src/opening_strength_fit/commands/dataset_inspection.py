@@ -555,7 +555,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "Build or load a small opening tick dataset, check feature/label coverage, "
-            "and optionally write the raw tick sample for local smoke training."
+            "and optionally write the raw tick sample for local debugging."
         )
     )
     parser.add_argument(
