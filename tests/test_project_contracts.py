@@ -6,7 +6,11 @@ import sys
 import tomllib
 from pathlib import Path
 
-from opening_strength_fit.commands.experiment_audit import RunRecord, metrics_status
+from opening_strength_fit.commands.experiment_audit import (
+    RunRecord,
+    metrics_status,
+    summarize_values,
+)
 from opening_strength_fit.commands.project_contracts import collect_errors
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -63,3 +67,29 @@ def test_experiment_audit_metrics_status_distinguishes_artifact_runs() -> None:
     assert metrics_status(artifact, has_metrics=True) == "unexpected"
     assert metrics_status(completed_training, has_metrics=False) == "missing"
     assert metrics_status(queued_training, has_metrics=False) == "pending"
+
+
+def test_experiment_audit_summary_prioritizes_actionable_counts() -> None:
+    records = [
+        {"status": "completed", "metrics": "yes"},
+        {"status": "queued", "metrics": "pending"},
+        {"status": "completed", "metrics": "n/a"},
+        {"status": "running", "metrics": "missing"},
+    ]
+
+    assert (
+        summarize_values(
+            records,
+            "status",
+            ("queued", "running", "completed", "canceled", "superseded"),
+        )
+        == "queued=1, running=1, completed=2"
+    )
+    assert (
+        summarize_values(
+            records,
+            "metrics",
+            ("missing", "pending", "unexpected", "yes", "n/a"),
+        )
+        == "missing=1, pending=1, yes=1, n/a=1"
+    )

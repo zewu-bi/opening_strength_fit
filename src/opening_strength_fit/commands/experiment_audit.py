@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -142,6 +143,33 @@ def print_table(records: list[dict[str, str]]) -> None:
         print("  ".join(record[column].ljust(widths[column]) for column in columns))
 
 
+def summarize_values(records: list[dict[str, str]], column: str, order: tuple[str, ...]) -> str:
+    counts = Counter(record[column] for record in records)
+    keys = [key for key in order if key in counts]
+    keys.extend(sorted(set(counts) - set(keys)))
+    return ", ".join(f"{key}={counts[key]}" for key in keys) if keys else "none"
+
+
+def print_summary(records: list[dict[str, str]]) -> None:
+    print("\naudit_summary:")
+    print(
+        "  status_counts: "
+        + summarize_values(
+            records,
+            "status",
+            ("queued", "running", "completed", "canceled", "superseded"),
+        )
+    )
+    print(
+        "  metrics_counts: "
+        + summarize_values(
+            records,
+            "metrics",
+            ("missing", "pending", "unexpected", "yes", "n/a"),
+        )
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Audit local experiment config/job/metrics alignment."
@@ -212,6 +240,7 @@ def main() -> None:
 
     print("experiment_alignment:")
     print_table(records)
+    print_summary(records)
     if warnings:
         print("\nalignment_warnings:")
         for warning in warnings:
