@@ -94,7 +94,7 @@ ic_mode = "cross_section"
 top_n = 100
 
 [output]
-local_dir = "output/local/alpha_conditioned_reversal_gap_risk_v2"
+local_dir = "output/legacy/analysis/alpha_conditioned_reversal_gap_risk_v2"
 k8s_dir = "/mnt/output/opening_strength_fit/alpha_conditioned_reversal_gap_risk_v2"
 
 [k8s]
@@ -103,7 +103,7 @@ image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
-helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260529-alpha-conditioned-risk-v2"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260529-alpha-conditioned-risk-v2"
 
 [k8s.node_selector]
 "kubernetes.io/hostname" = "node8"

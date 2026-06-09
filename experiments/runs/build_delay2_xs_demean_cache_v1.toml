@@ -19,7 +19,7 @@ source = "labeled_pvc"
 labeled_path = "/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_labeled.parquet"
 
 [output]
-local_dir = "output/local/build_delay2_xs_demean_cache_v1"
+local_dir = "output/legacy/analysis/build_delay2_xs_demean_cache_v1"
 k8s_dir = "/mnt/output/opening_strength_fit/cache_builds/build_delay2_xs_demean_cache_v1"
 
 [k8s]

@@ -87,7 +87,7 @@ ic_mode = "cross_section"
 top_n = 100
 
 [output]
-local_dir = "output/local/lgbm_delay2_postopen_v2"
+local_dir = "output/legacy/analysis/lgbm_delay2_postopen_v2"
 k8s_dir = "/mnt/output/opening_strength_fit/lgbm_delay2_postopen_v2"
 
 [k8s]

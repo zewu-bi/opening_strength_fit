@@ -146,7 +146,7 @@ ic_mode = "cross_section"
 top_n = 100
 
 [output]
-local_dir = "output/local/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1"
+local_dir = "output/legacy/analysis/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1"
 k8s_dir = "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1"
 
 [k8s]
@@ -156,7 +156,7 @@ image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
-helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260605-halfyear-v1"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260605-halfyear-v1"
 wait_for_paths = [
   "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2015_delay2_mixed_w030_labeled_v1.parquet",
   "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2016_delay2_mixed_w030_labeled_v1.parquet",

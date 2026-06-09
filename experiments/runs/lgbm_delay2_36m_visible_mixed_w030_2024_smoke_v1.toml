@@ -6,7 +6,7 @@ status = "completed"
 
 [data]
 source = "labeled_pvc"
-labeled_path = "/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_mixed_w030_labeled_v1"
+labeled_path = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1"
 tick_path = ""
 input_kind = "labeled"
 feature_limit = 80
@@ -144,7 +144,7 @@ ic_mode = "cross_section"
 top_n = 100
 
 [output]
-local_dir = "output/local/lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1"
+local_dir = "output/legacy/analysis/lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1"
 k8s_dir = "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_2024_smoke_v1"
 
 [k8s]
@@ -153,12 +153,12 @@ image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
-helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260604-next-close-v2"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260604-next-close-v2"
 wait_for_paths = [
-  "/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_mixed_w030_labeled_v1/opening_2021_delay2_mixed_w030_labeled_v1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_mixed_w030_labeled_v1/opening_2022_delay2_mixed_w030_labeled_v1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_mixed_w030_labeled_v1/opening_2023_delay2_mixed_w030_labeled_v1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_mixed_w030_labeled_v1/opening_2024_delay2_mixed_w030_labeled_v1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2021_delay2_mixed_w030_labeled_v1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2022_delay2_mixed_w030_labeled_v1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2023_delay2_mixed_w030_labeled_v1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2024_delay2_mixed_w030_labeled_v1.parquet",
 ]
 wait_for_path_timeout_seconds = 43200
 wait_for_path_interval_seconds = 120

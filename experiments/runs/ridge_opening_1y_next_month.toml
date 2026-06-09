@@ -76,7 +76,7 @@ ic_mode = "cross_section"
 top_n = 20
 
 [output]
-local_dir = "output/local/ridge_opening_1y_next_month"
+local_dir = "output/legacy/analysis/ridge_opening_1y_next_month"
 k8s_dir = "/mnt/output/opening_strength_fit/ridge_opening_1y_next_month"
 
 [k8s]

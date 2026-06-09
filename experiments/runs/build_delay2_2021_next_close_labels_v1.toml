@@ -5,8 +5,8 @@ description = "Fetch 2021 ClickHouse next-close labels for delay2 base labeled c
 status = "completed"
 
 [next_close_labels]
-input_path = "/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_base_labeled_v2/opening_2021_delay2_base_labeled_v2.parquet"
-output_path = "/mnt/output/opening_strength_fit/cache/opening_10y_201501_202412_delay2_next_close_labels_v1/opening_2021_next_close_labels_v1.parquet"
+input_path = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_base_labeled_v2/opening_2021_delay2_base_labeled_v2.parquet"
+output_path = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/opening_2021_next_close_labels_v1.parquet"
 buy_price_col = "buy_price"
 decision_times = [
   "09:31:00",
@@ -31,7 +31,7 @@ port = 8123
 table = "stock.tick"
 
 [output]
-local_dir = "output/local/build_delay2_2021_next_close_labels_v1"
+local_dir = "output/legacy/analysis/build_delay2_2021_next_close_labels_v1"
 k8s_dir = "/mnt/output/opening_strength_fit/cache_builds/build_delay2_2021_next_close_labels_v1"
 
 [k8s]
@@ -40,7 +40,7 @@ image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
-helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260604-next-close-v2"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260604-next-close-v2"
 
 [k8s.node_selector]
 "kubernetes.io/hostname" = "node8"

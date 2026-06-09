@@ -1,0 +1,79 @@
+[run]
+id = "baseline_2022_2025_cluster_analysis_v1"
+kind = "pool_internal_analysis"
+description = "Cluster-side re-analysis of the archived 2022-2025 baseline using historical soft_core_reg_light prediction shards from the 2018-2024 mainline and 2025 OOS extension."
+status = "completed"
+
+[window]
+mode = "rolling_monthly"
+test_months = 6
+test_stride_months = 6
+test_start_month = "2022-01"
+test_end_month = "2025-12"
+
+[evaluation]
+selection_mode = "cross_section"
+ic_mode = "cross_section"
+top_n = 100
+
+[output]
+local_dir = "output/artifacts/baseline_2022_2025_cluster_analysis_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/baseline_2022_2025_cluster_analysis_v1"
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-analyze-baseline-2225"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+clickhouse_secret = "opening-strength-clickhouse"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260609-cluster-analysis-v3"
+
+[k8s.node_selector]
+"kubernetes.io/hostname" = "node15"
+
+[analysis.pool_internal]
+enabled = true
+job_name = "os-analyze-baseline-2225"
+variant = "baseline_2022_2025_cluster"
+plot_prefix = "baseline_2022_2025_cluster"
+plot_variant_label = "2022-2025 baseline cluster"
+record_prefix = "baseline_2022_2025_cluster"
+plot_period = "quarter"
+pools = ["universe", "L"]
+top_n = 100
+output_dir = "/mnt/output/opening_strength_fit/baseline_2022_2025_cluster_analysis_v1/analysis/pool_internal_top100"
+report_dir = "/mnt/output/opening_strength_fit/baseline_2022_2025_cluster_analysis_v1/analysis/pool_internal_top100/reports"
+next_close_label_input = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1"
+env_secrets = ["opening-strength-clickhouse", "xy-fit-ceph-credentials"]
+wait_for_path_timeout_seconds = 86400
+wait_for_path_interval_seconds = 120
+predictions = [
+  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2022-01/predictions.parquet",
+  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2022-07/predictions.parquet",
+  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2023-01/predictions.parquet",
+  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2023-07/predictions.parquet",
+  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2024-01/predictions.parquet",
+  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2024-07/predictions.parquet",
+  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/month_2025-01/predictions.parquet",
+  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/month_2025-07/predictions.parquet",
+]
+wait_for_paths = [
+  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2022-01/predictions.parquet",
+  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2022-07/predictions.parquet",
+  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2023-01/predictions.parquet",
+  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2023-07/predictions.parquet",
+  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2024-01/predictions.parquet",
+  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2024-07/predictions.parquet",
+  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/month_2025-01/predictions.parquet",
+  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/month_2025-07/predictions.parquet",
+]
+
+[analysis.pool_internal.resources]
+cpu_request = "8"
+cpu_limit = "16"
+memory_request = "256Gi"
+memory_limit = "384Gi"
+
+[analysis.pool_internal.archive]
+profile = "presentation_core"

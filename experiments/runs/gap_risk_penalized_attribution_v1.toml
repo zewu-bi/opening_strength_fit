@@ -60,7 +60,7 @@ penalty = 0.35
 candidate_alpha_rank_min = 0.80
 
 [output]
-local_dir = "output/local/gap_risk_penalized_attribution_v1"
+local_dir = "output/legacy/analysis/gap_risk_penalized_attribution_v1"
 k8s_dir = "/mnt/output/opening_strength_fit/gap_risk_penalized_attribution_v1"
 
 [k8s]

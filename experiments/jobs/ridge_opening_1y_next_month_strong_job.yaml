@@ -17,7 +17,7 @@ spec:
             claimName: bizewu-private-data
       containers:
         - name: opening-strength-fit
-          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260520-064219-strong
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260520-064219-strong
           imagePullPolicy: Always
           envFrom:
             - secretRef:

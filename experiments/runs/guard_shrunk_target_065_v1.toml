@@ -76,7 +76,7 @@ ic_mode = "cross_section"
 top_n = 100
 
 [output]
-local_dir = "output/local/guard_shrunk_target_065_v1"
+local_dir = "output/legacy/analysis/guard_shrunk_target_065_v1"
 k8s_dir = "/mnt/output/opening_strength_fit/guard_shrunk_target_065_v1"
 
 [k8s]
@@ -85,7 +85,7 @@ image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
-helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260528-clean-risk-v1"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260528-clean-risk-v1"
 
 [k8s.node_selector]
 "kubernetes.io/hostname" = "node8"

@@ -35,7 +35,7 @@ source = "labeled_pvc"
 labeled_path = "/mnt/output/opening_strength_fit/cache/opening_1y_next_month_delay2_labeled.parquet"
 
 [output]
-local_dir = "output/local/build_guard_shrunk_target_060_v1"
+local_dir = "output/legacy/analysis/build_guard_shrunk_target_060_v1"
 k8s_dir = "/mnt/output/opening_strength_fit/cache_builds/build_guard_shrunk_target_060_v1"
 
 [k8s]
@@ -43,7 +43,7 @@ namespace = "bizewu"
 image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
-helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:opening-strength-fit-20260528-clean-risk-v1"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260528-clean-risk-v1"
 
 [k8s.node_selector]
 "kubernetes.io/hostname" = "node8"
