@@ -428,23 +428,8 @@ osf-summarize-opening-results \
 osf-compare-opening-results
 ```
 
-2022-2025 universe + pool_L pool-internal 验收面板：
-
-```bash
-osf-render-k8s-job \
-  --config experiments/runs/<run_id>.toml \
-  --analysis \
-  --image ${IMAGE_REPO}:${VERSION}
-
-hfcli kubectl --cluster research apply -f experiments/jobs/<run_id>_pool_internal_analysis_job.yaml
-hfcli kubectl --cluster research wait --for=condition=complete job/<analysis-job-name> -n bizewu --timeout=24h
-
-osf-sync-experiment-artifacts \
-  --config experiments/runs/<run_id>.toml \
-  --all
-```
-
-该脚本输出：
+2022-2025 universe + pool_L pool-internal 验收面板按第 5.1 节运行 analysis Job，再按第 6 节
+`osf-sync-experiment-artifacts --all` 同步。核心输出：
 
 ```text
 pool_internal_summary.csv

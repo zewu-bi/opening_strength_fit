@@ -121,12 +121,7 @@ universe 作为参照、`pool_L` 作为验收对象；`pool_S/M` 不进主展示
 | training universe | A 股 `00/30.SZ` 和 `60/68.SH` full universe |
 | selection masks | 历史归档保留 universe / `pool_S` / `pool_M` / `pool_L`；后续主展示使用 universe + `pool_L`，验收聚焦 `pool_L` |
 | main metrics | short Rank IC、池内 Top100 excess；next close 作为 tail 诊断和 mixed-label 定权参考 |
-| completed validation | `soft_core_reg_light`，2024 全年 12 个 monthly rolling folds；run id `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`，已完成并归档 |
-| completed mainline | 同一 feature/model 口径，`36m train -> next 6m test` 半年 rolling；`2018H1..2024H2` 主线和 `2025H1..2025H2` OOS extension 均已完成并归档 |
-| current summary | `2022-2025` baseline 已归档：universe + `pool_L` 季度 excess/IC 和日度累计曲线 |
-| completed pilot sweep | `reg_strong` / `bagging` / `no_preopen_reg_mid` 已归档，均未超过 baseline |
 | next target | 聚焦 `2022-2025` 和 `pool_L`，进入细粒度特征工程和轻量常规模型调参 |
-| analysis workflow | 从 `2022-2025` sweep 起，正式 pool-internal 分析在 K8s 内完成，本地同步 compact artifacts |
 
 训练和全量打分仍使用 full universe。历史验证保留 `pool_S`、`pool_M`、`pool_L` 作为 TopN
 selection mask；后续按 mentor 指示主看 `pool_L`，并保留 universe 作为主展示参照。

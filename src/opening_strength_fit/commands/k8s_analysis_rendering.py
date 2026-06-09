@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hashlib
-import re
 import shlex
 import textwrap
 from datetime import date
@@ -10,9 +8,18 @@ from pathlib import Path
 import pandas as pd
 
 from opening_strength_fit.commands.artifact_sync_metrics import DEFAULT_NEXT_CLOSE_LABEL_PVC_DIR
+from opening_strength_fit.commands.k8s_rendering_common import (
+    env_from_secrets_yaml as _env_from_secrets_yaml,
+)
+from opening_strength_fit.commands.k8s_rendering_common import k8s_job_name as _k8s_job_name
+from opening_strength_fit.commands.k8s_rendering_common import (
+    node_selector_yaml as _node_selector_yaml,
+)
+from opening_strength_fit.commands.k8s_rendering_common import (
+    wait_for_specific_paths_yaml as _wait_for_specific_paths_yaml,
+)
 from opening_strength_fit.config import config_value as get
-from opening_strength_fit.config import run_id, slug
-from opening_strength_fit.k8s import KUBERNETES_NAME_LIMIT
+from opening_strength_fit.config import run_id
 
 
 def _analysis_config(config: dict) -> dict:
@@ -50,22 +57,6 @@ def _analysis_resources(config: dict) -> dict:
     return resources if isinstance(resources, dict) else {}
 
 
-def _env_from_secrets_yaml(secret_names: list[str], indent: int) -> str:
-    unique_names = []
-    seen = set()
-    for name in secret_names:
-        item = str(name).strip()
-        if item and item not in seen:
-            unique_names.append(item)
-            seen.add(item)
-    if not unique_names:
-        return ""
-    lines = ["envFrom:"]
-    for name in unique_names:
-        lines.extend(["  - secretRef:", f"      name: {name}"])
-    return textwrap.indent("\n".join(lines) + "\n", " " * indent)
-
-
 def _analysis_env_from(config: dict, indent: int = 22) -> str:
     secret_names = []
     clickhouse_secret = str(
@@ -79,48 +70,6 @@ def _analysis_env_from(config: dict, indent: int = 22) -> str:
     if ceph_secret:
         secret_names.append(ceph_secret)
     return _env_from_secrets_yaml(secret_names, indent=indent)
-
-
-def _node_selector_yaml(config: dict, indent: int = 18) -> str:
-    node_selector = config.get("k8s", {}).get("node_selector", {})
-    if not node_selector:
-        return ""
-    lines = [f"{' ' * indent}nodeSelector:"]
-    for key, value in sorted(node_selector.items()):
-        lines.append(f'{" " * (indent + 2)}{key}: "{value}"')
-    return "\n".join(lines) + "\n"
-
-
-def _wait_for_specific_paths_yaml(
-    paths: list[str],
-    *,
-    timeout_seconds: int,
-    interval_seconds: int,
-    indent: int,
-) -> str:
-    quoted_paths = " ".join(f'"{path.replace(chr(34), chr(92) + chr(34))}"' for path in paths)
-    return textwrap.indent(
-        textwrap.dedent(
-            f"""\
-            WAIT_PATH_TIMEOUT_SECONDS={timeout_seconds}
-            WAIT_PATH_INTERVAL_SECONDS={interval_seconds}
-            WAIT_PATH_STARTED=${{SECONDS}}
-            WAIT_PATHS=({quoted_paths})
-            for WAIT_PATH in "${{WAIT_PATHS[@]}}"; do
-              until [ -f "${{WAIT_PATH}}" ]; do
-                if [ $((SECONDS - WAIT_PATH_STARTED)) -ge "${{WAIT_PATH_TIMEOUT_SECONDS}}" ]; then
-                  echo "timed out waiting for dependency file: ${{WAIT_PATH}}" >&2
-                  exit 1
-                fi
-                echo "waiting for dependency file: ${{WAIT_PATH}}"
-                sleep "${{WAIT_PATH_INTERVAL_SECONDS}}"
-              done
-              echo "dependency file is ready: ${{WAIT_PATH}}"
-            done
-            """
-        ),
-        " " * indent,
-    )
 
 
 def _window_mode(config: dict) -> str:
@@ -159,16 +108,6 @@ def _year_from_config(config: dict, key: str) -> int:
     if not value:
         raise SystemExit(f"--analysis requires [window].{key} for yearly waits")
     return date.fromisoformat(str(value)).year
-
-
-def _k8s_job_name(prefix: str, run_id_value: str, suffix: str) -> str:
-    candidate = f"{prefix}-{slug(run_id_value)}-{suffix}".strip("-")
-    if len(candidate) <= KUBERNETES_NAME_LIMIT:
-        return candidate
-    digest = hashlib.sha1(candidate.encode("utf-8")).hexdigest()[:8]
-    keep = KUBERNETES_NAME_LIMIT - len(prefix) - len(suffix) - len(digest) - 3
-    compact = re.sub(r"-+", "-", slug(run_id_value))[: max(1, keep)].rstrip("-")
-    return f"{prefix}-{compact}-{suffix}-{digest}"
 
 
 def _shell_command_yaml(args: list[str], indent: int) -> str:

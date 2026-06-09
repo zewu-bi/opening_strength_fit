@@ -37,6 +37,22 @@ def _metric_row(month: str, rows: int, top_return: float) -> dict[str, object]:
     }
 
 
+def _run_spec(run_id: str, **overrides) -> RunSpec:
+    values = {
+        "run_id": run_id,
+        "pvc_dir": f"/mnt/output/opening_strength_fit/{run_id}",
+        "namespace": "bizewu",
+        "pvc": "bizewu-private-data",
+        "mount_path": "/mnt/output",
+        "pull_secret": "highfort",
+        "image": "image",
+        "test_start_year": 0,
+        "test_end_year": 0,
+    }
+    values.update(overrides)
+    return RunSpec(**values)
+
+
 class SyncExperimentArtifactsTest(unittest.TestCase):
     def test_yearly_shard_metrics_are_combined_locally(self) -> None:
         frames = [
@@ -105,16 +121,8 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
         self.assertEqual(paths, [metrics_dir / "test_run_metrics_by_year.csv"])
 
     def test_next_close_label_years_use_halfyear_window_range(self) -> None:
-        spec = RunSpec(
-            run_id="halfyear",
-            pvc_dir="/mnt/output/opening_strength_fit/halfyear",
-            namespace="bizewu",
-            pvc="bizewu-private-data",
-            mount_path="/mnt/output",
-            pull_secret="highfort",
-            image="image",
-            test_start_year=0,
-            test_end_year=0,
+        spec = _run_spec(
+            "halfyear",
             test_start_month="2024-07",
             test_end_month="2025-12",
         )
@@ -122,16 +130,8 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
         self.assertEqual(next_close_label_years(spec), [2024, 2025])
 
     def test_pull_next_close_labels_uses_standard_local_directory(self) -> None:
-        spec = RunSpec(
-            run_id="halfyear",
-            pvc_dir="/mnt/output/opening_strength_fit/halfyear",
-            namespace="bizewu",
-            pvc="bizewu-private-data",
-            mount_path="/mnt/output",
-            pull_secret="highfort",
-            image="image",
-            test_start_year=0,
-            test_end_year=0,
+        spec = _run_spec(
+            "halfyear",
             test_start_month="2025-01",
             test_end_month="2025-12",
         )
@@ -167,16 +167,8 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
         )
 
     def test_score_risk_artifacts_are_pulled_to_local_run_dir(self) -> None:
-        spec = RunSpec(
-            run_id="score_learned_risk_sweep_v1",
-            pvc_dir="/mnt/output/opening_strength_fit/score_learned_risk_sweep_v1",
-            namespace="bizewu",
-            pvc="bizewu-private-data",
-            mount_path="/mnt/output",
-            pull_secret="highfort",
-            image="image",
-            test_start_year=0,
-            test_end_year=0,
+        spec = _run_spec(
+            "score_learned_risk_sweep_v1",
             kind="score_risk_sweep",
         )
 
@@ -210,14 +202,8 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
             )
 
     def test_lightweight_artifacts_record_summaries_only(self) -> None:
-        spec = RunSpec(
-            run_id="rolling_alpha_conditioned_top100_validation_v1",
-            pvc_dir="/mnt/output/opening_strength_fit/rolling_alpha_conditioned_top100_validation_v1",
-            namespace="bizewu",
-            pvc="bizewu-private-data",
-            mount_path="/mnt/output",
-            pull_secret="highfort",
-            image="image",
+        spec = _run_spec(
+            "rolling_alpha_conditioned_top100_validation_v1",
             test_start_year=2021,
             test_end_year=2021,
             test_start_month="2021-08",
@@ -258,16 +244,8 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
         )
 
     def test_pool_internal_analysis_artifacts_pull_and_record(self) -> None:
-        spec = RunSpec(
-            run_id="lgbm_delay2_36m_2022_2025_pool_l_reg_mid_v1",
-            pvc_dir="/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_pool_l_reg_mid_v1",
-            namespace="bizewu",
-            pvc="bizewu-private-data",
-            mount_path="/mnt/output",
-            pull_secret="highfort",
-            image="image",
-            test_start_year=0,
-            test_end_year=0,
+        spec = _run_spec(
+            "lgbm_delay2_36m_2022_2025_pool_l_reg_mid_v1",
             test_start_month="2022-01",
             test_end_month="2025-12",
             kind="exploration",
@@ -364,16 +342,8 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
         )
 
     def test_presentation_core_archive_profile_prunes_reports_from_config(self) -> None:
-        spec = RunSpec(
-            run_id="presentation_run",
-            pvc_dir="/mnt/output/opening_strength_fit/presentation_run",
-            namespace="bizewu",
-            pvc="bizewu-private-data",
-            mount_path="/mnt/output",
-            pull_secret="highfort",
-            image="image",
-            test_start_year=0,
-            test_end_year=0,
+        spec = _run_spec(
+            "presentation_run",
             kind="pool_internal_analysis",
             pool_internal_analysis_enabled=True,
             pool_internal_analysis_dir="/mnt/output/opening_strength_fit/presentation_run/analysis",
@@ -504,14 +474,8 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
         self.assertAlmostEqual(float(summary.loc[0, "next_top_excess_bps"]), 2.0)
 
     def test_rolling_validation_artifacts_can_be_pulled_from_month_shards(self) -> None:
-        spec = RunSpec(
-            run_id="rolling_alpha_conditioned_top100_validation_v1",
-            pvc_dir="/mnt/output/opening_strength_fit/rolling_alpha_conditioned_top100_validation_v1",
-            namespace="bizewu",
-            pvc="bizewu-private-data",
-            mount_path="/mnt/output",
-            pull_secret="highfort",
-            image="image",
+        spec = _run_spec(
+            "rolling_alpha_conditioned_top100_validation_v1",
             test_start_year=2021,
             test_end_year=2021,
             test_start_month="2021-08",
@@ -560,16 +524,8 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
             self.assertIn(root / "month_2021-08" / "rolling_group_metrics.csv", paths)
 
     def test_gap_attribution_artifacts_are_pulled_without_group_metrics(self) -> None:
-        spec = RunSpec(
-            run_id="gap_risk_penalized_attribution_v1",
-            pvc_dir="/mnt/output/opening_strength_fit/gap_risk_penalized_attribution_v1",
-            namespace="bizewu",
-            pvc="bizewu-private-data",
-            mount_path="/mnt/output",
-            pull_secret="highfort",
-            image="image",
-            test_start_year=0,
-            test_end_year=0,
+        spec = _run_spec(
+            "gap_risk_penalized_attribution_v1",
             kind="gap_risk_attribution",
         )
         fetched_remote_paths = []
