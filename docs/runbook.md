@@ -31,7 +31,7 @@ mixed w030 cache:
 ## 1. 预检
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
+cd ~/projects/opening_strength_fit
 source .venv/bin/activate
 set -a; . ./.env; set +a
 
@@ -64,7 +64,7 @@ CEPH_LDAP_KEY='your_headquarter_password'
 加载环境变量：
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
+cd ~/projects/opening_strength_fit
 set -a; . ./.env; set +a
 ```
 

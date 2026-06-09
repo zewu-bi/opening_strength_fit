@@ -30,7 +30,7 @@ next work: 2022-2025 pool_L feature engineering and model optimization
 ## 常用命令
 
 ```bash
-cd "$(git rev-parse --show-toplevel)"
+cd ~/projects/opening_strength_fit
 source .venv/bin/activate
 python -m pip install -e ".[dev]"
 
