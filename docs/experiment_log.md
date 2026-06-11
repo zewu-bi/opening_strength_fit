@@ -20,8 +20,10 @@
   `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1`，
   覆盖 `2018H1` 至 `2024H2` 共 14 个 folds；2020-2024 S/M/L 与 2018-2019
   universe-only 分析均已同步并归档。
-- 2025 OOS extension 与 `2022-2025` baseline 切片均已归档；当前下一步进入
-  `2022-2025` / `pool_L` 的特征工程和模型优化，主展示使用 universe + `pool_L`。
+- 2025 OOS extension 与 `2022-2025` baseline 切片均已归档；首轮强正则 / 重 bagging /
+  去 `preopen_*` 试水均未超过 baseline。2026-06-09 已投放第二批 10 个
+  `2022-2025` / `pool_L` 因子增强实验，主展示使用 universe + `pool_L`。后续“特征工程
+  和模型优化做强短期信号”落实为 cross-sectional relative features 和 model ensemble。
 - S/M/L 股池文件覆盖 `2020-01-02` 至 `2025-12-31`；2018/2019 没有股池日期，只用 universe
   口径验收。
 - 两模型 `final_score = alpha_rank - lambda * gap_risk_rank` 路线封存。它通过 rolling，说明短+长目标有信息，
@@ -41,6 +43,7 @@
 | `soft_core_reg_light` vs `w030` baseline | +0.24 / +0.31 / +0.58 | +0.92 / -0.01 / +1.17 | 固定权重后的 feature/model 候选；三列为 pool_S/M/L 的增量。 |
 | 36m `baseline` full year | +8.3 / +9.3 / +10.4 | +7.7 / +5.6 / +4.4 | 2024-01..2024-12 已同步归档；三列为 pool_S/M/L。 |
 | 36m halfyear `baseline` 2020-2024 | +8.9 / +10.7 / +12.1 | +12.0 / +13.7 / +14.3 | 半年 rolling 已完成；三列为 pool_S/M/L。 |
+| 2022-2025 `pool_L` second sweep | +0.017 best delta | +0.232 best delta | 9 个模型实验已完成并归档；最佳 short 增量仅 `price_path_plus` +0.017 bps，后续落实为 cross-sectional relative features 和 model ensemble。 |
 
 ## 实验时间线
 
@@ -62,6 +65,10 @@
 | 2026-06-05 | 36m baseline full-year archive | 2024-01..2024-12 已同步归档；正式模型展示名定为 `baseline`，S/M/L 池内 short 和 next 均值均为正。 |
 | 2026-06-05 | 36m halfyear rolling mainline running | 13y mixed cache 中 2015-2024 shard 齐备后，提交并运行 `36m train -> next 6m test` 半年 rolling，共 14 个 folds。 |
 | 2026-06-08 | 36m halfyear rolling archive | PVC 上 14/14 folds 完成；补齐本地 `2024H1` shard，归档 2018-2019 universe-only 和 2020-2024 S/M/L 分析。 |
+| 2026-06-09 | 2022-2025 pool_L second sweep running | 10 个 pool_L 因子增强实验和 9 个 cluster-side analysis Job 已提交；首轮 completed analysis Job 已从集群清理。 |
+| 2026-06-10 | tree-friendly sequence experiment running | 提交 `lgbm_delay2_36m_2022_2025_tree_sequence_v1`：full-universe 训练，显式编码 post-open 路径统计；`pool_L` 仅作为验收切片。 |
+| 2026-06-10 | xs-relative recent-weight overnight add-on | 提交 `lgbm_delay2_36m_2022_2025_pool_l_xs_relative_recent_weight_v1`：横截面相对特征 + recent-regime 轻度样本权重，作为 `xs_relative` 与 `recent_regime_weight` 的交互对照。 |
+| 2026-06-11 | 2022-2025 pool_L second sweep archive | 9 个模型实验训练 + pool-internal analysis 已补齐并归档；feature audit 仍在跑，不阻塞模型结论。 |
 
 ## 2026-05-20 小窗结果
 
@@ -2084,7 +2091,8 @@ mentor 后续指示：
 
 - `2020`、`2021` 年做日频的人不多，下一轮信号增强重点看 `2022-2025`。
 - 研究对象仍是开盘强势股本身，继续通过特征工程和常规模型参数优化来加强信号。
-- 后续展示和验收主看 `pool_L`；S/M/L 和 universe 保留为历史归档和必要诊断。
+- 后续展示和验收主看 universe + `pool_L` 四格：universe short、`pool_L` short 和
+  `pool_L` next 预期同向增强；universe next 只作为 tail 诊断，不作为否决项。
 - 上一轮 `2020-2025` rolling-window summary 只保留四股池 short halfyear、next halfyear 和 weekly 单周期视图三张核心图；这里的 weekly 不是 4w rolling 诊断。
 
 ### 2022-2025 baseline 归档
@@ -2103,8 +2111,10 @@ Rank IC 按季度聚合，累计超额使用日度路径且横轴只标年份。
 | universe | +16.75 | 0.149 | -8.48 | 0.004 |
 | pool_L | +8.63 | 0.138 | +7.97 | 0.002 |
 
-解读：`pool_L` 的 short 与 next 内部超额均为正，适合作为下一轮信号增强验收对象；universe
-short 更强但 next 为负，保留为参照和 tail 诊断。
+解读：universe short 强但 next 为负，`pool_L` short 和 next 同时为正。当前判断是：
+universe score 混有真实强弱和短效噪声 / 拥挤成分；`pool_L` 作为质量筛选后，同一 score
+更偏向可延续的真实强弱。后续 feature/model 增强期待 universe short、`pool_L` short 和
+`pool_L` next 同向改善；universe next 保留为 tail 诊断。
 
 归档文件：
 
@@ -2168,9 +2178,178 @@ experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_{reg_strong,baggi
 未完成的 `reg_mid`、`drop_return_reg_mid`、`guard_weighted` 已按用户要求停止并移出当前归档口径；
 后续不再把它们作为主线完整性的要求。
 
-下一步：围绕 `2022-2025` / `pool_L` 做更细粒度的特征工程，优先拆分 preopen / postopen /
-盘口深度 / 成交流子族，保留 short excess 与 short IC 的同时寻找 next tail 稳定性增量；不要继续押
-粗粒度正则、重 bagging 或整族删特征。
+下一步已落到 2026-06-09 第二批实验：围绕 `2022-2025` 做更细粒度的
+feature engineering 和常规模型优化，优先直接做强开盘短 alpha。验收看 universe short、
+`pool_L` short 和 `pool_L` next 是否同向增强；universe next 只作 tail 诊断。
+
+### 2022-2025 pool_L 因子增强第二批实验投放
+
+2026-06-09 提交第二批 10 个 `2022-2025` / `pool_L` 实验。口径统一为：
+
+```text
+sample: 09:31:00-09:40:00 decision points
+label: mixed w_long=0.30, target_col=target_label
+window: 36m train -> 6m test, stride 6m, 2022-01..2025-12
+training universe: full A-share universe
+analysis pools: universe + pool_L
+primary objective: train a stronger opening short alpha
+acceptance: universe short improves; pool_L short and pool_L next improve together
+diagnostic: universe next-close is a tail diagnostic, not a rejection metric
+baseline: pool_L short +8.626 bps, next +7.974 bps, short IC 0.1380, next IC 0.0017
+```
+
+目标校正：训练一个更强的开盘短 alpha；用 `pool_L` 检验质量筛选后 short / next 是否同向增强。
+`pool_L` 是 overlay 验收场景，不是训练域或机制本身；universe next 只作为 tail 诊断。
+
+代码和镜像准备：
+
+- 镜像：`registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260609-pooll-strength-v1`
+  pushed digest `sha256:8e3d40d556af74dc95e100c14a7a3bc6a7a54f490a8afdf4d3e0cea7ee7355a2`。
+- 2026-06-10 工程修复镜像：`registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260610-engineering-fixes-v1`
+  pushed digest `sha256:8df247a3cf3d8b87eb8130f16d2bd39de603f2e11acca07674ccfb4d44692f9c`。
+- `features.py` 新增 `postopen_v2_queue_*` 队列补给响应特征，以及
+  `auction_price_range_bps` / `auction_last_position_in_range`。
+- `training_labeled.py` 新增 `sample_weight.mode = "date_linear"`，用于 recent-regime 轻度加权。
+- `feature_dependence_audit.py` 支持 stock pool selection filter，feature audit 可直接汇总 `pool_L`。
+- `training.py` 的 `predictions.parquet`、bucket 和 metrics 产物改为同目录临时文件 + `os.replace`
+  原子落盘，并在训练完成后写 `_SUCCESS` marker。
+- analysis Job 默认等待各 shard 的 `metrics_by_year.csv`，不再仅凭 `predictions.parquet` 出现就启动；
+  `analysis.pool_internal.wait_for_completion_file` 可按需覆盖。
+- K8s render 支持 `[k8s].env_secrets` / `ceph_secret` 注入，并支持
+  `avoid_nodes = ["node7"]` 渲染 `nodeAffinity NotIn`，training 和 analysis Job 共用。
+- 本地校验：`pytest tests/test_candidate_guards.py tests/test_postopen_v2_features.py tests/test_feature_audit_groups.py`
+  通过；2026-06-10 工程修复后全量 `pytest` 106 项通过、`ruff check src tests` 通过；
+  `osf-audit-experiments` 显示 `alignment_ok: yes`。
+
+已提交实验：
+
+| run | cluster job | analysis job | purpose |
+| --- | --- | --- | --- |
+| `lgbm_delay2_36m_2022_2025_pool_l_feature_audit_v1` | `os-audit-36m-2225-pooll-features` | n/a | grouped feature audit，带 `pool_L` selection filter。 |
+| `lgbm_delay2_36m_2022_2025_pool_l_depth_state_plus_v1` | `os-lgbm-36m-2225-depth-state` | `os-analyze-36m-2225-depth-state` | 加权/斜率 depth-gap 状态，测试盘口形态强弱。 |
+| `lgbm_delay2_36m_2022_2025_pool_l_depth_trajectory_plus_v1` | `os-lgbm-36m-2225-depth-traj` | `os-analyze-36m-2225-depth-traj` | 加入价格、深度、价差的 opening trajectory。 |
+| `lgbm_delay2_36m_2022_2025_pool_l_queue_response_plus_v1` | `os-lgbm-36m-2225-queue-plus` | `os-analyze-36m-2225-queue-plus` | 显式加入 ask/bid 队列补给和 spread compression response。 |
+| `lgbm_delay2_36m_2022_2025_pool_l_price_path_plus_v1` | `os-lgbm-36m-2225-price-path` | `os-analyze-36m-2225-price-path` | 加入 mid/ask/bid path diff、relative path 和 spread path。 |
+| `lgbm_delay2_36m_2022_2025_pool_l_trade_impact_normalized_plus_v1` | `os-lgbm-36m-2225-trade-impact` | `os-analyze-36m-2225-trade-impact` | 保留成交冲击相对深度的归一化信号，弱化 raw trade-flow diff。 |
+| `lgbm_delay2_36m_2022_2025_pool_l_restore_raw_trade_state_v1` | `os-lgbm-36m-2225-raw-trade` | `os-analyze-36m-2225-raw-trade` | 恢复 raw `volume` / `turnover` / `iopv` state，看 pool_L 是否吃 liquidity/attention level。 |
+| `lgbm_delay2_36m_2022_2025_pool_l_preopen_price_state_v1` | `os-lgbm-36m-2225-preopen-price` | `os-analyze-36m-2225-preopen-price` | 只保留 preopen price/range/imbalance state，去掉 preopen volume/turnover。 |
+| `lgbm_delay2_36m_2022_2025_pool_l_preopen_auction_strength_v1` | `os-lgbm-36m-2225-auction` | `os-analyze-36m-2225-auction` | 加入 auction range / final position，并恢复 preopen volume/turnover。 |
+| `lgbm_delay2_36m_2022_2025_pool_l_recent_regime_weight_v1` | `os-lgbm-36m-2225-recent-wt` | `os-analyze-36m-2225-recent-wt` | baseline feature/model + date-linear sample weight，2019-2025 从 0.80 线性到 1.20。 |
+
+K8s 操作记录：
+
+```text
+deleted completed jobs:
+os-analyze-36m-2225-bagging
+os-analyze-36m-2225-nopreopen
+os-analyze-36m-2225-regstrong
+
+created jobs:
+os-audit-36m-2225-pooll-features
+os-lgbm-36m-2225-depth-state
+os-lgbm-36m-2225-depth-traj
+os-lgbm-36m-2225-queue-plus
+os-lgbm-36m-2225-price-path
+os-lgbm-36m-2225-trade-impact
+os-lgbm-36m-2225-raw-trade
+os-lgbm-36m-2225-preopen-price
+os-lgbm-36m-2225-auction
+os-lgbm-36m-2225-recent-wt
+os-analyze-36m-2225-depth-state
+os-analyze-36m-2225-depth-traj
+os-analyze-36m-2225-queue-plus
+os-analyze-36m-2225-price-path
+os-analyze-36m-2225-trade-impact
+os-analyze-36m-2225-raw-trade
+os-analyze-36m-2225-preopen-price
+os-analyze-36m-2225-auction
+os-analyze-36m-2225-recent-wt
+```
+
+2026-06-10 修复后实查：
+
+```text
+completed end-to-end model experiments after 2026-06-11 archive:
+depth_state_plus
+depth_trajectory_plus
+queue_response_plus
+price_path_plus
+trade_impact_normalized_plus
+restore_raw_trade_state
+preopen_price_state
+preopen_auction_strength
+recent_regime_weight
+
+still running separately:
+os-audit-36m-2225-pooll-features
+```
+
+排查事实：重建前活跃 `depth-traj` / `raw-trade` 训练 Job 仍是
+`20260609-pooll-strength-v1` 镜像且没有 `affinity`，其中 `depth-traj` shard 1 被调度到
+`node7`；两个 analysis Job 仍等待 `predictions.parquet`。2026-06-10 已删除并重建上述
+5 个未完成 Job；新模板均为 `20260610-engineering-fixes-v1`，带
+`kubernetes.io/hostname NotIn node7`，analysis `WAIT_PATHS` 均为 `metrics_by_year.csv`。
+重建后 `depth-traj` / `raw-trade` 的 index 0 立即因已有 `metrics_by_year.csv` 跳过完成，
+随后全部 8/8 training shards 完成；2026-06-11 补跑 `depth-traj` / `raw-trade` analysis，
+并和另外 7 个模型一起同步到 `experiments/results/backtests/`。
+
+9 个模型实验的 `pool_L` 总体结果如下，单位 bps；delta 相对集群侧 2022-2025 baseline。
+完整 CSV 归档在
+`experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_second_sweep_summary.csv`。
+
+| variant | short excess | short delta | next excess | next delta | short IC | next IC | short positive months | next positive months |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| baseline | +8.626 | +0.000 | +7.974 | +0.000 | 0.1380 | 0.0017 | 48 / 48 | 32 / 48 |
+| `price_path_plus` | +8.644 | +0.017 | +7.988 | +0.015 | 0.1383 | 0.0016 | 48 / 48 | 32 / 48 |
+| `recent_regime_weight` | +8.634 | +0.008 | +8.205 | +0.232 | 0.1384 | 0.0017 | 48 / 48 | 31 / 48 |
+| `restore_raw_trade_state` | +8.630 | +0.004 | +8.026 | +0.052 | 0.1380 | 0.0017 | 48 / 48 | 31 / 48 |
+| `depth_trajectory_plus` | +8.615 | -0.011 | +8.148 | +0.174 | 0.1383 | 0.0016 | 48 / 48 | 33 / 48 |
+| `queue_response_plus` | +8.583 | -0.044 | +7.981 | +0.007 | 0.1381 | 0.0019 | 48 / 48 | 32 / 48 |
+| `preopen_auction_strength` | +8.581 | -0.045 | +8.006 | +0.032 | 0.1380 | 0.0017 | 48 / 48 | 31 / 48 |
+| `depth_state_plus` | +8.566 | -0.060 | +7.986 | +0.013 | 0.1380 | 0.0017 | 48 / 48 | 30 / 48 |
+| `trade_impact_normalized_plus` | +8.550 | -0.077 | +7.994 | +0.020 | 0.1380 | 0.0019 | 48 / 48 | 32 / 48 |
+| `preopen_price_state` | +8.536 | -0.090 | +7.855 | -0.118 | 0.1376 | 0.0020 | 48 / 48 | 33 / 48 |
+
+研究判断：`price_path_plus`、`recent_regime_weight`、`restore_raw_trade_state` 只有极小 short
+正增量，最好也只有 +0.017 bps；`recent_regime_weight` 和 `depth_trajectory_plus` 对 next
+略好，但 primary short 目标没有形成可用增量。说明当前 baseline 已经吃掉大部分一阶可见信号，
+继续做宽泛特征族加减或轻量树模型调参，预期收益很小。后续实验仍围绕 full-universe 开盘短
+alpha 本身做强，但具体落实为三个方向：
+
+1. cross-sectional relative features：不是继续追加绝对状态，而是把核心盘口、成交流、价格路径、
+   preopen / postopen 状态改写成同一 `date x decision_time` 横截面内的 rank、zscore、demean
+   或相对异常表达，检验 A 股开盘短线是否更吃横截面相对强弱。
+2. model ensemble：用 baseline LGBM 与低成本异质模型 / 参数变体的 OOS prediction 做横截面
+   rank-level 组合，检验模型范式差异是否还能带来增量；`pool_L` 只用于检验该短 alpha 作为日频
+   股池 overlay 是否更强。
+3. tree-friendly sequence features：不引入神经网络，沿用 LightGBM，把 09:31-09:40 decision-row
+   路径编码为 rolling / expanding / landmark / impact-recovery 统计，检验时间结构本身是否提供
+   baseline 静态特征之外的新信息。
+
+2026-06-10 下班前追加一组隔夜交互对照：
+`lgbm_delay2_36m_2022_2025_pool_l_xs_relative_recent_weight_v1`，job
+`os-lgbm-36m-2225-xs-rel-wt`，analysis job `os-analyze-36m-2225-xs-rel-wt`。该组复用
+`xs_relative` 的横截面 zscore/rank 特征和 `recent_regime_weight` 的 `date_linear`
+样本权重，用于判断相对异常表达是否在近期 regime 加权下更稳。提交时集群上已有
+`xs_relative`、`model_ensemble`、`tree_sequence`、`depth_traj`、`raw_trade` 和 feature audit
+在跑，因此本轮只新增这一组，避免夜间资源过载。
+
+2026-06-10 `xs_relative` 首次提交的 index 0 在 `node15` 运行约 70 分钟后
+`OOMKilled`，pod memory limit 为 `512Gi`。日志停在读取 labeled PVC 的早期阶段：
+`projected_columns=154`，但年度 part 进入 `filter_labeled_frame()` 后列数膨胀到 `1194`，
+尚未打印 `dataset` / `split_plan`，因此不是 LightGBM 训练阶段 OOM。根因是
+`cross_sectional_relative_prefixes` 使用宽泛 `postopen_v2_` 等 prefix，且 xs-relative 特征在
+sample / lag filter 前生成，导致每个年度 part 先扩出大量横截面相对列再 concat 多年数据。
+修复：
+
+- 代码顺序调整为 postopen/path 特征仍在 sample filter 前生成，保留 09:31 对 09:30 的路径依赖；
+  `xs_rel_*` 改在 sample / lag filter 后生成。
+- `xs_relative_v1` 和 `xs_relative_recent_weight_v1` 的横截面相对源列改成 compact 核心列清单，
+  不再使用宽泛 `postopen_v2_` prefix。
+- 新镜像：`registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260610-xs-rel-compact-v1`
+  pushed digest `sha256:5c1bf994f2b189dad78bba14e56600e94439d24a9d130b086757b0667cf625e6`。
+- 重提 `os-lgbm-36m-2225-xs-rel` / `os-lgbm-36m-2225-xs-rel-wt` 及对应 analysis Job；因
+  `node8` 上同一路径短时不可见，两个训练 Job 的 `avoid_nodes` 扩为 `["node7", "node8"]`。
 
 ### 归档和保留口径
 
@@ -2215,7 +2394,7 @@ CSV / JSON / SVG 包；`output/legacy/**` 只保留旧本地分析和 debug 产�
 | `output/legacy/reports/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1_weekly_2025_trading_day_equal` | 2025 OOS extension 的交易日等权 weekly / 4-week rolling pool-internal 诊断和 SVG。 |
 | `experiments/results/backtests/halfyear_window_2020_2025/` | 2020-2025 合并视角的三张核心 SVG：short 半年度、next 半年度、weekly 单周折线；trace 记录输入 run 和 2024-09-30 / 2021-10-04 outlier。 |
 | `experiments/results/backtests/baseline_2022_2025_cluster/` | 集群侧 2022-2025 baseline 切片；主展示为 universe + `pool_L` 的季度 excess/IC 和日度累计超额曲线。 |
-| `experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_<variant>_v1/` | 2022-2025 首轮试水优化归档；包含 `reg_strong`、`bagging`、`no_preopen_reg_mid` 的集群侧 pool-internal summary / plot data / SVG，以及 flat `pilot_sweep_summary.csv`。 |
+| `experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_<variant>_v1/` | 2022-2025 pool_L 优化归档；包含首轮 `reg_strong` / `bagging` / `no_preopen_reg_mid` 和第二批 9 个模型实验的集群侧 pool-internal summary / plot data / SVG；flat summary 包括 `pilot_sweep_summary.csv` 和 `second_sweep_summary.csv`。 |
 | `experiments/results/backtests/gap_risk_penalized_attribution_v1/` | rolling gap-risk Top100 替换归因的 outcome、feature exposure 和 residual-control 证据。 |
 | `output/artifacts/<run_id>` | 当前 2022-2025 cluster baseline / pool_L 优化实验的本地查看副本；正式摘要另归档到 `experiments/results/backtests/`。 |
 | `output/legacy/artifacts/<run_id>` | 旧 artifact 拉取和 raw shard metrics，保留给 debug / history。 |

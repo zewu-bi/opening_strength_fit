@@ -1,17 +1,35 @@
 # 运行手册
 
-Scope: runnable configs, commands, paths, sync steps, and troubleshooting.
+Scope: runnable configs, commands, paths, sync steps, and troubleshooting. 研究判断见
+[project_brief.md](project_brief.md)，实验记录见 [experiment_log.md](experiment_log.md)。
 
 标准闭环：
 
 ```text
-precheck -> render training job -> apply/wait -> render analysis job -> apply/wait -> sync compact artifacts -> audit/coverage
+precheck -> render training job -> apply/wait -> render analysis job -> apply/wait -> sync compact artifacts -> audit
 ```
 
-## 配置和输入
+## 0. 环境和预检
 
-实验配置放在 `experiments/runs/*.toml`，K8s manifest 由 `osf-render-k8s-job` 写到
-`experiments/jobs/`。历史 run、数字和归档路径见 [experiment_log.md](experiment_log.md)。
+```bash
+cd ~/projects/opening_strength_fit
+source .venv/bin/activate
+set -a; . ./.env; set +a
+
+osf-audit-experiments
+osf-check-project-contracts
+osf-probe-clickhouse-data --schema --field-notes
+```
+
+## 1. 配置和路径
+
+实验配置放在：
+
+```text
+experiments/runs/<run_id>.toml
+experiments/jobs/<run_id>_job.yaml
+experiments/results/metrics/<run_id>_metrics_by_year.csv
+```
 
 常用 PVC cache：
 
@@ -26,23 +44,25 @@ mixed w030 cache:
 /mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/
 ```
 
-当前判断见 [project_brief.md](project_brief.md)。本 runbook 只保留操作步骤、命令模板和排查口径。
+PVC 输出约定：
 
-## 1. 预检
-
-```bash
-cd ~/projects/opening_strength_fit
-source .venv/bin/activate
-set -a; . ./.env; set +a
-
-osf-audit-experiments
-osf-check-project-contracts
-osf-probe-clickhouse-data --schema --field-notes
+```text
+run output: /mnt/output/opening_strength_fit/<run_id>/
+analysis:   /mnt/output/opening_strength_fit/<run_id>/analysis/pool_internal_top100/
+local pull: output/artifacts/<run_id>/
 ```
+
+Tracked evidence 写入 `experiments/results/{metrics,backtests}/`。旧 pulls、prediction parquet、
+本地分析、label shards 和重报告放 `output/legacy/`。
+
+Run kind 映射见 [experiments/README.md](../experiments/README.md)。TOML 模板见
+[experiments/config_templates/](../experiments/config_templates/)。
+
+`*.tmp.parquet`、`*.parquet.lock` 和 heartbeat 文件表示 cache 正在写入。
 
 ## 2. 外部股池
 
-mentor 发来的股池和隔壁 `xy_fit` 项目的 `X.parquet` / `Y.parquet` 在同一个 Ceph S3 目录：
+Ceph S3：
 
 ```text
 bucket:   lml.bzw@ssd
@@ -54,33 +74,17 @@ data/pool_M.parquet
 data/pool_S.parquet
 ```
 
-本地读取使用司令部 LDAP 凭据。把真实值写在项目根目录的 `.env`；`.env` 已在 `.gitignore` 中。
+`.env` 中放司令部 LDAP 凭据：
 
 ```bash
 CEPH_LDAP_ID='your_headquarter_username'
 CEPH_LDAP_KEY='your_headquarter_password'
 ```
 
-加载环境变量：
+需要快速核对 Ceph 文件时，可以复用 `xy_fit` 的 venv 和 `xyfit.io.build_client()` 列
+`Bucket="lml.bzw", Prefix="data/"`。
 
-```bash
-cd ~/projects/opening_strength_fit
-set -a; . ./.env; set +a
-```
-
-项目原生支持 `bucket@ssd/path.parquet` 形式的股池路径。需要快速核对 Ceph 文件时，可以复用
-`xy_fit` 的 venv 和 `xyfit.io.build_client()` 列 `Bucket="lml.bzw", Prefix="data/"`。
-
-CLI 快速试验：
-
-```bash
-osf-train \
-  --config experiments/runs/<run_id>.toml \
-  --pool S \
-  --output-dir output/legacy/analysis/<run_id>_pool_s_selection
-```
-
-`--pool S|M|L` 映射到：
+CLI 映射：
 
 ```text
 S -> lml.bzw@ssd/data/pool_S.parquet
@@ -88,11 +92,11 @@ M -> lml.bzw@ssd/data/pool_M.parquet
 L -> lml.bzw@ssd/data/pool_L.parquet
 ```
 
-默认语义是 `filter_train=false`、`filter_selection=true`：模型在 full universe 上训练和打分，
+默认语义：`filter_train=false`、`filter_selection=true`。模型在 full universe 上训练和打分，
 TopN 从池内候选里选。保守日期口径加：
 
 ```bash
---pool S --pool-date-lag-sessions 1
+--pool L --pool-date-lag-sessions 1
 ```
 
 TOML 模板见
@@ -101,45 +105,25 @@ TOML 模板见
 开启 `filter_selection=true` 后，TopN 汇总使用池内候选行；`predictions*.parquet` 保留全
 universe 打分并额外写出 `stock_pool_member` 和 stock-pool score buckets。
 
-## 3. 实验配置
+## 3. 构建镜像
 
-正式实验通常对应三类文件：
-
-```text
-experiments/runs/<run_id>.toml
-experiments/jobs/<run_id>_job.yaml
-experiments/results/metrics/<run_id>_metrics_by_year.csv
-```
-
-Run kind 映射见 [experiments/README.md](../experiments/README.md)。TOML 模板见
-[experiments/config_templates/](../experiments/config_templates/)。
-
-PVC 约定：
-
-```text
-cache:      /mnt/output/opening_strength_fit/cache/*.parquet
-run output: /mnt/output/opening_strength_fit/<run_id>/
-analysis:   /mnt/output/opening_strength_fit/<run_id>/analysis/pool_internal_top100/
-local artifact pull: output/artifacts/<run_id>/  # compact analysis artifacts only
-```
-
-`*.tmp.parquet`、`*.parquet.lock` 和 heartbeat 文件表示 cache 正在写入。
-
-正式落点：tracked evidence 写入 `experiments/results/{metrics,backtests}/`；当前集群侧分析镜像写入
-`output/artifacts/<run_id>/` 或 config 的 `[output].local_dir`；partial metrics 写入
-`output/artifacts/_partial_metrics/`；旧 pulls、prediction parquet、本地分析、label shards 和重报告统一放
-`output/legacy/{artifacts,predictions,analysis,labels,reports}/`。
-
-## 4. 构建和 K8s
-
-集群命令统一使用 `hfcli kubectl --cluster research ...`，namespace 使用 `bizewu`。
+集群命令统一使用 `hfcli kubectl --cluster research ...`，namespace 是 `bizewu`。
 
 ```bash
 IMAGE_REPO=registry.corp.highfortfunds.com/bizewu/opening-strength-fit
 VERSION=$(date +%Y%m%d)-lgbm-cpu-v1
+
 docker build --build-arg CACHE_BUST=${VERSION} -t ${IMAGE_REPO}:${VERSION} .
 docker push ${IMAGE_REPO}:${VERSION}
+```
 
+GPU TOML 模板见 [experiments/config_templates/gpu_lightgbm.toml](../experiments/config_templates/gpu_lightgbm.toml)。
+
+## 4. 训练 Job
+
+普通 Job：
+
+```bash
 osf-render-k8s-job \
   --config experiments/runs/<run_id>.toml \
   --image ${IMAGE_REPO}:${VERSION}
@@ -150,10 +134,7 @@ hfcli kubectl --cluster research apply -f experiments/jobs/<run_id>_job.yaml
 hfcli kubectl --cluster research wait --for=condition=complete job/opening-strength-<run-slug> -n bizewu --timeout=24h
 ```
 
-默认正式路径是 CPU LightGBM + PVC labeled cache。GPU TOML 模板见
-[experiments/config_templates/gpu_lightgbm.toml](../experiments/config_templates/gpu_lightgbm.toml)。
-
-monthly rolling 或长窗口任务使用 sharded Job：
+Rolling / sharded Job：
 
 ```bash
 osf-render-k8s-job \
@@ -166,30 +147,20 @@ hfcli kubectl --cluster research apply -f experiments/jobs/<run_id>_sharded_job.
 hfcli kubectl --cluster research wait --for=condition=complete job/<rendered-sharded-job-name> -n bizewu --timeout=24h
 ```
 
-Indexed Job 的每个 shard 写独立子目录，例如：
+Indexed Job 的每个 shard 写独立子目录，例如 `month_YYYY-MM/` 或 `year_YYYY/`。
 
-```text
-month_YYYY-MM/
-year_YYYY/
-```
-
-并行度由 `[k8s].shard_parallelism` 控制。
-
-K8s Job 命名约定：
-
-- sharded rolling 必须在 TOML 的 `[k8s]` 里显式设置短 `job_name`。
-- 格式使用 `os-<model>-<window>-<period>-<target>-<display>`，例如
-  `os-lgbm-36m-2026-w030-mainline`。
-- 展示名使用短标签，方便在 K8s 和图表中追溯同一 run family。
-- 不要依赖 renderer 自动生成的 `opening-strength-...-<hash>` 名字；这类 hash 名只作为旧运行的追溯信息。
+TOML 中手动设置短 job name：
 
 ```toml
 [k8s]
-job_name = "os-lgbm-36m-2026-w030-mainline"
+job_name = "os-lgbm-36m-2225-mainline"
 shard_parallelism = 1
 ```
 
-调整正在运行的 Indexed Job 并行度：
+命名格式使用 `os-<model>-<window>-<period>-<target>-<display>`，例如
+`os-lgbm-36m-2225-mainline`。
+
+调整并行度：
 
 ```bash
 hfcli kubectl --cluster research patch job <job-name> \
@@ -197,13 +168,20 @@ hfcli kubectl --cluster research patch job <job-name> \
   -p '{"spec":{"parallelism":<parallelism>}}'
 ```
 
-### 4.1 集群侧分析 Job
+观察 rolling：
 
-从 `2022-2025` 这一轮新实验开始，正式预测结果分析改为集群侧完成。训练 Job 只负责在
-PVC 上写 metrics 和 raw predictions；pool-internal Top100 / Rank IC / plot data / SVG
-由独立 analysis Job 在 PVC 和 S3 附近完成，本地只同步压缩后的 CSV / JSON / SVG。
+```bash
+osf-rolling-job-status --config experiments/runs/<rolling_run_id>.toml
+osf-rolling-job-status --config experiments/runs/<rolling_run_id>.toml --tail 160
+osf-rolling-job-status --config experiments/runs/<rolling_run_id>.toml --job-name <job-name>
+hfcli kubectl --cluster research logs -n bizewu <pod-name> -f
+```
 
-TOML 中使用 `[analysis.pool_internal]` 声明分析契约：
+## 5. Pool-Internal 分析 Job
+
+正式 pool-internal Top100 / Rank IC / plot data / SVG 由独立 analysis Job 在集群侧完成。
+
+TOML：
 
 ```toml
 [analysis.pool_internal]
@@ -239,43 +217,28 @@ hfcli kubectl --cluster research apply -f experiments/jobs/<run_id>_pool_interna
 hfcli kubectl --cluster research wait --for=condition=complete job/<analysis-job-name> -n bizewu --timeout=24h
 ```
 
-analysis Job 会根据 config 的 rolling window 自动等待每个 `month_YYYY-MM/predictions.parquet`
-出现，再读取：
+输入和输出：
 
 ```text
 predictions:       /mnt/output/opening_strength_fit/<run_id>/
 next-close labels: /mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/
 stock pools:       lml.bzw@ssd/data/pool_{S,M,L}.parquet
+output:            /mnt/output/opening_strength_fit/<run_id>/analysis/pool_internal_top100/
 ```
 
-产物写在：
+analysis Job 会根据 config 的 rolling window 等待每个 `month_YYYY-MM/predictions.parquet`
+出现，再开始分析。
 
-```text
-/mnt/output/opening_strength_fit/<run_id>/analysis/pool_internal_top100/
+2020 年以前没有 S/M/L 股池日期；早期 shard 分析使用：
+
+```toml
+[analysis.pool_internal]
+pools = ["universe"]
 ```
 
-### 4.2 Rolling 过程观测
+## 6. 同步和归档
 
-Indexed Job 的 shard index 对应月份或半年窗口：
-
-```bash
-osf-rolling-job-status \
-  --config experiments/runs/<rolling_run_id>.toml
-
-osf-rolling-job-status \
-  --config experiments/runs/<rolling_run_id>.toml \
-  --tail 160
-
-osf-rolling-job-status \
-  --config experiments/runs/<rolling_run_id>.toml \
-  --job-name <job-name>
-
-hfcli kubectl --cluster research logs -n bizewu <pod-name> -f
-```
-
-## 5. 同步产物
-
-metrics、cluster-side analysis artifacts 和轻量归档统一使用：
+同步 compact artifacts：
 
 ```bash
 osf-sync-experiment-artifacts \
@@ -286,22 +249,10 @@ osf-audit-experiments
 osf-check-project-contracts
 ```
 
-`--all` 和无显式动作时不再拉取 prediction parquet；prediction 是训练/分析之间的 PVC 内部大文件，
-本地 parquet 用后可以删除。
-只有需要本地复盘旧流程或排查单个 shard 时，才显式加 `--predictions`：
+主要输出：`experiments/results/metrics/`、`output/artifacts/<run_id>/`、
+`experiments/results/backtests/<record-prefix>/`。
 
-```bash
-osf-sync-experiment-artifacts \
-  --config experiments/runs/<rolling_run_id>.toml \
-  --predictions --allow-partial
-```
-
-默认 metrics 直接写入 `experiments/results/metrics/`。`--allow-partial` 不写入
-`experiments/results/`，metrics 自动落到 `output/artifacts/_partial_metrics/`，方便排查已完成 shard。
-对半年 rolling，raw predictions 文件名使用窗口标签，例如
-`predictions_2018-01_2018-06.parquet`，shard 目录仍以窗口起点命名为 `month_YYYY-MM/`。
-
-默认输出：
+常见文件：
 
 ```text
 experiments/results/metrics/<run_id>_metrics_by_year.csv
@@ -311,14 +262,20 @@ output/artifacts/<run_id>/reports/**/*.{csv,svg}
 experiments/results/backtests/<record-prefix>/{pool_internal_*.csv,*_with_mean.svg}
 ```
 
-pool-internal 分析不再把 next-close label 拉到本地。正式 analysis Job 直接读取 PVC 上的
-`next_close_label_input`。`--next-close-labels` 仅保留给旧本地分析和排查使用。
+调试单个 shard 才拉 prediction parquet：
+
+```bash
+osf-sync-experiment-artifacts \
+  --config experiments/runs/<rolling_run_id>.toml \
+  --predictions --allow-partial
+```
+
+`--allow-partial` 写入 `output/artifacts/_partial_metrics/`。
 
 非标准轻量 artifact：`score_risk_sweep`、`alpha_conditioned_rolling_validation`、
-`gap_risk_attribution` 会同步各自 summary/trace CSV；rolling root summary 缺失时会拉取
-`month_YYYY-MM/` shards 并本地合并；正式归档写入 `experiments/results/backtests/`。
+`gap_risk_attribution` 会同步各自 summary/trace CSV。
 
-## 6. 分析命令
+## 7. 汇总和作图
 
 Metrics：
 
@@ -329,8 +286,7 @@ osf-summarize-opening-results \
 osf-compare-opening-results
 ```
 
-2022-2025 universe + pool_L pool-internal 验收面板按第 4.1 节运行 analysis Job，再按第 5 节
-`osf-sync-experiment-artifacts --all` 同步。核心输出：
+2022-2025 主展示使用 universe + `pool_L`，`plot_period = "quarter"`。核心输出：
 
 ```text
 pool_internal_summary.csv
@@ -345,32 +301,7 @@ pool_internal_trace.json
 reports/cumulative/<plot-prefix>_universe_pool_l_daily_cumulative.svg
 ```
 
-2022-2025 主展示只使用 `universe` 和 `pool_L`，`plot_period = "quarter"`；short / next
-excess + Rank IC 使用季度聚合，累计超额曲线优先用日度路径且横轴只标年份。不要把
-`pool_S/M`、月度图或周度图作为主图。2020 年以前没有 S/M/L 股池文件；分析早期 shard 时
-在 TOML 里把池限制到 universe：
-
-```toml
-[analysis.pool_internal]
-pools = ["universe"]
-```
-
-该模式会输出 `<plot-prefix>_universe_*` SVG / plot data，不要求 S/M/L 股池存在。
-
-本地 `osf-analyze-pool-internal-top100` 只作为 legacy fallback；正式结果不要再先拉
-prediction parquet 到本地。小样本调试可直接读本地路径或 PVC 风格的 `month_*` / `year_*` 目录：
-
-```bash
-osf-analyze-pool-internal-top100 \
-  --predictions /mnt/output/opening_strength_fit/<run_id> \
-  --next-close-label-input /mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1 \
-  --variant <variant_label>
-```
-
-本地归档由 `osf-sync-experiment-artifacts --all` 完成。
-
-周度 4w rolling 只作为稳定性补充诊断，不是 baseline summary 默认口径。需要检查周度稳定性时，
-可以单独从已存在的 `pool_internal_group_metrics.csv` 重画：
+周度 4w rolling 稳定性补充：
 
 ```bash
 osf-plot-weekly-pool-internal \
@@ -381,24 +312,17 @@ osf-plot-weekly-pool-internal \
   --rolling-weeks 4
 ```
 
-该脚本输出 daily/weekly summary、worst windows 和 `<plot-prefix>_*_weekly_rolling_4w/*.svg`。
-
-周度图可作为附录；应先做日度聚合再按周求和后累加，避免把周均值直接累加导致尺度失真。
-
-`predictions` 里不保留 `alpha_return_next_close`，这是训练防泄漏设计；cluster-side analysis
-直接在 PVC 上 join next-close 年度 label，不再通过本地 label cache 完成正式分析。
-
 Legacy diagnostics entrypoints: `osf-plot-rolling-validation-tradeoff`、
 `osf-audit-feature-dependence`、`osf-run-lgbm-delay-replays`、`osf-plot-lgbm-delay-decay`、
-`osf-run-alpha-horizon-decay`。旧结果和重报告写到 `output/legacy/`。
+`osf-run-alpha-horizon-decay`。
 
-## 7. 排查
+## 8. 排查
 
 | symptom | action |
 | --- | --- |
 | `kubectl` 没有 current-context | 使用 `hfcli kubectl --cluster research ...`。 |
 | PVC API 被 RBAC 拒绝 | 用 Pod/Job yaml 的 `claimName` 和容器内 `/mnt/output` 检查文件状态。 |
-| `field is immutable` | 重新创建同名 Job 后 apply。 |
+| `field is immutable` | 删除同名 Job 后重新 apply。 |
 | K8s 内找不到新 config | 重新 build/push 镜像，并重新 render Job。 |
 | cache 只有 `.tmp` / lock / heartbeat | 等待最终 `.parquet` 和 manifest。 |
 | replay 缺少上下文字段 | 传 `--context-input`，或先运行 interface check。 |

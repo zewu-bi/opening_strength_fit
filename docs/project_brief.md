@@ -1,150 +1,79 @@
 # 项目简介
 
-`opening_strength_fit` 研究 A 股开盘阶段的 cross-sectional short-horizon alpha。样本粒度是
-`trading day x symbol x opening decision time`，模型使用 decision point 当时及以前可见的信息，
-预测“当前主动买入并短持有约一分钟”的收益 proxy，并检查信号在更长持有期和外部股池中的迁移表现。
+`opening_strength_fit` 研究 A 股开盘阶段的 cross-sectional short-horizon alpha。样本是
+`trading day x symbol x opening decision time`，特征只使用 decision point 当时及以前可见的信息。
 
-项目窗口是 `09:30:00-09:40:00` 的整分钟 decision points。当前优化子域是
-`09:31:00-09:40:00`，把特殊的 `09:30` opening snapshot 作为单独 regime 处理。
+当前优化窗口是 `09:31:00-09:40:00`。`09:30` opening snapshot 单独看作 regime。
 
-## 当前主线
+## 当前判断
+
+目标：通过特征工程和模型优化，把开盘短期信号做强。
 
 当前主线是单模型 mixed label：
 
 ```text
 short_label = xs_norm(持有约 1 分钟后用 VWAP 卖出的收益 | date, decision_time)
 long_label  = xs_norm(同一买入价持有到第二天收盘的收益 | date, decision_time)
-train_label = short_label + w_long * long_label
+train_label = short_label + 0.30 * long_label
 ```
 
-`short_label` 是主体，`long_label` 提供小权重稳定性约束。2026-06-03 的
-`w_long=0.10 / 0.20 / 0.30` rolling 和 S/M/L selection-mask 复核后，当前固定
-`w_long = 0.30`。池内 Top100 excess 的 6 个月均值为：
+核心假设：full-universe opening score 同时包含真实强弱 / 开盘承接 / 资金方向，以及很短的
+microstructure fill、反弹、拥挤和临时成交优势。`pool_L` 做了质量筛选后，score 更偏向前者。
 
-```text
-pool_S: short +10.0 bps, next +6.6 bps
-pool_M: short +12.2 bps, next +9.0 bps
-pool_L: short +14.1 bps, next +9.4 bps
-```
+验收口径：
 
-2026-06-04 的 18m feature regroup / LightGBM sampling-regularization sweep 后，当前
-feature/model 候选是：
-
-```text
-lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1
-```
-
-这套口径保留 decision-time 可见的核心盘口、集合竞价和开盘后轨迹特征，减少宽泛累计特征暴露，
-并使用轻度 LightGBM sampling / regularization。这组结果是已归档验证；
-真实 run id 保留为 artifact 追溯键：
-`lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`。
-它使用 `36m train -> next 1m test`，覆盖 `2024-01` 至 `2024-12`。该月度 rolling
-已同步并归档 `2024-01` 至 `2024-12` 全年结果。
-
-同一 feature/model 口径的 `36m train -> next 6m test` 半年 rolling 已完成：
-`lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1`，
-覆盖 `2018H1` 至 `2024H2` 共 14 个半年 folds。2020 年之前没有 S/M/L 股池日期，
-因此 `2018-2019` 只做 universe-only 分析；`2020-2024` 已完成 universe / S / M / L
-池内 Top100 验收并归档。
-
-2025 OOS extension 也已完成，run id 为
-`lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1`，
-覆盖 `2025H1` 和 `2025H2` 两个半年 folds。随后已把 `2020-2024` 主线与 `2025`
-OOS extension 合并成 `2020-2025` rolling-window summary，并归档三张核心图：
-short halfyear、next halfyear 和 weekly 单周期视图。
-
-最新 mentor 指示：后续信号增强重点看 `2022-2025`；候选池展示和验收主看
-`pool_L`。`2022-2025` baseline 已按 universe + `pool_L` 归档，主图为季度
-short / next excess + Rank IC，以及日度累计超额曲线。下一步进入特征工程和模型优化。
-从当前 `2022-2025` 新实验 sweep 开始，正式预测结果分析迁到集群侧：训练 Job 在 PVC 上写
-raw predictions，analysis Job 在 PVC/S3 附近 join next-close labels 和 config 指定的 selection
-masks 并写 compact CSV / JSON / SVG artifacts；当前 `2022-2025` 主展示只配置 universe + `pool_L`
-且按季度画图，本地只同步这些分析产物，不再把全量 prediction parquet 作为正式分析输入。
-
-2024 全年 S/M/L 池内 Top100 excess 为：
-
-```text
-pool_S: short +8.3 bps, next +7.7 bps
-pool_M: short +9.3 bps, next +5.6 bps
-pool_L: short +10.4 bps, next +4.4 bps
-```
-
-半年 rolling 的 2020-2024 S/M/L 池内 Top100 excess 为：
-
-```text
-pool_S: short +8.9 bps, next +12.0 bps
-pool_M: short +10.7 bps, next +13.7 bps
-pool_L: short +12.1 bps, next +14.3 bps
-```
-
-2018-2019 universe-only short / next internal excess 为 `+28.4 / +10.1 bps`。
-
-2025 OOS extension 的 S/M/L 池内 Top100 excess 为：
-
-```text
-pool_S: short +5.1 bps, next +7.6 bps
-pool_M: short +5.6 bps, next +8.6 bps
-pool_L: short +6.2 bps, next +8.2 bps
-```
-
-2020-2025 合并 rolling-window summary 的 S/M/L 池内 Top100 excess 为：
-
-```text
-pool_S: short +8.3 bps, next +11.3 bps
-pool_M: short +9.8 bps, next +12.9 bps
-pool_L: short +11.1 bps, next +13.3 bps
-```
-
-2022-2025 baseline 的 universe / `pool_L` 池内 Top100 excess 和 IC 为：
-
-```text
-universe: short +16.8 bps, next -8.5 bps, short IC 0.149, next IC 0.004
-pool_L:   short  +8.6 bps, next +8.0 bps, short IC 0.138, next IC 0.002
-```
-
-该 baseline 由集群侧 analysis Job 重跑并归档到
-`experiments/results/backtests/baseline_2022_2025_cluster/`。主展示保留
-universe 作为参照、`pool_L` 作为验收对象；`pool_S/M` 不进主展示。
-
-2022-2025 首轮试水优化已归档三组：强正则 `reg_strong`、重 bagging `bagging`、去
-`preopen_*` + 中正则 `no_preopen_reg_mid`。三组都没有超过 baseline；`bagging` 最接近但无增量，
-`reg_strong` 系统性变弱，`no_preopen_reg_mid` 说明 preopen 不能整族删除。下一步不再补齐粗粒度
-正则/降权 sweep，而是转向更细粒度 feature engineering。
-
-当前执行口径：
-
-| item | current setting |
+| metric | expectation |
 | --- | --- |
+| universe short | 提升 |
+| `pool_L` short | 提升 |
+| `pool_L` next | 跟随提升 |
+| universe next | 记录 tail 方向 |
+
+训练和打分仍在 full universe 上完成。`pool_L` 只用于应用和验收切片。
+
+## 当前证据
+
+| run / batch | result |
+| --- | --- |
+| mixed-label selection | `w_long=0.30` 在 S/M/L 复核后固定。 |
+| current baseline | `soft_core_reg_light`，36m rolling，集群侧 pool-internal analysis。 |
+| baseline run ids | analysis `baseline_2022_2025_cluster_analysis_v1`；prediction shards from `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1` and `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1`。 |
+| 2020-2025 rolling summary | S/M/L 池内 short 和 next 均为正；`pool_L` short `+11.1 bps`，next `+13.3 bps`。 |
+| 2022-2025 baseline | universe short `+16.8 bps`、next `-8.5 bps`；`pool_L` short `+8.6 bps`、next `+8.0 bps`。 |
+| first pilot sweep | `reg_strong`、`bagging`、`no_preopen_reg_mid` 均未超过 baseline。 |
+| second batch, 9 runs | 最好只是 `price_path_plus` 的 `pool_L` short `+0.017 bps` 增量；没有实质提升。 |
+| cross-sectional relative features | `xs_relative_v1` 的 `pool_L` short 小幅提升，next 变弱；只有弱局部增量。 |
+
+已归档 baseline compact artifacts：
+
+```text
+experiments/results/backtests/baseline_2022_2025_cluster/
+```
+
+第二批 9 个模型实验汇总：
+
+```text
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_second_sweep_summary.csv
+```
+
+完整实验顺序、run id、K8s 状态和数字见 [experiment_log.md](experiment_log.md)。
+
+## 固定口径
+
+| item | setting |
+| --- | --- |
+| data source | ClickHouse `ch.db.prod.highfortfunds.com / stock.tick` |
+| data window | `09:15:00-09:45:00` |
+| project window | `09:30:00-09:40:00` integer-minute decision points |
 | sample slice | `09:31:00-09:40:00` |
 | label | mixed label, `w_long=0.30` |
-| feature/model | archived `soft_core_reg_light` validation |
 | training universe | A 股 `00/30.SZ` 和 `60/68.SH` full universe |
-| selection masks | 历史归档保留 universe / `pool_S` / `pool_M` / `pool_L`；后续主展示使用 universe + `pool_L`，验收聚焦 `pool_L` |
-| main metrics | short Rank IC、池内 Top100 excess；next close 作为 tail 诊断和 mixed-label 定权参考 |
-| next target | 聚焦 `2022-2025` 和 `pool_L`，进入细粒度特征工程和轻量常规模型调参 |
+| current baseline | archived `soft_core_reg_light` |
+| main display | universe + `pool_L` |
+| main metrics | Rank IC；池内 Top100 excess |
+| current research focus | cross-sectional relative features；model ensemble |
 
-训练和全量打分仍使用 full universe。历史验证保留 `pool_S`、`pool_M`、`pool_L` 作为 TopN
-selection mask；后续按 mentor 指示主看 `pool_L`，并保留 universe 作为主展示参照。
-pool membership 作为输出标记，模型特征保持在
-decision-time visible 信息集内。
-
-## 研究口径
-
-默认数据源和窗口：
-
-```text
-ClickHouse: ch.db.prod.highfortfunds.com / stock.tick
-data window: 09:15:00 - 09:45:00
-project sample window: 09:30:00 - 09:40:00 integer-minute decision points
-current optimization slice: 09:31:00 - 09:40:00
-```
-
-外部候选股池来自 `lml.bzw@ssd/data/pool_{L,M,S}.parquet`，三份文件是
-`date x symbol` bool 宽表，当前覆盖 `2020-01-02` 至 `2025-12-31`，
-并观察为嵌套池 `pool_S ⊂ pool_M ⊂ pool_L`。读取和配置方法见
-[runbook.md](runbook.md#2-外部股池)。2020 年以前没有股池日期，历史 shard 只做 universe 分析。
-
-短线收益 label：
+短线 label：
 
 ```text
 decision_t = sampled decision tick
@@ -154,54 +83,37 @@ sell_vwap  = VWAP(entry_t + 60s, entry_t + 120s)
 label      = sell_vwap / buy_price - 1 - fee_bps / 10000
 ```
 
-`entry_tick_delay` 是研究用成交代理。`09:40` 是正式 decision point，它的 label 使用到约
-`09:41-09:42` 的 VWAP。ClickHouse 原始 tick 偶尔出现 6 秒间隔时，通常表示上一条 3 秒 tick
-所有字段未变。
+外部股池来自 `lml.bzw@ssd/data/pool_{L,M,S}.parquet`，覆盖 `2020-01-02` 至 `2025-12-31`。
+`pool_S ⊂ pool_M ⊂ pool_L`。
 
-术语：当前口径称为 decision-time visible / causal feature set。集合竞价摘要、`09:30` 开盘快照、
-`09:31-09:40` 开盘后轨迹都可以作为特征，条件是在下单决策时已经可见。`postopen_v1/v2` 是开盘后
-轨迹特征族名称。
+当前口径称为 decision-time visible / causal feature set。集合竞价摘要、`09:30` 开盘快照、
+`09:31-09:40` 开盘后轨迹都可以作为特征，条件是在下单决策时已经可见。
 
-主评估：
+`09:40` 是正式 decision point，它的 label 使用到约 `09:41-09:42` 的 VWAP。ClickHouse
+原始 tick 偶尔出现 6 秒间隔时，通常表示上一条 3 秒 tick 所有字段未变。
+
+## 术语
 
 | term | meaning |
 | --- | --- |
 | `Rank IC` | 同一 `date x decision_time` 横截面内的排序能力。 |
-| `Top100 excess` | 默认指池内 Top100 excess，即 Top100 均值减同一 selection mask 内全体候选均值。 |
-| `selection mask` | universe / `pool_S` / `pool_M` / `pool_L` 是同一模型的切片维度；后续主看 `pool_L`。 |
-| `next close` | mixed-label 定权和 dirty-tail 诊断口径。 |
-| `replay` | 验证和交易约束诊断工具。 |
+| `Top100 excess` | 池内 Top100 均值减同一 selection mask 内全体候选均值。 |
+| `selection mask` | universe / `pool_S` / `pool_M` / `pool_L` 的切片维度。 |
+| `next close` | 隔夜延续性检查；当前主看 `pool_L` next。 |
 
-历史图表按 selection mask 分组或分面。已归档的 `2020-2025` rolling-window summary 保留
-short halfyear、next halfyear 和 weekly 单周期视图三张四股池图；这里的 weekly 不是 4w rolling 诊断。
-
-## 关键里程碑
+## 里程碑
 
 | stage | conclusion |
 | --- | --- |
 | baseline / delay | 开盘短线信号为正；delay2 后仍有可学排序。 |
-| post-open features | 开盘后盘口动态有增量，`09:31-09:40` 可以作为当前主样本域。 |
-| dirty-tail diagnostics | raw short score 带“短正长负”的拥挤追涨 tail；可见信息能识别其中一部分。 |
-| mentor re-scope | 从两模型 `alpha - risk` 切回直接训练 single mixed label。 |
-| S/M/L mixed label | 固定 `w_long=0.30`，在 S/M/L 池内保住 short 并改善 next internal excess。 |
-| feature/model sweep | 18m 小缓存上晋级 `soft_core_reg_light`，随后完成 36m 归档验证。 |
-| 36m soft-core full year | `2024-01..2024-12` 已同步并归档；S/M/L short 和 next 池内 Top100 excess 均值均为正。 |
-| 36m halfyear rolling mainline | 同一 feature/model 口径已完成 `2018H1..2024H2` 半年 folds；2020-2024 S/M/L 与 2018-2019 universe-only 均已归档。 |
-| 2025 OOS extension | 同一 feature/model 口径已完成 `2025H1..2025H2`；S/M/L 池内 short 与 next excess 均为正。 |
-| 2020-2025 rolling-window summary | 合并视角已归档三张核心图；S/M/L 池内 short 与 next excess 均为正，作为当前总结材料。 |
-| 2022-2025 baseline | 集群侧 universe + `pool_L` 季度 excess/IC 和日度累计曲线已归档；`pool_L` short/next 均为正，universe next 为负，后续优化主看 `pool_L`。 |
-| 2022-2025 first pilot sweep | 强正则、重 bagging、去 `preopen_*` 三组试水均未超过 baseline；baseline 局部健康，下一步转向细粒度特征工程。 |
-| next mentor direction | 后续重点做强 `2022-2025` 信号，展示使用 universe + `pool_L`，验收主看 `pool_L`，继续走特征工程和模型优化。 |
+| post-open features | 开盘后盘口动态有增量，`09:31-09:40` 是当前主样本域。 |
+| dirty-tail diagnostics | raw short score 有短正长负 tail，后续改为 mixed label 主线。 |
+| 2020-2025 mainline | S/M/L 池内 short 和 next 均为正。 |
+| 2022-2025 baseline | universe + `pool_L` 集群侧分析已归档，后续信号增强聚焦这一窗口。 |
+| 2022-2025 sweeps | 首轮和第二批常规增强尚未形成实质增量。 |
 
-`09:30` 是单独 regime：它强，但主要混合集合竞价结果、第一张开盘盘口快照、时间坐标和缺失/0 模式。
-当前主优化放在 `09:31-09:40`。
+## 入口
 
-`09:31-09:40` 有稳定 short alpha。raw decision-time baseline 的 short Top100 excess 为
-`+22.21 bps`，同一 Top100 的 next-close excess 为 `-32.21 bps`。主线吸收 guard、clean target
-和 learned risk layer 的诊断经验，改为直接训练 single mixed label；两模型 final score 留作对照证据。
-
-## 资料入口
-
-- 真实实验顺序、run、数字和 K8s 输出：见 [experiment_log.md](experiment_log.md)。
 - 命令、K8s、artifact sync、股池读取：见 [runbook.md](runbook.md)。
+- 实验记录和归档路径：见 [experiment_log.md](experiment_log.md)。
 - 代码和脚本索引：见 [project_map.md](project_map.md)。
