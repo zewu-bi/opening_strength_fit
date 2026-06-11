@@ -71,12 +71,14 @@ class PostopenV2FeatureTest(unittest.TestCase):
         out = add_postopen_v2_decision_features(
             _decision_rows(),
             windows=(1,),
-            depth_levels=(3,),
+            depth_levels=(3, 10),
         )
 
         self.assertIn("postopen_v2_trade_volume_to_ask1_1t", out.columns)
         self.assertIn("postopen_v2_trade_vwap_vs_mid_1t_bps", out.columns)
         self.assertAlmostEqual(out.loc[0, "postopen_v2_trade_vwap_vs_mid_1t_bps"], 0.0)
+        self.assertIn("postopen_v2_queue_ask1_replenish_vs_trade_1m", out.columns)
+        self.assertIn("postopen_v2_queue_bid_depth10_replenish_vs_trade_1m", out.columns)
 
 
 if __name__ == "__main__":

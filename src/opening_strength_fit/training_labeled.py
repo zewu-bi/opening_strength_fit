@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import numpy as np
 import pandas as pd
 
@@ -20,8 +22,12 @@ from opening_strength_fit.config import (
 )
 from opening_strength_fit.dataset import build_labeled_feature_frame
 from opening_strength_fit.features import (
+    add_cross_sectional_relative_features,
+    add_historical_same_minute_surprise_features,
+    add_path_shape_confirmation_features,
     add_postopen_decision_features,
     add_postopen_v2_decision_features,
+    add_tree_sequence_features,
 )
 from opening_strength_fit.sampling import DEFAULT_DECISION_TIMES, parse_clock_times
 from opening_strength_fit.schema import (
@@ -54,9 +60,75 @@ def _drop_features_from_config(
     return labeled.drop(columns=drop_columns)
 
 
+def _cross_sectional_relative_columns_from_config(
+    labeled: pd.DataFrame,
+    config: dict,
+) -> list[str]:
+    explicit = set(config_list(config, "features", "cross_sectional_relative_columns", []))
+    prefixes = tuple(config_list(config, "features", "cross_sectional_relative_prefixes", []))
+    patterns = [
+        re.compile(pattern)
+        for pattern in config_list(config, "features", "cross_sectional_relative_regexes", [])
+    ]
+    columns: list[str] = []
+    for column in labeled.columns:
+        name = str(column)
+        if name in explicit:
+            columns.append(name)
+            continue
+        if prefixes and name.startswith(prefixes):
+            columns.append(name)
+            continue
+        if patterns and any(pattern.search(name) for pattern in patterns):
+            columns.append(name)
+    return list(dict.fromkeys(columns))
+
+
+def _apply_cross_sectional_relative_from_config(
+    labeled: pd.DataFrame,
+    config: dict,
+) -> pd.DataFrame:
+    relative_columns = _cross_sectional_relative_columns_from_config(labeled, config)
+    if not relative_columns:
+        raise SystemExit(
+            "features.include_cross_sectional_relative=true but no "
+            "cross_sectional_relative_columns/prefixes/regexes matched"
+        )
+    return add_cross_sectional_relative_features(
+        labeled,
+        columns=tuple(relative_columns),
+        group_cols=tuple(
+            config_list(
+                config,
+                "features",
+                "cross_sectional_relative_group_cols",
+                ["date", "decision_target_timestamp"],
+            )
+        ),
+        modes=tuple(
+            config_list(
+                config,
+                "features",
+                "cross_sectional_relative_modes",
+                ["zscore", "rank_centered"],
+            )
+        ),
+        prefix=config_str(config, "features", "cross_sectional_relative_prefix", "xs_rel_"),
+        rank_method=config_str(
+            config,
+            "features",
+            "cross_sectional_relative_rank_method",
+            "average",
+        ),
+    )
+
+
 def _apply_feature_transforms_from_config(
     labeled: pd.DataFrame,
     config: dict,
+    *,
+    include_cross_sectional_relative: bool = True,
+    drop_features: bool = True,
 ) -> pd.DataFrame:
     if config_bool(config, "features", "include_postopen_decision", False):
         labeled = add_postopen_decision_features(
@@ -84,8 +156,170 @@ def _apply_feature_transforms_from_config(
                 (3, 5, 10),
             ),
         )
-    labeled = _drop_features_from_config(labeled, config)
+    if config_bool(config, "features", "include_path_shape_confirmation", False):
+        labeled = add_path_shape_confirmation_features(
+            labeled,
+            windows=config_int_tuple(
+                config,
+                "features",
+                "path_shape_windows",
+                (2, 3, 5),
+            ),
+            prefix=config_str(
+                config,
+                "features",
+                "path_shape_prefix",
+                "path_shape_",
+            ),
+        )
+    if config_bool(config, "features", "include_tree_sequence", False):
+        labeled = add_tree_sequence_features(
+            labeled,
+            columns=tuple(config_list(config, "features", "tree_sequence_columns", [])),
+            include_prefixes=tuple(
+                config_list(config, "features", "tree_sequence_prefixes", [])
+            ),
+            include_patterns=tuple(
+                config_list(config, "features", "tree_sequence_regexes", [])
+            ),
+            windows=config_int_tuple(
+                config,
+                "features",
+                "tree_sequence_windows",
+                (2, 3, 5),
+            ),
+            landmarks=tuple(
+                config_list(
+                    config,
+                    "features",
+                    "tree_sequence_landmarks",
+                    ["09:31:00", "09:33:00", "09:35:00", "09:40:00"],
+                )
+            ),
+            prefix=config_str(config, "features", "tree_sequence_prefix", "tree_seq_"),
+        )
+    if include_cross_sectional_relative and config_bool(
+        config,
+        "features",
+        "include_cross_sectional_relative",
+        False,
+    ):
+        labeled = _apply_cross_sectional_relative_from_config(labeled, config)
+    if drop_features:
+        labeled = _drop_features_from_config(labeled, config)
     return labeled
+
+
+def _historical_surprise_columns_from_config(labeled: pd.DataFrame, config: dict) -> list[str]:
+    explicit = set(config_list(config, "features", "historical_surprise_columns", []))
+    prefixes = tuple(config_list(config, "features", "historical_surprise_prefixes", []))
+    patterns = [
+        re.compile(pattern)
+        for pattern in config_list(config, "features", "historical_surprise_regexes", [])
+    ]
+    columns: list[str] = []
+    for column in labeled.columns:
+        name = str(column)
+        if name in explicit:
+            columns.append(name)
+            continue
+        if prefixes and name.startswith(prefixes):
+            columns.append(name)
+            continue
+        if patterns and any(pattern.search(name) for pattern in patterns):
+            columns.append(name)
+    return list(dict.fromkeys(columns))
+
+
+def _apply_post_sample_feature_transforms_from_config(
+    labeled: pd.DataFrame,
+    config: dict,
+) -> pd.DataFrame:
+    if config_bool(config, "features", "include_historical_same_minute_surprise", False):
+        columns = _historical_surprise_columns_from_config(labeled, config)
+        if not columns:
+            raise SystemExit(
+                "features.include_historical_same_minute_surprise=true but no "
+                "historical_surprise_columns/prefixes/regexes matched"
+            )
+        labeled = add_historical_same_minute_surprise_features(
+            labeled,
+            columns=tuple(columns),
+            windows=config_int_tuple(
+                config,
+                "features",
+                "historical_surprise_windows",
+                (20, 60),
+            ),
+            min_periods=config_int(
+                config,
+                "features",
+                "historical_surprise_min_periods",
+                10,
+            ),
+            modes=tuple(
+                config_list(
+                    config,
+                    "features",
+                    "historical_surprise_modes",
+                    ["zscore", "ratio"],
+                )
+            ),
+            prefix=config_str(
+                config,
+                "features",
+                "historical_surprise_prefix",
+                "hist_surprise_",
+            ),
+        )
+    return labeled
+
+
+def apply_target_transform_from_config(frame: pd.DataFrame, config: dict) -> pd.DataFrame:
+    if not config_bool(config, "target_transform", "enabled", False):
+        return frame
+    mode = config_str(config, "target_transform", "mode", "rank_centered").strip().lower()
+    if mode not in {"rank_centered", "rank_pct"}:
+        raise SystemExit("target_transform.mode must be rank_centered or rank_pct")
+    source_col = config_str(config, "target_transform", "source_col", "target_label")
+    output_col = config_str(
+        config,
+        "target_transform",
+        "output_col",
+        f"{source_col}_{mode}",
+    )
+    if source_col not in frame.columns:
+        raise SystemExit(f"target_transform source column not found: {source_col}")
+    group_cols = [
+        column
+        for column in config_list(
+            config,
+            "target_transform",
+            "group_cols",
+            ["date", "decision_target_timestamp"],
+        )
+        if column in frame.columns
+    ]
+    if not group_cols:
+        raise SystemExit("target_transform needs at least one available group column")
+
+    out = frame.copy()
+    values = pd.to_numeric(out[source_col], errors="coerce").replace([np.inf, -np.inf], np.nan)
+    valid = values.notna()
+    if "valid_label" in out.columns:
+        valid &= out["valid_label"].fillna(False).astype(bool)
+    grouped = values.where(valid).groupby([out[column] for column in group_cols], sort=False)
+    rank_pct = grouped.rank(method=config_str(config, "target_transform", "rank_method", "average"), pct=True)
+    if mode == "rank_pct":
+        target = rank_pct
+    else:
+        count = grouped.transform("count")
+        rank_mean = (count + 1.0) / (2.0 * count)
+        target = rank_pct - rank_mean
+    out[output_col] = target.where(valid)
+    if "valid_label" in out.columns:
+        out["valid_label"] = out["valid_label"].fillna(False).astype(bool) & out[output_col].notna()
+    return out
 
 
 def apply_candidate_filter_from_config(
@@ -125,6 +359,29 @@ def apply_sample_weight_from_config(
     if not config_bool(config, "sample_weight", "enabled", False):
         return frame
     output_col = config_str(config, "sample_weight", "output_col", "sample_weight")
+    mode = config_str(config, "sample_weight", "mode", "candidate_mask").strip().lower()
+    if mode in {"date_linear", "linear_date", "recent_date"}:
+        if "date" not in frame.columns:
+            raise SystemExit("sample_weight.mode='date_linear' requires a date column")
+        dates = pd.to_datetime(frame["date"], errors="coerce")
+        configured_start = config_str(config, "sample_weight", "start_date", "")
+        configured_end = config_str(config, "sample_weight", "end_date", "")
+        start = pd.Timestamp(configured_start) if configured_start else dates.min()
+        end = pd.Timestamp(configured_end) if configured_end else dates.max()
+        if pd.isna(start) or pd.isna(end) or end <= start:
+            raise SystemExit("sample_weight.mode='date_linear' needs start_date < end_date")
+        min_weight = config_float(config, "sample_weight", "min_weight", 0.75)
+        max_weight = config_float(config, "sample_weight", "max_weight", 1.25)
+        span = (end - start).days
+        pct = ((dates - start).dt.days / span).clip(lower=0.0, upper=1.0)
+        out = frame.copy()
+        out[output_col] = (min_weight + pct * (max_weight - min_weight)).fillna(1.0)
+        return out
+
+    if mode not in {"candidate_mask", "guard", "rank_mask"}:
+        raise SystemExit(
+            "sample_weight.mode must be candidate_mask/rank_mask/guard or date_linear"
+        )
     pass_weight = config_float(config, "sample_weight", "pass_weight", 1.0)
     fail_weight = config_float(config, "sample_weight", "fail_weight", 0.25)
     mask = opening_candidate_mask(
@@ -304,6 +561,8 @@ def build_labeled_frame_from_config(
         ),
     )
     labeled = _apply_feature_transforms_from_config(labeled, config)
+    labeled = _apply_post_sample_feature_transforms_from_config(labeled, config)
+    labeled = apply_target_transform_from_config(labeled, config)
     if apply_candidate_filter:
         return apply_candidate_filter_from_config(labeled, config)
     return labeled
@@ -327,6 +586,16 @@ def filter_labeled_frame(labeled: pd.DataFrame, config: dict) -> pd.DataFrame:
             ),
             symbols=load_symbol_list(symbols_file) if symbols_file else None,
         )
-    labeled = _apply_feature_transforms_from_config(labeled, config)
+    labeled = _apply_feature_transforms_from_config(
+        labeled,
+        config,
+        include_cross_sectional_relative=False,
+        drop_features=False,
+    )
     labeled = _filter_labeled_sample_from_config(labeled, config)
+    labeled = _apply_post_sample_feature_transforms_from_config(labeled, config)
+    if config_bool(config, "features", "include_cross_sectional_relative", False):
+        labeled = _apply_cross_sectional_relative_from_config(labeled, config)
+    labeled = _drop_features_from_config(labeled, config)
+    labeled = apply_target_transform_from_config(labeled, config)
     return apply_candidate_filter_from_config(labeled, config)

@@ -18,6 +18,28 @@ def node_selector_yaml(config: dict, indent: int) -> str:
     return "\n".join(lines) + "\n"
 
 
+def avoid_nodes_affinity_yaml(config: dict, indent: int) -> str:
+    avoid_nodes = config.get("k8s", {}).get("avoid_nodes", [])
+    if isinstance(avoid_nodes, str):
+        avoid_nodes = avoid_nodes.replace(",", " ").split()
+    nodes = [str(node).strip() for node in avoid_nodes if str(node).strip()]
+    if not nodes:
+        return ""
+
+    lines = [
+        f"{' ' * indent}affinity:",
+        f"{' ' * (indent + 2)}nodeAffinity:",
+        f"{' ' * (indent + 4)}requiredDuringSchedulingIgnoredDuringExecution:",
+        f"{' ' * (indent + 6)}nodeSelectorTerms:",
+        f"{' ' * (indent + 8)}- matchExpressions:",
+        f"{' ' * (indent + 10)}- key: kubernetes.io/hostname",
+        f"{' ' * (indent + 12)}operator: NotIn",
+        f"{' ' * (indent + 12)}values:",
+    ]
+    lines.extend(f"{' ' * (indent + 14)}- {node}" for node in nodes)
+    return "\n".join(lines) + "\n"
+
+
 def wait_for_specific_paths_yaml(
     paths: list[str],
     *,

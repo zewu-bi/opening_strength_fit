@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -102,6 +103,20 @@ def write_frame(df: pd.DataFrame, path: str | Path, *, index: bool = False) -> N
         df.to_csv(path, index=index)
         return
     raise SystemExit(f"unsupported output format: {path.suffix}")
+
+
+def write_frame_atomic(df: pd.DataFrame, path: str | Path, *, index: bool = False) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    suffixes = "".join(path.suffixes[-2:]).lower()
+    suffix = ".csv.gz" if suffixes == ".csv.gz" else path.suffix
+    tmp_path = path.with_name(f".{path.name}.{os.getpid()}.tmp{suffix}")
+    try:
+        write_frame(df, tmp_path, index=index)
+        os.replace(tmp_path, path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
 
 
 def resolve_path(root: str | Path, value: str | Path) -> Path:

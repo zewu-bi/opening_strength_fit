@@ -10,6 +10,7 @@ from opening_strength_fit.config import (
     config_bool,
     config_float,
     config_int,
+    config_list,
     config_optional_int,
     config_str,
 )
@@ -24,6 +25,8 @@ from opening_strength_fit.feature_config import (
 )
 from opening_strength_fit.io import write_frame
 from opening_strength_fit.model import (
+    ClockSegmentPredictionModel,
+    EnsemblePredictionModel,
     evaluate_prediction_frame,
     fit_gbm_frame,
     fit_lightgbm_frame,
@@ -31,6 +34,7 @@ from opening_strength_fit.model import (
     predict_frame,
 )
 from opening_strength_fit.reports import print_mapping
+from opening_strength_fit.schema import normalize_clock_time
 from opening_strength_fit.stock_pool import (
     StockPoolConfig,
     configured_stock_pool_selection_frame,
@@ -119,6 +123,36 @@ def fit_prediction_model(
     alpha: float,
 ):
     model_name = config_str(config, "model", "name", "ridge").strip().lower()
+    if model_name == "ensemble":
+        return fit_ensemble_prediction_model(
+            train,
+            args=args,
+            config=config,
+            alpha=alpha,
+        )
+    if model_name in {"clock_segment_lightgbm", "clock_segment_lgbm", "segmented_lightgbm"}:
+        return fit_clock_segment_prediction_model(
+            train,
+            args=args,
+            config=config,
+            alpha=alpha,
+        )
+    return fit_single_prediction_model(
+        train,
+        args=args,
+        config=config,
+        alpha=alpha,
+    )
+
+
+def fit_single_prediction_model(
+    train: pd.DataFrame,
+    *,
+    args: argparse.Namespace,
+    config: dict,
+    alpha: float,
+):
+    model_name = config_str(config, "model", "name", "ridge").strip().lower()
     configured_feature_limit = feature_limit(args, config)
     target_col = config_str(config, "model", "target_col", "label")
     configured_feature_filters = feature_filters_from_config(config)
@@ -169,7 +203,206 @@ def fit_prediction_model(
             max_bin=config_optional_int(config, "model", "max_bin", None),
             gpu_use_dp=config_bool(config, "model", "gpu_use_dp", False),
         )
-    raise SystemExit(f"unsupported model.name={model_name!r}; expected ridge, gbm, or lightgbm")
+    raise SystemExit(
+        f"unsupported model.name={model_name!r}; "
+        "expected ridge, gbm, lightgbm, ensemble, or clock_segment_lightgbm"
+    )
+
+
+def _clock_series(frame: pd.DataFrame) -> pd.Series:
+    if "decision_time" in frame.columns:
+        raw = frame["decision_time"].astype(str)
+        extracted = raw.str.extract(r"(\d{1,2}:\d{2}(?::\d{2})?)", expand=False).fillna("")
+        return extracted.map(lambda value: normalize_clock_time(value) if value else "")
+    time_col = "decision_target_timestamp" if "decision_target_timestamp" in frame else "timestamp"
+    return pd.to_datetime(frame[time_col], errors="coerce").dt.strftime("%H:%M:%S").fillna("")
+
+
+def _segment_model_config(config: dict, segment: dict, base_model_name: str) -> dict:
+    merged = {
+        section: dict(values) if isinstance(values, dict) else values
+        for section, values in config.items()
+    }
+    model_section = dict(merged.get("model", {}))
+    for key in (
+        "segments",
+        "base_model_name",
+        "fallback",
+        "fallback_model_name",
+        "fallback_min_rows",
+    ):
+        model_section.pop(key, None)
+    model_section["name"] = str(segment.get("model_name", base_model_name))
+    for key, value in segment.items():
+        if key in {"segment_name", "decision_times", "model_name", "fallback"}:
+            continue
+        model_section[key] = value
+    merged["model"] = model_section
+    return merged
+
+
+def fit_clock_segment_prediction_model(
+    train: pd.DataFrame,
+    *,
+    args: argparse.Namespace,
+    config: dict,
+    alpha: float,
+):
+    model_section = config.get("model", {})
+    segments = model_section.get("segments", []) if isinstance(model_section, dict) else []
+    if not isinstance(segments, list) or not segments:
+        raise SystemExit(
+            "model.name='clock_segment_lightgbm' requires at least one [[model.segments]] table"
+        )
+
+    base_model_name = config_str(config, "model", "base_model_name", "lightgbm")
+    clock = _clock_series(train)
+    fitted_segments = []
+    segment_stats = []
+    for index, segment in enumerate(segments):
+        if not isinstance(segment, dict):
+            raise SystemExit("each [[model.segments]] entry must be a table")
+        decision_times = tuple(
+            normalize_clock_time(str(value))
+            for value in segment.get("decision_times", [])
+            if str(value).strip()
+        )
+        if not decision_times:
+            raise SystemExit("each [[model.segments]] entry requires decision_times")
+        mask = clock.isin(set(decision_times))
+        if not bool(mask.any()):
+            raise SystemExit(
+                f"clock segment {segment.get('segment_name', index)!r} has no training rows"
+            )
+
+        segment_config = _segment_model_config(config, segment, base_model_name)
+        model, stats = fit_single_prediction_model(
+            train.loc[mask].copy(),
+            args=args,
+            config=segment_config,
+            alpha=alpha,
+        )
+        segment_name = str(segment.get("segment_name", f"segment_{index}"))
+        fitted_segments.append((segment_name, decision_times, model))
+        segment_stats.append(
+            {
+                "index": index,
+                "segment_name": segment_name,
+                "decision_times": list(decision_times),
+                "model_name": model.model_name,
+                **stats,
+            }
+        )
+
+    features = list(
+        dict.fromkeys(feature for _, _, model in fitted_segments for feature in model.features)
+    )
+    target_col = config_str(config, "model", "target_col", "label")
+    stats = {
+        "rows": int(sum(item["rows"] for item in segment_stats)),
+        "dates": int(train["date"].nunique()) if "date" in train.columns else 0,
+        "symbols": int(train["symbol"].nunique()) if "symbol" in train.columns else 0,
+        "features": len(features),
+        "segments": segment_stats,
+    }
+    return (
+        ClockSegmentPredictionModel(
+            features=features,
+            segment_models=fitted_segments,
+            fallback_model=None,
+            model_name="clock_segment_lightgbm",
+            target_col=target_col,
+        ),
+        stats,
+    )
+
+
+def _member_model_config(config: dict, member: dict) -> dict:
+    merged = {
+        section: dict(values) if isinstance(values, dict) else values
+        for section, values in config.items()
+    }
+    model_section = dict(merged.get("model", {}))
+    for key in ("members", "weights", "combine_mode", "rank_group_cols"):
+        model_section.pop(key, None)
+    for key, value in member.items():
+        if key == "weight":
+            continue
+        model_section[key] = value
+    merged["model"] = model_section
+    return merged
+
+
+def fit_ensemble_prediction_model(
+    train: pd.DataFrame,
+    *,
+    args: argparse.Namespace,
+    config: dict,
+    alpha: float,
+):
+    model_section = config.get("model", {})
+    members = model_section.get("members", []) if isinstance(model_section, dict) else []
+    if not isinstance(members, list) or not members:
+        raise SystemExit("model.name='ensemble' requires at least one [[model.members]] table")
+
+    fitted_models = []
+    weights = []
+    member_stats = []
+    for index, member in enumerate(members):
+        if not isinstance(member, dict):
+            raise SystemExit("each [[model.members]] entry must be a table")
+        member_config = _member_model_config(config, member)
+        member_alpha = float(member.get("alpha", alpha))
+        model, stats = fit_single_prediction_model(
+            train,
+            args=args,
+            config=member_config,
+            alpha=member_alpha,
+        )
+        fitted_models.append(model)
+        weights.append(float(member.get("weight", 1.0)))
+        member_stats.append(
+            {
+                "index": index,
+                "model_name": model.model_name,
+                "weight": float(member.get("weight", 1.0)),
+                "features": int(len(model.features)),
+                **stats,
+            }
+        )
+
+    features = list(dict.fromkeys(feature for model in fitted_models for feature in model.features))
+    base_stats = member_stats[0]
+    stats = {
+        "rows": int(base_stats["rows"]),
+        "dates": int(base_stats["dates"]),
+        "symbols": int(base_stats["symbols"]),
+        "features": len(features),
+        "members": member_stats,
+    }
+    member_names = "+".join(model.model_name for model in fitted_models)
+    target_col = config_str(config, "model", "target_col", "label")
+    combine_mode = config_str(config, "model", "combine_mode", "rank")
+    return (
+        EnsemblePredictionModel(
+            features=features,
+            alpha=float("nan"),
+            models=fitted_models,
+            weights=weights,
+            combine_mode=combine_mode,
+            rank_group_cols=tuple(
+                config_list(
+                    config,
+                    "model",
+                    "rank_group_cols",
+                    ["date", "decision_target_timestamp"],
+                )
+            ),
+            model_name=f"ensemble_{combine_mode}_{member_names}",
+            target_col=target_col,
+        ),
+        stats,
+    )
 
 
 def model_config_payload(config: dict, alpha: float) -> dict[str, object]:
@@ -211,6 +444,30 @@ def model_config_payload(config: dict, alpha: float) -> dict[str, object]:
             "max_bin": config_optional_int(config, "model", "max_bin", None),
             "gpu_use_dp": config_bool(config, "model", "gpu_use_dp", False),
             "sample_weight_col": config_str(config, "model", "sample_weight_col", ""),
+        }
+    if model_name == "ensemble":
+        model_section = config.get("model", {})
+        members = model_section.get("members", []) if isinstance(model_section, dict) else []
+        return {
+            "name": "ensemble",
+            "target_col": target_col,
+            "combine_mode": config_str(config, "model", "combine_mode", "rank"),
+            "rank_group_cols": config_list(
+                config,
+                "model",
+                "rank_group_cols",
+                ["date", "decision_target_timestamp"],
+            ),
+            "members": members,
+        }
+    if model_name in {"clock_segment_lightgbm", "clock_segment_lgbm", "segmented_lightgbm"}:
+        model_section = config.get("model", {})
+        segments = model_section.get("segments", []) if isinstance(model_section, dict) else []
+        return {
+            "name": "clock_segment_lightgbm",
+            "target_col": target_col,
+            "base_model_name": config_str(config, "model", "base_model_name", "lightgbm"),
+            "segments": segments,
         }
     return {"name": model_name}
 

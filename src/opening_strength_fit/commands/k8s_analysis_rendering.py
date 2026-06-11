@@ -9,6 +9,9 @@ import pandas as pd
 
 from opening_strength_fit.commands.artifact_sync_metrics import DEFAULT_NEXT_CLOSE_LABEL_PVC_DIR
 from opening_strength_fit.commands.k8s_rendering_common import (
+    avoid_nodes_affinity_yaml as _avoid_nodes_affinity_yaml,
+)
+from opening_strength_fit.commands.k8s_rendering_common import (
     env_from_secrets_yaml as _env_from_secrets_yaml,
 )
 from opening_strength_fit.commands.k8s_rendering_common import k8s_job_name as _k8s_job_name
@@ -129,18 +132,22 @@ def _analysis_wait_paths(config: dict, pvc_dir: str) -> list[str]:
     explicit = _analysis_list(config, "wait_for_paths", [])
     if explicit:
         return explicit
+    completion_file = str(_analysis_get(config, "wait_for_completion_file", "metrics_by_year.csv"))
+    completion_file = completion_file.strip()
+    if not completion_file:
+        completion_file = "predictions.parquet"
     if _window_mode(config) == "rolling_monthly":
         return [
-            f"{pvc_dir.rstrip('/')}/month_{start_month}/predictions.parquet"
+            f"{pvc_dir.rstrip('/')}/month_{start_month}/{completion_file}"
             for start_month, _ in _month_windows_from_config(config)
         ]
     try:
         start_year = _year_from_config(config, "test_start_date")
         end_year = _year_from_config(config, "test_end_date")
     except SystemExit:
-        return [f"{pvc_dir.rstrip('/')}/predictions.parquet"]
+        return [f"{pvc_dir.rstrip('/')}/{completion_file}"]
     return [
-        f"{pvc_dir.rstrip('/')}/year_{year}/predictions.parquet"
+        f"{pvc_dir.rstrip('/')}/year_{year}/{completion_file}"
         for year in range(start_year, end_year + 1)
     ]
 
@@ -259,7 +266,7 @@ def render_pool_internal_analysis_job(config_path: Path, config: dict, image: st
                 - name: opening-strength-output
                   persistentVolumeClaim:
                     claimName: {pvc}
-{_node_selector_yaml(config, indent=14).rstrip()}
+{(_node_selector_yaml(config, indent=14) + _avoid_nodes_affinity_yaml(config, indent=14)).rstrip()}
               containers:
                 - name: opening-strength-fit
                   image: {image}

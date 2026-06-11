@@ -14,7 +14,7 @@ from opening_strength_fit.config import (
     run_id,
 )
 from opening_strength_fit.evaluation import score_bucket_returns
-from opening_strength_fit.io import write_frame
+from opening_strength_fit.io import write_frame_atomic
 from opening_strength_fit.reports import (
     dataset_summary,
     metrics_by_year_from_windows,
@@ -78,15 +78,33 @@ def _json_ready(value):
 
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(
-            _json_ready(payload),
-            indent=2,
-            ensure_ascii=False,
-            default=_json_default,
-            allow_nan=False,
-        ),
-        encoding="utf-8",
+    tmp_path = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp_path.write_text(
+            json.dumps(
+                _json_ready(payload),
+                indent=2,
+                ensure_ascii=False,
+                default=_json_default,
+                allow_nan=False,
+            ),
+            encoding="utf-8",
+        )
+        os.replace(tmp_path, path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+
+def _write_success_marker(output_dir: Path, *, run_name: str, windows: int) -> None:
+    _write_json(
+        output_dir / "_SUCCESS",
+        {
+            "run_id": run_name,
+            "windows": windows,
+            "status": "completed",
+            "format_version": 1,
+        },
     )
 
 
@@ -174,14 +192,14 @@ def train_from_args(args: argparse.Namespace) -> None:
             if column in combined_predictions.columns
         ]
         combined_predictions = combined_predictions.sort_values(sort_cols)
-    write_frame(combined_predictions, output_dir / "predictions.parquet")
+    write_frame_atomic(combined_predictions, output_dir / "predictions.parquet")
 
     combined_buckets = score_bucket_returns(
         combined_predictions,
         bins=int(evaluation_settings["score_bins"]),
         group_cols=evaluation_settings["_bucket_group_cols"],
     )
-    combined_buckets.to_csv(output_dir / "score_buckets.csv", index=False)
+    write_frame_atomic(combined_buckets, output_dir / "score_buckets.csv")
     if stock_pool is not None and stock_pool_settings.filter_selection:
         _, combined_pool_predictions, _ = configured_stock_pool_selection_frame(
             combined_predictions,
@@ -193,20 +211,17 @@ def train_from_args(args: argparse.Namespace) -> None:
             bins=int(evaluation_settings["score_bins"]),
             group_cols=evaluation_settings["_bucket_group_cols"],
         )
-        combined_pool_buckets.to_csv(
-            output_dir / "score_buckets_stock_pool.csv",
-            index=False,
-        )
+        write_frame_atomic(combined_pool_buckets, output_dir / "score_buckets_stock_pool.csv")
 
     metrics_by_window = pd.DataFrame(metric_rows)
     metrics_by_year = metrics_by_year_from_windows(metrics_by_window)
-    metrics_by_year.to_csv(output_dir / "metrics_by_year.csv", index=False)
-    metrics_by_year.to_parquet(output_dir / "metrics_by_year.parquet", index=False)
+    write_frame_atomic(metrics_by_year, output_dir / "metrics_by_year.csv")
+    write_frame_atomic(metrics_by_year, output_dir / "metrics_by_year.parquet")
     if not metrics_by_window["test_month"].is_unique or len(metrics_by_window) != len(
         metrics_by_year
     ):
-        metrics_by_window.to_csv(output_dir / "metrics_by_month.csv", index=False)
-        metrics_by_window.to_parquet(output_dir / "metrics_by_month.parquet", index=False)
+        write_frame_atomic(metrics_by_window, output_dir / "metrics_by_month.csv")
+        write_frame_atomic(metrics_by_window, output_dir / "metrics_by_month.parquet")
 
     _write_json(
         output_dir / "metrics.json",
@@ -224,6 +239,7 @@ def train_from_args(args: argparse.Namespace) -> None:
             "metrics_by_year": metrics_by_year.to_dict(orient="records"),
         },
     )
+    _write_success_marker(output_dir, run_name=run_name, windows=len(splits))
 
     print_mapping(
         "evaluation_settings",

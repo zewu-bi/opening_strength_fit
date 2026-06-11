@@ -24,6 +24,12 @@ from opening_strength_fit.evaluation import (
 from opening_strength_fit.io import write_frame
 from opening_strength_fit.model import evaluate_prediction_frame, predict_frame
 from opening_strength_fit.reports import dataset_summary, print_mapping
+from opening_strength_fit.stock_pool import (
+    configured_stock_pool_selection_frame,
+    load_configured_stock_pool,
+    stock_pool_config_from_mapping,
+    stock_pool_runtime_summary,
+)
 from opening_strength_fit.training_args import build_training_parser, load_run_config
 from opening_strength_fit.training_data import (
     load_clickhouse_labeled_frame,
@@ -174,13 +180,24 @@ def _summary_row(
     train_rows: int | None,
     repeat: int | None = None,
     baseline: dict[str, object] | None = None,
+    stock_pool_settings=None,
+    stock_pool: pd.DataFrame | None = None,
 ) -> dict[str, object]:
+    if stock_pool is not None and stock_pool_settings is not None:
+        predictions, selection_predictions, stock_pool_summary = configured_stock_pool_selection_frame(
+            predictions,
+            stock_pool_settings,
+            stock_pool,
+        )
+    else:
+        selection_predictions = predictions
+        stock_pool_summary = {}
     metrics = evaluate_prediction_frame(
-        predictions,
+        selection_predictions,
         group_cols=evaluation_settings["_ic_group_cols"],
     )
     top = top_score_trades(
-        predictions,
+        selection_predictions,
         top_n=int(evaluation_settings["top_n"]),
         group_cols=evaluation_settings["_selection_group_cols"],
     )
@@ -211,6 +228,7 @@ def _summary_row(
         "top_score_mean_return_bps": top_summary["mean_return"] * 10_000,
         "top_score_win_rate": top_summary["win_rate"],
     }
+    row.update(stock_pool_summary)
     if baseline is not None:
         row["delta_group_rank_ic_mean"] = row["group_rank_ic_mean"] - baseline["group_rank_ic_mean"]
         row["delta_top_score_mean_return_bps"] = (
@@ -330,6 +348,10 @@ def main() -> None:
 
     labeled = _load_labeled(args, config)
     print_mapping("dataset", dataset_summary(labeled))
+    stock_pool_settings = stock_pool_config_from_mapping(config)
+    stock_pool = load_configured_stock_pool(stock_pool_settings)
+    if stock_pool is not None:
+        print_mapping("stock_pool", stock_pool_runtime_summary(stock_pool_settings, stock_pool))
 
     alpha = args.alpha if args.alpha is not None else config_float(config, "model", "alpha", 1.0)
     evaluation_settings = build_evaluation_settings(config, args)
@@ -388,6 +410,8 @@ def main() -> None:
             dropped_features=0,
             train_rows=train_stats["rows"],
             evaluation_settings=evaluation_settings,
+            stock_pool_settings=stock_pool_settings,
+            stock_pool=stock_pool,
         )
         metric_rows.append(baseline_row)
         importance_rows.extend(
@@ -448,6 +472,8 @@ def main() -> None:
                         train_rows=train_stats["rows"],
                         evaluation_settings=evaluation_settings,
                         baseline=baseline_row,
+                        stock_pool_settings=stock_pool_settings,
+                        stock_pool=stock_pool,
                     )
                     row["group"] = group_name
                     row["permuted_features"] = len(columns)
@@ -481,6 +507,8 @@ def main() -> None:
                     train_rows=ablated_train_stats["rows"],
                     evaluation_settings=evaluation_settings,
                     baseline=baseline_row,
+                    stock_pool_settings=stock_pool_settings,
+                    stock_pool=stock_pool,
                 )
                 row["group"] = group_name
                 metric_rows.append(row)

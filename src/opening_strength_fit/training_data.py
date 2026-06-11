@@ -334,6 +334,55 @@ def _postopen_v2_source_columns(config: dict, available: set[str]) -> list[str]:
     return source
 
 
+def _cross_sectional_relative_source_columns(config: dict, available: set[str]) -> list[str]:
+    if not config_bool(config, "features", "include_cross_sectional_relative", False):
+        return []
+    source = []
+    source.extend(config_list(config, "features", "cross_sectional_relative_group_cols", []))
+    source.extend(config_list(config, "features", "cross_sectional_relative_columns", []))
+    source.extend(
+        _matching_existing_columns(
+            available,
+            prefixes=tuple(
+                config_list(config, "features", "cross_sectional_relative_prefixes", [])
+            ),
+            patterns=tuple(
+                config_list(config, "features", "cross_sectional_relative_regexes", [])
+            ),
+        )
+    )
+    return source
+
+
+def _historical_surprise_source_columns(config: dict, available: set[str]) -> list[str]:
+    if not config_bool(config, "features", "include_historical_same_minute_surprise", False):
+        return []
+    source = []
+    source.extend(config_list(config, "features", "historical_surprise_columns", []))
+    source.extend(
+        _matching_existing_columns(
+            available,
+            prefixes=tuple(config_list(config, "features", "historical_surprise_prefixes", [])),
+            patterns=tuple(config_list(config, "features", "historical_surprise_regexes", [])),
+        )
+    )
+    return source
+
+
+def _target_transform_source_columns(config: dict) -> list[str]:
+    if not config_bool(config, "target_transform", "enabled", False):
+        return []
+    return [
+        config_str(config, "target_transform", "source_col", "target_label"),
+        *config_list(
+            config,
+            "target_transform",
+            "group_cols",
+            ["date", "decision_target_timestamp"],
+        ),
+    ]
+
+
 def _guard_condition_columns(config: dict, section: str) -> tuple[str, ...]:
     return (
         *_mapping_keys(config_float_mapping(config, section, "min")),
@@ -379,6 +428,7 @@ def _labeled_pvc_read_columns(path: Path, config: dict) -> list[str] | None:
         target_col,
         sample_weight_col,
         sample_weight_output_col,
+        *_target_transform_source_columns(config),
         *PREDICTION_CONTEXT_COLUMNS,
         *_guard_condition_columns(config, "candidate_filter"),
         *_guard_condition_columns(config, "sample_weight"),
@@ -391,6 +441,8 @@ def _labeled_pvc_read_columns(path: Path, config: dict) -> list[str] | None:
     selected.extend(feature_filters["include_columns"])
     selected.extend(_postopen_decision_source_columns(config))
     selected.extend(_postopen_v2_source_columns(config, available))
+    selected.extend(_cross_sectional_relative_source_columns(config, available))
+    selected.extend(_historical_surprise_source_columns(config, available))
     selected.extend(
         _matching_existing_columns(
             available,

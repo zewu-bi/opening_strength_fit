@@ -7,6 +7,9 @@ import pandas as pd
 
 from opening_strength_fit.commands.k8s_analysis_rendering import render_pool_internal_analysis_job
 from opening_strength_fit.commands.k8s_rendering_common import (
+    avoid_nodes_affinity_yaml as _avoid_nodes_affinity_yaml,
+)
+from opening_strength_fit.commands.k8s_rendering_common import (
     env_from_secrets_yaml as _env_from_secrets_yaml,
 )
 from opening_strength_fit.commands.k8s_rendering_common import k8s_job_name as _k8s_job_name
@@ -55,6 +58,10 @@ def training_command(config: dict) -> str:
         "hist_gradient_boosting",
         "lightgbm",
         "lgbm",
+        "ensemble",
+        "clock_segment_lightgbm",
+        "clock_segment_lgbm",
+        "segmented_lightgbm",
     }:
         return "osf-train"
     raise SystemExit(f"Unsupported model.name for k8s rendering: {model_name}")
@@ -124,9 +131,13 @@ def _wait_for_paths_yaml(config: dict, indent: int) -> str:
 
 
 def _scheduler_yaml(config: dict, resources: dict, indent: int = 14) -> str:
-    return _node_selector_yaml(config, indent=indent) + _gpu_tolerations_yaml(
-        resources,
-        indent=indent,
+    return (
+        _node_selector_yaml(config, indent=indent)
+        + _avoid_nodes_affinity_yaml(config, indent=indent)
+        + _gpu_tolerations_yaml(
+            resources,
+            indent=indent,
+        )
     )
 
 
@@ -226,11 +237,20 @@ def _window_mode(config: dict) -> str:
     return str(get(config, "window", "mode", "chronological"))
 
 
-def _clickhouse_env_from(config: dict, indent: int = 18) -> str:
-    secret = str(get(config, "k8s", "clickhouse_secret", "") or "")
-    if not secret:
-        return ""
-    return _env_from_secrets_yaml([secret], indent=indent)
+def _k8s_env_from(config: dict, indent: int = 18) -> str:
+    secret_names = []
+    clickhouse_secret = str(get(config, "k8s", "clickhouse_secret", "") or "")
+    if clickhouse_secret:
+        secret_names.append(clickhouse_secret)
+    env_secrets = get(config, "k8s", "env_secrets", []) or []
+    if isinstance(env_secrets, str):
+        secret_names.extend(env_secrets.replace(",", " ").split())
+    else:
+        secret_names.extend(str(item) for item in env_secrets)
+    ceph_secret = str(get(config, "k8s", "ceph_secret", "") or "")
+    if ceph_secret:
+        secret_names.append(ceph_secret)
+    return _env_from_secrets_yaml(secret_names, indent=indent)
 
 
 def render_training_job(config_path: Path, config: dict, image: str) -> str:
@@ -254,7 +274,7 @@ def render_training_job(config_path: Path, config: dict, image: str) -> str:
     gpu_resource_line = _gpu_resource_line(resources, indent=22)
     scheduler_yaml = _scheduler_yaml(config, resources, indent=14)
     command = training_command(config)
-    env_from = _clickhouse_env_from(config, indent=18)
+    env_from = _k8s_env_from(config, indent=18)
     command_yaml = _training_command_yaml(
         command=command,
         config_path=config_path,
@@ -327,11 +347,11 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
     gpu_resource_line = _gpu_resource_line(resources, indent=26)
     scheduler_yaml = _scheduler_yaml(config, resources, indent=18)
     command = training_command(config)
-    env_from = _clickhouse_env_from(config, indent=18)
+    env_from = _k8s_env_from(config, indent=18)
     opencl_bootstrap = _gpu_opencl_bootstrap_yaml(resources, indent=26)
     wait_for_paths = _wait_for_paths_yaml(config, indent=26)
     if _window_mode(config) == "rolling_monthly":
-        env_from = _clickhouse_env_from(config, indent=22)
+        env_from = _k8s_env_from(config, indent=22)
         month_windows = _month_windows_from_config(config)
         test_starts = " ".join(start for start, _ in month_windows)
         test_ends = " ".join(end for _, end in month_windows)

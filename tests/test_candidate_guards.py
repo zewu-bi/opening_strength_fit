@@ -83,6 +83,32 @@ class CandidateGuardTest(unittest.TestCase):
             ).equals(weighted["sample_weight"].eq(1.0))
         )
 
+    def test_sample_weight_config_supports_date_linear_weights(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "date": ["2022-01-01", "2023-01-01", "2024-01-01"],
+                "symbol": ["000001.SZ", "000002.SZ", "000003.SZ"],
+                "label": [0.1, 0.2, 0.3],
+            }
+        )
+        config = {
+            "sample_weight": {
+                "enabled": True,
+                "mode": "date_linear",
+                "output_col": "sample_weight",
+                "start_date": "2022-01-01",
+                "end_date": "2024-01-01",
+                "min_weight": 0.8,
+                "max_weight": 1.2,
+            }
+        }
+
+        weighted = apply_sample_weight_from_config(frame, config)
+
+        self.assertAlmostEqual(weighted.loc[0, "sample_weight"], 0.8)
+        self.assertAlmostEqual(weighted.loc[2, "sample_weight"], 1.2)
+        self.assertGreater(weighted.loc[1, "sample_weight"], weighted.loc[0, "sample_weight"])
+
     def test_lightgbm_uses_sample_weight_without_feature_leakage(self) -> None:
         frame = pd.DataFrame(
             {

@@ -144,6 +144,11 @@ class K8sHelperTest(unittest.TestCase):
 
         self.assertEqual(training_command(config), "osf-build-next-close-labels")
 
+    def test_ensemble_model_uses_standard_training_script(self) -> None:
+        config = {"run": {"kind": "exploration"}, "model": {"name": "ensemble"}}
+
+        self.assertEqual(training_command(config), "osf-train")
+
     def test_pool_internal_analysis_job_uses_cluster_artifacts(self) -> None:
         config = {
             "run": {
@@ -189,11 +194,11 @@ class K8sHelperTest(unittest.TestCase):
         self.assertIn("name: opening-strength-clickhouse", manifest)
         self.assertIn("name: xy-fit-ceph-credentials", manifest)
         self.assertIn(
-            "/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_pool_l_reg_mid_v1/month_2022-01/predictions.parquet",
+            "/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_pool_l_reg_mid_v1/month_2022-01/metrics_by_year.csv",
             manifest,
         )
         self.assertIn(
-            "/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_pool_l_reg_mid_v1/month_2022-07/predictions.parquet",
+            "/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_pool_l_reg_mid_v1/month_2022-07/metrics_by_year.csv",
             manifest,
         )
         self.assertIn("--predictions \\", manifest)

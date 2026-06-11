@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import numpy as np
 import pandas as pd
 
@@ -13,6 +15,7 @@ from opening_strength_fit.schema import (
     bid_volume_col,
     ensure_timestamp_columns,
     filter_time_range,
+    normalize_clock_time,
 )
 
 
@@ -223,6 +226,100 @@ def _column_values(df: pd.DataFrame, column: str) -> pd.Series:
     if column not in df.columns:
         return pd.Series(np.nan, index=df.index, dtype="float64")
     return _numeric_series(df[column])
+
+
+def _matching_columns(
+    columns: pd.Index,
+    *,
+    include_columns: tuple[str, ...] = (),
+    include_prefixes: tuple[str, ...] = (),
+    include_patterns: tuple[str, ...] = (),
+) -> list[str]:
+    explicit = set(include_columns)
+    compiled = [re.compile(pattern) for pattern in include_patterns]
+    matched: list[str] = []
+    for column in columns:
+        name = str(column)
+        if name in explicit:
+            matched.append(name)
+            continue
+        if include_prefixes and name.startswith(include_prefixes):
+            matched.append(name)
+            continue
+        if compiled and any(pattern.search(name) for pattern in compiled):
+            matched.append(name)
+    return list(dict.fromkeys(matched))
+
+
+def add_cross_sectional_relative_features(
+    frame: pd.DataFrame,
+    *,
+    columns: tuple[str, ...] = (),
+    include_prefixes: tuple[str, ...] = (),
+    include_patterns: tuple[str, ...] = (),
+    group_cols: tuple[str, ...] = ("date", "decision_target_timestamp"),
+    modes: tuple[str, ...] = ("zscore", "rank_centered"),
+    prefix: str = "xs_rel_",
+    rank_method: str = "average",
+) -> pd.DataFrame:
+    """Add within-cross-section relative versions of configured numeric columns."""
+
+    available_group_cols = tuple(column for column in group_cols if column in frame.columns)
+    if not available_group_cols:
+        raise ValueError("cross-sectional relative features need at least one group column")
+
+    source_columns = [
+        column
+        for column in _matching_columns(
+            frame.columns,
+            include_columns=columns,
+            include_prefixes=include_prefixes,
+            include_patterns=include_patterns,
+        )
+        if column not in available_group_cols
+    ]
+    source_columns = [
+        column
+        for column in source_columns
+        if pd.api.types.is_numeric_dtype(frame[column]) or pd.api.types.is_bool_dtype(frame[column])
+    ]
+    if not source_columns:
+        return frame.copy()
+
+    normalized_modes = tuple(mode.strip().lower() for mode in modes if mode.strip())
+    valid_modes = {"demean", "zscore", "rank_pct", "rank_centered", "rank"}
+    unknown_modes = sorted(set(normalized_modes) - valid_modes)
+    if unknown_modes:
+        raise ValueError(f"unknown cross-sectional relative feature modes: {unknown_modes}")
+
+    out = frame.copy()
+    group_keys = [out[column] for column in available_group_cols]
+    new_columns: dict[str, pd.Series] = {}
+    for column in source_columns:
+        values = pd.to_numeric(out[column], errors="coerce").astype("float64")
+        grouped = values.groupby(group_keys, sort=False)
+        centered = None
+        rank_pct = None
+        for mode in normalized_modes:
+            if mode in {"demean", "zscore"} and centered is None:
+                centered = values - grouped.transform("mean")
+            if mode == "demean":
+                new_columns[f"{prefix}{column}_demean"] = centered
+            elif mode == "zscore":
+                std = grouped.transform("std")
+                new_columns[f"{prefix}{column}_zscore"] = pd.Series(
+                    safe_divide(centered, std),
+                    index=out.index,
+                )
+            elif mode in {"rank_pct", "rank_centered", "rank"}:
+                if rank_pct is None:
+                    rank_pct = grouped.rank(method=rank_method, pct=True)
+                if mode == "rank_pct":
+                    new_columns[f"{prefix}{column}_rank_pct"] = rank_pct
+                else:
+                    new_columns[f"{prefix}{column}_rank_centered"] = rank_pct - 0.5
+
+    return pd.concat([out, pd.DataFrame(new_columns, index=out.index)], axis=1)
 
 
 def _sum_present_columns(df: pd.DataFrame, columns: list[str]) -> pd.Series:
@@ -568,6 +665,39 @@ def _add_queue_response_features(builder: _PostOpenV2Builder) -> None:
             -builder.series("postopen_v2_spread_bps_diff_1m"),
         )
 
+    for window in (1, 2, 3, 5):
+        trade_column = f"postopen_v2_volume_diff_{window}m"
+        if not builder.has(trade_column):
+            continue
+        trade_volume = builder.series(trade_column).abs()
+        ask_queue_column = f"postopen_v2_ask_volume_1_diff_{window}m"
+        bid_queue_column = f"postopen_v2_bid_volume_1_diff_{window}m"
+        if builder.has(ask_queue_column):
+            builder.add(
+                f"postopen_v2_queue_ask1_replenish_vs_trade_{window}m",
+                safe_divide(builder.series(ask_queue_column), trade_volume),
+            )
+        if builder.has(bid_queue_column):
+            builder.add(
+                f"postopen_v2_queue_bid1_replenish_vs_trade_{window}m",
+                safe_divide(builder.series(bid_queue_column), trade_volume),
+            )
+        if builder.has("postopen_v2_bid_depth_10"):
+            bid_depth_diff = builder.numeric("postopen_v2_bid_depth_10") - builder.shifted(
+                "postopen_v2_bid_depth_10",
+                window,
+            )
+            builder.add(
+                f"postopen_v2_queue_bid_depth10_replenish_vs_trade_{window}m",
+                safe_divide(bid_depth_diff, trade_volume),
+            )
+        spread_column = f"postopen_v2_spread_bps_diff_{window}m"
+        if builder.has(spread_column):
+            builder.add(
+                f"postopen_v2_queue_spread_compression_{window}m",
+                -builder.series(spread_column),
+            )
+
 
 def add_postopen_v2_decision_features(
     frame: pd.DataFrame,
@@ -589,6 +719,462 @@ def add_postopen_v2_decision_features(
     _add_trajectory_features(builder, windows=windows)
     _add_queue_response_features(builder)
     return builder.finish()
+
+
+def _tree_sequence_default_columns(frame: pd.DataFrame) -> tuple[str, ...]:
+    candidates = (
+        "return_vs_prev_close",
+        "return_vs_open",
+        "mid_price",
+        "ask_price_1",
+        "bid_price_1",
+        "spread_bps",
+        "depth_imbalance_1",
+        "depth_imbalance_10",
+        "ask_volume_1",
+        "bid_volume_1",
+        "ask_depth_10",
+        "bid_depth_10",
+        "volume_diff_1t",
+        "volume_diff_3t",
+        "volume_diff_10t",
+        "turnover_diff_1t",
+        "turnover_diff_3t",
+        "trade_vwap_1t",
+    )
+    return tuple(column for column in candidates if column in frame.columns)
+
+
+def _tree_sequence_columns_from_filters(
+    frame: pd.DataFrame,
+    *,
+    columns: tuple[str, ...],
+    include_prefixes: tuple[str, ...],
+    include_patterns: tuple[str, ...],
+) -> tuple[str, ...]:
+    if not columns and not include_prefixes and not include_patterns:
+        return _tree_sequence_default_columns(frame)
+    return tuple(
+        _matching_columns(
+            frame.columns,
+            include_columns=columns,
+            include_prefixes=include_prefixes,
+            include_patterns=include_patterns,
+        )
+    )
+
+
+def _rolling_linear_slope(values: pd.Series, window: int) -> pd.Series:
+    if window < 2:
+        return pd.Series(np.nan, index=values.index, dtype="float64")
+
+    values = _numeric_series(values)
+    rolling = values.rolling(window=window, min_periods=window)
+    rolling_sum = rolling.sum()
+    valid_window = rolling.count().eq(float(window))
+
+    weighted_sum = pd.Series(0.0, index=values.index, dtype="float64")
+    for offset in range(window - 1):
+        weight = float(window - 1 - offset)
+        weighted_sum = weighted_sum + values.shift(offset) * weight
+
+    x_mean = float(window - 1) / 2.0
+    denom = float(window * (window**2 - 1)) / 12.0
+    slope = (weighted_sum - x_mean * rolling_sum) / denom
+    return slope.where(valid_window)
+
+
+def _grouped_rolling_linear_slope(
+    values: pd.Series,
+    group_keys: list[pd.Series],
+    window: int,
+) -> pd.Series:
+    if window < 2:
+        return pd.Series(np.nan, index=values.index, dtype="float64")
+
+    values = _numeric_series(values)
+    grouped = values.groupby(group_keys, sort=False)
+    rolling = grouped.rolling(window=window, min_periods=window)
+    group_levels = list(range(len(group_keys)))
+    rolling_sum = rolling.sum().reset_index(level=group_levels, drop=True)
+    valid_window = rolling.count().reset_index(level=group_levels, drop=True).eq(float(window))
+
+    weighted_sum = pd.Series(0.0, index=values.index, dtype="float64")
+    for offset in range(window - 1):
+        weight = float(window - 1 - offset)
+        shifted = values if offset == 0 else grouped.shift(offset)
+        weighted_sum = weighted_sum + shifted * weight
+
+    x_mean = float(window - 1) / 2.0
+    denom = float(window * (window**2 - 1)) / 12.0
+    slope = (weighted_sum - x_mean * rolling_sum) / denom
+    return slope.where(valid_window)
+
+
+def _expanding_position(values: pd.Series) -> pd.Series:
+    expanding_min = values.expanding(min_periods=1).min()
+    expanding_max = values.expanding(min_periods=1).max()
+    return safe_divide(values - expanding_min, expanding_max - expanding_min)
+
+
+def _clock_slug(clock: str) -> str:
+    return clock.replace(":", "")
+
+
+def _normalized_row_clock(frame: pd.DataFrame, time_col: str) -> pd.Series:
+    if "decision_time" in frame.columns:
+        raw = frame["decision_time"].astype(str)
+        extracted = raw.str.extract(r"(\d{1,2}:\d{2}(?::\d{2})?)", expand=False).fillna("")
+        return extracted.map(lambda value: normalize_clock_time(value) if value else "")
+    return pd.to_datetime(frame[time_col], errors="coerce").dt.strftime("%H:%M:%S").fillna("")
+
+
+def _landmark_series(
+    frame: pd.DataFrame,
+    *,
+    group,
+    time_col: str,
+    column: str,
+    clock: str,
+) -> pd.Series:
+    target = normalize_clock_time(clock)
+    row_clock = pd.to_datetime(frame[time_col], errors="coerce").dt.strftime("%H:%M:%S")
+    values = _numeric_series(frame[column]).where(row_clock == target)
+    landmark = values.groupby(group, sort=False).transform("max")
+    current_after_landmark = row_clock >= target
+    return landmark.where(current_after_landmark)
+
+
+def add_tree_sequence_features(
+    frame: pd.DataFrame,
+    *,
+    columns: tuple[str, ...] = (),
+    include_prefixes: tuple[str, ...] = (),
+    include_patterns: tuple[str, ...] = (),
+    windows: tuple[int, ...] = (2, 3, 5),
+    landmarks: tuple[str, ...] = ("09:31:00", "09:33:00", "09:35:00", "09:40:00"),
+    prefix: str = "tree_seq_",
+) -> pd.DataFrame:
+    """Encode post-open paths as tabular features for tree models.
+
+    All path statistics are computed within each date/symbol group and use
+    only the current and earlier decision rows.
+    """
+
+    out = ensure_timestamp_columns(frame)
+    time_col = (
+        "decision_target_timestamp" if "decision_target_timestamp" in out.columns else "timestamp"
+    )
+    out = out.sort_values(["date", "symbol", time_col]).reset_index(drop=True)
+    group_keys = [out["date"], out["symbol"]]
+    selected_columns = _tree_sequence_columns_from_filters(
+        out,
+        columns=columns,
+        include_prefixes=include_prefixes,
+        include_patterns=include_patterns,
+    )
+    if not selected_columns:
+        return out
+
+    new_columns: dict[str, pd.Series] = {}
+    for column in selected_columns:
+        values = _numeric_series(out[column])
+        per_symbol = values.groupby(group_keys, sort=False)
+        first = per_symbol.transform("first")
+        expanding = per_symbol.expanding(min_periods=1)
+        expanding_mean = expanding.mean().reset_index(level=[0, 1], drop=True)
+        expanding_std = expanding.std().reset_index(level=[0, 1], drop=True)
+        expanding_min = expanding.min().reset_index(level=[0, 1], drop=True)
+        expanding_max = expanding.max().reset_index(level=[0, 1], drop=True)
+
+        new_columns[f"{prefix}{column}_from_first"] = values - first
+        new_columns[f"{prefix}{column}_rel_from_first"] = safe_divide(values - first, first.abs())
+        new_columns[f"{prefix}{column}_exp_mean"] = expanding_mean
+        new_columns[f"{prefix}{column}_exp_std"] = expanding_std
+        new_columns[f"{prefix}{column}_exp_range"] = expanding_max - expanding_min
+        new_columns[f"{prefix}{column}_exp_pos"] = (
+            values.groupby(group_keys, sort=False)
+            .transform(_expanding_position)
+            .reset_index(drop=True)
+        )
+
+        for window in windows:
+            if window < 2:
+                continue
+            rolling = per_symbol.rolling(window=window, min_periods=window)
+            rolling_mean = rolling.mean().reset_index(level=[0, 1], drop=True)
+            rolling_std = rolling.std().reset_index(level=[0, 1], drop=True)
+            rolling_min = rolling.min().reset_index(level=[0, 1], drop=True)
+            rolling_max = rolling.max().reset_index(level=[0, 1], drop=True)
+            lagged = per_symbol.shift(window - 1)
+            new_columns[f"{prefix}{column}_roll{window}_mean"] = rolling_mean
+            new_columns[f"{prefix}{column}_roll{window}_std"] = rolling_std
+            new_columns[f"{prefix}{column}_roll{window}_range"] = rolling_max - rolling_min
+            new_columns[f"{prefix}{column}_roll{window}_change"] = values - lagged
+            new_columns[f"{prefix}{column}_roll{window}_slope"] = _grouped_rolling_linear_slope(
+                values,
+                group_keys,
+                window,
+            )
+
+        for clock in landmarks:
+            landmark = _landmark_series(
+                out,
+                group=group_keys,
+                time_col=time_col,
+                column=column,
+                clock=clock,
+            )
+            slug = _clock_slug(normalize_clock_time(clock))
+            new_columns[f"{prefix}{column}_at_{slug}"] = landmark
+            new_columns[f"{prefix}{column}_vs_{slug}"] = values - landmark
+
+    if {"mid_price", "volume_diff_1t"}.issubset(out.columns):
+        mid = _numeric_series(out["mid_price"])
+        for window in windows:
+            if window < 2:
+                continue
+            volume = _numeric_series(out["volume_diff_1t"]).abs()
+            trade_sum = (
+                volume.groupby(group_keys, sort=False)
+                .rolling(window=window, min_periods=window)
+                .sum()
+                .reset_index(level=[0, 1], drop=True)
+            )
+            prior_mid = mid.groupby(group_keys, sort=False).shift(window - 1)
+            mid_move_bps = safe_divide(mid - prior_mid, prior_mid) * 10_000
+            new_columns[f"{prefix}mid_move_to_trade_roll{window}"] = safe_divide(
+                mid_move_bps,
+                trade_sum,
+            )
+
+    if {"bid_depth_10", "ask_depth_10", "volume_diff_1t"}.issubset(out.columns):
+        trade_volume = _numeric_series(out["volume_diff_1t"]).abs()
+        for window in windows:
+            if window < 2:
+                continue
+            trade_sum = (
+                trade_volume.groupby(group_keys, sort=False)
+                .rolling(window=window, min_periods=window)
+                .sum()
+                .reset_index(level=[0, 1], drop=True)
+            )
+            for side in ("bid", "ask"):
+                depth = _numeric_series(out[f"{side}_depth_10"])
+                depth_change = depth - depth.groupby(group_keys, sort=False).shift(window - 1)
+                new_columns[f"{prefix}{side}_depth_replenish_to_trade_roll{window}"] = (
+                    safe_divide(depth_change, trade_sum)
+                )
+
+    if {"spread_bps", "volume_diff_1t"}.issubset(out.columns):
+        spread = _numeric_series(out["spread_bps"])
+        trade_volume = _numeric_series(out["volume_diff_1t"]).abs()
+        for window in windows:
+            if window < 2:
+                continue
+            trade_sum = (
+                trade_volume.groupby(group_keys, sort=False)
+                .rolling(window=window, min_periods=window)
+                .sum()
+                .reset_index(level=[0, 1], drop=True)
+            )
+            spread_change = spread - spread.groupby(group_keys, sort=False).shift(window - 1)
+            new_columns[f"{prefix}spread_compression_to_trade_roll{window}"] = safe_divide(
+                -spread_change,
+                trade_sum,
+            )
+
+    return pd.concat([out, pd.DataFrame(new_columns, index=out.index)], axis=1)
+
+
+def add_path_shape_confirmation_features(
+    frame: pd.DataFrame,
+    *,
+    windows: tuple[int, ...] = (2, 3, 5),
+    prefix: str = "path_shape_",
+) -> pd.DataFrame:
+    """Add causal post-open path shape and confirmation features."""
+
+    out = ensure_timestamp_columns(frame)
+    time_col = (
+        "decision_target_timestamp" if "decision_target_timestamp" in out.columns else "timestamp"
+    )
+    out = out.sort_values(["date", "symbol", time_col]).reset_index(drop=True)
+    group_keys = [out["date"], out["symbol"]]
+    group_cols = ["date", "symbol"]
+    new_columns: dict[str, pd.Series] = {}
+
+    if "mid_price" in out.columns:
+        mid = _numeric_series(out["mid_price"])
+        per_symbol = mid.groupby(group_keys, sort=False)
+        expanding_high = per_symbol.cummax()
+        expanding_low = per_symbol.cummin()
+        first_mid = per_symbol.transform("first")
+        mid_move_1 = mid - per_symbol.shift(1)
+        mid_move_1_bps = pd.Series(
+            safe_divide(mid_move_1, per_symbol.shift(1)) * 10_000,
+            index=out.index,
+        )
+        positive_move = mid_move_1_bps.gt(0.0).astype("float64")
+
+        new_columns[f"{prefix}mid_drawdown_from_open_high_bps"] = (
+            safe_divide(mid - expanding_high, expanding_high) * 10_000
+        )
+        new_columns[f"{prefix}mid_recovery_from_open_low_bps"] = (
+            safe_divide(mid - expanding_low, expanding_low) * 10_000
+        )
+        new_columns[f"{prefix}mid_from_first_bps"] = safe_divide(mid - first_mid, first_mid) * 10_000
+        new_columns[f"{prefix}mid_new_high_flag"] = mid.ge(expanding_high).astype("int8")
+        new_columns[f"{prefix}mid_new_low_flag"] = mid.le(expanding_low).astype("int8")
+        new_columns[f"{prefix}return_positive_fraction"] = (
+            positive_move.groupby(group_keys, sort=False)
+            .expanding(min_periods=1)
+            .mean()
+            .reset_index(level=[0, 1], drop=True)
+        )
+
+        for window in windows:
+            if window < 2:
+                continue
+            prior = per_symbol.shift(window - 1)
+            move_bps = pd.Series(
+                safe_divide(mid - prior, prior) * 10_000,
+                index=out.index,
+            )
+            new_columns[f"{prefix}mid_move_{window}m_bps"] = move_bps
+            new_columns[f"{prefix}return_accel_1m_vs_{window}m"] = (
+                mid_move_1_bps - safe_divide(move_bps, float(window - 1))
+            )
+            roll_high = (
+                mid.groupby(group_keys, sort=False)
+                .rolling(window=window, min_periods=window)
+                .max()
+                .reset_index(level=[0, 1], drop=True)
+            )
+            roll_low = (
+                mid.groupby(group_keys, sort=False)
+                .rolling(window=window, min_periods=window)
+                .min()
+                .reset_index(level=[0, 1], drop=True)
+            )
+            new_columns[f"{prefix}mid_position_roll{window}"] = safe_divide(
+                mid - roll_low,
+                roll_high - roll_low,
+            )
+
+        if "spread_bps" in out.columns:
+            spread = _numeric_series(out["spread_bps"])
+            spread_change = spread - spread.groupby(group_keys, sort=False).shift(1)
+            new_columns[f"{prefix}spread_compress_after_upmove"] = (
+                -spread_change * positive_move
+            )
+            new_columns[f"{prefix}spread_widen_after_upmove"] = spread_change * positive_move
+
+        if "depth_imbalance_10" in out.columns:
+            imbalance = _numeric_series(out["depth_imbalance_10"])
+            for window in windows:
+                if window < 2:
+                    continue
+                slope = _grouped_rolling_linear_slope(imbalance, group_keys, window)
+                new_columns[f"{prefix}imbalance_slope_roll{window}"] = slope
+                new_columns[f"{prefix}imbalance_slope_confirm_return_roll{window}"] = (
+                    slope * move_positive_over_window(out, group_cols, mid, window)
+                )
+
+        if {"bid_depth_10", "ask_depth_10"}.issubset(out.columns):
+            bid_depth = _numeric_series(out["bid_depth_10"])
+            ask_depth = _numeric_series(out["ask_depth_10"])
+            bid_change = bid_depth - bid_depth.groupby(group_keys, sort=False).shift(1)
+            ask_change = ask_depth - ask_depth.groupby(group_keys, sort=False).shift(1)
+            new_columns[f"{prefix}bid_depth_support_after_upmove"] = bid_change * positive_move
+            new_columns[f"{prefix}ask_depth_fade_after_upmove"] = (-ask_change) * positive_move
+            new_columns[f"{prefix}depth_support_imbalance_after_upmove"] = (
+                bid_change - ask_change
+            ) * positive_move
+
+    return pd.concat([out, pd.DataFrame(new_columns, index=out.index)], axis=1)
+
+
+def move_positive_over_window(
+    frame: pd.DataFrame,
+    group_cols: list[str],
+    values: pd.Series,
+    window: int,
+) -> pd.Series:
+    group_keys = [frame[column] for column in group_cols]
+    prior = values.groupby(group_keys, sort=False).shift(window - 1)
+    return (values - prior).gt(0.0).astype("float64")
+
+
+def add_historical_same_minute_surprise_features(
+    frame: pd.DataFrame,
+    *,
+    columns: tuple[str, ...],
+    windows: tuple[int, ...] = (20, 60),
+    min_periods: int = 10,
+    modes: tuple[str, ...] = ("zscore", "ratio"),
+    prefix: str = "hist_surprise_",
+) -> pd.DataFrame:
+    """Add symbol x decision-clock historical surprise features using prior dates only."""
+
+    out = ensure_timestamp_columns(frame)
+    if "symbol" not in out.columns or "date" not in out.columns:
+        raise ValueError("historical surprise features require date and symbol columns")
+    time_col = (
+        "decision_target_timestamp" if "decision_target_timestamp" in out.columns else "timestamp"
+    )
+    clock = _normalized_row_clock(out, time_col)
+    work = out.assign(_hist_clock=clock, _hist_orig_order=np.arange(len(out)))
+    work = work.sort_values(["symbol", "_hist_clock", "date", time_col]).reset_index(drop=True)
+    group_keys = [work["symbol"], work["_hist_clock"]]
+    modes = tuple(mode.strip().lower() for mode in modes if mode.strip())
+    valid_modes = {"zscore", "ratio", "diff"}
+    unknown_modes = sorted(set(modes) - valid_modes)
+    if unknown_modes:
+        raise ValueError(f"unknown historical surprise modes: {unknown_modes}")
+
+    selected = [
+        column
+        for column in columns
+        if column in work.columns and pd.api.types.is_numeric_dtype(work[column])
+    ]
+    if not selected:
+        return out.copy()
+
+    min_periods = max(2, int(min_periods))
+    new_sorted: dict[str, pd.Series] = {}
+    for column in selected:
+        values = pd.to_numeric(work[column], errors="coerce").astype("float64")
+        past = values.groupby(group_keys, sort=False).shift(1)
+        for window in windows:
+            if window < 2:
+                continue
+            rolling = past.groupby(group_keys, sort=False).rolling(
+                window=int(window),
+                min_periods=min_periods,
+            )
+            mean = rolling.mean().reset_index(level=[0, 1], drop=True)
+            std = rolling.std().reset_index(level=[0, 1], drop=True)
+            if "zscore" in modes:
+                new_sorted[f"{prefix}{column}_{window}d_zscore"] = pd.Series(
+                    safe_divide(values - mean, std),
+                    index=work.index,
+                )
+            if "ratio" in modes:
+                new_sorted[f"{prefix}{column}_{window}d_ratio"] = pd.Series(
+                    safe_divide(values, mean),
+                    index=work.index,
+                )
+            if "diff" in modes:
+                new_sorted[f"{prefix}{column}_{window}d_diff"] = values - mean
+
+    if not new_sorted:
+        return out.copy()
+    features = pd.DataFrame(new_sorted, index=work.index)
+    features["_hist_orig_order"] = work["_hist_orig_order"].to_numpy()
+    features = features.sort_values("_hist_orig_order").drop(columns="_hist_orig_order")
+    features.index = out.index
+    return pd.concat([out.copy(), features], axis=1)
 
 
 def build_preopen_features(
@@ -660,5 +1246,19 @@ def build_feature_frame(
                 out["preopen_return_vs_prev_close"] = safe_divide(
                     out["preopen_last_price"] - out["prev_close"],
                     out["prev_close"],
+                )
+            if {
+                "preopen_price_min",
+                "preopen_price_max",
+                "preopen_last_price",
+            }.issubset(out.columns):
+                price_range = out["preopen_price_max"] - out["preopen_price_min"]
+                reference_price = (
+                    out["prev_close"] if "prev_close" in out.columns else out["preopen_last_price"]
+                )
+                out["auction_price_range_bps"] = safe_divide(price_range, reference_price) * 10_000
+                out["auction_last_position_in_range"] = safe_divide(
+                    out["preopen_last_price"] - out["preopen_price_min"],
+                    price_range,
                 )
     return out

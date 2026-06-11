@@ -142,6 +142,55 @@ class LabeledPvcSourceTest(unittest.TestCase):
         )
         self.assertIn("volume", labeled.columns)
 
+    def test_labeled_pvc_relative_features_are_built_after_decision_filter(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "labeled.parquet"
+            rows = []
+            for symbol, spread, lag in (
+                ("000001.SZ", 10.0, 0.0),
+                ("000002.SZ", 20.0, 0.0),
+                ("000003.SZ", 1000.0, 10.0),
+            ):
+                rows.append(
+                    {
+                        "date": "2022-01-04",
+                        "symbol": symbol,
+                        "timestamp": pd.Timestamp("2022-01-04 09:31:00"),
+                        "decision_time": "09:31:00",
+                        "decision_target_timestamp": pd.Timestamp("2022-01-04 09:31:00"),
+                        "decision_lag_seconds": lag,
+                        "spread_bps": spread,
+                        "label": 0.01,
+                        "target_label": 0.2,
+                        "valid_label": True,
+                    }
+                )
+            pd.DataFrame(rows).to_parquet(path, index=False)
+
+            args = argparse.Namespace(labeled_input=None)
+            config = {
+                "data": {"source": "labeled_pvc", "labeled_path": str(path)},
+                "universe": {"enabled": False},
+                "sample": {
+                    "mode": "decision_points",
+                    "decision_times": ["09:31:00"],
+                    "decision_max_lag_seconds": 5,
+                },
+                "features": {
+                    "include_cross_sectional_relative": True,
+                    "cross_sectional_relative_columns": ["spread_bps"],
+                    "cross_sectional_relative_modes": ["rank_centered"],
+                },
+                "model": {"target_col": "target_label"},
+            }
+
+            labeled = load_labeled_pvc_frame(args, config)
+
+        self.assertEqual(labeled["symbol"].tolist(), ["000001.SZ", "000002.SZ"])
+        self.assertEqual(labeled["xs_rel_spread_bps_rank_centered"].tolist(), [0.0, 0.5])
+
     def test_labeled_pvc_projects_columns_when_feature_includes_are_configured(
         self,
     ) -> None:
@@ -243,6 +292,66 @@ class LabeledPvcSourceTest(unittest.TestCase):
             labeled.iloc[0]["postopen_v2_ask_volume_1_diff_1m"],
             25.0,
         )
+        self.assertNotIn("unused_heavy_feature", labeled.columns)
+
+    def test_labeled_pvc_projection_keeps_cross_sectional_relative_sources(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "labeled.parquet"
+            pd.DataFrame(
+                [
+                    {
+                        "date": "2022-01-04",
+                        "symbol": "000001.SZ",
+                        "timestamp": pd.Timestamp("2022-01-04 09:31:00"),
+                        "decision_time": "09:31:00",
+                        "decision_target_timestamp": pd.Timestamp("2022-01-04 09:31:00"),
+                        "decision_lag_seconds": 0.0,
+                        "label": 0.01,
+                        "target_label": 0.2,
+                        "valid_label": True,
+                        "raw_depth_state": 10.0,
+                        "unused_heavy_feature": 999.0,
+                    },
+                    {
+                        "date": "2022-01-04",
+                        "symbol": "000002.SZ",
+                        "timestamp": pd.Timestamp("2022-01-04 09:31:00"),
+                        "decision_time": "09:31:00",
+                        "decision_target_timestamp": pd.Timestamp("2022-01-04 09:31:00"),
+                        "decision_lag_seconds": 0.0,
+                        "label": 0.02,
+                        "target_label": 0.3,
+                        "valid_label": True,
+                        "raw_depth_state": 30.0,
+                        "unused_heavy_feature": 999.0,
+                    },
+                ]
+            ).to_parquet(path, index=False)
+
+            args = argparse.Namespace(labeled_input=None)
+            config = {
+                "data": {"source": "labeled_pvc", "labeled_path": str(path)},
+                "universe": {"enabled": False},
+                "sample": {
+                    "mode": "decision_points",
+                    "decision_times": ["09:31:00"],
+                    "decision_max_lag_seconds": 5,
+                },
+                "features": {
+                    "include_cross_sectional_relative": True,
+                    "cross_sectional_relative_columns": ["raw_depth_state"],
+                    "cross_sectional_relative_modes": ["demean"],
+                    "include_feature_prefixes": ["xs_rel_"],
+                },
+                "model": {"target_col": "target_label"},
+            }
+
+            labeled = load_labeled_pvc_frame(args, config)
+
+        self.assertIn("xs_rel_raw_depth_state_demean", labeled.columns)
+        self.assertEqual(labeled["xs_rel_raw_depth_state_demean"].tolist(), [-10.0, 10.0])
         self.assertNotIn("unused_heavy_feature", labeled.columns)
 
     def test_labeled_pvc_directory_projects_each_file_before_concat(self) -> None:
