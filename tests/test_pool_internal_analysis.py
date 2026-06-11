@@ -3,11 +3,11 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from opening_strength_fit.commands.pool_internal_analysis import (
+from opening_strength_fit.pool_internal_eval import (
     halfyear_summary,
-    prediction_files,
     year_summary,
 )
+from opening_strength_fit.prediction_frames import prediction_files
 
 
 def _month_row(month: str, short_bps: float, next_bps: float) -> dict[str, object]:

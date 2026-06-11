@@ -12,7 +12,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from opening_strength_fit.commands.opening_backtest_constraints import (
+from opening_strength_fit.opening_backtest_constraints import (
     apply_static_constraints,
     clock_timestamp,
     enrich_predictions_with_context,

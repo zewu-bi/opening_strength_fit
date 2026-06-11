@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,30 +13,37 @@ from opening_strength_fit.clickhouse_ticks import (
     DEFAULT_CLICKHOUSE_TICK_PORT,
     DEFAULT_CLICKHOUSE_TICK_TABLE,
 )
-from opening_strength_fit.commands.horizon_clickhouse_labels import (
+from opening_strength_fit.horizon_clickhouse_labels import (
+    DEFAULT_CLOSE_LOOKBACK_SECONDS,
+    DEFAULT_CLOSE_OFFSET_US,
     clickhouse_setting,
     compute_clickhouse_close_labels,
     compute_clickhouse_intraday_labels,
 )
-from opening_strength_fit.commands.horizon_clickhouse_labels import (
+from opening_strength_fit.horizon_clickhouse_labels import (
     query_close_prices as query_close_prices,
 )
-from opening_strength_fit.commands.horizon_local_labels import (
+from opening_strength_fit.horizon_local_labels import (
     attach_available_prediction_labels,
     compute_sampled_intraday_labels,
     compute_tick_horizon_labels,
     explicit_label_map,
     filter_decision_times,
-    key_columns_for_merge,
-    label_column_name,
     load_prediction,
     load_sample_context,
     merge_label_input,
 )
-from opening_strength_fit.commands.horizon_reporting import (
+from opening_strength_fit.horizon_reporting import (
     build_summary_tables,
     plot_mean_alpha_return,
     plot_rank_ic,
+)
+from opening_strength_fit.horizons import (
+    HorizonSpec,
+    horizon_specs,
+    key_columns_for_merge,
+    label_column_name,
+    normalize_horizon_name,
 )
 from opening_strength_fit.io import write_frame
 
@@ -61,24 +67,14 @@ DEFAULT_HORIZONS = (
     "next_close",
 )
 DEFAULT_GROUP_COLS = ("date", "decision_target_timestamp")
-DEFAULT_CLOSE_OFFSET_US = 54_000_000_000
-DEFAULT_CLOSE_LOOKBACK_SECONDS = 1_800
 DEFAULT_DECISION_MAX_LAG_SECONDS = 5
 DEFAULT_TIMED_TARGET_END_TIME = "09:40:00"
-TIME_HORIZON_SUFFIXES = {"s", "m", "h"}
 
 
 @dataclass(frozen=True)
 class RunInput:
     label: str
     path: Path
-
-
-@dataclass(frozen=True)
-class HorizonSpec:
-    name: str
-    label: str
-    seconds: int | None = None
 
 
 def parse_run(value: str) -> RunInput:
@@ -100,41 +96,6 @@ def parse_label_mapping(value: str) -> tuple[str, str]:
     if not horizon or not column:
         raise argparse.ArgumentTypeError("horizon and column cannot be empty")
     return horizon, column
-
-
-def normalize_horizon_name(value: str) -> str:
-    return str(value).strip().lower().replace("-", "_").replace(" ", "_")
-
-
-def parse_seconds_horizon(value: str) -> int | None:
-    horizon = normalize_horizon_name(value)
-    if horizon in {"close", "next_open", "next_close"}:
-        return None
-    aliases = {
-        "30sec": "30s",
-        "60sec": "60s",
-        "5min": "5m",
-    }
-    horizon = aliases.get(horizon, horizon)
-    if len(horizon) < 2 or horizon[-1] not in TIME_HORIZON_SUFFIXES:
-        raise argparse.ArgumentTypeError(
-            f"unknown horizon {value!r}; use Ns, Nm, Nh, close, next_open, or next_close"
-        )
-    amount = int(horizon[:-1])
-    unit = horizon[-1]
-    multiplier = {"s": 1, "m": 60, "h": 3600}[unit]
-    return amount * multiplier
-
-
-def horizon_specs(values: Iterable[str]) -> list[HorizonSpec]:
-    specs = []
-    for value in values:
-        name = normalize_horizon_name(value)
-        name = {"30sec": "30s", "60sec": "60s", "5min": "5m"}.get(name, name)
-        seconds = parse_seconds_horizon(name)
-        label = name.replace("_", " ")
-        specs.append(HorizonSpec(name=name, label=label, seconds=seconds))
-    return specs
 
 
 def parse_clock_values(values: list[str] | None) -> set[str]:

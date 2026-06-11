@@ -20,8 +20,8 @@ from opening_strength_fit.analysis import (
     load_or_fetch_next_close_labels as shared_load_or_fetch_next_close_labels,
 )
 from opening_strength_fit.clickhouse_ticks import DEFAULT_CLICKHOUSE_TICK_TABLE
-from opening_strength_fit.commands.horizon_clickhouse_labels import compute_clickhouse_close_labels
-from opening_strength_fit.commands.horizon_decay import HorizonSpec
+from opening_strength_fit.horizon_clickhouse_labels import compute_clickhouse_close_labels
+from opening_strength_fit.horizons import HorizonSpec
 from opening_strength_fit.io import frame_columns
 from opening_strength_fit.io import read_frame as shared_read_frame
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from opening_strength_fit.commands.weekly_pool_internal_plots import (
+from opening_strength_fit.pool_internal_weekly import (
     build_weekly_pool_internal_summaries,
     normalize_pools,
 )

@@ -8,14 +8,20 @@ from unittest.mock import patch
 import numpy as np
 import pandas as pd
 
-from opening_strength_fit.commands.horizon_decay import (  # noqa: E402
-    HorizonSpec,
-    build_summary_tables,
+from opening_strength_fit.horizon_clickhouse_labels import (
     compute_clickhouse_close_labels,
+)
+from opening_strength_fit.horizon_local_labels import (
     compute_sampled_intraday_labels,
     compute_tick_horizon_labels,
-    horizon_specs,
     load_sample_context,
+)
+from opening_strength_fit.horizon_reporting import (
+    build_summary_tables,
+)
+from opening_strength_fit.horizons import (  # noqa: E402
+    HorizonSpec,
+    horizon_specs,
 )
 
 
@@ -163,15 +169,15 @@ class AlphaHorizonDecayTest(unittest.TestCase):
 
         with (
             patch(
-                "opening_strength_fit.commands.horizon_clickhouse_labels.get_tick_client",
+                "opening_strength_fit.horizon_clickhouse_labels.get_tick_client",
                 return_value=object(),
             ),
             patch(
-                "opening_strength_fit.commands.horizon_clickhouse_labels.query_trading_dates",
+                "opening_strength_fit.horizon_clickhouse_labels.query_trading_dates",
                 return_value=["2022-01-04", "2022-01-05"],
             ),
             patch(
-                "opening_strength_fit.commands.horizon_clickhouse_labels.query_close_prices",
+                "opening_strength_fit.horizon_clickhouse_labels.query_close_prices",
                 return_value=pd.DataFrame(
                     {
                         "date": ["2022-01-05", "2022-01-05"],

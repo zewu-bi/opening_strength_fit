@@ -17,12 +17,6 @@ from opening_strength_fit.clickhouse_ticks import (
     DEFAULT_CLICKHOUSE_TICK_PORT,
     DEFAULT_CLICKHOUSE_TICK_TABLE,
 )
-from opening_strength_fit.commands.horizon_clickhouse_labels import compute_clickhouse_close_labels
-from opening_strength_fit.commands.horizon_decay import (
-    DEFAULT_CLOSE_LOOKBACK_SECONDS,
-    DEFAULT_CLOSE_OFFSET_US,
-    HorizonSpec,
-)
 from opening_strength_fit.config import (
     config_clock_list,
     config_float,
@@ -31,6 +25,12 @@ from opening_strength_fit.config import (
     load_toml,
     run_id,
 )
+from opening_strength_fit.horizon_clickhouse_labels import (
+    DEFAULT_CLOSE_LOOKBACK_SECONDS,
+    DEFAULT_CLOSE_OFFSET_US,
+    compute_clickhouse_close_labels,
+)
+from opening_strength_fit.horizons import HorizonSpec
 from opening_strength_fit.io import frame_columns, read_frame, write_frame
 from opening_strength_fit.reports import print_mapping
 from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns

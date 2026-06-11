@@ -12,10 +12,10 @@ from opening_strength_fit.commands.delay_replays import (  # noqa: E402
     validate_context_delay,  # noqa: E402
     validate_prediction_interface,  # noqa: E402
 )
-from opening_strength_fit.commands.opening_intraday_backtest import (
+from opening_strength_fit.labels import build_trade_labels
+from opening_strength_fit.opening_backtest_constraints import (
     apply_static_constraints,  # noqa: E402
 )
-from opening_strength_fit.labels import build_trade_labels
 
 
 def _ticks(offsets: list[int]) -> pd.DataFrame:

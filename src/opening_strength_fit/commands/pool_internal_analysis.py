@@ -5,20 +5,33 @@ import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from opening_strength_fit.analysis import KEY_COLUMNS, NEXT_CLOSE_LABEL_COL, write_json
-from opening_strength_fit.commands.weekly_pool_internal_plots import (
-    build_daily_summary,
-    build_weekly_pool_internal_summaries,
-)
 from opening_strength_fit.io import read_frame
+from opening_strength_fit.pool_internal_eval import (
+    evaluate_pool,
+    halfyear_summary,
+    positive_clock_summary,
+    positive_month_summary,
+    quarter_summary,
+    summarize_groups,
+    year_summary,
+)
 from opening_strength_fit.pool_internal_plots import (
     slug_label,
     write_daily_pool_internal_cumulative_plot,
     write_universe_sml_pool_internal_plots,
     write_weekly_pool_internal_rolling_plot,
+)
+from opening_strength_fit.pool_internal_weekly import (
+    build_daily_summary,
+    build_weekly_pool_internal_summaries,
+)
+from opening_strength_fit.prediction_frames import (
+    next_close_files,
+    normalize_keys,
+    prediction_files,
 )
 from opening_strength_fit.stock_pool import (
     DEFAULT_STOCK_POOL_PATHS,
@@ -27,7 +40,6 @@ from opening_strength_fit.stock_pool import (
 )
 
 DEFAULT_POOLS = ("universe", "S", "M", "L")
-GROUP_COLS = ("date", "decision_target_timestamp")
 
 
 def parse_args() -> argparse.Namespace:
@@ -111,71 +123,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def prediction_files(path: Path) -> list[Path]:
-    if path.is_file():
-        return [path]
-    if not path.exists():
-        raise SystemExit(f"prediction input does not exist: {path}")
-    raw_dir = path / "raw"
-    if raw_dir.exists():
-        files = sorted(raw_dir.glob("predictions_*.parquet"))
-        if files:
-            return files
-    combined = path / "predictions_all.parquet"
-    if combined.exists():
-        return [combined]
-    single = path / "predictions.parquet"
-    if single.exists():
-        return [single]
-    sharded_files = prediction_shard_files(path)
-    if sharded_files:
-        return sharded_files
-    files = sorted(path.glob("predictions_*.parquet"))
-    if files:
-        return files
-    raise SystemExit(f"no prediction parquet files found under: {path}")
-
-
-def prediction_shard_files(path: Path) -> list[Path]:
-    files: list[Path] = []
-    for prefix in ("month_", "year_"):
-        for shard_dir in sorted(item for item in path.glob(f"{prefix}*") if item.is_dir()):
-            single = shard_dir / "predictions.parquet"
-            if single.exists():
-                files.append(single)
-                continue
-            shard_files = sorted(shard_dir.glob("predictions_*.parquet"))
-            if shard_files:
-                files.extend(shard_files)
-    return files
-
-
-def next_close_files(path: Path, years: set[str]) -> list[Path]:
-    if path.is_file():
-        return [path]
-    if not path.exists():
-        raise SystemExit(f"next-close label input does not exist: {path}")
-    files = sorted(path.glob("*.parquet"))
-    if years:
-        matched = [file for file in files if any(year in file.name for year in sorted(years))]
-        if matched:
-            return matched
-    if files:
-        return files
-    raise SystemExit(f"no next-close parquet files found under: {path}")
-
-
-def normalize_keys(frame: pd.DataFrame) -> pd.DataFrame:
-    out = frame.copy()
-    out["date"] = pd.to_datetime(out["date"], errors="coerce").dt.strftime("%Y-%m-%d")
-    out["symbol"] = out["symbol"].astype(str)
-    out["decision_target_timestamp"] = pd.to_datetime(
-        out["decision_target_timestamp"],
-        errors="coerce",
-    )
-    return out
-
-
 def read_predictions(paths: list[str], *, score_col: str, short_label_col: str) -> pd.DataFrame:
     required = [*KEY_COLUMNS, score_col, short_label_col]
     files = [file for raw in paths for file in prediction_files(Path(raw))]
@@ -204,226 +151,6 @@ def read_next_close_labels(path: str, *, years: set[str], next_label_col: str) -
     labels = normalize_keys(pd.concat(frames, ignore_index=True))
     labels = labels.dropna(subset=list(KEY_COLUMNS) + [next_label_col])
     return labels.drop_duplicates(list(KEY_COLUMNS), keep="last")
-
-
-def finite_corr(left: pd.Series, right: pd.Series, *, method: str = "spearman") -> float:
-    values = pd.DataFrame({"left": left, "right": right}).replace([np.inf, -np.inf], np.nan)
-    values = values.dropna()
-    if len(values) < 2:
-        return float("nan")
-    if values["left"].nunique(dropna=True) < 2 or values["right"].nunique(dropna=True) < 2:
-        return float("nan")
-    return float(values["left"].corr(values["right"], method=method))
-
-
-def clock_label(values: pd.Series) -> pd.Series:
-    timestamps = pd.to_datetime(values, errors="coerce")
-    return timestamps.dt.strftime("%H:%M")
-
-
-def evaluate_pool(
-    frame: pd.DataFrame,
-    *,
-    pool_name: str,
-    score_col: str,
-    short_label_col: str,
-    next_label_col: str,
-    top_n: int,
-) -> pd.DataFrame:
-    work = frame.dropna(subset=[score_col, short_label_col, next_label_col]).copy()
-    if work.empty:
-        return pd.DataFrame()
-    work["_score_rank"] = work.groupby(list(GROUP_COLS), sort=False)[score_col].rank(
-        ascending=False,
-        method="first",
-    )
-    work["_selected"] = work["_score_rank"].le(top_n)
-
-    group = work.groupby(list(GROUP_COLS), sort=False)
-    base = group.agg(
-        candidate_rows=(score_col, "size"),
-        pool_short_mean=(short_label_col, "mean"),
-        pool_next_mean=(next_label_col, "mean"),
-    )
-    selected = (
-        work.loc[work["_selected"]]
-        .groupby(list(GROUP_COLS), sort=False)
-        .agg(
-            selected_rows=(score_col, "size"),
-            selected_short_mean=(short_label_col, "mean"),
-            selected_next_mean=(next_label_col, "mean"),
-        )
-    )
-    rank_ic = group.apply(
-        lambda item: pd.Series(
-            {
-                "short_rank_ic": finite_corr(item[score_col], item[short_label_col]),
-                "next_rank_ic": finite_corr(item[score_col], item[next_label_col]),
-            }
-        )
-    )
-    metrics = base.join(selected, how="left").join(rank_ic, how="left").reset_index()
-    metrics["pool"] = pool_name
-    metrics["test_month"] = pd.to_datetime(metrics["date"]).dt.to_period("M").astype(str)
-    metrics["clock"] = clock_label(metrics["decision_target_timestamp"])
-    metrics["short_internal_excess_bps"] = (
-        metrics["selected_short_mean"] - metrics["pool_short_mean"]
-    ) * 10_000.0
-    metrics["next_internal_excess_bps"] = (
-        metrics["selected_next_mean"] - metrics["pool_next_mean"]
-    ) * 10_000.0
-    for column in (
-        "pool_short_mean",
-        "selected_short_mean",
-        "pool_next_mean",
-        "selected_next_mean",
-    ):
-        metrics[f"{column}_bps"] = metrics[column] * 10_000.0
-    return metrics[
-        [
-            "pool",
-            "test_month",
-            "date",
-            "decision_target_timestamp",
-            "clock",
-            "candidate_rows",
-            "selected_rows",
-            "pool_short_mean_bps",
-            "selected_short_mean_bps",
-            "short_internal_excess_bps",
-            "pool_next_mean_bps",
-            "selected_next_mean_bps",
-            "next_internal_excess_bps",
-            "short_rank_ic",
-            "next_rank_ic",
-        ]
-    ]
-
-
-def summarize_groups(
-    group_metrics: pd.DataFrame,
-    by: list[str],
-    *,
-    month_col: str = "test_month",
-) -> pd.DataFrame:
-    if group_metrics.empty:
-        return pd.DataFrame()
-    out = (
-        group_metrics.groupby(by, sort=False)
-        .agg(
-            groups=("short_internal_excess_bps", "size"),
-            months=(month_col, "nunique"),
-            candidate_rows=("candidate_rows", "mean"),
-            selected_rows=("selected_rows", "mean"),
-            pool_short_mean_bps=("pool_short_mean_bps", "mean"),
-            selected_short_mean_bps=("selected_short_mean_bps", "mean"),
-            short_internal_excess_bps=("short_internal_excess_bps", "mean"),
-            pool_next_mean_bps=("pool_next_mean_bps", "mean"),
-            selected_next_mean_bps=("selected_next_mean_bps", "mean"),
-            next_internal_excess_bps=("next_internal_excess_bps", "mean"),
-            short_rank_ic=("short_rank_ic", "mean"),
-            next_rank_ic=("next_rank_ic", "mean"),
-        )
-        .reset_index()
-    )
-    return out
-
-
-def positive_month_summary(month_summary: pd.DataFrame) -> pd.DataFrame:
-    if month_summary.empty:
-        return pd.DataFrame()
-    return (
-        month_summary.groupby("pool", sort=False)
-        .agg(
-            short_positive_months=(
-                "short_internal_excess_bps",
-                lambda value: int((value > 0).sum()),
-            ),
-            next_positive_months=("next_internal_excess_bps", lambda value: int((value > 0).sum())),
-        )
-        .reset_index()
-    )
-
-
-def positive_clock_summary(clock_summary: pd.DataFrame) -> pd.DataFrame:
-    if clock_summary.empty:
-        return pd.DataFrame()
-    return (
-        clock_summary.groupby("pool", sort=False)
-        .agg(
-            short_positive_clocks=(
-                "short_internal_excess_bps",
-                lambda value: int((value > 0).sum()),
-            ),
-            next_positive_clocks=("next_internal_excess_bps", lambda value: int((value > 0).sum())),
-        )
-        .reset_index()
-    )
-
-
-def halfyear_summary(month_summary: pd.DataFrame) -> pd.DataFrame:
-    if month_summary.empty:
-        return pd.DataFrame()
-    frame = month_summary.copy()
-    frame["year"] = frame["test_month"].astype(str).str.slice(0, 4).astype(int)
-    month_num = frame["test_month"].astype(str).str.slice(5, 7).astype(int)
-    frame["half"] = month_num.map(lambda value: "H1" if value <= 6 else "H2")
-    return (
-        frame.groupby(["pool", "year", "half"], sort=False)
-        .agg(
-            months=("test_month", "nunique"),
-            short_internal_excess_bps=("short_internal_excess_bps", "mean"),
-            next_internal_excess_bps=("next_internal_excess_bps", "mean"),
-            short_rank_ic=("short_rank_ic", "mean"),
-            next_rank_ic=("next_rank_ic", "mean"),
-            short_positive_months=(
-                "short_internal_excess_bps",
-                lambda value: int((value > 0).sum()),
-            ),
-            next_positive_months=("next_internal_excess_bps", lambda value: int((value > 0).sum())),
-        )
-        .reset_index()
-    )
-
-
-def year_summary(month_summary: pd.DataFrame) -> pd.DataFrame:
-    if month_summary.empty:
-        return pd.DataFrame()
-    frame = month_summary.copy()
-    frame["year"] = frame["test_month"].astype(str).str.slice(0, 4).astype(int)
-    return (
-        frame.groupby(["pool", "year"], sort=False)
-        .agg(
-            months=("test_month", "nunique"),
-            candidate_rows=("candidate_rows", "mean"),
-            selected_rows=("selected_rows", "mean"),
-            pool_short_mean_bps=("pool_short_mean_bps", "mean"),
-            selected_short_mean_bps=("selected_short_mean_bps", "mean"),
-            short_internal_excess_bps=("short_internal_excess_bps", "mean"),
-            pool_next_mean_bps=("pool_next_mean_bps", "mean"),
-            selected_next_mean_bps=("selected_next_mean_bps", "mean"),
-            next_internal_excess_bps=("next_internal_excess_bps", "mean"),
-            short_rank_ic=("short_rank_ic", "mean"),
-            next_rank_ic=("next_rank_ic", "mean"),
-            short_positive_months=(
-                "short_internal_excess_bps",
-                lambda value: int((value > 0).sum()),
-            ),
-            next_positive_months=("next_internal_excess_bps", lambda value: int((value > 0).sum())),
-        )
-        .reset_index()
-    )
-
-
-def quarter_summary(group_metrics: pd.DataFrame) -> pd.DataFrame:
-    if group_metrics.empty:
-        return pd.DataFrame()
-    frame = group_metrics.copy()
-    frame["_source_month"] = frame["test_month"]
-    frame["test_month"] = (
-        pd.to_datetime(frame["date"], errors="coerce").dt.to_period("Q").astype(str)
-    )
-    return summarize_groups(frame, ["pool", "test_month"], month_col="_source_month")
 
 
 def _csv_ready(frame: pd.DataFrame) -> pd.DataFrame:

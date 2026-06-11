@@ -28,8 +28,6 @@ from opening_strength_fit.analysis import (
     write_json,
 )
 from opening_strength_fit.clickhouse_ticks import DEFAULT_CLICKHOUSE_TICK_TABLE
-from opening_strength_fit.commands.horizon_clickhouse_labels import compute_clickhouse_close_labels
-from opening_strength_fit.commands.horizon_decay import HorizonSpec
 from opening_strength_fit.config import (
     config_bool,
     config_float,
@@ -45,6 +43,8 @@ from opening_strength_fit.feature_config import (
     feature_filters_from_config,
     feature_limit,
 )
+from opening_strength_fit.horizon_clickhouse_labels import compute_clickhouse_close_labels
+from opening_strength_fit.horizons import HorizonSpec
 from opening_strength_fit.io import read_frame, write_frame
 from opening_strength_fit.labels import finite_numeric_series
 from opening_strength_fit.model import evaluate_prediction_frame, fit_lightgbm_frame, predict_frame

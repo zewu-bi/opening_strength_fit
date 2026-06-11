@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from opening_strength_fit.commands.weekly_pool_internal_plots import normalize_pools
 from opening_strength_fit.pool_internal_plots import write_weekly_pool_internal_cumulative_plot
+from opening_strength_fit.pool_internal_weekly import normalize_pools
 
 POOL_CHOICES = ("universe", "S", "M", "L", "pool_S", "pool_M", "pool_L")
 

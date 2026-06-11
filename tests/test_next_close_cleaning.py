@@ -7,9 +7,6 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from opening_strength_fit.commands.alpha_conditioned_rolling_validation import (
-    score_variants,  # noqa: E402
-)
 from opening_strength_fit.commands.learned_risk_layer import (  # noqa: E402
     normalize_next_close_labels as normalize_learned_next_close_labels,
 )
@@ -23,6 +20,7 @@ from opening_strength_fit.commands.signal_baseline_panels import (  # noqa: E402
     normalize_next_close_labels as normalize_panel_next_close_labels,
 )
 from opening_strength_fit.labels import safe_price_return  # noqa: E402
+from opening_strength_fit.score_variant_eval import score_variants  # noqa: E402
 
 
 class NextCloseCleaningTest(unittest.TestCase):
