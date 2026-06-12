@@ -2441,19 +2441,17 @@ experiments/results/backtests/model_ensemble_vs_baseline_group_delta/
 
 ### 2026-06-12 optimization direction acceptance figures
 
-后续验收主要看 `experiments/results/backtests/optimization_direction_comparison_2022_2025/`
-下的三张图：
+验收看这三张图：
 
 ```text
-optimization_directions_daily_cumulative.svg
-optimization_directions_relative_baseline_daily_cumulative.svg
-optimization_directions_relative_baseline_yearly_mean.svg
+experiments/results/backtests/optimization_direction_comparison_2022_2025/optimization_directions_daily_cumulative.svg
+experiments/results/backtests/optimization_direction_comparison_2022_2025/optimization_directions_relative_baseline_daily_cumulative.svg
+experiments/results/backtests/optimization_direction_comparison_2022_2025/optimization_directions_relative_baseline_yearly_mean.svg
 ```
 
-口径：绝对累和图保留 `baseline_pool_l` 和四个方向；相对 baseline 累和图只画四个方向；
-年度柱图使用 `pool_internal_year_summary.csv` 中每年平均 excess bps 对 baseline 做差。
-累和图的日收益和累和序列均除以 `top100 * 10 = 1000`，单位标为 bps。`baseline_universe`
-不再作为默认验收线。
+口径：累和图只保留 `next`/隔夜；绝对累和为 `pool_L_mean + internal_excess - fee`，`fee = 5 bps`，单位 bps。
+
+阶段状态：baseline 后四方向特征/模型 sweep 收尾，下一步做组合和定稿回测。
 
 ### 归档和保留口径
 

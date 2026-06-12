@@ -94,7 +94,9 @@ def write_two_panel_bar_svg(
         ) -> float:
             return bottom - (value - ymin) / (ymax - ymin) * panel_height
 
-        lines.append(_svg_text(left, top - 22.0, str(panel["title"]), size=28, weight=800))
+        panel_title = str(panel.get("title", ""))
+        if panel_title:
+            lines.append(_svg_text(left, top - 22.0, panel_title, size=28, weight=800))
         for tick in tick_values:
             y = ymap(tick)
             is_zero = abs(tick) < 1e-12
@@ -193,11 +195,24 @@ def write_two_panel_line_svg(
     height = 900
     left = 86.0
     right = 1562.0
-    panel_tops = (145.0, 550.0)
-    panel_height = 310.0
+    panel_count = len(panels)
+    if panel_count == 1:
+        panel_tops = (112.0,)
+        panel_height = 720.0
+    elif panel_count == 2:
+        panel_tops = (145.0, 550.0)
+        panel_height = 310.0
+    else:
+        raise ValueError("write_two_panel_line_svg supports one or two panels")
     chart_width = right - left
-    min_date = data["week_start"].min()
-    max_date = data["week_start"].max()
+    data_min_date = data["week_start"].min()
+    data_max_date = data["week_start"].max()
+    if x_label_mode == "years_only":
+        min_date = pd.Timestamp(year=data_min_date.year, month=1, day=1)
+        max_date = pd.Timestamp(year=data_max_date.year + 1, month=1, day=1)
+    else:
+        min_date = data_min_date
+        max_date = data_max_date
     span_days = max((max_date - min_date).days, 1)
 
     def xmap(value: pd.Timestamp) -> float:
@@ -248,7 +263,9 @@ def write_two_panel_line_svg(
         ) -> float:
             return bottom - (value - ymin) / (ymax - ymin) * panel_height
 
-        lines.append(_svg_text(left, top - 22.0, str(panel["title"]), size=28, weight=800))
+        panel_title = str(panel.get("title", ""))
+        if panel_title:
+            lines.append(_svg_text(left, top - 22.0, panel_title, size=28, weight=800))
         for tick in tick_values:
             y = ymap(tick)
             is_zero = abs(tick) < 1e-12
@@ -273,7 +290,7 @@ def write_two_panel_line_svg(
                 f'<line x1="{x:.1f}" y1="{top:.1f}" x2="{x:.1f}" y2="{bottom:.1f}" '
                 'stroke="#ebe7de" stroke-width="1"/>'
             )
-            if panel_index == 1:
+            if panel_index == panel_count - 1:
                 label = _line_x_tick_label(
                     tick,
                     min_date=min_date,
@@ -350,14 +367,13 @@ def _line_x_ticks(
     mode: str,
 ) -> list[pd.Timestamp]:
     if mode == "years_only":
-        ticks = [min_date]
-        ticks.extend(
+        end_year = max_date.year
+        if max_date.month != 1 or max_date.day != 1:
+            end_year += 1
+        return [
             pd.Timestamp(year=year, month=1, day=1)
-            for year in range(min_date.year + 1, max_date.year)
-        )
-        if max_date.year != min_date.year:
-            ticks.append(max_date)
-        return ticks
+            for year in range(min_date.year, end_year + 1)
+        ]
 
     ticks = [
         tick

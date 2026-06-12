@@ -7,7 +7,7 @@
 
 ## 当前判断
 
-目标：通过特征工程和模型优化，把开盘短期信号做强。
+目标：baseline 后四方向特征/模型优化已收尾，下一步做组合和定稿回测。
 
 当前主线是单模型 mixed label：
 
@@ -95,8 +95,8 @@ experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_audit_sum
 | current baseline | archived `soft_core_reg_light` |
 | main display | universe + `pool_L` |
 | main metrics | Rank IC；池内 Top100 excess |
-| acceptance figures | `optimization_directions_daily_cumulative.svg`；`optimization_directions_relative_baseline_daily_cumulative.svg`；`optimization_directions_relative_baseline_yearly_mean.svg` |
-| current research focus | xs_relative；hist-same-minute surprise；path-shape；clock/segment models |
+| acceptance figures | `experiments/results/backtests/optimization_direction_comparison_2022_2025/optimization_directions_daily_cumulative.svg`；`experiments/results/backtests/optimization_direction_comparison_2022_2025/optimization_directions_relative_baseline_daily_cumulative.svg`；`experiments/results/backtests/optimization_direction_comparison_2022_2025/optimization_directions_relative_baseline_yearly_mean.svg` |
+| current research focus | xs_relative；hist-surprise；path-shape；clock-segment 已收尾，下一步组合/定稿 |
 
 短线 label：
 

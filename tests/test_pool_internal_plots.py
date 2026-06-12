@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from opening_strength_fit.pool_internal_plot_svg import write_two_panel_line_svg
 from opening_strength_fit.pool_internal_plots import (
     month_major_plot_data,
     write_universe_sml_pool_internal_plots,
@@ -206,3 +207,40 @@ def test_write_cumulative_plot_can_label_years_only(tmp_path) -> None:
     assert "2025-12-31" not in figure_text
     assert ">2022<" in figure_text
     assert ">2025<" in figure_text
+    assert ">2026<" in figure_text
+
+
+def test_single_panel_line_plot_uses_full_height_and_year_boundaries(tmp_path) -> None:
+    plot_data = pd.DataFrame(
+        {
+            "pool": ["pool_L", "pool_L", "pool_L"],
+            "week_start": ["2022-01-04", "2025-01-02", "2025-12-31"],
+            "next_cumulative_net_return_bps": [1.0, 5.0, 7.0],
+        }
+    )
+    output_path = tmp_path / "single_panel.svg"
+
+    write_two_panel_line_svg(
+        plot_data,
+        title="single panel",
+        panels=[
+            {
+                "title": "Next cumulative net return",
+                "ylabel": "bps",
+                "column": "next_cumulative_net_return_bps",
+                "default_ylim": (0.0, 8.0),
+                "tick_step": 2.0,
+                "tick_decimals": None,
+                "fixed_ylim": True,
+            },
+        ],
+        output_path=output_path,
+        pools=("pool_L",),
+        x_label_mode="years_only",
+    )
+
+    figure_text = output_path.read_text(encoding="utf-8")
+    assert 'y1="112.0"' in figure_text
+    assert 'y2="832.0"' in figure_text
+    assert ">2025<" in figure_text
+    assert ">2026<" in figure_text
