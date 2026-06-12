@@ -7,7 +7,8 @@
 
 ## 当前判断
 
-目标：baseline 后四方向特征/模型优化已收尾，下一步做组合和定稿回测。
+目标：继续强化 `09:31-09:40` 开盘短线信号。新增特征无法稳定提升 universe short、
+`pool_L` short 和 `pool_L` next 后，再进入组合定稿。
 
 当前主线是单模型 mixed label：
 
@@ -19,6 +20,9 @@ train_label = short_label + 0.30 * long_label
 
 核心假设：full-universe opening score 同时包含真实强弱 / 开盘承接 / 资金方向，以及很短的
 microstructure fill、反弹、拥挤和临时成交优势。`pool_L` 做了质量筛选后，score 更偏向前者。
+
+下一步方向是 price-regime / price-bucket 诊断与交互，以及 hist-surprise、xs-relative 一类
+尺度归一化特征。具体实验记录、复盘理由和运行细节见 [experiment_log.md](experiment_log.md)。
 
 验收口径：
 
@@ -37,7 +41,6 @@ microstructure fill、反弹、拥挤和临时成交优势。`pool_L` 做了质�
 | --- | --- |
 | mixed-label selection | `w_long=0.30` 在 S/M/L 复核后固定。 |
 | current baseline | `soft_core_reg_light`，36m rolling，集群侧 pool-internal analysis。 |
-| baseline run ids | analysis `baseline_2022_2025_cluster_analysis_v1`；prediction shards from `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1` and `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1`。 |
 | 2020-2025 rolling summary | S/M/L 池内 short 和 next 均为正；`pool_L` short `+11.1 bps`，next `+13.3 bps`。 |
 | 2022-2025 baseline | universe short `+16.8 bps`、next `-8.5 bps`；`pool_L` short `+8.6 bps`、next `+8.0 bps`。 |
 | first pilot sweep | `reg_strong`、`bagging`、`no_preopen_reg_mid` 均未超过 baseline。 |
@@ -47,40 +50,7 @@ microstructure fill、反弹、拥挤和临时成交优势。`pool_L` 做了质�
 | fullxs feature batch | `hist_same_minute_surprise` 最好：`pool_L` short `+9.127 bps`（delta `+0.501`），next `+8.332 bps`（delta `+0.358`）；`path_shape_confirm` next delta `+0.665` 但 short 只 `+0.044`；`rank_label_regression` IC 高但 Top100 明显变弱。 |
 | feature audit | `pool_L` grouped audit 已归档；ablation 中 postopen_v1/v2 对 Top100 最敏感，permutation 中 orderbook_depth 对 Rank IC 最敏感。 |
 
-已归档 baseline compact artifacts：
-
-```text
-experiments/results/backtests/baseline_2022_2025_cluster/
-```
-
-第二批 9 个模型实验汇总：
-
-```text
-experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_second_sweep_summary.csv
-```
-
-cross-sectional relative features 归档：
-
-```text
-experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_xs_relative_v1/
-experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_xs_relative_recent_weight_v1/
-experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_xs_relative_summary.csv
-```
-
-model ensemble 归档：
-
-```text
-experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_model_ensemble_v1/
-```
-
-fullxs / feature audit 归档：
-
-```text
-experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_summary.csv
-experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_audit_summary.csv
-```
-
-完整实验顺序、run id、K8s 状态和数字见 [experiment_log.md](experiment_log.md)。
+完整实验顺序、run id、K8s 状态、归档路径和逐项数字见 [experiment_log.md](experiment_log.md)。
 
 ## 固定口径
 
@@ -95,8 +65,8 @@ experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_audit_sum
 | current baseline | archived `soft_core_reg_light` |
 | main display | universe + `pool_L` |
 | main metrics | Rank IC；池内 Top100 excess |
-| acceptance figures | `experiments/results/backtests/optimization_direction_comparison_2022_2025/optimization_directions_daily_cumulative.svg`；`experiments/results/backtests/optimization_direction_comparison_2022_2025/optimization_directions_relative_baseline_daily_cumulative.svg`；`experiments/results/backtests/optimization_direction_comparison_2022_2025/optimization_directions_relative_baseline_yearly_mean.svg` |
-| current research focus | xs_relative；hist-surprise；path-shape；clock-segment 已收尾，下一步组合/定稿 |
+| acceptance figures | current optimization-direction comparison SVGs；exact paths in [experiment_log.md](experiment_log.md) |
+| current research focus | 继续做强 short signal；下一步优先 price-regime 干预和尺度归一化特征 |
 
 短线 label：
 
@@ -136,6 +106,7 @@ label      = sell_vwap / buy_price - 1 - fee_bps / 10000
 | 2020-2025 mainline | S/M/L 池内 short 和 next 均为正。 |
 | 2022-2025 baseline | universe + `pool_L` 集群侧分析已归档，后续信号增强聚焦这一窗口。 |
 | 2022-2025 sweeps | 首轮和第二批常规增强尚未形成实质增量。 |
+| current signal-enhancement phase | 常规特征/模型 sweep 增量变小；下一步验证价格生态分层和尺度归一化特征。 |
 
 ## 入口
 

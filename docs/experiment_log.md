@@ -1,33 +1,16 @@
 # Experiment Log
 
-本文件是实验事实源，适合查具体 run、数字、K8s 输出和配置。想先读当前判断，请看
-[project_brief.md](project_brief.md)；这个文件不适合从头顺读。
+本文件是实验事实源：run id、数字、K8s 状态、归档路径和配置索引。当前判断先看
+[project_brief.md](project_brief.md)；这里按日期和关键词查，不适合从头顺读。
 
 ## 当前路线摘要
 
-当前路线：
-
-- 项目窗口仍是 `09:30-09:40`；当前优化子域是 `09:31-09:40`。
-- 训练主线改为单模型 mixed label：一分钟 VWAP short label 为主，小权重加入持有到第二天收盘的 long label。
-- 训练仍用 full universe；`pool_S`、`pool_M`、`pool_L` 只作为 TopN selection mask，指标在不同 mask 下分别汇总。
-- mixed label 已扫 `w_long=0.10 / 0.20 / 0.30`；结合 S/M/L 池内 Top100 excess，当前固定
-  `w_long=0.30`。固定权重后的 7 组 feature/model 小扫已晋级 `soft_core_reg_light`；迁移到
-  `36m train -> next 1m test` 的 2024 全年 rolling 后，正式模型展示名定为 `baseline`。
-- `baseline` 对应真实 run id
-  `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1`。已同步并归档
-  `2024-01` 至 `2024-12` 全年结果；真实 run id 只作为 config / metrics / predictions 追溯键。
-- 同一 `baseline` 口径的 `36m train -> next 6m test` 半年 rolling 已完成：
-  `lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1`，
-  覆盖 `2018H1` 至 `2024H2` 共 14 个 folds；2020-2024 S/M/L 与 2018-2019
-  universe-only 分析均已同步并归档。
-- 2025 OOS extension 与 `2022-2025` baseline 切片均已归档；首轮强正则 / 重 bagging /
-  去 `preopen_*` 试水均未超过 baseline。第二批 9 个 pool_L 因子增强实验、cross-sectional
-  relative features 和 model ensemble 均已归档。2026-06-12 fullxs 批次与 grouped
-  feature audit 完成归档；`hist_same_minute_surprise` 是当前最好的 fullxs 增量候选。
-- S/M/L 股池文件覆盖 `2020-01-02` 至 `2025-12-31`；2018/2019 没有股池日期，只用 universe
-  口径验收。
-- 两模型 `final_score = alpha_rank - lambda * gap_risk_rank` 路线封存。它通过 rolling，说明短+长目标有信息，
-  但当前不继续用两个模型定义目标。
+- 样本域：`09:31-09:40`；训练 full universe，S/M/L 只作 TopN selection mask。
+- 主线：single mixed label，`w_long=0.30`；展示 baseline 是 `soft_core_reg_light`。
+- 已归档：2024 月度、2018H1..2025H2 半年/OOS、2022-2025 baseline、second sweep、xs-relative、
+  model ensemble、fullxs batch 和 feature audit。
+- 当前增量候选：`hist_same_minute_surprise`；下一步按 2026-06-12 rescope 做 price-regime 和尺度归一化。
+- 封存路线：两模型 `final_score = alpha_rank - lambda * gap_risk_rank`，保留为历史证据，不再定义当前目标。
 
 关键分叉结果：
 
@@ -72,6 +55,7 @@
 | 2026-06-11 | model ensemble archive | `lgbm_delay2_36m_2022_2025_pool_l_model_ensemble_v1` 已同步归档并从集群清理；`pool_L` short / next 均低于 baseline。 |
 | 2026-06-11 | xs-relative archive and retired experiment cleanup | `xs_relative_v1` / `xs_relative_recent_weight_v1` 已同步到 `experiments/results`；一个未形成正式结果的路径统计实验已删除。 |
 | 2026-06-12 | fullxs and feature-audit archive | 4 个 fullxs 训练 + pool-internal analysis、feature audit、baseline prediction restore metrics 已同步归档；`hist_same_minute_surprise` 为当前最好 fullxs 候选。 |
+| 2026-06-12 | mentor re-scope | 继续 short signal 强化；下一阶段显式做 price-regime 干预和尺度归一化特征。 |
 
 ## 2026-05-20 小窗结果
 
@@ -2451,7 +2435,36 @@ experiments/results/backtests/optimization_direction_comparison_2022_2025/optimi
 
 口径：累和图只保留 `next`/隔夜；绝对累和为 `pool_L_mean + internal_excess - fee`，`fee = 5 bps`，单位 bps。
 
-阶段状态：baseline 后四方向特征/模型 sweep 收尾，下一步做组合和定稿回测。
+阶段状态：baseline 后四方向特征/模型 sweep 收尾；mentor rescope 后，下一步不急于组合定稿，
+而是继续做强 short signal，优先 price-regime 干预和尺度归一化特征。
+
+### 2026-06-12 Mentor Re-scope: price ecology and scale normalization
+
+mentor comment 判断：正确，已采纳为下一阶段研究边界。
+
+具体理由：
+
+1. 继续做强短期信号直到收敛，与当前主线一致。首轮、第二批、xs-relative、model ensemble 和 fullxs
+   批次说明常规特征族加减的增量已经变小，但 `hist_same_minute_surprise` 仍有同向改善，因此还没有到
+   停止 signal discovery 的位置。
+2. 贵/便宜股票需要主动干预。A 股最小价格变动为 `0.01`，对 2 元股票是约 50 bps，对 1000 元股票是
+   约 0.1 bps；这会改变挂单集中在哪些档位、盘口缺口、一档占比、queue replenish 和成交冲击的含义。
+   因此不能默认同一组绝对盘口特征在不同价格层级共享同一个生效模式。
+3. `hist_same_minute_surprise` 不只是“历史 surprise”命名下的异常检测，它更像无量纲化：用同一股票、
+   同一决策分钟的过去均值/波动来重定当前状态的尺度。`xs_relative` 则是在同一
+   `date x decision_time` 横截面内找尺度。两者共同指向下一阶段：优先把价格、深度、成交和队列特征
+   变成相对 tick、bps、ratio、zscore、rank 或分桶后的交互表达。
+
+下一步实验约束：
+
+- `primary objective` 不变：训练更强的 opening short alpha；验收仍看 universe short、`pool_L` short、
+  `pool_L` next 是否同向增强，universe next 只作 tail 诊断。
+- 新增 price-regime 诊断和干预：按 decision price / reference price 切 cheap / mid / expensive
+  bucket，分别看 feature importance、Top100 excess 和 short/next tradeoff；必要时加入 price bucket
+  特征、price-bucket interaction 或 clock/price segmented model。
+- 新增尺度归一化主线：优先扩展 hist-surprise、cross-sectional relative、tick-normalized depth gap、
+  bps-normalized spread/path、notional/price-scaled queue 和 per-symbol historical ratio，而不是继续堆
+  raw absolute orderbook state。
 
 ### 归档和保留口径
 

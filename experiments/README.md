@@ -1,5 +1,8 @@
 # Experiments
 
+This file describes experiment directory conventions and run-kind entrypoints.
+Run results and decisions live in `docs/experiment_log.md`.
+
 | path | content |
 | --- | --- |
 | `runs/*.toml` | Run configs. `run.id` matches the filename. |

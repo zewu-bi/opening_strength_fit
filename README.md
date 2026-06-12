@@ -10,21 +10,19 @@ Current snapshot:
 ```text
 sample window: 09:30:00-09:40:00, current slice 09:31:00-09:40:00
 main label: mixed short + next-close label, w_long = 0.30
-archived feature/model: soft_core_reg_light
-completed archive: 2024 monthly validation, 2018H1..2025H2 halfyear/OOS, 2020-2025 summary, 2022-2025 baseline, and fullxs/feature-audit batches
-current focus: baseline 后四方向特征/模型优化已收尾；用 pool_L next/隔夜验收
-acceptance figures: experiments/results/backtests/optimization_direction_comparison_2022_2025/{optimization_directions_daily_cumulative.svg,optimization_directions_relative_baseline_daily_cumulative.svg,optimization_directions_relative_baseline_yearly_mean.svg}
-next work: combine/finalize xs_relative, hist_surprise, path_shape, and clock_segment
-progress source: docs/experiment_log.md
+current baseline: soft_core_reg_light
+current focus: 继续做强 short signal；优先 price-regime 和尺度归一化特征
+current brief: docs/project_brief.md
+run facts and artifact index: docs/experiment_log.md
 ```
 
 ## 文档入口
 
 | 文件 | 内容 |
 | --- | --- |
-| [docs/project_brief.md](docs/project_brief.md) | 研究目标、核心口径、当前主线和关键里程碑。 |
-| [docs/runbook.md](docs/runbook.md) | K8s Job、artifact sync、analysis 和排查命令。 |
-| [docs/experiment_log.md](docs/experiment_log.md) | 实验事实源：run、数字、K8s 输出、配置索引。 |
+| [docs/project_brief.md](docs/project_brief.md) | 当前研究判断、固定口径、验收口径和关键证据摘要。 |
+| [docs/runbook.md](docs/runbook.md) | 可执行命令：K8s Job、artifact sync、analysis 和排查。 |
+| [docs/experiment_log.md](docs/experiment_log.md) | 实验事实源：run、数字、K8s 输出、归档路径和配置索引。 |
 | [docs/project_map.md](docs/project_map.md) | 文件、模块和 CLI 索引。 |
 | [experiments/README.md](experiments/README.md) | Run config 目录约定、run kind 映射和 TOML 模板入口。 |
 | [experiments/results/README.md](experiments/results/README.md) | 可提交轻量结果目录约定。 |

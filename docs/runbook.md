@@ -1,7 +1,7 @@
 # 运行手册
 
-Scope: runnable configs, commands, paths, sync steps, and troubleshooting. 研究判断见
-[project_brief.md](project_brief.md)，实验记录见 [experiment_log.md](experiment_log.md)。
+本文件只放可执行流程：配置路径、K8s Job、artifact sync、analysis 命令和排查。研究判断见
+[project_brief.md](project_brief.md)，实验事实源见 [experiment_log.md](experiment_log.md)。
 
 标准闭环：
 
