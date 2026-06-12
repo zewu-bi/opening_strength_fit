@@ -451,6 +451,110 @@ def relative_to_baseline_year_data(
     return sort_month_major(pd.concat(frames, ignore_index=True))
 
 
+def load_yearly_net_alpha_data(
+    *,
+    backtests_root: Path,
+    directions: tuple[DirectionSpec, ...],
+    pool: str,
+    include_baseline_pool: bool,
+    baseline_run_id: str,
+    fee_bps: float,
+) -> pd.DataFrame:
+    frames = []
+    if include_baseline_pool:
+        frames.append(
+            _load_yearly_net_alpha_rows(
+                year_path=backtests_root / baseline_run_id / "pool_internal_year_summary.csv",
+                summary_path=backtests_root / baseline_run_id / "pool_internal_summary.csv",
+                pool=pool,
+                key="baseline_pool_l",
+                label="baseline pool_L",
+                fee_bps=fee_bps,
+            )
+        )
+    for direction in directions:
+        frames.append(
+            _load_yearly_net_alpha_rows(
+                year_path=backtests_root / direction.run_id / "pool_internal_year_summary.csv",
+                summary_path=backtests_root / direction.run_id / "pool_internal_summary.csv",
+                pool=pool,
+                key=direction.key,
+                label=direction.label,
+                fee_bps=fee_bps,
+            )
+        )
+    return sort_month_major(pd.concat(frames, ignore_index=True))
+
+
+def _load_yearly_net_alpha_rows(
+    *,
+    year_path: Path,
+    summary_path: Path,
+    pool: str,
+    key: str,
+    label: str,
+    fee_bps: float,
+) -> pd.DataFrame:
+    required = {
+        "pool",
+        "year",
+        "pool_next_mean_bps",
+        "selected_next_mean_bps",
+        "next_internal_excess_bps",
+    }
+    frame = pd.read_csv(year_path)
+    missing = sorted(required - set(frame.columns))
+    if missing:
+        raise ValueError(f"{year_path} missing columns: {missing}")
+    item = frame.loc[frame["pool"].astype(str).eq(pool)].copy()
+    if item.empty:
+        raise ValueError(f"{year_path} has no rows for pool {pool!r}")
+    item["test_month"] = item["year"].astype(str)
+
+    summary = _load_summary_row(summary_path, pool=pool)
+    mean_item = pd.DataFrame(
+        {
+            "test_month": ["Mean"],
+            "pool_next_mean_bps": [summary["pool_next_mean_bps"]],
+            "selected_next_mean_bps": [summary["selected_next_mean_bps"]],
+            "next_internal_excess_bps": [summary["next_internal_excess_bps"]],
+        }
+    )
+    out = pd.concat(
+        [
+            item[
+                [
+                    "test_month",
+                    "pool_next_mean_bps",
+                    "selected_next_mean_bps",
+                    "next_internal_excess_bps",
+                ]
+            ],
+            mean_item,
+        ],
+        ignore_index=True,
+    )
+    out["pool"] = key
+    out["pool_label"] = label
+    out["variant"] = label
+    out["fee_bps"] = float(fee_bps)
+    out["next_net_return_bps"] = out["selected_next_mean_bps"] - out["fee_bps"]
+    out["next_alpha_bps"] = out["next_net_return_bps"] - out["pool_next_mean_bps"]
+    return out[
+        [
+            "test_month",
+            "variant",
+            "pool",
+            "pool_label",
+            "pool_next_mean_bps",
+            "selected_next_mean_bps",
+            "fee_bps",
+            "next_net_return_bps",
+            "next_alpha_bps",
+        ]
+    ]
+
+
 def _load_year_summary(path: Path, *, pool: str) -> pd.DataFrame:
     required = {"pool", "year", "short_internal_excess_bps", "next_internal_excess_bps"}
     frame = pd.read_csv(path)

@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import pandas as pd
+
 from opening_strength_fit.analysis import write_json
 from opening_strength_fit.optimization_direction_data import (
     CUMULATIVE_DECISION_NORMALIZER,
@@ -11,11 +13,9 @@ from opening_strength_fit.optimization_direction_data import (
     DirectionSpec,
     line_axis,
     line_step,
-    load_cumulative_plot_data,
     load_horizon_plot_data,
     load_realized_cumulative_plot_data,
-    relative_to_baseline_cumulative_data,
-    relative_to_baseline_year_data,
+    load_yearly_net_alpha_data,
     source_files,
 )
 from opening_strength_fit.pool_internal_plot_svg import (
@@ -43,6 +43,40 @@ def parse_direction_spec(value: str) -> DirectionSpec:
         )
     key, label, run_id = (part.strip() for part in parts)
     return DirectionSpec(key=key, label=label, run_id=run_id)
+
+
+def combine_short_next_excess_data(
+    short_data: pd.DataFrame,
+    next_data: pd.DataFrame,
+) -> pd.DataFrame:
+    key_columns = ["test_month", "variant", "pool", "pool_label"]
+    return short_data[key_columns + ["short_internal_excess_bps"]].merge(
+        next_data[key_columns + ["next_internal_excess_bps"]],
+        on=key_columns,
+        how="inner",
+    )
+
+
+def combine_net_alpha_cumulative_data(
+    realized_cumulative_output: pd.DataFrame,
+) -> pd.DataFrame:
+    key_columns = ["pool", "pool_label", "week_start", "variant"]
+    combined = realized_cumulative_output[
+        key_columns
+        + [
+            "pool_next_mean_bps",
+            "selected_next_mean_bps",
+            "next_internal_excess_bps",
+            "fee_bps",
+            "next_net_return_bps",
+            "next_cumulative_net_return_bps",
+        ]
+    ].copy()
+    combined["next_alpha_bps"] = combined["next_net_return_bps"] - combined["pool_next_mean_bps"]
+    combined["next_cumulative_alpha_bps"] = (
+        combined.groupby("pool", sort=False)["next_alpha_bps"].cumsum()
+    )
+    return combined
 
 
 def write_optimization_direction_plots(
@@ -75,14 +109,6 @@ def write_optimization_direction_plots(
         pool=pool,
         horizon="next",
     )
-    excess_cumulative_data = load_cumulative_plot_data(
-        backtests_root=backtests_root,
-        directions=directions,
-        pool=pool,
-        include_baseline_pool=include_baseline_pool_cumulative,
-        include_baseline_universe=include_baseline_universe_cumulative,
-        baseline_run_id=baseline_run_id,
-    )
     realized_cumulative_data = load_realized_cumulative_plot_data(
         backtests_root=backtests_root,
         directions=directions,
@@ -92,22 +118,25 @@ def write_optimization_direction_plots(
         baseline_run_id=baseline_run_id,
         fee_bps=realized_fee_bps,
     )
-    relative_cumulative_data = relative_to_baseline_cumulative_data(
-        excess_cumulative_data,
-        directions=directions,
-        baseline_key="baseline_pool_l",
-    )
-    relative_year_data = relative_to_baseline_year_data(
+    yearly_net_alpha_data = load_yearly_net_alpha_data(
         backtests_root=backtests_root,
         directions=directions,
         pool=pool,
+        include_baseline_pool=include_baseline_pool_cumulative,
         baseline_run_id=baseline_run_id,
+        fee_bps=realized_fee_bps,
     )
     cumulative_series = tuple(
         [
             *(["baseline_pool_l"] if include_baseline_pool_cumulative else []),
             *series,
             *(["baseline_universe"] if include_baseline_universe_cumulative else []),
+        ]
+    )
+    yearly_series = tuple(
+        [
+            *(["baseline_pool_l"] if include_baseline_pool_cumulative else []),
+            *series,
         ]
     )
     realized_cumulative_output = realized_cumulative_data.drop(
@@ -120,36 +149,24 @@ def write_optimization_direction_plots(
         ],
         errors="ignore",
     )
-    relative_cumulative_output = relative_cumulative_data.drop(
-        columns=[
-            "short_relative_excess_bps",
-            "short_cumulative_relative_excess_bps",
-        ],
-        errors="ignore",
+    short_next_data = combine_short_next_excess_data(short_data, next_data)
+    net_alpha_cumulative_data = combine_net_alpha_cumulative_data(
+        realized_cumulative_output,
     )
-
-    short_csv = output_dir / "optimization_directions_short_excess_rank_ic_plot_data.csv"
-    short_svg = output_dir / "optimization_directions_short_excess_rank_ic_with_mean.svg"
-    next_csv = output_dir / "optimization_directions_next_excess_rank_ic_plot_data.csv"
-    next_svg = output_dir / "optimization_directions_next_excess_rank_ic_with_mean.svg"
-    cumulative_csv = output_dir / "optimization_directions_daily_cumulative_plot_data.csv"
-    cumulative_svg = output_dir / "optimization_directions_daily_cumulative.svg"
-    relative_cumulative_csv = (
-        output_dir / "optimization_directions_relative_baseline_daily_cumulative_plot_data.csv"
+    short_next_csv = output_dir / "optimization_directions_short_next_excess_plot_data.csv"
+    short_next_svg = output_dir / "optimization_directions_short_next_excess.svg"
+    net_alpha_cumulative_csv = (
+        output_dir / "optimization_directions_net_alpha_cumulative_plot_data.csv"
     )
-    relative_cumulative_svg = (
-        output_dir / "optimization_directions_relative_baseline_daily_cumulative.svg"
-    )
-    relative_year_csv = (
-        output_dir / "optimization_directions_relative_baseline_yearly_mean_plot_data.csv"
-    )
-    relative_year_svg = output_dir / "optimization_directions_relative_baseline_yearly_mean.svg"
+    net_alpha_cumulative_svg = output_dir / "optimization_directions_net_alpha_cumulative.svg"
+    yearly_net_alpha_csv = output_dir / "optimization_directions_yearly_net_alpha_plot_data.csv"
+    yearly_net_alpha_svg = output_dir / "optimization_directions_yearly_net_alpha.svg"
     trace_path = output_dir / "optimization_directions_trace.json"
 
-    short_data.to_csv(short_csv, index=False, float_format="%.6f")
+    short_next_data.to_csv(short_next_csv, index=False, float_format="%.6f")
     write_two_panel_bar_svg(
-        short_data,
-        title=f"{title_prefix}: short excess / Rank IC",
+        short_next_data,
+        title=f"{title_prefix}: Top 100 internal excess",
         panels=[
             {
                 "title": "Short Top 100 internal excess",
@@ -165,29 +182,6 @@ def write_optimization_direction_plots(
                 "min_tick_step": 5.0,
             },
             {
-                "title": "Short Rank IC",
-                "ylabel": "IC",
-                "column": "short_rank_ic",
-                "default_ylim": (0.0, 0.18),
-                "tick_step": 0.02,
-                "tick_decimals": 2,
-                "label_decimals": 3,
-                "adaptive_ylim": True,
-                "include_zero": True,
-                "target_ticks": 9,
-                "min_tick_step": 0.01,
-            },
-        ],
-        output_path=short_svg,
-        pools=series,
-    )
-
-    next_data.to_csv(next_csv, index=False, float_format="%.6f")
-    write_two_panel_bar_svg(
-        next_data,
-        title=f"{title_prefix}: next-close excess / Rank IC",
-        panels=[
-            {
                 "title": "Next Top 100 internal excess",
                 "ylabel": "bps",
                 "column": "next_internal_excess_bps",
@@ -200,112 +194,87 @@ def write_optimization_direction_plots(
                 "target_ticks": 6,
                 "min_tick_step": 5.0,
             },
-            {
-                "title": "Next Rank IC",
-                "ylabel": "IC",
-                "column": "next_rank_ic",
-                "default_ylim": (-0.03, 0.04),
-                "tick_step": 0.01,
-                "tick_decimals": 2,
-                "label_decimals": 3,
-                "adaptive_ylim": True,
-                "include_zero": True,
-                "target_ticks": 8,
-                "min_tick_step": 0.005,
-            },
         ],
-        output_path=next_svg,
+        output_path=short_next_svg,
         pools=series,
     )
 
-    realized_cumulative_output.to_csv(cumulative_csv, index=False, float_format="%.6f")
+    net_alpha_cumulative_data.to_csv(
+        net_alpha_cumulative_csv,
+        index=False,
+        float_format="%.6f",
+    )
     write_two_panel_line_svg(
-        realized_cumulative_output,
-        title="2022-2025 pool L Top 100选股累和曲线",
+        net_alpha_cumulative_data,
+        title="2022-2025 pool L Top 100选股累和与 alpha",
         panels=[
             {
-                "title": "",
+                "title": "Next selected net return, fee-adjusted",
                 "ylabel": "bps",
                 "column": "next_cumulative_net_return_bps",
                 "default_ylim": line_axis(
-                    realized_cumulative_output["next_cumulative_net_return_bps"]
+                    net_alpha_cumulative_data["next_cumulative_net_return_bps"]
                 ),
                 "tick_step": line_step(
-                    realized_cumulative_output["next_cumulative_net_return_bps"]
+                    net_alpha_cumulative_data["next_cumulative_net_return_bps"]
+                ),
+                "tick_decimals": None,
+                "fixed_ylim": True,
+            },
+            {
+                "title": "Cumulative alpha vs pool background",
+                "ylabel": "bps",
+                "column": "next_cumulative_alpha_bps",
+                "default_ylim": line_axis(
+                    net_alpha_cumulative_data["next_cumulative_alpha_bps"]
+                ),
+                "tick_step": line_step(
+                    net_alpha_cumulative_data["next_cumulative_alpha_bps"]
                 ),
                 "tick_decimals": None,
                 "fixed_ylim": True,
             },
         ],
-        output_path=cumulative_svg,
+        output_path=net_alpha_cumulative_svg,
         pools=cumulative_series,
         x_label_mode="years_only",
         line_width=2.1,
     )
 
-    relative_cumulative_output.to_csv(
-        relative_cumulative_csv,
-        index=False,
-        float_format="%.6f",
-    )
-    write_two_panel_line_svg(
-        relative_cumulative_output,
-        title=f"{title_prefix}: cumulative excess vs baseline",
-        panels=[
-            {
-                "title": "",
-                "ylabel": "bps",
-                "column": "next_cumulative_relative_excess_bps",
-                "default_ylim": line_axis(
-                    relative_cumulative_output["next_cumulative_relative_excess_bps"]
-                ),
-                "tick_step": line_step(
-                    relative_cumulative_output["next_cumulative_relative_excess_bps"]
-                ),
-                "tick_decimals": None,
-                "fixed_ylim": True,
-            },
-        ],
-        output_path=relative_cumulative_svg,
-        pools=series,
-        x_label_mode="years_only",
-        line_width=2.1,
-    )
-
-    relative_year_data.to_csv(relative_year_csv, index=False, float_format="%.6f")
+    yearly_net_alpha_data.to_csv(yearly_net_alpha_csv, index=False, float_format="%.6f")
     write_two_panel_bar_svg(
-        relative_year_data,
-        title=f"{title_prefix}: yearly avg excess vs baseline",
+        yearly_net_alpha_data,
+        title=f"{title_prefix}: yearly next net / alpha",
         panels=[
             {
-                "title": "Short yearly avg excess vs baseline",
+                "title": "Next yearly selected net return",
                 "ylabel": "bps",
-                "column": "short_relative_excess_bps",
-                "default_ylim": (-1.0, 1.0),
-                "tick_step": 0.5,
-                "tick_decimals": 1,
-                "label_decimals": 2,
+                "column": "next_net_return_bps",
+                "default_ylim": (-10.0, 30.0),
+                "tick_step": 5.0,
+                "tick_decimals": None,
+                "label_decimals": 1,
                 "adaptive_ylim": True,
                 "include_zero": True,
                 "target_ticks": 7,
-                "min_tick_step": 0.1,
+                "min_tick_step": 2.5,
             },
             {
-                "title": "Next yearly avg excess vs baseline",
+                "title": "Next yearly alpha vs pool background",
                 "ylabel": "bps",
-                "column": "next_relative_excess_bps",
-                "default_ylim": (-1.0, 1.0),
-                "tick_step": 0.5,
-                "tick_decimals": 1,
-                "label_decimals": 2,
+                "column": "next_alpha_bps",
+                "default_ylim": (-10.0, 20.0),
+                "tick_step": 5.0,
+                "tick_decimals": None,
+                "label_decimals": 1,
                 "adaptive_ylim": True,
                 "include_zero": True,
                 "target_ticks": 7,
-                "min_tick_step": 0.1,
+                "min_tick_step": 2.5,
             },
         ],
-        output_path=relative_year_svg,
-        pools=series,
+        output_path=yearly_net_alpha_svg,
+        pools=yearly_series,
     )
 
     trace = {
@@ -329,25 +298,26 @@ def write_optimization_direction_plots(
             for item in directions
         ],
         "figures": {
-            "short_excess_rank_ic": str(short_svg),
-            "next_excess_rank_ic": str(next_svg),
-            "daily_cumulative": str(cumulative_svg),
-            "relative_baseline_daily_cumulative": str(relative_cumulative_svg),
-            "relative_baseline_yearly_mean": str(relative_year_svg),
+            "short_next_excess": str(short_next_svg),
+            "net_alpha_cumulative": str(net_alpha_cumulative_svg),
+            "yearly_net_alpha": str(yearly_net_alpha_svg),
         },
         "plot_data": {
-            "short_excess_rank_ic": str(short_csv),
-            "next_excess_rank_ic": str(next_csv),
-            "daily_cumulative": str(cumulative_csv),
-            "relative_baseline_daily_cumulative": str(relative_cumulative_csv),
-            "relative_baseline_yearly_mean": str(relative_year_csv),
+            "short_next_excess": str(short_next_csv),
+            "net_alpha_cumulative": str(net_alpha_cumulative_csv),
+            "yearly_net_alpha": str(yearly_net_alpha_csv),
         },
         "cumulative_acceptance": {
-            "panels": ["next"],
+            "panels": ["next_absolute_net", "next_pool_benchmark_alpha"],
             "reason": "short cumulative is omitted because this workflow cannot trade T+0",
             "normalizer": CUMULATIVE_DECISION_NORMALIZER,
             "unit": "bps",
             "fee_bps_per_trade": realized_fee_bps,
+            "absolute_definition": "pool_L selected next return minus fee",
+            "alpha_definition": (
+                "API-style profit minus benchmark; local benchmark is the pool_L "
+                "background next return, so alpha = selected next return - fee - pool_L mean"
+            ),
         },
         "source_files": source_files(backtests_root, directions),
     }
@@ -362,16 +332,12 @@ def write_optimization_direction_plots(
     write_json(trace_path, trace, ensure_ascii=True)
 
     return {
-        "short_excess_rank_ic_plot_data": str(short_csv),
-        "short_excess_rank_ic_figure": str(short_svg),
-        "next_excess_rank_ic_plot_data": str(next_csv),
-        "next_excess_rank_ic_figure": str(next_svg),
-        "daily_cumulative_plot_data": str(cumulative_csv),
-        "daily_cumulative_figure": str(cumulative_svg),
-        "relative_baseline_daily_cumulative_plot_data": str(relative_cumulative_csv),
-        "relative_baseline_daily_cumulative_figure": str(relative_cumulative_svg),
-        "relative_baseline_yearly_mean_plot_data": str(relative_year_csv),
-        "relative_baseline_yearly_mean_figure": str(relative_year_svg),
+        "short_next_excess_plot_data": str(short_next_csv),
+        "short_next_excess_figure": str(short_next_svg),
+        "net_alpha_cumulative_plot_data": str(net_alpha_cumulative_csv),
+        "net_alpha_cumulative_figure": str(net_alpha_cumulative_svg),
+        "yearly_net_alpha_plot_data": str(yearly_net_alpha_csv),
+        "yearly_net_alpha_figure": str(yearly_net_alpha_svg),
         "trace": str(trace_path),
     }
 

@@ -301,6 +301,17 @@ pool_internal_trace.json
 reports/cumulative/<plot-prefix>_universe_pool_l_daily_cumulative.svg
 ```
 
+Optimization-direction 验收图由 `osf-plot-optimization-direction-comparison` 生成：
+
+```text
+optimization_directions_net_alpha_cumulative.svg
+optimization_directions_yearly_net_alpha.svg
+optimization_directions_short_next_excess.svg
+```
+
+其中 cumulative 图只画 next：上 panel 是扣费 selected net return，下 panel 是 API-style
+`profit - benchmark` alpha；本地 benchmark 使用 `pool_L` 背景收益，而不是 baseline 模型。
+
 周度 4w rolling 稳定性补充：
 
 ```bash

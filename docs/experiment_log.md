@@ -2428,12 +2428,17 @@ experiments/results/backtests/model_ensemble_vs_baseline_group_delta/
 验收看这三张图：
 
 ```text
-experiments/results/backtests/optimization_direction_comparison_2022_2025/optimization_directions_daily_cumulative.svg
-experiments/results/backtests/optimization_direction_comparison_2022_2025/optimization_directions_relative_baseline_daily_cumulative.svg
-experiments/results/backtests/optimization_direction_comparison_2022_2025/optimization_directions_relative_baseline_yearly_mean.svg
+experiments/results/backtests/optimization_direction_comparison_2022_2025/optimization_directions_net_alpha_cumulative.svg
+experiments/results/backtests/optimization_direction_comparison_2022_2025/optimization_directions_yearly_net_alpha.svg
+experiments/results/backtests/optimization_direction_comparison_2022_2025/optimization_directions_short_next_excess.svg
 ```
 
-口径：累和图只保留 `next`/隔夜；绝对累和为 `pool_L_mean + internal_excess - fee`，`fee = 5 bps`，单位 bps。
+口径：累和图只保留 `next`/隔夜。上 panel 是 selected net return：
+`pool_L_mean + internal_excess - fee`；下 panel 按 backtest API 的 `profit - benchmark`
+语义改成真 alpha，本地 benchmark 是同一天 `pool_L` 背景收益，因此
+`alpha = selected_next_mean - fee - pool_L_mean = internal_excess - fee`。`fee = 5 bps`，
+daily plot data 仍按 `cumulative_decision_normalizer = 1000` 缩放。逐年柱状图同样使用
+`next_net_return_bps` / `next_alpha_bps`；short/next 图只保留 Top100 internal excess，不再画 IC。
 
 阶段状态：baseline 后四方向特征/模型 sweep 收尾；mentor rescope 后，下一步不急于组合定稿，
 而是继续做强 short signal，优先 price-regime 干预和尺度归一化特征。
