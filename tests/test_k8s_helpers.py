@@ -109,6 +109,36 @@ class K8sHelperTest(unittest.TestCase):
         self.assertIn('--test-start-month "${TEST_START}"', manifest)
         self.assertIn('--test-end-month "${TEST_END}"', manifest)
 
+    def test_osf_train_shards_require_predictions_before_skipping(self) -> None:
+        config = {
+            "run": {
+                "id": "lgbm_delay2_36m_halfyear_rolling_v1",
+                "kind": "exploration",
+            },
+            "model": {"name": "lightgbm"},
+            "window": {
+                "mode": "rolling_monthly",
+                "train_months": 36,
+                "test_months": 6,
+                "test_stride_months": 6,
+                "test_start_month": "2025-01",
+                "test_end_month": "2025-12",
+            },
+            "output": {"k8s_dir": "/mnt/output/opening_strength_fit/run"},
+            "k8s": {"resources": {"memory_limit": "512Gi"}},
+        }
+
+        manifest = render_sharded_training_job(
+            Path("experiments/runs/rolling.toml"),
+            config,
+            "image:tag",
+        )
+
+        self.assertIn('[ -f "${OUT}/_SUCCESS" ]', manifest)
+        self.assertIn('[ -f "${OUT}/metrics_by_year.csv" ]', manifest)
+        self.assertIn('[ -f "${OUT}/predictions.parquet" ]', manifest)
+        self.assertIn("required outputs already exist", manifest)
+
     def test_sharded_job_respects_explicit_short_job_name(self) -> None:
         config = {
             "run": {

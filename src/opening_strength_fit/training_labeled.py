@@ -27,7 +27,6 @@ from opening_strength_fit.features import (
     add_path_shape_confirmation_features,
     add_postopen_decision_features,
     add_postopen_v2_decision_features,
-    add_tree_sequence_features,
 )
 from opening_strength_fit.sampling import DEFAULT_DECISION_TIMES, parse_clock_times
 from opening_strength_fit.schema import (
@@ -171,32 +170,6 @@ def _apply_feature_transforms_from_config(
                 "path_shape_prefix",
                 "path_shape_",
             ),
-        )
-    if config_bool(config, "features", "include_tree_sequence", False):
-        labeled = add_tree_sequence_features(
-            labeled,
-            columns=tuple(config_list(config, "features", "tree_sequence_columns", [])),
-            include_prefixes=tuple(
-                config_list(config, "features", "tree_sequence_prefixes", [])
-            ),
-            include_patterns=tuple(
-                config_list(config, "features", "tree_sequence_regexes", [])
-            ),
-            windows=config_int_tuple(
-                config,
-                "features",
-                "tree_sequence_windows",
-                (2, 3, 5),
-            ),
-            landmarks=tuple(
-                config_list(
-                    config,
-                    "features",
-                    "tree_sequence_landmarks",
-                    ["09:31:00", "09:33:00", "09:35:00", "09:40:00"],
-                )
-            ),
-            prefix=config_str(config, "features", "tree_sequence_prefix", "tree_seq_"),
         )
     if include_cross_sectional_relative and config_bool(
         config,

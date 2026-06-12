@@ -178,6 +178,7 @@ def write_two_panel_line_svg(
     output_path: Path,
     pools: tuple[str, ...] = PLOT_POOLS,
     x_label_mode: str = "dates_at_ends",
+    line_width: float = 3.0,
 ) -> None:
     pools = tuple(pools)
     if not pools:
@@ -218,7 +219,8 @@ def write_two_panel_line_svg(
         x = legend_start + legend_item_width * index
         lines.append(
             f'<line x1="{x:.1f}" y1="{legend_y - 3:.1f}" x2="{x + 34.0:.1f}" '
-            f'y2="{legend_y - 3:.1f}" stroke="{PLOT_COLORS[pool]}" stroke-width="5"/>'
+            f'y2="{legend_y - 3:.1f}" stroke="{PLOT_COLORS[pool]}" '
+            f'stroke-width="{max(line_width + 2.0, 3.0):.1f}"/>'
         )
         lines.append(
             f'<circle cx="{x + 17.0:.1f}" cy="{legend_y - 3:.1f}" r="4.5" '
@@ -310,7 +312,8 @@ def write_two_panel_line_svg(
             ]
             lines.append(
                 f'<polyline points="{" ".join(points)}" fill="none" '
-                f'stroke="{PLOT_COLORS[pool]}" stroke-width="3.0" stroke-linejoin="round" '
+                f'stroke="{PLOT_COLORS[pool]}" stroke-width="{line_width:.1f}" '
+                'stroke-linejoin="round" '
                 'stroke-linecap="round"/>'
             )
             for row in item.iloc[:: max(1, len(item) // 24)].itertuples(index=False):

@@ -2,7 +2,7 @@
 id = "lgbm_delay2_36m_2022_2025_pool_l_xs_relative_v1"
 kind = "exploration"
 description = "2022-2025 pool_L factor-strengthening candidate: add compact date x decision_time cross-sectional relative zscore/rank features for core book, flow, price-state, preopen, and postopen_v2 signals."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"

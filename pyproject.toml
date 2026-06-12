@@ -45,6 +45,7 @@ osf-fetch-clickhouse-ticks = "opening_strength_fit.cli.fetch_clickhouse_ticks:ma
 osf-inspect-dataset = "opening_strength_fit.cli.inspect_dataset:main"
 osf-inspect-labeled-cache = "opening_strength_fit.cli.inspect_labeled_cache:main"
 osf-plot-lgbm-delay-decay = "opening_strength_fit.cli.plot_lgbm_delay_decay:main"
+osf-plot-optimization-direction-comparison = "opening_strength_fit.cli.plot_optimization_direction_comparison:main"
 osf-plot-rolling-validation-tradeoff = "opening_strength_fit.cli.plot_rolling_validation_tradeoff:main"
 osf-plot-signal-baseline-panels = "opening_strength_fit.cli.plot_signal_baseline_panels:main"
 osf-plot-weekly-pool-internal = "opening_strength_fit.cli.plot_weekly_pool_internal:main"

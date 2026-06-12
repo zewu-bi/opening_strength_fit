@@ -2,7 +2,7 @@
 id = "lgbm_delay2_36m_2022_2025_fullxs_clock_segment_lgbm_v1"
 kind = "exploration"
 description = "2022-2025 full cross-section tree-model test: train separate LightGBM models for early and late opening decision minutes."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"

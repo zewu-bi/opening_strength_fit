@@ -79,8 +79,8 @@ spec:
               TEST_START="${TEST_STARTS[${INDEX}]}"
               TEST_END="${TEST_ENDS[${INDEX}]}"
               OUT="${ROOT}/month_${TEST_START}"
-              if [ -f "${OUT}/metrics_by_year.csv" ]; then
-                echo "test window ${TEST_START}..${TEST_END}: metrics already exist, skipping ${OUT}"
+              if [ -f "${OUT}/_SUCCESS" ] && [ -f "${OUT}/metrics_by_year.csv" ] && [ -f "${OUT}/predictions.parquet" ]; then
+                echo "test window ${TEST_START}..${TEST_END}: required outputs already exist (_SUCCESS, metrics_by_year.csv, predictions.parquet), skipping ${OUT}"
                 exit 0
               fi
 

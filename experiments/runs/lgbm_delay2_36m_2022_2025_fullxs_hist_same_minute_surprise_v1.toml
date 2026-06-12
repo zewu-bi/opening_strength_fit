@@ -2,7 +2,7 @@
 id = "lgbm_delay2_36m_2022_2025_fullxs_hist_same_minute_surprise_v1"
 kind = "exploration"
 description = "2022-2025 full cross-section feature-engineering test: add causal symbol x same-decision-minute historical surprise features on top of the soft-core baseline."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"
@@ -157,4 +157,3 @@ memory_limit = "384Gi"
 
 [analysis.pool_internal.archive]
 profile = "presentation_core"
-

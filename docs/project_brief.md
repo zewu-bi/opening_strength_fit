@@ -42,7 +42,10 @@ microstructure fill、反弹、拥挤和临时成交优势。`pool_L` 做了质�
 | 2022-2025 baseline | universe short `+16.8 bps`、next `-8.5 bps`；`pool_L` short `+8.6 bps`、next `+8.0 bps`。 |
 | first pilot sweep | `reg_strong`、`bagging`、`no_preopen_reg_mid` 均未超过 baseline。 |
 | second batch, 9 runs | 最好只是 `price_path_plus` 的 `pool_L` short `+0.017 bps` 增量；没有实质提升。 |
-| cross-sectional relative features | `xs_relative_v1` 的 `pool_L` short 小幅提升，next 变弱；只有弱局部增量。 |
+| cross-sectional relative features | `xs_relative_v1` / `xs_relative_recent_weight_v1` 已归档；前者 short 小幅提升但 next 变弱，后者含样本权重。 |
+| model ensemble | `model_ensemble_v1` 已归档；`pool_L` short `+7.635 bps`、next `+6.018 bps`，均低于 baseline。 |
+| fullxs feature batch | `hist_same_minute_surprise` 最好：`pool_L` short `+9.127 bps`（delta `+0.501`），next `+8.332 bps`（delta `+0.358`）；`path_shape_confirm` next delta `+0.665` 但 short 只 `+0.044`；`rank_label_regression` IC 高但 Top100 明显变弱。 |
+| feature audit | `pool_L` grouped audit 已归档；ablation 中 postopen_v1/v2 对 Top100 最敏感，permutation 中 orderbook_depth 对 Rank IC 最敏感。 |
 
 已归档 baseline compact artifacts：
 
@@ -54,6 +57,27 @@ experiments/results/backtests/baseline_2022_2025_cluster/
 
 ```text
 experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_second_sweep_summary.csv
+```
+
+cross-sectional relative features 归档：
+
+```text
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_xs_relative_v1/
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_xs_relative_recent_weight_v1/
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_xs_relative_summary.csv
+```
+
+model ensemble 归档：
+
+```text
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_model_ensemble_v1/
+```
+
+fullxs / feature audit 归档：
+
+```text
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_summary.csv
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_audit_summary.csv
 ```
 
 完整实验顺序、run id、K8s 状态和数字见 [experiment_log.md](experiment_log.md)。
@@ -71,7 +95,8 @@ experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_second_sweep_summ
 | current baseline | archived `soft_core_reg_light` |
 | main display | universe + `pool_L` |
 | main metrics | Rank IC；池内 Top100 excess |
-| current research focus | cross-sectional relative features；model ensemble |
+| acceptance figures | `optimization_directions_daily_cumulative.svg`；`optimization_directions_relative_baseline_daily_cumulative.svg`；`optimization_directions_relative_baseline_yearly_mean.svg` |
+| current research focus | xs_relative；hist-same-minute surprise；path-shape；clock/segment models |
 
 短线 label：
 

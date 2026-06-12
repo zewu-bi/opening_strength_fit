@@ -1,13 +1,13 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: os-lgbm-36m-2225-tree-seq
+  name: os-baseline-2225-restore
   namespace: bizewu
 spec:
   backoffLimit: 0
   completionMode: Indexed
   completions: 8
-  parallelism: 1
+  parallelism: 4
   ttlSecondsAfterFinished: 86400
   template:
     spec:
@@ -27,9 +27,10 @@ spec:
                   operator: NotIn
                   values:
                     - node7
+                    - node8
       containers:
         - name: opening-strength-fit
-          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260610-tree-seq-v1
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260610-xs-ensemble-v1
           imagePullPolicy: Always
           envFrom:
             - secretRef:
@@ -61,7 +62,7 @@ spec:
                 done
                 echo "dependency file is ready: ${WAIT_PATH}"
               done
-              ROOT=/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_tree_sequence_v1
+              ROOT=/mnt/output/opening_strength_fit/baseline_2022_2025_prediction_restore_v1
               mkdir -p "${ROOT}"
               TEST_STARTS=(2022-01 2022-07 2023-01 2023-07 2024-01 2024-07 2025-01 2025-07)
               TEST_ENDS=(2022-06 2022-12 2023-06 2023-12 2024-06 2024-12 2025-06 2025-12)
@@ -78,17 +79,17 @@ spec:
               TEST_START="${TEST_STARTS[${INDEX}]}"
               TEST_END="${TEST_ENDS[${INDEX}]}"
               OUT="${ROOT}/month_${TEST_START}"
-              if [ -f "${OUT}/metrics_by_year.csv" ]; then
-                echo "test window ${TEST_START}..${TEST_END}: metrics already exist, skipping ${OUT}"
+              if [ -f "${OUT}/_SUCCESS" ] && [ -f "${OUT}/metrics_by_year.csv" ] && [ -f "${OUT}/predictions.parquet" ]; then
+                echo "test window ${TEST_START}..${TEST_END}: required outputs already exist (_SUCCESS, metrics_by_year.csv, predictions.parquet), skipping ${OUT}"
                 exit 0
               fi
 
               echo
-              echo "running lgbm_delay2_36m_2022_2025_tree_sequence_v1 shard test=${TEST_START}..${TEST_END} index=${INDEX}"
+              echo "running baseline_2022_2025_prediction_restore_v1 shard test=${TEST_START}..${TEST_END} index=${INDEX}"
               echo "output_dir=${OUT}"
 
               osf-train \
-                --config experiments/runs/lgbm_delay2_36m_2022_2025_tree_sequence_v1.toml \
+                --config experiments/runs/baseline_2022_2025_prediction_restore_v1.toml \
                 --rolling-monthly \
                 --train-months 36 \
                 --test-months 6 \

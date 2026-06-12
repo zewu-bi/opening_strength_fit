@@ -2,7 +2,7 @@
 id = "lgbm_delay2_36m_2022_2025_pool_l_xs_relative_recent_weight_v1"
 kind = "exploration"
 description = "2022-2025 pool_L factor-strengthening candidate: combine compact date x decision_time cross-sectional relative features with mild recent-regime sample weighting."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"

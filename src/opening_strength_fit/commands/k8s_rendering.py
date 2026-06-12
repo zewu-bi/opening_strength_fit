@@ -67,6 +67,21 @@ def training_command(config: dict) -> str:
     raise SystemExit(f"Unsupported model.name for k8s rendering: {model_name}")
 
 
+def _rolling_completion_files(config: dict, command: str) -> list[str]:
+    run_kind = str(get(config, "run", "kind", "")).strip().lower()
+    if run_kind == "alpha_conditioned_rolling_validation":
+        return ["rolling_summary.csv"]
+    if run_kind == "feature_audit":
+        return ["feature_audit_trace.json", "feature_audit_metrics.csv"]
+    if command == "osf-train":
+        return ["_SUCCESS", "metrics_by_year.csv", "predictions.parquet"]
+    return ["metrics_by_year.csv"]
+
+
+def _shell_file_check(files: list[str]) -> str:
+    return " && ".join(f'[ -f "${{OUT}}/{file}" ]' for file in files)
+
+
 def _gpu_count(resources: dict) -> str:
     gpu_limit = str(resources.get("gpu_limit", resources.get("nvidia_gpu", "0")) or "0")
     if gpu_limit in {"", "0", "0.0", "none", "None"}:
@@ -369,12 +384,9 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
         test_stride_months = int(
             get(config, "window", "test_stride_months", test_months) or test_months
         )
-        done_file = (
-            "rolling_summary.csv"
-            if str(get(config, "run", "kind", "")).strip().lower()
-            == "alpha_conditioned_rolling_validation"
-            else "metrics_by_year.csv"
-        )
+        completion_files = _rolling_completion_files(config, command)
+        completion_check = _shell_file_check(completion_files)
+        completion_label = ", ".join(completion_files)
         return textwrap.dedent(
             f"""\
             apiVersion: batch/v1
@@ -432,8 +444,8 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
                           TEST_START="${{TEST_STARTS[${{INDEX}}]}}"
                           TEST_END="${{TEST_ENDS[${{INDEX}}]}}"
                           OUT="${{ROOT}}/month_${{TEST_START}}"
-                          if [ -f "${{OUT}}/{done_file}" ]; then
-                            echo "test window ${{TEST_START}}..${{TEST_END}}: metrics already exist, skipping ${{OUT}}"
+                          if {completion_check}; then
+                            echo "test window ${{TEST_START}}..${{TEST_END}}: required outputs already exist ({completion_label}), skipping ${{OUT}}"
                             exit 0
                           fi
 

@@ -11,9 +11,10 @@ Current snapshot:
 sample window: 09:30:00-09:40:00, current slice 09:31:00-09:40:00
 main label: mixed short + next-close label, w_long = 0.30
 archived feature/model: soft_core_reg_light
-completed archive: 2024 monthly validation, 2018H1..2025H2 halfyear/OOS, 2020-2025 summary, and 2022-2025 baseline
+completed archive: 2024 monthly validation, 2018H1..2025H2 halfyear/OOS, 2020-2025 summary, 2022-2025 baseline, and fullxs/feature-audit batches
 current focus: 训练一个更强的开盘短 alpha；用 pool_L 检验它作为日频股池 overlay 是否更强
-next work: cross-sectional relative features + model ensemble
+acceptance figures: absolute cumulative, cumulative vs baseline, yearly avg vs baseline
+next work: optimize around xs_relative, hist-same-minute surprise, path-shape, and segment models
 progress source: docs/experiment_log.md
 ```
 

@@ -11,6 +11,7 @@ import pandas as pd
 from opening_strength_fit.commands.artifact_sync import (
     combine_metric_frames,  # noqa: E402
     combine_rolling_validation_shards,  # noqa: E402
+    pull_feature_audit_artifacts,  # noqa: E402
     pull_gap_attribution_artifacts,  # noqa: E402
     pull_next_close_labels,  # noqa: E402
     pull_pool_internal_analysis_artifacts,  # noqa: E402
@@ -546,6 +547,75 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
             )
         self.assertFalse(
             any("gap_attribution_group_metrics.csv" in path for path in fetched_remote_paths)
+        )
+
+    def test_feature_audit_artifacts_are_pulled_from_month_shards(self) -> None:
+        spec = _run_spec(
+            "feature_audit_v1",
+            kind="feature_audit",
+            test_start_month="2022-01",
+            test_end_month="2022-12",
+            test_months=6,
+            test_stride_months=6,
+        )
+
+        def fake_fetch(_hfcli, _spec, _pod, remote_path, local_path):
+            if "/month_" not in remote_path:
+                return False
+            if remote_path.endswith("feature_audit_metrics.csv"):
+                local_path.parent.mkdir(parents=True, exist_ok=True)
+                pd.DataFrame(
+                    [
+                        {
+                            "variant": "baseline",
+                            "split": local_path.parent.name,
+                            "group_rank_ic_mean": 0.1,
+                        }
+                    ]
+                ).to_csv(local_path, index=False)
+                return True
+            if remote_path.endswith("feature_group_importance.csv"):
+                local_path.parent.mkdir(parents=True, exist_ok=True)
+                pd.DataFrame(
+                    [
+                        {
+                            "split": local_path.parent.name,
+                            "group": "postopen",
+                            "importance_gain_sum": 1.0,
+                        }
+                    ]
+                ).to_csv(local_path, index=False)
+                return True
+            return False
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch(
+                "opening_strength_fit.commands.artifact_sync_artifacts.fetch_remote_file_if_exists",
+                side_effect=fake_fetch,
+            ):
+                pulled = pull_feature_audit_artifacts(
+                    "hfcli",
+                    spec,
+                    "helper-pod",
+                    root,
+                )
+            recorded = record_lightweight_artifacts(
+                spec,
+                root,
+                root / "results",
+            )
+            metrics = pd.read_csv(root / spec.run_id / "feature_audit_metrics.csv")
+
+        self.assertIn(root / spec.run_id / "feature_audit_metrics.csv", pulled)
+        self.assertEqual(metrics["test_month"].tolist(), ["2022-01", "2022-07"])
+        self.assertEqual(
+            [path.relative_to(root / "results").as_posix() for path in recorded],
+            [
+                "backtests/feature_audit_v1/feature_audit_metrics.csv",
+                "backtests/feature_audit_v1/feature_group_importance.csv",
+                "backtests/feature_audit_v1/feature_audit_trace.json",
+            ],
         )
 
 

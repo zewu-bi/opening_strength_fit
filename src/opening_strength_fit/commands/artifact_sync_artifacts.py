@@ -40,6 +40,19 @@ ROLLING_VALIDATION_SHARD_ARTIFACTS = (
     "rolling_summary.csv",
     "rolling_trace.json",
 )
+FEATURE_AUDIT_ARTIFACTS = (
+    "feature_audit_metrics.csv",
+    "feature_audit_permutation.csv",
+    "feature_importance.csv",
+    "feature_group_importance.csv",
+    "feature_audit_trace.json",
+)
+FEATURE_AUDIT_COMBINED_CSVS = (
+    "feature_audit_metrics.csv",
+    "feature_audit_permutation.csv",
+    "feature_importance.csv",
+    "feature_group_importance.csv",
+)
 GAP_ATTRIBUTION_ARTIFACTS = (
     "gap_attribution_outcomes_by_month.csv",
     "gap_attribution_outcomes_overall.csv",
@@ -73,12 +86,21 @@ def is_gap_attribution(spec: RunSpec) -> bool:
     return spec.kind == "gap_risk_attribution"
 
 
+def is_feature_audit(spec: RunSpec) -> bool:
+    return spec.kind == "feature_audit"
+
+
 def is_pool_internal_analysis(spec: RunSpec) -> bool:
     return spec.pool_internal_analysis_enabled
 
 
 def is_non_standard_artifact_run(spec: RunSpec) -> bool:
-    return is_score_risk_sweep(spec) or is_rolling_validation(spec) or is_gap_attribution(spec)
+    return (
+        is_score_risk_sweep(spec)
+        or is_rolling_validation(spec)
+        or is_gap_attribution(spec)
+        or is_feature_audit(spec)
+    )
 
 
 def local_artifact_dir(spec: RunSpec, output_root: Path | None) -> Path:
@@ -194,6 +216,32 @@ def pull_gap_attribution_artifacts(
     )
     if not pulled:
         raise SystemExit(f"{spec.run_id}: no gap-attribution artifacts found under {spec.pvc_dir}")
+    record_artifact_fetch(spec, output_dir, pulled, missing)
+    return pulled
+
+
+def pull_feature_audit_artifacts(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    output_root: Path | None,
+) -> list[Path]:
+    output_dir, pulled, missing = pull_artifact_set(
+        hfcli,
+        spec,
+        pod_name,
+        output_root,
+        FEATURE_AUDIT_ARTIFACTS,
+    )
+    if (output_dir / "feature_audit_metrics.csv").exists():
+        record_artifact_fetch(spec, output_dir, pulled, missing)
+        return pulled
+
+    shard_paths = pull_feature_audit_shards(hfcli, spec, pod_name, output_dir)
+    if shard_paths:
+        pulled.extend(shard_paths)
+    if not pulled:
+        raise SystemExit(f"{spec.run_id}: no feature-audit artifacts found under {spec.pvc_dir}")
     record_artifact_fetch(spec, output_dir, pulled, missing)
     return pulled
 
@@ -338,6 +386,85 @@ def pull_rolling_validation_shards(
     return [*pulled, *combined]
 
 
+def combine_feature_audit_shards(
+    output_dir: Path,
+    *,
+    months: list[str],
+    missing_months: list[str],
+) -> list[Path]:
+    combined_paths: list[Path] = []
+    outputs: dict[str, str] = {}
+    for name in FEATURE_AUDIT_COMBINED_CSVS:
+        frames = []
+        for month in months:
+            path = output_dir / f"month_{month}" / name
+            if path.exists():
+                frame = pd.read_csv(path)
+                if "test_month" not in frame.columns:
+                    frame.insert(0, "test_month", month)
+                frames.append(frame)
+        if not frames:
+            continue
+        combined = pd.concat(frames, ignore_index=True)
+        destination = output_dir / name
+        combined.to_csv(destination, index=False)
+        combined_paths.append(destination)
+        outputs[name.removesuffix(".csv")] = str(destination)
+
+    trace_path = output_dir / "feature_audit_trace.json"
+    write_json(
+        trace_path,
+        {
+            "combined_at_utc": datetime.now(UTC).isoformat(),
+            "months": months,
+            "missing_months": missing_months,
+            "outputs": outputs,
+        },
+        ensure_ascii=True,
+    )
+    combined_paths.append(trace_path)
+    return combined_paths
+
+
+def pull_feature_audit_shards(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    output_dir: Path,
+) -> list[Path]:
+    if not spec.test_start_month or not spec.test_end_month:
+        return []
+
+    pulled: list[Path] = []
+    missing_months: list[str] = []
+    windows = month_window_periods(
+        spec.test_start_month,
+        spec.test_end_month,
+        test_months=spec.test_months,
+        stride_months=spec.test_stride_months,
+    )
+    labels = [start if start == end else f"{start}_{end}" for start, end in windows]
+    for (start_month, _), label in zip(windows, labels, strict=True):
+        shard_dir = output_dir / f"month_{start_month}"
+        shard_dir.mkdir(parents=True, exist_ok=True)
+        found = False
+        for name in FEATURE_AUDIT_ARTIFACTS:
+            remote_path = f"{spec.pvc_dir}/month_{start_month}/{name}"
+            local_path = shard_dir / name
+            if fetch_remote_file_if_exists(hfcli, spec, pod_name, remote_path, local_path):
+                pulled.append(local_path)
+                found = True
+        if not found:
+            missing_months.append(label)
+
+    combined = combine_feature_audit_shards(
+        output_dir,
+        months=[start for start, _ in windows],
+        missing_months=missing_months,
+    )
+    return [*pulled, *combined]
+
+
 def record_artifact_file(source: Path, destination: Path) -> Path | None:
     if not source.exists():
         return None
@@ -415,6 +542,30 @@ def record_lightweight_artifacts(
             (
                 output_dir / "gap_attribution_trace.json",
                 archive_dir / "trace.json",
+            ),
+        ]
+    elif is_feature_audit(spec):
+        archive_dir = backtests_dir / spec.run_id
+        records = [
+            (
+                output_dir / "feature_audit_metrics.csv",
+                archive_dir / "feature_audit_metrics.csv",
+            ),
+            (
+                output_dir / "feature_audit_permutation.csv",
+                archive_dir / "feature_audit_permutation.csv",
+            ),
+            (
+                output_dir / "feature_importance.csv",
+                archive_dir / "feature_importance.csv",
+            ),
+            (
+                output_dir / "feature_group_importance.csv",
+                archive_dir / "feature_group_importance.csv",
+            ),
+            (
+                output_dir / "feature_audit_trace.json",
+                archive_dir / "feature_audit_trace.json",
             ),
         ]
     else:

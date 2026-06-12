@@ -13,6 +13,7 @@ from opening_strength_fit.commands.artifact_sync_artifacts import (
     is_rolling_validation,
     is_score_risk_sweep,
     local_artifact_dir,
+    pull_feature_audit_artifacts,
     pull_gap_attribution_artifacts,
     pull_pool_internal_analysis_artifacts,
     pull_rolling_validation_artifacts,
@@ -308,8 +309,15 @@ def main() -> None:
                         pod_name,
                         artifacts_root,
                     )
-                else:
+                elif is_gap_attribution(spec):
                     paths = pull_gap_attribution_artifacts(
+                        args.hfcli,
+                        spec,
+                        pod_name,
+                        artifacts_root,
+                    )
+                else:
+                    paths = pull_feature_audit_artifacts(
                         args.hfcli,
                         spec,
                         pod_name,
