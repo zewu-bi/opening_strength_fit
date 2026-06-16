@@ -2,7 +2,7 @@
 id = "lgbm_delay2_36m_2022_2025_fullxs_price_bucket_v1"
 kind = "exploration"
 description = "2022-2025 price-regime intervention: add fixed tick/bps price bucket features and price-bucket interactions on top of the soft-core baseline."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"

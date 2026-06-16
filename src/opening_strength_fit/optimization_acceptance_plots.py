@@ -31,17 +31,19 @@ DIRECTION_COLORS = {
     "xs_relative": "#0072b2",
     "hist_surprise": "#d55e00",
     "path_shape": "#009e73",
+    "scale_norm": "#56b4e9",
     "clock_segment": "#cc79a7",
 }
 
 DISPLAY_LABELS = {
-    "baseline": "baseline",
-    "baseline_pool_l": "baseline",
-    "background": "background",
-    "xs_relative": "xsrelative",
-    "hist_surprise": "histsurprise",
-    "path_shape": "pathshape",
-    "clock_segment": "clocksegment",
+    "baseline": "base",
+    "baseline_pool_l": "base",
+    "background": "pool",
+    "xs_relative": "xs",
+    "hist_surprise": "deviation",
+    "path_shape": "path",
+    "scale_norm": "scale",
+    "clock_segment": "clock",
 }
 
 DEFAULT_PLOT_DIRECTION_KEYS = ("hist_surprise", "path_shape")
@@ -137,9 +139,10 @@ def add_background_cumulative_data(
     baseline["week_start"] = pd.to_datetime(baseline["week_start"], errors="coerce")
     baseline = baseline.dropna(subset=["week_start"]).sort_values("week_start")
     background = baseline.copy()
+    background_label = DISPLAY_LABELS.get("background", "background")
     background["pool"] = "background"
-    background["pool_label"] = "background"
-    background["variant"] = "background"
+    background["pool_label"] = background_label
+    background["variant"] = background_label
     background["selected_next_mean_bps"] = pd.NA
     background["next_internal_excess_bps"] = pd.NA
     background["fee_bps"] = 0.0
@@ -349,9 +352,10 @@ def write_optimization_direction_plots(
         index=False,
         float_format="%.6f",
     )
+    cumulative_title = f"{title_prefix} fee {realized_fee_bps:g}bps 池内Top100隔夜收益累和"
     write_two_panel_line_svg(
         net_alpha_cumulative_data,
-        title=f"{title_prefix} 池内Top100隔夜收益累和",
+        title=cumulative_title,
         panels=[
             {
                 "title": "累计总收益",
@@ -367,7 +371,7 @@ def write_optimization_direction_plots(
                 "fixed_ylim": True,
             },
             {
-                "title": "相对baseline",
+                "title": "vs base",
                 "ylabel": "bps",
                 "column": "next_cumulative_vs_baseline_bps",
                 "default_ylim": line_axis(
@@ -430,8 +434,8 @@ def write_optimization_direction_plots(
             "net_alpha_cumulative": str(net_alpha_cumulative_csv),
         },
         "cumulative_acceptance": {
-            "figure_title": f"{title_prefix} 池内Top100隔夜收益累和",
-            "panels": ["累计总收益", "相对baseline"],
+            "figure_title": cumulative_title,
+            "panels": ["累计总收益", "vs base"],
             "background_series": "pool_L background overnight return",
             "reason": "short cumulative is omitted because this workflow cannot trade T+0",
             "normalizer": CUMULATIVE_DECISION_NORMALIZER,

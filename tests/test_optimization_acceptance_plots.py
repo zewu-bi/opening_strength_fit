@@ -7,7 +7,7 @@ from opening_strength_fit.optimization_acceptance_plots import (
     ensure_plot_colors,
     validate_plot_directions,
 )
-from opening_strength_fit.optimization_direction_data import DirectionSpec
+from opening_strength_fit.optimization_direction_data import DEFAULT_REALIZED_FEE_BPS, DirectionSpec
 from opening_strength_fit.pool_internal_plot_svg import PLOT_COLORS
 
 
@@ -19,6 +19,10 @@ def test_default_plot_directions_selects_current_fixed_models() -> None:
     selected = default_plot_directions()
 
     assert [item.key for item in selected] == ["hist_surprise", "path_shape"]
+
+
+def test_default_realized_fee_uses_all_in_a_share_round_trip_estimate() -> None:
+    assert DEFAULT_REALIZED_FEE_BPS == 8.0
 
 
 def test_validate_plot_directions_accepts_two_or_three_models() -> None:

@@ -329,7 +329,8 @@ short rank IC和next pool_L 超额: optimization_directions_overlay_acceptance.s
 第二张 cumulative 图只画 next：上 panel 是扣费 selected net return，并额外画一条
 `pool_L` background；下 panel 是 comparison models 相对 baseline 的累计差值。
 本仓库目前没有公司回测 API 封装；未来若接入公司回测 API，可替换 background 数据源。
-底层来自 daily pool-internal summary，图上保留日频累计点。
+默认扣费口径为 A 股 all-in round-trip 估计 `8 bps`；如需 stress 旧口径可传
+`--realized-fee-bps 5`。底层来自 daily pool-internal summary，图上保留日频累计点。
 
 选择新模型的例子：
 
