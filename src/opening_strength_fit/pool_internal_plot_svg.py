@@ -33,6 +33,7 @@ def write_two_panel_bar_svg(
     pool_count = len(pools)
     if pool_count <= 0:
         raise ValueError("at least one pool is required for plotting")
+    legend_labels = _legend_labels(plot_data, pools)
 
     width = 1600
     height = 900
@@ -71,7 +72,9 @@ def write_two_panel_bar_svg(
             f'<rect x="{x:.1f}" y="{legend_y - 12:.1f}" width="34" height="18" '
             f'fill="{PLOT_COLORS[pool]}"/>'
         )
-        lines.append(_svg_text(x + 46.0, legend_y + 3.0, pool, size=19, fill="#262626"))
+        lines.append(
+            _svg_text(x + 46.0, legend_y + 3.0, legend_labels[pool], size=19, fill="#262626")
+        )
 
     for panel_index, panel in enumerate(panels):
         top = panel_tops[panel_index]
@@ -84,6 +87,7 @@ def write_two_panel_bar_svg(
         tick_values = _ticks(ymin, ymax, tick_step)
         tick_decimals = panel["tick_decimals"]
         label_decimals = int(panel["label_decimals"])
+        value_labels = str(panel.get("value_labels", "all"))
 
         def ymap(
             value: float,
@@ -96,7 +100,8 @@ def write_two_panel_bar_svg(
 
         panel_title = str(panel.get("title", ""))
         if panel_title:
-            lines.append(_svg_text(left, top - 22.0, panel_title, size=28, weight=800))
+            title_size = int(panel.get("title_size", 28))
+            lines.append(_svg_text(left, top - 22.0, panel_title, size=title_size, weight=800))
         for tick in tick_values:
             y = ymap(tick)
             is_zero = abs(tick) < 1e-12
@@ -130,7 +135,8 @@ def write_two_panel_bar_svg(
             f'y2="{bottom:.1f}" stroke="#bdb7ad" stroke-width="1.2" stroke-dasharray="6 7"/>'
         )
 
-        zero_y = ymap(0.0)
+        baseline_value = min(max(0.0, ymin), ymax)
+        baseline_y = ymap(baseline_value)
         for category_index, category in enumerate(categories):
             center_x = centers[category_index]
             if panel_index == 1:
@@ -145,16 +151,26 @@ def write_two_panel_bar_svg(
                     )
                 )
             for pool_index, pool in enumerate(pools):
-                value = float(data_index.loc[(category, pool), column])
+                try:
+                    raw_value = data_index.loc[(category, pool), column]
+                except KeyError:
+                    continue
+                if pd.isna(raw_value):
+                    continue
+                value = float(raw_value)
+                if not math.isfinite(value):
+                    continue
                 x = center_x + offsets[pool_index] - bar_width / 2
                 value_y = ymap(value)
-                bar_y = min(value_y, zero_y)
-                bar_height = max(abs(zero_y - value_y), 1.2)
+                bar_y = min(value_y, baseline_y)
+                bar_height = max(abs(baseline_y - value_y), 1.2)
                 lines.append(
                     f'<rect x="{x:.1f}" y="{bar_y:.1f}" width="{bar_width:.1f}" '
                     f'height="{bar_height:.1f}" fill="{PLOT_COLORS[pool]}"/>'
                 )
-                label_y = bar_y - 7.0 if value >= 0 else bar_y + bar_height + 14.0
+                if not _should_label_bar(value_labels, category):
+                    continue
+                label_y = value_y - 7.0 if value >= baseline_value else value_y + 14.0
                 lines.append(
                     _svg_text(
                         x + bar_width / 2,
@@ -190,6 +206,7 @@ def write_two_panel_line_svg(
     data = data.dropna(subset=["week_start"]).sort_values(["pool", "week_start"])
     if data.empty:
         raise ValueError("weekly plot data is empty")
+    legend_labels = _legend_labels(data, pools)
 
     width = 1600
     height = 900
@@ -241,7 +258,9 @@ def write_two_panel_line_svg(
             f'<circle cx="{x + 17.0:.1f}" cy="{legend_y - 3:.1f}" r="4.5" '
             f'fill="{PLOT_COLORS[pool]}"/>'
         )
-        lines.append(_svg_text(x + 46.0, legend_y + 3.0, pool, size=19, fill="#262626"))
+        lines.append(
+            _svg_text(x + 46.0, legend_y + 3.0, legend_labels[pool], size=19, fill="#262626")
+        )
 
     for panel_index, panel in enumerate(panels):
         top = panel_tops[panel_index]
@@ -358,6 +377,24 @@ def nice_line_axis(
         target_ticks=target_ticks,
         pad_fraction=0.25,
     )
+
+
+def _legend_labels(plot_data: pd.DataFrame, pools: tuple[str, ...]) -> dict[str, str]:
+    if "pool_label" not in plot_data.columns:
+        return {pool: pool for pool in pools}
+    labels: dict[str, str] = {}
+    for pool in pools:
+        item = plot_data.loc[plot_data["pool"].astype(str).eq(pool), "pool_label"]
+        labels[pool] = str(item.iloc[0]) if not item.empty else pool
+    return labels
+
+
+def _should_label_bar(mode: str, category: str) -> bool:
+    if mode == "none":
+        return False
+    if mode == "mean_only":
+        return category == "Mean"
+    return True
 
 
 def _line_x_ticks(

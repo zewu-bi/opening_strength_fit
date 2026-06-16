@@ -7,9 +7,13 @@
 
 - 样本域：`09:31-09:40`；训练 full universe，S/M/L 只作 TopN selection mask。
 - 主线：single mixed label，`w_long=0.30`；展示 baseline 是 `soft_core_reg_light`。
+  当前验收是两个视角的 overlay：universe short Rank IC 检验开盘短期模型本身，
+  `pool_L` Top100 next internal excess 检验叠加 mentor 隔夜股池后的隔夜收益。
 - 已归档：2024 月度、2018H1..2025H2 半年/OOS、2022-2025 baseline、second sweep、xs-relative、
   model ensemble、fullxs batch 和 feature audit。
 - 当前增量候选：`hist_same_minute_surprise`；下一步按 2026-06-12 rescope 做 price-regime 和尺度归一化。
+- 固定研究流程：新的特征工程/模型优化 -> 集群重训 -> pool-internal analysis -> 同步轻量 artifacts ->
+  用 `optimization_overlay_acceptance_2022_2025` 两张图评估。
 - 封存路线：两模型 `final_score = alpha_rank - lambda * gap_risk_rank`，保留为历史证据，不再定义当前目标。
 
 关键分叉结果：
@@ -55,7 +59,8 @@
 | 2026-06-11 | model ensemble archive | `lgbm_delay2_36m_2022_2025_pool_l_model_ensemble_v1` 已同步归档并从集群清理；`pool_L` short / next 均低于 baseline。 |
 | 2026-06-11 | xs-relative archive and retired experiment cleanup | `xs_relative_v1` / `xs_relative_recent_weight_v1` 已同步到 `experiments/results`；一个未形成正式结果的路径统计实验已删除。 |
 | 2026-06-12 | fullxs and feature-audit archive | 4 个 fullxs 训练 + pool-internal analysis、feature audit、baseline prediction restore metrics 已同步归档；`hist_same_minute_surprise` 为当前最好 fullxs 候选。 |
-| 2026-06-12 | mentor re-scope | 继续 short signal 强化；下一阶段显式做 price-regime 干预和尺度归一化特征。 |
+| 2026-06-12 | mentor re-scope | 继续强化开盘短期模型；下一阶段显式做 price-regime 干预和尺度归一化特征。 |
+| 2026-06-12 | price-regime / scale-normalization jobs submitted | 三组 2022-2025 fullxs 实验已挂到集群：`price_bucket`、`scale_norm`、`price_scale_norm`。 |
 
 ## 2026-05-20 小窗结果
 
@@ -2078,8 +2083,9 @@ mentor 后续指示：
 
 - `2020`、`2021` 年做日频的人不多，下一轮信号增强重点看 `2022-2025`。
 - 研究对象仍是开盘强势股本身，继续通过特征工程和常规模型参数优化来加强信号。
-- 后续展示和验收主看 universe + `pool_L` 四格：universe short、`pool_L` short 和
-  `pool_L` next 预期同向增强；universe next 只作为 tail 诊断，不作为否决项。
+- 当时展示和验收主看 universe + `pool_L` 四格：universe short、`pool_L` short 和
+  `pool_L` next 预期同向增强；universe next 只作为 tail 诊断，不作为否决项。当前口径已收敛为
+  两视角 overlay：universe short Rank IC + `pool_L` Top100 next internal excess。
 - 上一轮 `2020-2025` rolling-window summary 只保留四股池 short halfyear、next halfyear 和 weekly 单周期视图三张核心图；这里的 weekly 不是 4w rolling 诊断。
 
 ### 2022-2025 baseline 归档
@@ -2098,10 +2104,10 @@ Rank IC 按季度聚合，累计超额使用日度路径且横轴只标年份。
 | universe | +16.75 | 0.149 | -8.48 | 0.004 |
 | pool_L | +8.63 | 0.138 | +7.97 | 0.002 |
 
-解读：universe short 强但 next 为负，`pool_L` short 和 next 同时为正。当前判断是：
+解读：universe short 强但 next 为负，`pool_L` short 和 next 同时为正。当时判断是：
 universe score 混有真实强弱和短效噪声 / 拥挤成分；`pool_L` 作为质量筛选后，同一 score
-更偏向可延续的真实强弱。后续 feature/model 增强期待 universe short、`pool_L` short 和
-`pool_L` next 同向改善；universe next 保留为 tail 诊断。
+更偏向可延续的真实强弱。当前验收进一步简化为：用 universe short Rank IC 直接看短期模型，
+用 `pool_L` Top100 next internal excess 看隔夜 overlay。
 
 归档文件：
 
@@ -2166,8 +2172,8 @@ experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_{reg_strong,baggi
 后续不再把它们作为主线完整性的要求。
 
 下一步已落到 2026-06-09 第二批实验：围绕 `2022-2025` 做更细粒度的
-feature engineering 和常规模型优化，优先直接做强开盘短 alpha。验收看 universe short、
-`pool_L` short 和 `pool_L` next 是否同向增强；universe next 只作 tail 诊断。
+feature engineering 和常规模型优化，优先直接做强开盘短 alpha。该段记录保留当时四格验收的
+历史口径；当前固定图已改为 universe short Rank IC + `pool_L` Top100 next internal excess。
 
 ### 2022-2025 pool_L 因子增强第二批实验投放
 
@@ -2180,9 +2186,9 @@ window: 36m train -> 6m test, stride 6m, 2022-01..2025-12
 training universe: full A-share universe
 analysis pools: universe + pool_L
 primary objective: train a stronger opening short alpha
-acceptance: universe short improves; pool_L short and pool_L next improve together
-diagnostic: universe next-close is a tail diagnostic, not a rejection metric
-baseline: pool_L short +8.626 bps, next +7.974 bps, short IC 0.1380, next IC 0.0017
+current acceptance: universe short Rank IC improves; pool_L Top100 next internal excess improves
+legacy diagnostic: universe next-close was only a tail diagnostic
+baseline reference: universe short IC 0.1489; pool_L next Top100 excess +7.974 bps
 ```
 
 目标校正：训练一个更强的开盘短 alpha；用 `pool_L` 检验质量筛选后 short / next 是否同向增强。
@@ -2423,25 +2429,29 @@ experiments/results/backtests/model_ensemble_vs_baseline_group_delta/
 
 另一个未形成正式结果的路径统计实验，已按用户要求删除其 run config、K8s manifests、特征入口和测试。
 
-### 2026-06-12 optimization direction acceptance figures
+### 2026-06-12 optimization overlay acceptance figures
 
-验收看这三张图：
+验收看这两张图：
 
 ```text
-experiments/results/backtests/optimization_direction_comparison_2022_2025/optimization_directions_net_alpha_cumulative.svg
-experiments/results/backtests/optimization_direction_comparison_2022_2025/optimization_directions_yearly_net_alpha.svg
-experiments/results/backtests/optimization_direction_comparison_2022_2025/optimization_directions_short_next_excess.svg
+experiments/results/backtests/optimization_overlay_acceptance_2022_2025/optimization_directions_overlay_acceptance.svg
+experiments/results/backtests/optimization_overlay_acceptance_2022_2025/optimization_directions_net_alpha_cumulative.svg
 ```
 
-口径：累和图只保留 `next`/隔夜。上 panel 是 selected net return：
-`pool_L_mean + internal_excess - fee`；下 panel 按 backtest API 的 `profit - benchmark`
-语义改成真 alpha，本地 benchmark 是同一天 `pool_L` 背景收益，因此
-`alpha = selected_next_mean - fee - pool_L_mean = internal_excess - fee`。`fee = 5 bps`，
-daily plot data 仍按 `cumulative_decision_normalizer = 1000` 缩放。逐年柱状图同样使用
-`next_net_return_bps` / `next_alpha_bps`；short/next 图只保留 Top100 internal excess，不再画 IC。
+图名和口径：
+
+| figure title | data panels | purpose |
+| --- | --- | --- |
+| short rank IC和next pool_L 超额 | `universe short Rank IC`; `pool_L Top100 next internal excess` | 主验收：短期模型本身是否更强，以及叠加到 mentor 股池后隔夜是否同步变好。 |
+| 池内Top100隔夜收益累和 | selected next net return + background; relative to baseline | 只看隔夜，保留日频累计点。 |
+
+不再作为主验收项：`pool_L` short IC、short excess、universe next excess 和 next IC。
+两张图只展示 baseline、hist_surprise 和 path_shape；第二张上 panel 额外展示 `pool_L`
+background。第二张图当前没有接入公司回测 API；仓库内未找到可调用封装。`fee = 5 bps`，
+daily plot data 仍按 `cumulative_decision_normalizer = 1000` 缩放，图上保留日频累计点。
 
 阶段状态：baseline 后四方向特征/模型 sweep 收尾；mentor rescope 后，下一步不急于组合定稿，
-而是继续做强 short signal，优先 price-regime 干预和尺度归一化特征。
+而是继续做强开盘短期模型，优先 price-regime 干预和尺度归一化特征。
 
 ### 2026-06-12 Mentor Re-scope: price ecology and scale normalization
 
@@ -2449,7 +2459,7 @@ mentor comment 判断：正确，已采纳为下一阶段研究边界。
 
 具体理由：
 
-1. 继续做强短期信号直到收敛，与当前主线一致。首轮、第二批、xs-relative、model ensemble 和 fullxs
+1. 继续做强开盘短期模型直到收敛，与当前主线一致。首轮、第二批、xs-relative、model ensemble 和 fullxs
    批次说明常规特征族加减的增量已经变小，但 `hist_same_minute_surprise` 仍有同向改善，因此还没有到
    停止 signal discovery 的位置。
 2. 贵/便宜股票需要主动干预。A 股最小价格变动为 `0.01`，对 2 元股票是约 50 bps，对 1000 元股票是
@@ -2462,14 +2472,29 @@ mentor comment 判断：正确，已采纳为下一阶段研究边界。
 
 下一步实验约束：
 
-- `primary objective` 不变：训练更强的 opening short alpha；验收仍看 universe short、`pool_L` short、
-  `pool_L` next 是否同向增强，universe next 只作 tail 诊断。
+- `primary objective` 不变：训练更强的 opening short alpha。验收用 universe short Rank IC
+  看短期模型本身，用 `pool_L` Top100 next internal excess 看 overnight overlay 效果。
 - 新增 price-regime 诊断和干预：按 decision price / reference price 切 cheap / mid / expensive
   bucket，分别看 feature importance、Top100 excess 和 short/next tradeoff；必要时加入 price bucket
   特征、price-bucket interaction 或 clock/price segmented model。
 - 新增尺度归一化主线：优先扩展 hist-surprise、cross-sectional relative、tick-normalized depth gap、
   bps-normalized spread/path、notional/price-scaled queue 和 per-symbol historical ratio，而不是继续堆
   raw absolute orderbook state。
+
+### 2026-06-12 price-regime / scale-normalization experiments submitted
+
+三组实验已用新镜像提交到 research 集群：
+
+```text
+image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260612-price-scale-v1
+digest: sha256:410746153cb4ac05f13e5f45e224ec5e83f3b4fc23ffad469be3280b3b31073f
+```
+
+| run | training job | analysis job | purpose |
+| --- | --- | --- | --- |
+| `lgbm_delay2_36m_2022_2025_fullxs_price_bucket_v1` | `os-lgbm-36m-2225-price-bucket` | `os-analyze-36m-2225-price-bucket` | price bucket + bucket interaction。 |
+| `lgbm_delay2_36m_2022_2025_fullxs_scale_norm_v1` | `os-lgbm-36m-2225-scale-norm` | `os-analyze-36m-2225-scale-norm` | tick/bps/notional scale features + expanded hist-surprise。 |
+| `lgbm_delay2_36m_2022_2025_fullxs_price_scale_norm_v1` | `os-lgbm-36m-2225-price-scale` | `os-analyze-36m-2225-price-scale` | price bucket、scale features、hist-surprise 和 compact xs-relative 组合主实验。 |
 
 ### 归档和保留口径
 

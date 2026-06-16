@@ -7,8 +7,9 @@
 
 ## 当前判断
 
-目标：继续强化 `09:31-09:40` 开盘短线信号。新增特征无法稳定提升 universe short、
-`pool_L` short 和 `pool_L` next 后，再进入组合定稿。
+目标：继续强化 `09:31-09:40` 开盘短期模型。我们的职责是做好开盘强势股短期模型；
+mentor 提供的隔夜模型以 `pool_L` 股池形式进入验收。两者做 overlay：先用隔夜视角给出
+`pool_L`，再在池内用短期模型选 Top100，最终看隔夜池内收益是否增强。
 
 当前主线是单模型 mixed label：
 
@@ -18,22 +19,39 @@ long_label  = xs_norm(同一买入价持有到第二天收盘的收益 | date, d
 train_label = short_label + 0.30 * long_label
 ```
 
-核心假设：full-universe opening score 同时包含真实强弱 / 开盘承接 / 资金方向，以及很短的
-microstructure fill、反弹、拥挤和临时成交优势。`pool_L` 做了质量筛选后，score 更偏向前者。
+核心假设：短期模型在 full universe 上学到开盘强弱、承接、资金方向和微观结构优势；
+隔夜模型给出的 `pool_L` 包含另一套中低频质量/隔夜收益视角。如果短期模型的排序能力真实存在，
+它在 `pool_L` 内仍应有正向排序力，并通过 Top100 overlay 强化原本隔夜股池。
 
-下一步方向是 price-regime / price-bucket 诊断与交互，以及 hist-surprise、xs-relative 一类
-尺度归一化特征。具体实验记录、复盘理由和运行细节见 [experiment_log.md](experiment_log.md)。
+下一步方向是继续做强开盘短期模型至收敛，并显式做 price-regime / price-bucket 诊断与交互。
+这里的 price-regime 是盘口生态干预：便宜股和贵股的一档集中度、tick/bps 尺度、queue 和成交冲击
+不能默认共享同一套特征生效模式。hist-surprise、xs-relative 一类结果说明，下一阶段应优先做
+相对 tick、bps、ratio、zscore、rank 和 per-symbol history 的尺度归一化特征。具体实验记录、
+复盘理由和运行细节见 [experiment_log.md](experiment_log.md)。
+
+固定研究流程：尝试新的特征工程或模型优化，在集群上按固定 rolling 口径重新训练，同步
+pool-internal artifacts，然后用固定两张验收图评估，避免临时口径漂移。
 
 验收口径：
 
 | metric | expectation |
 | --- | --- |
-| universe short | 提升 |
-| `pool_L` short | 提升 |
-| `pool_L` next | 跟随提升 |
-| universe next | 记录 tail 方向 |
+| universe short Rank IC | 提升；直接检验短期模型本身的排序能力。 |
+| `pool_L` Top100 next internal excess | 提升；检验短期模型叠加到 mentor 股池后的 overnight overlay 效果。 |
+| cumulative next net / baseline-relative return | 保持可解释、稳定；上 panel 同时显示 `pool_L` background。 |
+固定两张图：
 
-训练和打分仍在 full universe 上完成。`pool_L` 只用于应用和验收切片。
+```text
+2022-2025 short rank IC和next pool_L 超额
+2022-2025 池内Top100隔夜收益累和
+```
+
+当前图上只展示 baseline、hist_surprise 和 path_shape。累计图上半 panel 额外显示
+`pool_L` background；下半 panel 只显示 hist_surprise / path_shape 相对 baseline。
+
+不再把 `pool_L` short Rank IC、short Top100 excess、universe next excess 或 next Rank IC
+作为主验收项：short 端在 A 股 T+1 下不能直接交易，短期收益能力由 universe short Rank IC
+概括；next 端模型本身不负责预测隔夜排序，只看 `pool_L` 内 overlay 后的 Top100 next excess。
 
 ## 当前证据
 
@@ -44,10 +62,10 @@ microstructure fill、反弹、拥挤和临时成交优势。`pool_L` 做了质�
 | 2020-2025 rolling summary | S/M/L 池内 short 和 next 均为正；`pool_L` short `+11.1 bps`，next `+13.3 bps`。 |
 | 2022-2025 baseline | universe short `+16.8 bps`、next `-8.5 bps`；`pool_L` short `+8.6 bps`、next `+8.0 bps`。 |
 | first pilot sweep | `reg_strong`、`bagging`、`no_preopen_reg_mid` 均未超过 baseline。 |
-| second batch, 9 runs | 最好只是 `price_path_plus` 的 `pool_L` short `+0.017 bps` 增量；没有实质提升。 |
-| cross-sectional relative features | `xs_relative_v1` / `xs_relative_recent_weight_v1` 已归档；前者 short 小幅提升但 next 变弱，后者含样本权重。 |
-| model ensemble | `model_ensemble_v1` 已归档；`pool_L` short `+7.635 bps`、next `+6.018 bps`，均低于 baseline。 |
-| fullxs feature batch | `hist_same_minute_surprise` 最好：`pool_L` short `+9.127 bps`（delta `+0.501`），next `+8.332 bps`（delta `+0.358`）；`path_shape_confirm` next delta `+0.665` 但 short 只 `+0.044`；`rank_label_regression` IC 高但 Top100 明显变弱。 |
+| second batch, 9 runs | 历史四格口径下几乎无增量，说明宽泛特征族加减和轻量调参边际收益很低。 |
+| cross-sectional relative features | `xs_relative_v1` 提升 universe short Rank IC，但 `pool_L` next overlay 变弱；带 recent weight 的交互组不作为纯特征结论。 |
+| model ensemble | `model_ensemble_v1` 的 overlay next 和 short 侧表现均弱于 baseline，本轮不通过。 |
+| fullxs feature batch | `hist_same_minute_surprise` 是当前最好候选：universe short Rank IC 提升，`pool_L` next Top100 excess 同向改善；`path_shape_confirm` 主要改善 overlay next；`rank_label_regression` 说明 IC 高但 Top100 失败的路线不能直接接受。 |
 | feature audit | `pool_L` grouped audit 已归档；ablation 中 postopen_v1/v2 对 Top100 最敏感，permutation 中 orderbook_depth 对 Rank IC 最敏感。 |
 
 完整实验顺序、run id、K8s 状态、归档路径和逐项数字见 [experiment_log.md](experiment_log.md)。
@@ -63,10 +81,10 @@ microstructure fill、反弹、拥挤和临时成交优势。`pool_L` 做了质�
 | label | mixed label, `w_long=0.30` |
 | training universe | A 股 `00/30.SZ` 和 `60/68.SH` full universe |
 | current baseline | archived `soft_core_reg_light` |
-| main display | universe + `pool_L` |
-| main metrics | Rank IC；池内 Top100 excess |
-| acceptance figures | current optimization-direction comparison SVGs；exact paths in [experiment_log.md](experiment_log.md) |
-| current research focus | 继续做强 short signal；下一步优先 price-regime 干预和尺度归一化特征 |
+| main display | 短期模型 universe 排序 + `pool_L` overnight overlay |
+| main metrics | universe short Rank IC；`pool_L` Top100 next internal excess |
+| acceptance figures | `experiments/results/backtests/optimization_overlay_acceptance_2022_2025/` |
+| current research focus | 继续做强开盘短期模型；优先 price-regime 干预和尺度归一化特征，并用 `pool_L` overnight overlay 验收 |
 
 短线 label：
 
@@ -94,7 +112,8 @@ label      = sell_vwap / buy_price - 1 - fee_bps / 10000
 | `Rank IC` | 同一 `date x decision_time` 横截面内的排序能力。 |
 | `Top100 excess` | 池内 Top100 均值减同一 selection mask 内全体候选均值。 |
 | `selection mask` | universe / `pool_S` / `pool_M` / `pool_L` 的切片维度。 |
-| `next close` | 隔夜延续性检查；当前主看 `pool_L` next。 |
+| `overlay` | mentor 隔夜模型给出 `pool_L`，开盘短期模型在池内选 Top100。 |
+| `next close` | overlay 的隔夜验收收益；当前主看 `pool_L` Top100 next internal excess。 |
 
 ## 里程碑
 
@@ -106,7 +125,7 @@ label      = sell_vwap / buy_price - 1 - fee_bps / 10000
 | 2020-2025 mainline | S/M/L 池内 short 和 next 均为正。 |
 | 2022-2025 baseline | universe + `pool_L` 集群侧分析已归档，后续信号增强聚焦这一窗口。 |
 | 2022-2025 sweeps | 首轮和第二批常规增强尚未形成实质增量。 |
-| current signal-enhancement phase | 常规特征/模型 sweep 增量变小；下一步验证价格生态分层和尺度归一化特征。 |
+| current signal-enhancement phase | 常规特征/模型 sweep 增量变小；下一步验证价格生态分层和尺度归一化特征，并用固定三图验收。 |
 
 ## 入口
 

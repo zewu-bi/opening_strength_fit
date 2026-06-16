@@ -369,6 +369,33 @@ def _historical_surprise_source_columns(config: dict, available: set[str]) -> li
     return source
 
 
+def _price_scale_source_columns(config: dict) -> list[str]:
+    if not config_bool(config, "features", "include_price_scale_features", False):
+        return []
+    source = [
+        config_str(config, "features", "price_scale_price_col", "ask_price_1"),
+        "ask_price_1",
+        "bid_price_1",
+        "spread_abs",
+        "ask_volume_1",
+        "bid_volume_1",
+        "ask_depth_3",
+        "bid_depth_3",
+        "ask_depth_10",
+        "bid_depth_10",
+        "postopen_v2_ask_depth_3",
+        "postopen_v2_bid_depth_3",
+        "postopen_v2_ask_depth_10",
+        "postopen_v2_bid_depth_10",
+        "volume_diff_1t",
+        "volume_diff_3t",
+    ]
+    source.extend(f"ask_price_{level}" for level in range(2, 11))
+    source.extend(f"bid_price_{level}" for level in range(2, 11))
+    source.extend(config_list(config, "features", "price_scale_interaction_columns", []))
+    return source
+
+
 def _target_transform_source_columns(config: dict) -> list[str]:
     if not config_bool(config, "target_transform", "enabled", False):
         return []
@@ -441,6 +468,7 @@ def _labeled_pvc_read_columns(path: Path, config: dict) -> list[str] | None:
     selected.extend(feature_filters["include_columns"])
     selected.extend(_postopen_decision_source_columns(config))
     selected.extend(_postopen_v2_source_columns(config, available))
+    selected.extend(_price_scale_source_columns(config))
     selected.extend(_cross_sectional_relative_source_columns(config, available))
     selected.extend(_historical_surprise_source_columns(config, available))
     selected.extend(

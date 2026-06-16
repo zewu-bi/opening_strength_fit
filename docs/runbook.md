@@ -286,7 +286,8 @@ osf-summarize-opening-results \
 osf-compare-opening-results
 ```
 
-2022-2025 主展示使用 universe + `pool_L`，`plot_period = "quarter"`。核心输出：
+2022-2025 单个 run 的 pool-internal 分析仍使用 universe + `pool_L`，`plot_period = "quarter"`。
+这些文件用于 drilldown 和验收图的数据源：
 
 ```text
 pool_internal_summary.csv
@@ -301,16 +302,32 @@ pool_internal_trace.json
 reports/cumulative/<plot-prefix>_universe_pool_l_daily_cumulative.svg
 ```
 
-Optimization-direction 验收图由 `osf-plot-optimization-direction-comparison` 生成：
+固定研究流程：尝试新的特征工程或模型优化，render K8s Job，在集群上重新训练和
+pool-internal analysis，同步轻量 artifacts 后，用 `osf-plot-optimization-direction-comparison`
+生成两张验收图。
+
+默认输出目录：
 
 ```text
-optimization_directions_net_alpha_cumulative.svg
-optimization_directions_yearly_net_alpha.svg
-optimization_directions_short_next_excess.svg
+experiments/results/backtests/optimization_overlay_acceptance_2022_2025/
 ```
 
-其中 cumulative 图只画 next：上 panel 是扣费 selected net return，下 panel 是 API-style
-`profit - benchmark` alpha；本地 benchmark 使用 `pool_L` 背景收益，而不是 baseline 模型。
+验收图：
+
+```text
+short rank IC和next pool_L 超额: optimization_directions_overlay_acceptance.svg
+池内Top100隔夜收益累和: optimization_directions_net_alpha_cumulative.svg
+```
+
+第一张图是主验收：上 panel 用 `universe short Rank IC` 检查开盘短期模型本身；下 panel 用
+`pool_L Top100 next internal excess` 检查叠加 mentor 股池后的 overnight overlay 效果。
+图上只画 baseline、hist_surprise 和 path_shape，并在柱顶标数值。
+不再主看 short excess、`pool_L` short IC、universe next excess 或 next IC。
+
+第二张 cumulative 图只画 next：上 panel 是扣费 selected net return，并额外画一条
+`pool_L` background；下 panel 是 hist_surprise / path_shape 相对 baseline 的累计差值。
+本仓库目前没有公司回测 API 封装；未来若接入公司回测 API，可替换 background 数据源。
+底层来自 daily pool-internal summary，图上保留日频累计点。
 
 周度 4w rolling 稳定性补充：
 

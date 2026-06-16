@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pandas as pd
 
-from opening_strength_fit.pool_internal_plot_svg import write_two_panel_line_svg
+from opening_strength_fit.pool_internal_plot_svg import (
+    PLOT_COLORS,
+    write_two_panel_bar_svg,
+    write_two_panel_line_svg,
+)
 from opening_strength_fit.pool_internal_plots import (
     month_major_plot_data,
     write_universe_sml_pool_internal_plots,
@@ -115,6 +120,55 @@ def test_write_universe_only_pool_internal_plots(tmp_path) -> None:
     )
     trace = json.loads(trace_path.read_text(encoding="utf-8"))
     assert trace["series"] == ["universe"]
+
+
+def test_bar_plot_clamps_baseline_to_panel_axis(tmp_path) -> None:
+    plot_data = pd.DataFrame(
+        {
+            "test_month": ["2024Q1", "Mean"],
+            "pool": ["universe", "universe"],
+            "rank_ic": [0.15, 0.16],
+        }
+    )
+    output_path = tmp_path / "truncated_axis.svg"
+
+    write_two_panel_bar_svg(
+        plot_data,
+        title="truncated axis",
+        panels=[
+            {
+                "title": "Rank IC",
+                "ylabel": "Rank IC",
+                "column": "rank_ic",
+                "default_ylim": (0.10, 0.20),
+                "tick_step": 0.05,
+                "tick_decimals": 2,
+                "label_decimals": 3,
+                "fixed_ylim": True,
+                "include_zero": False,
+                "value_labels": "none",
+            }
+        ],
+        output_path=output_path,
+        pools=("universe",),
+    )
+
+    svg = output_path.read_text(encoding="utf-8")
+    bar_rects = [
+        match
+        for match in re.finditer(
+            rf'<rect x="(?P<x>[0-9.]+)" y="(?P<y>[0-9.]+)" width="(?P<w>[0-9.]+)" '
+            rf'height="(?P<h>[0-9.]+)" fill="{re.escape(PLOT_COLORS["universe"])}"/>',
+            svg,
+        )
+        if float(match.group("y")) > 100
+    ]
+    assert bar_rects
+    for match in bar_rects:
+        y = float(match.group("y"))
+        height = float(match.group("h"))
+        assert 145.0 <= y <= 455.0
+        assert 145.0 <= y + height <= 455.0
 
 
 def test_write_weekly_pool_internal_rolling_plot(tmp_path) -> None:

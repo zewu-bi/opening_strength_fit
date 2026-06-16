@@ -354,6 +354,54 @@ class LabeledPvcSourceTest(unittest.TestCase):
         self.assertEqual(labeled["xs_rel_raw_depth_state_demean"].tolist(), [-10.0, 10.0])
         self.assertNotIn("unused_heavy_feature", labeled.columns)
 
+    def test_labeled_pvc_projection_keeps_price_scale_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "labeled.parquet"
+            pd.DataFrame(
+                [
+                    {
+                        "date": "2022-01-04",
+                        "symbol": "000001.SZ",
+                        "timestamp": pd.Timestamp("2022-01-04 09:31:00"),
+                        "decision_time": "09:31:00",
+                        "decision_target_timestamp": pd.Timestamp("2022-01-04 09:31:00"),
+                        "decision_lag_seconds": 0.0,
+                        "label": 0.01,
+                        "target_label": 0.2,
+                        "valid_label": True,
+                        "ask_price_1": 2.00,
+                        "bid_price_1": 1.99,
+                        "ask_price_2": 2.01,
+                        "bid_price_2": 1.98,
+                        "spread_bps": 50.0,
+                        "unused_heavy_feature": 999.0,
+                    }
+                ]
+            ).to_parquet(path, index=False)
+
+            args = argparse.Namespace(labeled_input=None)
+            config = {
+                "data": {"source": "labeled_pvc", "labeled_path": str(path)},
+                "universe": {"enabled": False},
+                "sample": {
+                    "mode": "decision_points",
+                    "decision_times": ["09:31:00"],
+                    "decision_max_lag_seconds": 5,
+                },
+                "features": {
+                    "include_price_scale_features": True,
+                    "include_feature_prefixes": ["price_scale_"],
+                },
+                "model": {"target_col": "target_label"},
+            }
+
+            labeled = load_labeled_pvc_frame(args, config)
+
+        self.assertIn("price_scale_tick_bps", labeled.columns)
+        self.assertIn("price_scale_ask_gap_2_ticks", labeled.columns)
+        self.assertAlmostEqual(labeled.iloc[0]["price_scale_tick_bps"], 50.0)
+        self.assertNotIn("unused_heavy_feature", labeled.columns)
+
     def test_labeled_pvc_directory_projects_each_file_before_concat(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "cache"

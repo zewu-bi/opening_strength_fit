@@ -27,6 +27,7 @@ from opening_strength_fit.features import (
     add_path_shape_confirmation_features,
     add_postopen_decision_features,
     add_postopen_v2_decision_features,
+    add_price_scale_features,
 )
 from opening_strength_fit.sampling import DEFAULT_DECISION_TIMES, parse_clock_times
 from opening_strength_fit.schema import (
@@ -170,6 +171,22 @@ def _apply_feature_transforms_from_config(
                 "path_shape_prefix",
                 "path_shape_",
             ),
+        )
+    if config_bool(config, "features", "include_price_scale_features", False):
+        labeled = add_price_scale_features(
+            labeled,
+            price_col=config_str(config, "features", "price_scale_price_col", "ask_price_1"),
+            tick_size=config_float(config, "features", "price_scale_tick_size", 0.01),
+            bucket_edges=config_int_tuple(
+                config,
+                "features",
+                "price_scale_bucket_edges",
+                (5, 20),
+            ),
+            interaction_columns=tuple(
+                config_list(config, "features", "price_scale_interaction_columns", [])
+            ),
+            prefix=config_str(config, "features", "price_scale_prefix", "price_scale_"),
         )
     if include_cross_sectional_relative and config_bool(
         config,
