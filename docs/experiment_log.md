@@ -13,7 +13,8 @@
   model ensemble、fullxs batch 和 feature audit。
 - 当前增量候选：`hist_same_minute_surprise`；下一步按 2026-06-12 rescope 做 price-regime 和尺度归一化。
 - 固定研究流程：新的特征工程/模型优化 -> 集群重训 -> pool-internal analysis -> 同步轻量 artifacts ->
-  用 `optimization_overlay_acceptance_2022_2025` 两张图评估。
+  用 `optimization_overlay_acceptance_2022_2025` 两张图评估；默认画 hist_surprise / path_shape，
+  后续可替换为任意 2-3 个新的 comparison models。
 - 封存路线：两模型 `final_score = alpha_rank - lambda * gap_risk_rank`，保留为历史证据，不再定义当前目标。
 
 关键分叉结果：
@@ -2446,9 +2447,10 @@ experiments/results/backtests/optimization_overlay_acceptance_2022_2025/optimiza
 | 池内Top100隔夜收益累和 | selected next net return + background; relative to baseline | 只看隔夜，保留日频累计点。 |
 
 不再作为主验收项：`pool_L` short IC、short excess、universe next excess 和 next IC。
-两张图只展示 baseline、hist_surprise 和 path_shape；第二张上 panel 额外展示 `pool_L`
-background。第二张图当前没有接入公司回测 API；仓库内未找到可调用封装。`fee = 5 bps`，
-daily plot data 仍按 `cumulative_decision_normalizer = 1000` 缩放，图上保留日频累计点。
+默认两张图展示 baseline、hist_surprise 和 path_shape；后续可替换为任意 2-3 个
+comparison models。第二张上 panel 额外展示 `pool_L` background。第二张图当前没有接入
+公司回测 API；仓库内未找到可调用封装。`fee = 5 bps`，daily plot data 仍按
+`cumulative_decision_normalizer = 1000` 缩放，图上保留日频累计点。
 
 阶段状态：baseline 后四方向特征/模型 sweep 收尾；mentor rescope 后，下一步不急于组合定稿，
 而是继续做强开盘短期模型，优先 price-regime 干预和尺度归一化特征。

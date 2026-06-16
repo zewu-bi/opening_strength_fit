@@ -68,6 +68,7 @@ Library:
 - `src/opening_strength_fit/evaluation.py`: score buckets and top-score summaries.
 - `src/opening_strength_fit/reports.py`: compact dataset summaries, metrics reporting, and yearly aggregation.
 - `src/opening_strength_fit/pool_internal_plots.py` / `pool_internal_plot_svg.py`: pool-internal plot specs and SVG rendering.
+- `src/opening_strength_fit/optimization_acceptance_plots.py`: shared data preparation and rendering for the fixed two-figure overlay acceptance workflow.
 - `src/opening_strength_fit/rolling.py`: chronological, annual, and monthly split helpers.
 - `src/opening_strength_fit/rules.py`: non-ML baseline scores.
 - `src/opening_strength_fit/alpha_conditioning.py`: alpha-conditioned risk target, section-scoped LightGBM fit, scoring, and group-rank helpers.
@@ -78,7 +79,7 @@ CLI:
 - `osf-train` / `osf-run-experiment`: train/evaluate a configured experiment.
 - `osf-evaluate-predictions`: evaluate an existing prediction file.
 - `osf-analyze-pool-internal-top100`: join predictions with next-close labels and selection masks to produce Top100 pool-internal validation panels.
-- `osf-plot-optimization-direction-comparison`: render the fixed overlay acceptance figures: universe short Rank IC, `pool_L` Top100 next internal excess, and next net/background with baseline-relative cumulative return.
+- `osf-plot-optimization-direction-comparison`: render the fixed overlay acceptance figures for baseline plus 2-3 selected comparison models: universe short Rank IC, `pool_L` Top100 next internal excess, and next net/background with baseline-relative cumulative return.
 - `osf-plot-weekly-pool-internal`: render optional trading-day-equal weekly / 4w rolling pool-internal stability diagnostics from `pool_internal_group_metrics.csv`.
 - `osf-plot-weekly-pool-internal-cumulative`: render cumulative short/next pool-internal excess from pre-aggregated daily or weekly summary rows.
 - `osf-summarize-opening-results`: summarize metrics CSVs.

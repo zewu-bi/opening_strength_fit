@@ -46,8 +46,9 @@ pool-internal artifacts，然后用固定两张验收图评估，避免临时口
 2022-2025 池内Top100隔夜收益累和
 ```
 
-当前图上只展示 baseline、hist_surprise 和 path_shape。累计图上半 panel 额外显示
-`pool_L` background；下半 panel 只显示 hist_surprise / path_shape 相对 baseline。
+默认图上展示 baseline、hist_surprise 和 path_shape；也可以在保留 baseline 的前提下选择
+2-3 个新的 comparison models 一起画。累计图上半 panel 额外显示 `pool_L` background；
+下半 panel 只显示 comparison models 相对 baseline。
 
 不再把 `pool_L` short Rank IC、short Top100 excess、universe next excess 或 next Rank IC
 作为主验收项：short 端在 A 股 T+1 下不能直接交易，短期收益能力由 universe short Rank IC
@@ -125,7 +126,7 @@ label      = sell_vwap / buy_price - 1 - fee_bps / 10000
 | 2020-2025 mainline | S/M/L 池内 short 和 next 均为正。 |
 | 2022-2025 baseline | universe + `pool_L` 集群侧分析已归档，后续信号增强聚焦这一窗口。 |
 | 2022-2025 sweeps | 首轮和第二批常规增强尚未形成实质增量。 |
-| current signal-enhancement phase | 常规特征/模型 sweep 增量变小；下一步验证价格生态分层和尺度归一化特征，并用固定三图验收。 |
+| current signal-enhancement phase | 常规特征/模型 sweep 增量变小；下一步验证价格生态分层和尺度归一化特征，并用固定两张图验收。 |
 
 ## 入口
 
