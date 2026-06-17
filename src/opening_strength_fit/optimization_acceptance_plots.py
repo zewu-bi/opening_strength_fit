@@ -9,7 +9,10 @@ from opening_strength_fit.analysis import write_json
 from opening_strength_fit.optimization_direction_data import (
     CUMULATIVE_DECISION_NORMALIZER,
     DEFAULT_DIRECTIONS,
+    DEFAULT_POOL_FEE_MODE,
     DEFAULT_REALIZED_FEE_BPS,
+    NEXT_CLOSE_CAPITAL_DIVISOR,
+    RETURN_BPS_DENOMINATOR,
     DirectionSpec,
     line_axis,
     line_step,
@@ -113,17 +116,36 @@ def combine_net_alpha_cumulative_data(
     combined = realized_cumulative_output[
         key_columns
         + [
+            "candidate_rows",
+            "selected_rows",
             "pool_next_mean_bps",
+            "pool_turnover",
+            "pool_turnover_source",
+            "pool_fee_bps",
+            "pool_next_net_return_bps",
+            "pool_next_capital_net_return_bps",
+            "pool_next_cumulative_net_return_bps",
             "selected_next_mean_bps",
+            "selected_turnover",
+            "selected_fee_bps",
             "next_internal_excess_bps",
+            "next_capital_internal_excess_bps",
+            "next_cumulative_internal_excess_return_bps",
             "fee_bps",
             "next_net_return_bps",
+            "next_capital_net_return_bps",
             "next_cumulative_net_return_bps",
         ]
     ].copy()
-    combined["next_alpha_bps"] = combined["next_net_return_bps"] - combined["pool_next_mean_bps"]
+    combined["next_alpha_bps"] = (
+        combined["next_net_return_bps"] - combined["pool_next_net_return_bps"]
+    )
     combined["next_cumulative_alpha_bps"] = (
-        combined.groupby("pool", sort=False)["next_alpha_bps"].cumsum()
+        combined["next_cumulative_net_return_bps"]
+        - combined["pool_next_cumulative_net_return_bps"]
+    )
+    combined["next_capital_alpha_bps"] = (
+        combined["next_capital_net_return_bps"] - combined["pool_next_capital_net_return_bps"]
     )
     return combined
 
@@ -144,16 +166,26 @@ def add_background_cumulative_data(
     background["pool_label"] = background_label
     background["variant"] = background_label
     background["selected_next_mean_bps"] = pd.NA
+    background["selected_turnover"] = pd.NA
+    background["selected_fee_bps"] = pd.NA
     background["next_internal_excess_bps"] = pd.NA
-    background["fee_bps"] = 0.0
-    background["next_net_return_bps"] = background["pool_next_mean_bps"]
-    background["next_cumulative_net_return_bps"] = background["next_net_return_bps"].cumsum()
+    background["fee_bps"] = background["pool_fee_bps"]
+    background["next_net_return_bps"] = background["pool_next_net_return_bps"]
+    background["next_cumulative_net_return_bps"] = (
+        background["pool_next_cumulative_net_return_bps"]
+    )
     background["next_alpha_bps"] = pd.NA
     background["next_cumulative_alpha_bps"] = pd.NA
+    background["next_capital_internal_excess_bps"] = 0.0
+    background["next_cumulative_internal_excess_return_bps"] = 0.0
+    background["next_internal_excess_vs_baseline_bps"] = pd.NA
+    background["next_cumulative_internal_excess_vs_baseline_bps"] = pd.NA
     background["next_cumulative_vs_baseline_bps"] = pd.NA
     out = cumulative_data.copy()
     if "next_cumulative_vs_baseline_bps" not in out.columns:
         out["next_cumulative_vs_baseline_bps"] = pd.NA
+    if "next_cumulative_internal_excess_vs_baseline_bps" not in out.columns:
+        out["next_cumulative_internal_excess_vs_baseline_bps"] = pd.NA
     return pd.concat([out, background], ignore_index=True)
 
 
@@ -168,11 +200,26 @@ def add_cumulative_baseline_relative_data(
     data = data.dropna(subset=["week_start"])
     baseline = data.loc[data["pool"].astype(str).eq(baseline_key), [
         "week_start",
+        "next_net_return_bps",
         "next_cumulative_net_return_bps",
-    ]].rename(columns={"next_cumulative_net_return_bps": "baseline_cumulative_net_bps"})
+        "next_capital_internal_excess_bps",
+        "next_cumulative_internal_excess_return_bps",
+    ]].rename(
+        columns={
+            "next_net_return_bps": "baseline_next_net_bps",
+            "next_cumulative_net_return_bps": "baseline_next_cumulative_net_bps",
+            "next_capital_internal_excess_bps": "baseline_next_capital_internal_excess_bps",
+            "next_cumulative_internal_excess_return_bps": (
+                "baseline_next_cumulative_internal_excess_return_bps"
+            ),
+        }
+    )
     if baseline.empty:
         raise ValueError(f"cumulative data has no baseline rows for {baseline_key!r}")
+    data["next_vs_baseline_bps"] = pd.NA
     data["next_cumulative_vs_baseline_bps"] = pd.NA
+    data["next_internal_excess_vs_baseline_bps"] = pd.NA
+    data["next_cumulative_internal_excess_vs_baseline_bps"] = pd.NA
     for key in comparison_keys:
         item = data.loc[data["pool"].astype(str).eq(key), ["week_start"]].merge(
             baseline,
@@ -182,9 +229,38 @@ def add_cumulative_baseline_relative_data(
         index = data.index[data["pool"].astype(str).eq(key)]
         if len(index) != len(item):
             raise ValueError(f"cannot align cumulative baseline rows for {key!r}")
+        daily_relative_bps = (
+            pd.to_numeric(data.loc[index, "next_net_return_bps"], errors="coerce").to_numpy()
+            - pd.to_numeric(item["baseline_next_net_bps"], errors="coerce").to_numpy()
+        )
+        data.loc[index, "next_vs_baseline_bps"] = daily_relative_bps
+        daily_internal_relative_bps = (
+            pd.to_numeric(
+                data.loc[index, "next_capital_internal_excess_bps"],
+                errors="coerce",
+            ).to_numpy()
+            - pd.to_numeric(
+                item["baseline_next_capital_internal_excess_bps"],
+                errors="coerce",
+            ).to_numpy()
+        )
+        data.loc[index, "next_internal_excess_vs_baseline_bps"] = daily_internal_relative_bps
         data.loc[index, "next_cumulative_vs_baseline_bps"] = (
-            data.loc[index, "next_cumulative_net_return_bps"].to_numpy()
-            - item["baseline_cumulative_net_bps"].to_numpy()
+            pd.to_numeric(
+                data.loc[index, "next_cumulative_net_return_bps"],
+                errors="coerce",
+            ).to_numpy()
+            - pd.to_numeric(item["baseline_next_cumulative_net_bps"], errors="coerce").to_numpy()
+        )
+        data.loc[index, "next_cumulative_internal_excess_vs_baseline_bps"] = (
+            pd.to_numeric(
+                data.loc[index, "next_cumulative_internal_excess_return_bps"],
+                errors="coerce",
+            ).to_numpy()
+            - pd.to_numeric(
+                item["baseline_next_cumulative_internal_excess_return_bps"],
+                errors="coerce",
+            ).to_numpy()
         )
     data["week_start"] = data["week_start"].dt.strftime("%Y-%m-%d")
     return data
@@ -222,6 +298,8 @@ def write_optimization_direction_plots(
     include_baseline_universe_cumulative: bool = False,
     baseline_run_id: str = "baseline_2022_2025_cluster",
     realized_fee_bps: float = DEFAULT_REALIZED_FEE_BPS,
+    pool_turnover_path: str | Path | None = "auto",
+    pool_fee_mode: str = DEFAULT_POOL_FEE_MODE,
     title_prefix: str = "2022-2025",
 ) -> dict[str, str]:
     if directions is None:
@@ -271,6 +349,8 @@ def write_optimization_direction_plots(
         include_baseline_universe=include_baseline_universe_cumulative,
         baseline_run_id=baseline_run_id,
         fee_bps=realized_fee_bps,
+        pool_turnover_path=pool_turnover_path,
+        pool_fee_mode=pool_fee_mode,
     )
     realized_cumulative_output = apply_display_labels(
         realized_cumulative_data.drop(
@@ -352,7 +432,7 @@ def write_optimization_direction_plots(
         index=False,
         float_format="%.6f",
     )
-    cumulative_title = f"{title_prefix} fee {realized_fee_bps:g}bps 池内Top100隔夜收益累和"
+    cumulative_title = f"{title_prefix} fee {realized_fee_bps:g}bps 池内Top100隔夜总收益累和"
     write_two_panel_line_svg(
         net_alpha_cumulative_data,
         title=cumulative_title,
@@ -395,11 +475,15 @@ def write_optimization_direction_plots(
         "output_dir": str(output_dir),
         "pool": pool,
         "cumulative_decision_normalizer": CUMULATIVE_DECISION_NORMALIZER,
+        "return_bps_denominator": RETURN_BPS_DENOMINATOR,
+        "next_close_capital_divisor": NEXT_CLOSE_CAPITAL_DIVISOR,
         "realized_fee_bps": realized_fee_bps,
+        "pool_turnover_path": str(pool_turnover_path) if pool_turnover_path else None,
+        "pool_fee_mode": pool_fee_mode,
         "daily_cumulative_semantics": (
-            "overnight total return = pool_L background return + internal excess - fee; "
-            "daily cumulative points are kept; values are divided by "
-            "cumulative_decision_normalizer"
+            "next-close labels span entry day to next trading day's close, so cumulative "
+            "acceptance divides next-close bps by next_close_capital_divisor before "
+            "compounding from wealth 1.0"
         ),
         "overlay_acceptance": {
             "figure_title": f"{title_prefix} short rank IC和next pool_L 超额",
@@ -438,17 +522,24 @@ def write_optimization_direction_plots(
             "panels": ["累计总收益", "vs base"],
             "background_series": "pool_L background overnight return",
             "reason": "short cumulative is omitted because this workflow cannot trade T+0",
-            "normalizer": CUMULATIVE_DECISION_NORMALIZER,
             "unit": "bps",
             "fee_bps_per_trade": realized_fee_bps,
-            "absolute_definition": "pool_L selected overnight return minus fee",
-            "background_definition": (
-                "pool_L background overnight return; no company backtest API wrapper was "
-                "found in this repository"
+            "absolute_definition": (
+                "main panel plots selected_next_mean_bps minus selected_fee_bps, divided by "
+                "next_close_capital_divisor and compounded; background plots pool_next_mean_bps "
+                "minus pool_fee_bps with the same capital divisor"
             ),
+            "background_definition": (
+                "pool_L background overnight return minus pool_fee_bps; pool fee uses "
+                "equal-weight stock-pool membership turnover when available"
+            ),
+            "pool_turnover_source": "see pool_turnover_source column in cumulative plot data",
             "relative_to_baseline_definition": (
-                "comparison cumulative selected overnight net return minus "
-                "baseline cumulative selected overnight net return"
+                "comparison cumulative total return minus baseline cumulative total return"
+            ),
+            "compounding_definition": (
+                "cumulative total return bps = (cumprod(1 + daily_net_bps / "
+                "next_close_capital_divisor / 10000) - 1) * 10000"
             ),
         },
         "source_files": source_files(backtests_root, plot_directions),

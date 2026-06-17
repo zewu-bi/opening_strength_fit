@@ -5,8 +5,12 @@ from pathlib import Path
 
 import pandas as pd
 
-CUMULATIVE_DECISION_NORMALIZER = 1000.0
+CUMULATIVE_DECISION_NORMALIZER = 1.0
 DEFAULT_REALIZED_FEE_BPS = 8.0
+RETURN_BPS_DENOMINATOR = 10_000.0
+NEXT_CLOSE_CAPITAL_DIVISOR = 2.0
+DEFAULT_POOL_FEE_MODE = "stock_pool_membership"
+POOL_FEE_MODES = ("round_trip", "stock_pool_membership", "summary_estimate")
 
 
 @dataclass(frozen=True)
@@ -140,10 +144,16 @@ def load_realized_cumulative_plot_data(
     include_baseline_universe: bool,
     baseline_run_id: str,
     fee_bps: float,
+    pool_turnover_path: str | Path | None = None,
+    pool_fee_mode: str = DEFAULT_POOL_FEE_MODE,
 ) -> pd.DataFrame:
+    if pool_fee_mode not in POOL_FEE_MODES:
+        raise ValueError(f"unknown pool_fee_mode {pool_fee_mode!r}; expected {POOL_FEE_MODES}")
     required = {
         "pool",
         "date",
+        "candidate_rows",
+        "selected_rows",
         "pool_short_mean_bps",
         "selected_short_mean_bps",
         "short_internal_excess_bps",
@@ -151,6 +161,11 @@ def load_realized_cumulative_plot_data(
         "selected_next_mean_bps",
         "next_internal_excess_bps",
     }
+    pool_turnover_by_date = (
+        try_load_pool_turnover_by_date(_resolve_pool_turnover_path(pool, pool_turnover_path))
+        if pool_fee_mode == "stock_pool_membership"
+        else None
+    )
     frames = []
     if include_baseline_pool:
         frames.append(
@@ -161,6 +176,8 @@ def load_realized_cumulative_plot_data(
                 label="baseline pool_L",
                 required=required,
                 fee_bps=fee_bps,
+                pool_turnover_by_date=pool_turnover_by_date,
+                pool_fee_mode=pool_fee_mode,
             )
         )
     if include_baseline_universe:
@@ -173,6 +190,8 @@ def load_realized_cumulative_plot_data(
                 required=required,
                 fee_bps=fee_bps,
                 next_only=True,
+                pool_turnover_by_date=None,
+                pool_fee_mode=pool_fee_mode,
             )
         )
     for direction in directions:
@@ -184,6 +203,8 @@ def load_realized_cumulative_plot_data(
                 label=direction.label,
                 required=required,
                 fee_bps=fee_bps,
+                pool_turnover_by_date=pool_turnover_by_date,
+                pool_fee_mode=pool_fee_mode,
             )
         )
 
@@ -194,8 +215,30 @@ def load_realized_cumulative_plot_data(
         item = combined.loc[index].sort_values("week_start")
         short_values = pd.to_numeric(item["short_net_return_bps"], errors="coerce")
         next_values = pd.to_numeric(item["next_net_return_bps"], errors="coerce")
-        combined.loc[item.index, "short_cumulative_net_return_bps"] = short_values.cumsum()
-        combined.loc[item.index, "next_cumulative_net_return_bps"] = next_values.cumsum()
+        pool_next_values = pd.to_numeric(item["pool_next_net_return_bps"], errors="coerce")
+        next_capital_values = next_values / NEXT_CLOSE_CAPITAL_DIVISOR
+        pool_next_capital_values = pool_next_values / NEXT_CLOSE_CAPITAL_DIVISOR
+        next_internal_excess_values = (
+            pd.to_numeric(item["next_internal_excess_bps"], errors="coerce")
+            / NEXT_CLOSE_CAPITAL_DIVISOR
+        )
+        combined.loc[item.index, "next_capital_net_return_bps"] = next_capital_values
+        combined.loc[item.index, "pool_next_capital_net_return_bps"] = pool_next_capital_values
+        combined.loc[item.index, "next_capital_internal_excess_bps"] = (
+            next_internal_excess_values
+        )
+        combined.loc[item.index, "short_cumulative_net_return_bps"] = (
+            cumulative_return_bps(short_values)
+        )
+        combined.loc[item.index, "next_cumulative_net_return_bps"] = (
+            cumulative_return_bps(next_capital_values)
+        )
+        combined.loc[item.index, "pool_next_cumulative_net_return_bps"] = (
+            cumulative_return_bps(pool_next_capital_values)
+        )
+        combined.loc[item.index, "next_cumulative_internal_excess_return_bps"] = (
+            cumulative_return_bps(next_internal_excess_values)
+        )
     combined["week_start"] = combined["week_start"].dt.strftime("%Y-%m-%d")
     return combined
 
@@ -244,6 +287,8 @@ def _load_one_realized_plot_data(
     label: str,
     required: set[str],
     fee_bps: float,
+    pool_turnover_by_date: pd.Series | None,
+    pool_fee_mode: str,
     next_only: bool = False,
 ) -> pd.DataFrame:
     frame = pd.read_csv(path)
@@ -260,6 +305,8 @@ def _load_one_realized_plot_data(
     item["fee_bps_per_trade"] = float(fee_bps)
 
     for column in (
+        "candidate_rows",
+        "selected_rows",
         "pool_short_mean_bps",
         "selected_short_mean_bps",
         "short_internal_excess_bps",
@@ -268,9 +315,27 @@ def _load_one_realized_plot_data(
         "next_internal_excess_bps",
     ):
         item[column] = pd.to_numeric(item[column], errors="coerce") / CUMULATIVE_DECISION_NORMALIZER
-    item["fee_bps"] = float(fee_bps) / CUMULATIVE_DECISION_NORMALIZER
-    item["short_net_return_bps"] = item["selected_short_mean_bps"] - item["fee_bps"]
-    item["next_net_return_bps"] = item["selected_next_mean_bps"] - item["fee_bps"]
+    item["selected_turnover"] = 1.0
+    estimated_pool_turnover = estimate_pool_turnover(item)
+    item["pool_turnover_source"] = "daily_label_round_trip"
+    if pool_fee_mode == "round_trip":
+        item["pool_turnover"] = 1.0
+    elif pool_fee_mode == "stock_pool_membership" and pool_turnover_by_date is not None:
+        date_key = item["week_start"].dt.strftime("%Y-%m-%d")
+        realized_pool_turnover = date_key.map(pool_turnover_by_date)
+        item["pool_turnover"] = realized_pool_turnover.fillna(estimated_pool_turnover)
+        item.loc[realized_pool_turnover.notna(), "pool_turnover_source"] = (
+            "stock_pool_membership"
+        )
+    else:
+        item["pool_turnover_source"] = "selected_rows_over_candidate_rows"
+        item["pool_turnover"] = estimated_pool_turnover
+    item["selected_fee_bps"] = float(fee_bps) * item["selected_turnover"]
+    item["pool_fee_bps"] = float(fee_bps) * item["pool_turnover"]
+    item["fee_bps"] = item["selected_fee_bps"]
+    item["short_net_return_bps"] = item["selected_short_mean_bps"] - item["selected_fee_bps"]
+    item["next_net_return_bps"] = item["selected_next_mean_bps"] - item["selected_fee_bps"]
+    item["pool_next_net_return_bps"] = item["pool_next_mean_bps"] - item["pool_fee_bps"]
     if next_only:
         for column in (
             "pool_short_mean_bps",
@@ -284,6 +349,8 @@ def _load_one_realized_plot_data(
             "pool",
             "pool_label",
             "week_start",
+            "candidate_rows",
+            "selected_rows",
             "pool_short_mean_bps",
             "selected_short_mean_bps",
             "short_internal_excess_bps",
@@ -291,12 +358,70 @@ def _load_one_realized_plot_data(
             "selected_next_mean_bps",
             "next_internal_excess_bps",
             "fee_bps_per_trade",
+            "selected_turnover",
+            "pool_turnover",
+            "pool_turnover_source",
+            "selected_fee_bps",
+            "pool_fee_bps",
             "fee_bps",
             "short_net_return_bps",
             "next_net_return_bps",
+            "pool_next_net_return_bps",
             "variant",
         ]
     ]
+
+
+def estimate_pool_turnover(frame: pd.DataFrame) -> pd.Series:
+    candidate_rows = pd.to_numeric(frame["candidate_rows"], errors="coerce")
+    selected_rows = pd.to_numeric(frame["selected_rows"], errors="coerce")
+    turnover = selected_rows / candidate_rows.replace(0.0, pd.NA)
+    return turnover.clip(lower=0.0, upper=1.0).fillna(0.0)
+
+
+def try_load_pool_turnover_by_date(path: str | Path | None) -> pd.Series | None:
+    if path is None:
+        return None
+    try:
+        return load_pool_turnover_by_date(path)
+    except (Exception, SystemExit):
+        return None
+
+
+def load_pool_turnover_by_date(path: str | Path) -> pd.Series:
+    from opening_strength_fit.stock_pool import load_stock_pool
+
+    pool = load_stock_pool(path).astype(bool).sort_index()
+    if pool.empty:
+        return pd.Series(dtype="float64")
+    counts = pool.sum(axis=1).astype(float)
+    weights = pool.astype(float).div(counts.replace(0.0, pd.NA), axis=0).fillna(0.0)
+    turnover = weights.diff().abs().sum(axis=1) * 0.5
+    turnover.iloc[0] = 1.0 if counts.iloc[0] > 0 else 0.0
+    turnover.index = pd.to_datetime(turnover.index, errors="coerce").strftime("%Y-%m-%d")
+    turnover.name = "pool_turnover"
+    return turnover.astype("float64")
+
+
+def _resolve_pool_turnover_path(
+    pool: str,
+    pool_turnover_path: str | Path | None,
+) -> str | Path | None:
+    if pool_turnover_path in (None, ""):
+        return None
+    if str(pool_turnover_path).lower() != "auto":
+        return pool_turnover_path
+
+    from opening_strength_fit.stock_pool import DEFAULT_STOCK_POOL_PATHS
+
+    suffix = pool.removeprefix("pool_").upper()
+    return DEFAULT_STOCK_POOL_PATHS.get(suffix)
+
+
+def cumulative_return_bps(return_bps: pd.Series) -> pd.Series:
+    returns = pd.to_numeric(return_bps, errors="coerce").fillna(0.0) / RETURN_BPS_DENOMINATOR
+    wealth = (1.0 + returns).cumprod()
+    return (wealth - 1.0) * RETURN_BPS_DENOMINATOR
 
 
 def _normalize_cumulative_decision_bps(frame: pd.DataFrame) -> pd.DataFrame:

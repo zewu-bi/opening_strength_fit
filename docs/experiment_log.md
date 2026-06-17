@@ -10,8 +10,9 @@
   当前验收是两个视角的 overlay：universe short Rank IC 检验开盘短期模型本身，
   `pool_L` Top100 next internal excess 检验叠加 mentor 隔夜股池后的隔夜收益。
 - 已归档：2024 月度、2018H1..2025H2 半年/OOS、2022-2025 baseline、second sweep、xs-relative、
-  model ensemble、fullxs batch 和 feature audit。
-- 当前增量候选：`hist_same_minute_surprise`；下一步按 2026-06-12 rescope 做 price-regime 和尺度归一化。
+  model ensemble、fullxs batch、feature audit、price-regime / scale-normalization batch。
+- 当前增量候选：`scale_norm`；`price_scale_norm` short 更强但 next overlay / 累计总收益略弱于
+  `scale_norm`。
 - 固定研究流程：新的特征工程/模型优化 -> 集群重训 -> pool-internal analysis -> 同步轻量 artifacts ->
   用 `optimization_overlay_acceptance_2022_2025` 两张图评估；默认画 hist_surprise / path_shape，
   后续可替换为任意 2-3 个新的 comparison models。
@@ -33,6 +34,7 @@
 | 36m halfyear `baseline` 2020-2024 | +8.9 / +10.7 / +12.1 | +12.0 / +13.7 / +14.3 | 半年 rolling 已完成；三列为 pool_S/M/L。 |
 | 2022-2025 `pool_L` second sweep | +0.017 best delta | +0.232 best delta | 9 个模型实验已完成并归档；最佳 short 增量仅 `price_path_plus` +0.017 bps，后续落实为 cross-sectional relative features 和 model ensemble。 |
 | 2022-2025 fullxs batch | +0.501 best delta | +0.665 best delta | `hist_same_minute_surprise` short/next 同向改善；`path_shape_confirm` 主要改善 next；`rank_label_regression` IC 高但 Top100 变弱。 |
+| 2022-2025 price / scale batch | +0.687 best delta | +0.480 best delta | `price_scale_norm` 的 `pool_L` short 增量最高；`scale_norm` 的 `pool_L` next overlay 和累计总收益最好。 |
 
 ## 实验时间线
 
@@ -62,6 +64,7 @@
 | 2026-06-12 | fullxs and feature-audit archive | 4 个 fullxs 训练 + pool-internal analysis、feature audit、baseline prediction restore metrics 已同步归档；`hist_same_minute_surprise` 为当前最好 fullxs 候选。 |
 | 2026-06-12 | mentor re-scope | 继续强化开盘短期模型；下一阶段显式做 price-regime 干预和尺度归一化特征。 |
 | 2026-06-12 | price-regime / scale-normalization jobs submitted | 三组 2022-2025 fullxs 实验已挂到集群：`price_bucket`、`scale_norm`、`price_scale_norm`。 |
+| 2026-06-17 | price-regime / scale-normalization archive | `price_bucket`、`scale_norm`、`price_scale_norm` 已补齐归档；`scale_norm` 综合最好，`price_scale_norm` 更偏 short。 |
 
 ## 2026-05-20 小窗结果
 
@@ -2506,6 +2509,52 @@ digest: sha256:410746153cb4ac05f13e5f45e224ec5e83f3b4fc23ffad469be3280b3b31073f
 | `lgbm_delay2_36m_2022_2025_fullxs_price_bucket_v1` | `os-lgbm-36m-2225-price-bucket` | `os-analyze-36m-2225-price-bucket` | price bucket + bucket interaction。 |
 | `lgbm_delay2_36m_2022_2025_fullxs_scale_norm_v1` | `os-lgbm-36m-2225-scale-norm` | `os-analyze-36m-2225-scale-norm` | tick/bps/notional scale features + expanded hist-surprise。 |
 | `lgbm_delay2_36m_2022_2025_fullxs_price_scale_norm_v1` | `os-lgbm-36m-2225-price-scale` | `os-analyze-36m-2225-price-scale` | price bucket、scale features、hist-surprise 和 compact xs-relative 组合主实验。 |
+
+### 2026-06-17 price-regime / scale-normalization archive
+
+`price_bucket`、`scale_norm`、`price_scale_norm` 已补齐 training metrics、pool-internal analysis
+和正式 `experiments/results` 归档。`price_scale_norm` 的 analysis job
+`os-analyze-36m-2225-price-scale` 于 2026-06-17 补提并完成；run config 状态改为 `completed`。
+
+`pool_L` 主表如下，单位 bps；delta 相对集群侧 2022-2025 baseline：
+
+| variant | pool_L short excess | short delta | pool_L next excess | next delta | short IC | next IC | next positive months |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `baseline` | +8.626 | +0.000 | +7.974 | +0.000 | 0.1380 | 0.0017 | 32 / 48 |
+| `price_bucket` | +8.655 | +0.029 | +8.008 | +0.035 | 0.1384 | 0.0019 | 33 / 48 |
+| `scale_norm` | +9.241 | +0.615 | +8.454 | +0.480 | 0.1407 | 0.0030 | 33 / 48 |
+| `price_scale_norm` | +9.313 | +0.687 | +8.396 | +0.423 | 0.1410 | 0.0033 | 33 / 48 |
+
+解读：
+
+- 单独 `price_bucket` 基本无增量，说明固定价格分桶/交互不是主要来源。
+- `scale_norm` 明显优于 baseline，是当前综合最好候选；`pool_L` next overlay 和 8bps fee
+  累计总收益都略好于 `price_scale_norm`。
+- `price_scale_norm` 的 short 侧最强，但把 price bucket、scale、hist-surprise 和 compact xs-relative
+  全部叠加后没有继续改善 next overlay，说明 price interaction 可能引入了一点短期拥挤/噪声。
+
+刷新后的 price-regime acceptance 图：
+
+```text
+experiments/results/backtests/optimization_overlay_acceptance_price_regime_ready_2022_2025/
+```
+
+8bps fee、next-close capital divisor 口径下，期末累计总收益相对 baseline：
+
+| variant | cumulative total return vs baseline | cumulative internal excess vs baseline |
+| --- | ---: | ---: |
+| `price_bucket` | +25.4 bps | +23.2 bps |
+| `scale_norm` | +391.6 bps | +348.4 bps |
+| `price_scale_norm` | +355.8 bps | +304.4 bps |
+
+正式归档文件：
+
+```text
+experiments/results/metrics/lgbm_delay2_36m_2022_2025_fullxs_price_scale_norm_v1_metrics_by_year.csv
+experiments/results/metrics/lgbm_delay2_36m_2022_2025_fullxs_price_scale_norm_v1_metrics_by_month.csv
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_price_scale_norm_v1/
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_summary.csv
+```
 
 ### 归档和保留口径
 

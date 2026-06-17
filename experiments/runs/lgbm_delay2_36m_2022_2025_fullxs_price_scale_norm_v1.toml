@@ -2,7 +2,7 @@
 id = "lgbm_delay2_36m_2022_2025_fullxs_price_scale_norm_v1"
 kind = "exploration"
 description = "2022-2025 combined price ecology and scale-normalization main experiment: price buckets, bucket interactions, tick/bps/notional features, historical surprise, and compact cross-sectional relative features."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"

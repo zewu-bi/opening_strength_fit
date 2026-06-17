@@ -10,7 +10,9 @@ from opening_strength_fit.optimization_acceptance_plots import (
 )
 from opening_strength_fit.optimization_direction_data import (
     DEFAULT_DIRECTIONS,
+    DEFAULT_POOL_FEE_MODE,
     DEFAULT_REALIZED_FEE_BPS,
+    POOL_FEE_MODES,
     DirectionSpec,
 )
 
@@ -67,6 +69,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Per-trade fee bps subtracted from selected returns in the cumulative plot.",
     )
     parser.add_argument(
+        "--pool-turnover-path",
+        default="auto",
+        help=(
+            "Stock-pool parquet path used to compute equal-weight pool turnover fees. "
+            "Used only with --pool-fee-mode stock_pool_membership. Use 'auto' to infer from --pool."
+        ),
+    )
+    parser.add_argument(
+        "--pool-fee-mode",
+        choices=POOL_FEE_MODES,
+        default=DEFAULT_POOL_FEE_MODE,
+        help=(
+            "Pool background fee turnover mode. stock_pool_membership charges equal-weight "
+            "membership changes; summary_estimate falls back to selected_rows/candidate_rows; "
+            "round_trip charges the full pool every day."
+        ),
+    )
+    parser.add_argument(
         "--include-baseline-universe-cumulative",
         action="store_true",
         help="Also add baseline universe as a next-panel reference line on the cumulative plot.",
@@ -100,6 +120,8 @@ def main(argv: list[str] | None = None) -> None:
         include_baseline_universe_cumulative=args.include_baseline_universe_cumulative,
         baseline_run_id=args.baseline_run_id,
         realized_fee_bps=args.realized_fee_bps,
+        pool_turnover_path=args.pool_turnover_path,
+        pool_fee_mode=args.pool_fee_mode,
         title_prefix=args.title_prefix,
     )
     print("optimization_direction_comparison_outputs:")

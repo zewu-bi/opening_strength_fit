@@ -66,7 +66,8 @@ pool-internal artifacts，然后用固定两张验收图评估，避免临时口
 | second batch, 9 runs | 历史四格口径下几乎无增量，说明宽泛特征族加减和轻量调参边际收益很低。 |
 | cross-sectional relative features | `xs_relative_v1` 提升 universe short Rank IC，但 `pool_L` next overlay 变弱；带 recent weight 的交互组不作为纯特征结论。 |
 | model ensemble | `model_ensemble_v1` 的 overlay next 和 short 侧表现均弱于 baseline，本轮不通过。 |
-| fullxs feature batch | `hist_same_minute_surprise` 是当前最好候选：universe short Rank IC 提升，`pool_L` next Top100 excess 同向改善；`path_shape_confirm` 主要改善 overlay next；`rank_label_regression` 说明 IC 高但 Top100 失败的路线不能直接接受。 |
+| fullxs feature batch | `hist_same_minute_surprise` short/next 同向改善；`path_shape_confirm` 主要改善 overlay next；`rank_label_regression` 说明 IC 高但 Top100 失败的路线不能直接接受。 |
+| price / scale batch | `scale_norm` 是当前综合最好候选：`pool_L` short `+0.615 bps`、next `+0.480 bps` vs baseline；`price_scale_norm` short 更强但 next / 累计总收益略弱。 |
 | feature audit | `pool_L` grouped audit 已归档；ablation 中 postopen_v1/v2 对 Top100 最敏感，permutation 中 orderbook_depth 对 Rank IC 最敏感。 |
 
 完整实验顺序、run id、K8s 状态、归档路径和逐项数字见 [experiment_log.md](experiment_log.md)。
