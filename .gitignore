@@ -7,3 +7,8 @@ __pycache__/
 *.egg-info/
 .env
 output/**
+experiments/results/backtests/**/next_close_labels/
+experiments/results/backtests/**/company_backtest_api*/backtest_result.pkl
+experiments/results/backtests/**/company_backtest_api*/score_long.parquet
+experiments/results/backtests/**/company_backtest_api*/score_wide.parquet
+experiments/results/backtests/**/company_backtest_api*/w_eod.parquet

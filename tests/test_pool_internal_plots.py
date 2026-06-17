@@ -13,6 +13,8 @@ from opening_strength_fit.pool_internal_plot_svg import (
 )
 from opening_strength_fit.pool_internal_plots import (
     month_major_plot_data,
+    write_company_backtest_cumulative_plot,
+    write_company_backtest_neutral_comparison_plot,
     write_universe_sml_pool_internal_plots,
     write_weekly_pool_internal_cumulative_plot,
     write_weekly_pool_internal_rolling_plot,
@@ -262,6 +264,92 @@ def test_write_cumulative_plot_can_label_years_only(tmp_path) -> None:
     assert ">2022<" in figure_text
     assert ">2025<" in figure_text
     assert ">2026<" in figure_text
+
+
+def test_write_company_backtest_cumulative_plot(tmp_path) -> None:
+    plot_data = pd.DataFrame(
+        {
+            "pool": ["deviation", "deviation", "path", "path"],
+            "pool_label": ["deviation", "deviation", "path", "path"],
+            "week_start": ["2022-01-03", "2022-01-04", "2022-01-03", "2022-01-04"],
+            "profit_cumulative_bps": [10.0, 30.0, 12.0, 35.0],
+            "alpha_cumulative_bps": [2.0, 5.0, 3.0, 8.0],
+        }
+    )
+
+    paths = write_company_backtest_cumulative_plot(
+        plot_data,
+        tmp_path,
+        output_prefix="overlay",
+        output_name="overlay_company_backtest",
+        variant_label="overlay",
+        pools=("deviation", "path"),
+        series_colors={"deviation": "#e49413", "path": "#009e73"},
+    )
+
+    for path in paths.values():
+        assert Path(path).exists()
+
+    figure_text = Path(paths["company_backtest_figure"]).read_text(encoding="utf-8")
+    assert "overlay 公司API回测累和" in figure_text
+    assert "收益累和" in figure_text
+    assert "Alpha累和" in figure_text
+
+
+def test_write_company_backtest_neutral_comparison_plot(tmp_path) -> None:
+    plot_data = pd.DataFrame(
+        {
+            "pool": [
+                "model",
+                "model",
+                "neutral_pool",
+                "neutral_pool",
+                "model",
+                "model",
+            ],
+            "pool_label": [
+                "model",
+                "model",
+                "neutral_pool",
+                "neutral_pool",
+                "model",
+                "model",
+            ],
+            "week_start": [
+                "2022-01-03",
+                "2022-01-04",
+                "2022-01-03",
+                "2022-01-04",
+                "2022-01-03",
+                "2022-01-04",
+            ],
+            "profit_cumulative_bps": [10.0, 30.0, 8.0, 20.0, None, None],
+            "incremental_cumulative_bps": [None, None, None, None, 2.0, 10.0],
+        }
+    )
+
+    paths = write_company_backtest_neutral_comparison_plot(
+        plot_data,
+        tmp_path,
+        output_prefix="neutral",
+        output_name="neutral_comparison",
+        variant_label="model - neutral",
+        pools=("model", "neutral_pool"),
+        series_colors={
+            "model": "#e49413",
+            "neutral_pool": "#5d6674",
+        },
+    )
+
+    for path in paths.values():
+        assert Path(path).exists()
+
+    figure_text = Path(paths["company_neutral_comparison_figure"]).read_text(
+        encoding="utf-8"
+    )
+    assert "model - neutral 公司API neutral baseline" in figure_text
+    assert "收益累和" in figure_text
+    assert "相对 neutral_pool 增量" in figure_text
 
 
 def test_single_panel_line_plot_uses_full_height_and_year_boundaries(tmp_path) -> None:
