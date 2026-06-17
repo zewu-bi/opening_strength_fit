@@ -63,7 +63,9 @@ def test_ensure_plot_colors_assigns_unknown_model_key() -> None:
     assert "new_model" in PLOT_COLORS
 
 
-def test_realized_cumulative_uses_wealth_bps_and_round_trip_pool_fee(tmp_path: Path) -> None:
+def test_realized_cumulative_uses_capital_adjusted_cumsum_and_round_trip_pool_fee(
+    tmp_path: Path,
+) -> None:
     run_dir = tmp_path / "baseline_run"
     run_dir.mkdir()
     pd.DataFrame(
@@ -100,12 +102,8 @@ def test_realized_cumulative_uses_wealth_bps_and_round_trip_pool_fee(tmp_path: P
     assert second["pool_fee_bps"] == pytest.approx(8.0)
     assert first["next_net_return_bps"] == pytest.approx(92.0)
     assert first["next_capital_net_return_bps"] == pytest.approx(46.0)
-    assert second["next_cumulative_net_return_bps"] == pytest.approx(
-        ((1.0 + 46.0 / 10_000.0) ** 2 - 1.0) * 10_000.0
-    )
-    assert second["next_cumulative_internal_excess_return_bps"] == pytest.approx(
-        ((1.0 + 45.0 / 10_000.0) * (1.0 + 40.0 / 10_000.0) - 1.0) * 10_000.0
-    )
+    assert second["next_cumulative_net_return_bps"] == pytest.approx(92.0)
+    assert second["next_cumulative_internal_excess_return_bps"] == pytest.approx(85.0)
 
     cumulative = combine_net_alpha_cumulative_data(realized)
     with_background = add_background_cumulative_data(
@@ -122,15 +120,15 @@ def test_realized_cumulative_uses_wealth_bps_and_round_trip_pool_fee(tmp_path: P
     assert background["next_cumulative_internal_excess_return_bps"] == pytest.approx(0.0)
 
 
-def test_baseline_relative_curve_uses_wealth_return_difference() -> None:
+def test_baseline_relative_curve_uses_capital_adjusted_cumulative_difference() -> None:
     data = pd.DataFrame(
         {
             "pool": ["baseline_pool_l", "baseline_pool_l", "model", "model"],
             "week_start": ["2024-01-02", "2024-01-03", "2024-01-02", "2024-01-03"],
             "next_net_return_bps": [1000.0, 1000.0, 2000.0, 0.0],
-            "next_cumulative_net_return_bps": [1000.0, 2100.0, 2000.0, 2000.0],
+            "next_cumulative_net_return_bps": [1000.0, 2000.0, 2000.0, 2000.0],
             "next_capital_internal_excess_bps": [100.0, 100.0, 200.0, 0.0],
-            "next_cumulative_internal_excess_return_bps": [100.0, 201.0, 200.0, 200.0],
+            "next_cumulative_internal_excess_return_bps": [100.0, 200.0, 200.0, 200.0],
         }
     )
 
@@ -142,12 +140,12 @@ def test_baseline_relative_curve_uses_wealth_return_difference() -> None:
 
     model = out.loc[out["pool"].eq("model")].sort_values("week_start")
     assert model["next_vs_baseline_bps"].tolist() == pytest.approx([1000.0, -1000.0])
-    assert model["next_cumulative_vs_baseline_bps"].tolist() == pytest.approx([1000.0, -100.0])
+    assert model["next_cumulative_vs_baseline_bps"].tolist() == pytest.approx([1000.0, 0.0])
     assert model["next_internal_excess_vs_baseline_bps"].tolist() == pytest.approx(
         [100.0, -100.0]
     )
     assert model["next_cumulative_internal_excess_vs_baseline_bps"].tolist() == pytest.approx(
-        [100.0, -1.0]
+        [100.0, 0.0]
     )
 
 

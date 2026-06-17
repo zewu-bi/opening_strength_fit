@@ -227,17 +227,17 @@ def load_realized_cumulative_plot_data(
         combined.loc[item.index, "next_capital_internal_excess_bps"] = (
             next_internal_excess_values
         )
-        combined.loc[item.index, "short_cumulative_net_return_bps"] = (
-            cumulative_return_bps(short_values)
+        combined.loc[item.index, "short_cumulative_net_return_bps"] = cumulative_sum_bps(
+            short_values
         )
         combined.loc[item.index, "next_cumulative_net_return_bps"] = (
-            cumulative_return_bps(next_capital_values)
+            cumulative_sum_bps(next_capital_values)
         )
         combined.loc[item.index, "pool_next_cumulative_net_return_bps"] = (
-            cumulative_return_bps(pool_next_capital_values)
+            cumulative_sum_bps(pool_next_capital_values)
         )
         combined.loc[item.index, "next_cumulative_internal_excess_return_bps"] = (
-            cumulative_return_bps(next_internal_excess_values)
+            cumulative_sum_bps(next_internal_excess_values)
         )
     combined["week_start"] = combined["week_start"].dt.strftime("%Y-%m-%d")
     return combined
@@ -418,10 +418,8 @@ def _resolve_pool_turnover_path(
     return DEFAULT_STOCK_POOL_PATHS.get(suffix)
 
 
-def cumulative_return_bps(return_bps: pd.Series) -> pd.Series:
-    returns = pd.to_numeric(return_bps, errors="coerce").fillna(0.0) / RETURN_BPS_DENOMINATOR
-    wealth = (1.0 + returns).cumprod()
-    return (wealth - 1.0) * RETURN_BPS_DENOMINATOR
+def cumulative_sum_bps(return_bps: pd.Series) -> pd.Series:
+    return pd.to_numeric(return_bps, errors="coerce").fillna(0.0).cumsum()
 
 
 def _normalize_cumulative_decision_bps(frame: pd.DataFrame) -> pd.DataFrame:

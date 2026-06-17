@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import shlex
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -140,6 +141,7 @@ def parse_stock_pool_location(value: str | Path) -> StockPoolLocation:
 
 
 def _build_ceph_access_key_id() -> str:
+    load_env_file_if_present()
     user = os.environ.get("CEPH_LDAP_ID")
     password = os.environ.get("CEPH_LDAP_KEY")
     if not user or not password:
@@ -156,6 +158,30 @@ def _build_ceph_access_key_id() -> str:
         }
     }
     return base64.b64encode(json.dumps(token).encode("utf-8")).decode("utf-8")
+
+
+def load_env_file_if_present(path: str | Path = ".env") -> None:
+    env_path = Path(path)
+    if not env_path.is_absolute() and not env_path.exists():
+        for parent in (Path.cwd(), *Path.cwd().parents):
+            candidate = parent / env_path
+            if candidate.exists():
+                env_path = candidate
+                break
+        else:
+            return
+    if not env_path.exists():
+        return
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        parts = shlex.split(line, comments=True)
+        if not parts or "=" not in parts[0]:
+            continue
+        key, value = parts[0].split("=", 1)
+        os.environ.setdefault(key, value)
 
 
 def _read_remote_pool(location: StockPoolLocation) -> pd.DataFrame:

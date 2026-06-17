@@ -11,7 +11,7 @@
   `pool_L` Top100 next internal excess 检验叠加 mentor 隔夜股池后的隔夜收益。
 - 已归档：2024 月度、2018H1..2025H2 半年/OOS、2022-2025 baseline、second sweep、xs-relative、
   model ensemble、fullxs batch、feature audit、price-regime / scale-normalization batch。
-- 当前增量候选：`scale_norm`；`price_scale_norm` short 更强但 next overlay / 累计总收益略弱于
+- 当前增量候选：`scale_norm`；`price_scale_norm` short 更强但 next overlay / capital-adjusted 累计净收益略弱于
   `scale_norm`。
 - 固定研究流程：新的特征工程/模型优化 -> 集群重训 -> pool-internal analysis -> 同步轻量 artifacts ->
   用 `optimization_overlay_acceptance_2022_2025` 两张图评估；默认画 hist_surprise / path_shape，
@@ -34,7 +34,7 @@
 | 36m halfyear `baseline` 2020-2024 | +8.9 / +10.7 / +12.1 | +12.0 / +13.7 / +14.3 | 半年 rolling 已完成；三列为 pool_S/M/L。 |
 | 2022-2025 `pool_L` second sweep | +0.017 best delta | +0.232 best delta | 9 个模型实验已完成并归档；最佳 short 增量仅 `price_path_plus` +0.017 bps，后续落实为 cross-sectional relative features 和 model ensemble。 |
 | 2022-2025 fullxs batch | +0.501 best delta | +0.665 best delta | `hist_same_minute_surprise` short/next 同向改善；`path_shape_confirm` 主要改善 next；`rank_label_regression` IC 高但 Top100 变弱。 |
-| 2022-2025 price / scale batch | +0.687 best delta | +0.480 best delta | `price_scale_norm` 的 `pool_L` short 增量最高；`scale_norm` 的 `pool_L` next overlay 和累计总收益最好。 |
+| 2022-2025 price / scale batch | +0.687 best delta | +0.480 best delta | `price_scale_norm` 的 `pool_L` short 增量最高；`scale_norm` 的 `pool_L` next overlay 和 capital-adjusted 累计净收益最好。 |
 
 ## 实验时间线
 
@@ -2529,7 +2529,7 @@ digest: sha256:410746153cb4ac05f13e5f45e224ec5e83f3b4fc23ffad469be3280b3b31073f
 
 - 单独 `price_bucket` 基本无增量，说明固定价格分桶/交互不是主要来源。
 - `scale_norm` 明显优于 baseline，是当前综合最好候选；`pool_L` next overlay 和 8bps fee
-  累计总收益都略好于 `price_scale_norm`。
+  capital-adjusted 累计净收益都略好于 `price_scale_norm`。
 - `price_scale_norm` 的 short 侧最强，但把 price bucket、scale、hist-surprise 和 compact xs-relative
   全部叠加后没有继续改善 next overlay，说明 price interaction 可能引入了一点短期拥挤/噪声。
 
@@ -2539,13 +2539,13 @@ digest: sha256:410746153cb4ac05f13e5f45e224ec5e83f3b4fc23ffad469be3280b3b31073f
 experiments/results/backtests/optimization_overlay_acceptance_price_regime_ready_2022_2025/
 ```
 
-8bps fee、next-close capital divisor 口径下，期末累计总收益相对 baseline：
+8bps fee、next-close capital divisor = 2.0 且线性累加口径下，期末累计净收益相对 baseline：
 
-| variant | cumulative total return vs baseline | cumulative internal excess vs baseline |
+| variant | capital-adjusted cumulative net vs baseline | cumulative internal excess vs baseline |
 | --- | ---: | ---: |
-| `price_bucket` | +25.4 bps | +23.2 bps |
-| `scale_norm` | +391.6 bps | +348.4 bps |
-| `price_scale_norm` | +355.8 bps | +304.4 bps |
+| `price_bucket` | +16.8 bps | +16.8 bps |
+| `scale_norm` | +232.6 bps | +232.6 bps |
+| `price_scale_norm` | +204.8 bps | +204.8 bps |
 
 正式归档文件：
 
@@ -2555,6 +2555,25 @@ experiments/results/metrics/lgbm_delay2_36m_2022_2025_fullxs_price_scale_norm_v1
 experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_price_scale_norm_v1/
 experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_summary.csv
 ```
+
+### 2026-06-17 S/M/L stock-pool tradeoff check
+
+用 `hist_same_minute_surprise_v1` 预测、Top100、`pool_S/M/L`、2022-2025 全窗口生成 S/M/L
+benchmark，检查股池大小、平均 next 收益和股池成分换手之间的取舍。
+
+```text
+experiments/results/backtests/pool_sml_i500_benchmark_acceptance_2022_2025/
+```
+
+| pool | avg members | pool next mean | Top100 next mean | Top100 vs pool | stock-pool turnover | fee8 pool cost | fee8 /2 capital cost |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `pool_S` | 1454 | 19.77 bps | 27.39 bps | 7.62 bps | 23.3% | 1.86 bps | 0.93 bps/day |
+| `pool_M` | 2423 | 15.18 bps | 23.38 bps | 8.20 bps | 16.2% | 1.30 bps | 0.65 bps/day |
+| `pool_L` | 3392 | 11.24 bps | 19.57 bps | 8.33 bps | 9.9% | 0.79 bps | 0.40 bps/day |
+
+结论：股池本身呈现 S > M > L 的收益底子，同时 S > M > L 的换手成本也更高；但池内
+Top100 overlay 相对各自 pool 的 next excess 并不随股池变小而提高，`pool_L` 略高。这说明
+小池优势主要来自 pool selection 本身，而不是池内短期模型排序更强。
 
 ### 归档和保留口径
 

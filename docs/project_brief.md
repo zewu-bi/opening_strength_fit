@@ -43,7 +43,7 @@ pool-internal artifacts，然后用固定两张验收图评估，避免临时口
 
 ```text
 2022-2025 short rank IC和next pool_L 超额
-2022-2025 池内Top100隔夜收益累和
+2022-2025 池内Top100隔夜净收益累和
 ```
 
 默认图上展示 baseline、hist_surprise 和 path_shape；也可以在保留 baseline 的前提下选择
@@ -62,12 +62,13 @@ pool-internal artifacts，然后用固定两张验收图评估，避免临时口
 | current baseline | `soft_core_reg_light`，36m rolling，集群侧 pool-internal analysis。 |
 | 2020-2025 rolling summary | S/M/L 池内 short 和 next 均为正；`pool_L` short `+11.1 bps`，next `+13.3 bps`。 |
 | 2022-2025 baseline | universe short `+16.8 bps`、next `-8.5 bps`；`pool_L` short `+8.6 bps`、next `+8.0 bps`。 |
+| S/M/L pool tradeoff | 2022-2025 `pool_S/M/L` pool next 均值 `19.8 / 15.2 / 11.2 bps`，真实 pool 换手 `23.3% / 16.2% / 9.9%`，确认小池收益底子更高但换手成本也更高。 |
 | first pilot sweep | `reg_strong`、`bagging`、`no_preopen_reg_mid` 均未超过 baseline。 |
 | second batch, 9 runs | 历史四格口径下几乎无增量，说明宽泛特征族加减和轻量调参边际收益很低。 |
 | cross-sectional relative features | `xs_relative_v1` 提升 universe short Rank IC，但 `pool_L` next overlay 变弱；带 recent weight 的交互组不作为纯特征结论。 |
 | model ensemble | `model_ensemble_v1` 的 overlay next 和 short 侧表现均弱于 baseline，本轮不通过。 |
 | fullxs feature batch | `hist_same_minute_surprise` short/next 同向改善；`path_shape_confirm` 主要改善 overlay next；`rank_label_regression` 说明 IC 高但 Top100 失败的路线不能直接接受。 |
-| price / scale batch | `scale_norm` 是当前综合最好候选：`pool_L` short `+0.615 bps`、next `+0.480 bps` vs baseline；`price_scale_norm` short 更强但 next / 累计总收益略弱。 |
+| price / scale batch | `scale_norm` 是当前综合最好候选：`pool_L` short `+0.615 bps`、next `+0.480 bps` vs baseline；`price_scale_norm` short 更强但 next / capital-adjusted 累计净收益略弱。 |
 | feature audit | `pool_L` grouped audit 已归档；ablation 中 postopen_v1/v2 对 Top100 最敏感，permutation 中 orderbook_depth 对 Rank IC 最敏感。 |
 
 完整实验顺序、run id、K8s 状态、归档路径和逐项数字见 [experiment_log.md](experiment_log.md)。

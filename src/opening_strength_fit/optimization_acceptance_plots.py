@@ -432,13 +432,13 @@ def write_optimization_direction_plots(
         index=False,
         float_format="%.6f",
     )
-    cumulative_title = f"{title_prefix} fee {realized_fee_bps:g}bps 池内Top100隔夜总收益累和"
+    cumulative_title = f"{title_prefix} fee {realized_fee_bps:g}bps 池内Top100隔夜净收益累和"
     write_two_panel_line_svg(
         net_alpha_cumulative_data,
         title=cumulative_title,
         panels=[
             {
-                "title": "累计总收益",
+                "title": "累计净收益",
                 "ylabel": "bps",
                 "column": "next_cumulative_net_return_bps",
                 "default_ylim": line_axis(
@@ -483,7 +483,7 @@ def write_optimization_direction_plots(
         "daily_cumulative_semantics": (
             "next-close labels span entry day to next trading day's close, so cumulative "
             "acceptance divides next-close bps by next_close_capital_divisor before "
-            "compounding from wealth 1.0"
+            "linear cumulative summation"
         ),
         "overlay_acceptance": {
             "figure_title": f"{title_prefix} short rank IC和next pool_L 超额",
@@ -519,15 +519,15 @@ def write_optimization_direction_plots(
         },
         "cumulative_acceptance": {
             "figure_title": cumulative_title,
-            "panels": ["累计总收益", "vs base"],
+            "panels": ["累计净收益", "vs base"],
             "background_series": "pool_L background overnight return",
             "reason": "short cumulative is omitted because this workflow cannot trade T+0",
             "unit": "bps",
             "fee_bps_per_trade": realized_fee_bps,
             "absolute_definition": (
                 "main panel plots selected_next_mean_bps minus selected_fee_bps, divided by "
-                "next_close_capital_divisor and compounded; background plots pool_next_mean_bps "
-                "minus pool_fee_bps with the same capital divisor"
+                "next_close_capital_divisor and cumulatively summed; background plots "
+                "pool_next_mean_bps minus pool_fee_bps with the same capital divisor"
             ),
             "background_definition": (
                 "pool_L background overnight return minus pool_fee_bps; pool fee uses "
@@ -535,11 +535,12 @@ def write_optimization_direction_plots(
             ),
             "pool_turnover_source": "see pool_turnover_source column in cumulative plot data",
             "relative_to_baseline_definition": (
-                "comparison cumulative total return minus baseline cumulative total return"
+                "comparison capital-adjusted cumulative net bps minus baseline "
+                "capital-adjusted cumulative net bps"
             ),
-            "compounding_definition": (
-                "cumulative total return bps = (cumprod(1 + daily_net_bps / "
-                "next_close_capital_divisor / 10000) - 1) * 10000"
+            "accumulation_definition": (
+                "capital-adjusted cumulative net bps = cumsum(daily_net_bps / "
+                "next_close_capital_divisor)"
             ),
         },
         "source_files": source_files(backtests_root, plot_directions),

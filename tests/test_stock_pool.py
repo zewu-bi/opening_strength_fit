@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import pandas as pd
 
@@ -11,6 +13,7 @@ from opening_strength_fit.reports import metrics_by_year_from_windows
 from opening_strength_fit.rolling import DateSplit
 from opening_strength_fit.stock_pool import (
     apply_stock_pool_cli_overrides,
+    load_env_file_if_present,
     load_stock_pool,
     parse_stock_pool_location,
     stock_pool_membership_mask,
@@ -89,6 +92,27 @@ class StockPoolTest(unittest.TestCase):
         self.assertEqual(pool.index.tolist(), ["2022-01-03", "2022-01-04"])
         self.assertEqual(pool.columns.tolist(), ["000001.SZ", "000002.SH"])
         self.assertEqual(pool.dtypes.astype(str).unique().tolist(), ["bool"])
+
+    def test_load_env_file_if_present_sets_missing_values(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ".env"
+            path.write_text(
+                "\n".join(
+                    [
+                        "CEPH_LDAP_ID='ldap user'",
+                        'CEPH_LDAP_KEY="ldap key"',
+                        "EXISTING=from_file",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            with mock.patch.dict(os.environ, {"EXISTING": "already"}, clear=True):
+                load_env_file_if_present(path)
+
+                self.assertEqual(os.environ["CEPH_LDAP_ID"], "ldap user")
+                self.assertEqual(os.environ["CEPH_LDAP_KEY"], "ldap key")
+                self.assertEqual(os.environ["EXISTING"], "already")
 
     def test_training_top_selection_can_be_limited_to_stock_pool(self) -> None:
         labeled = pd.DataFrame(
