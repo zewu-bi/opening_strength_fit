@@ -11,7 +11,7 @@ Current snapshot:
 sample window: 09:30:00-09:40:00, current slice 09:31:00-09:40:00
 main label: mixed short + next-close label, w_long = 0.30
 current baseline: soft_core_reg_light
-current focus: 继续做强开盘短期模型；用 pool_L overnight overlay 验收增量
+current focus: 继续做强开盘短期模型；补 pool_L overlay、暴露和容量约束验收
 acceptance plots: experiments/results/backtests/optimization_overlay_acceptance_2022_2025/
 current brief: docs/project_brief.md
 run facts and artifact index: docs/experiment_log.md

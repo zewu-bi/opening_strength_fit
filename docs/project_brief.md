@@ -11,6 +11,12 @@
 mentor 提供的隔夜模型以 `pool_L` 股池形式进入验收。两者做 overlay：先用隔夜视角给出
 `pool_L`，再在池内用短期模型选 Top100，最终看隔夜池内收益是否增强。
 
+2026-06-23 mentor re-scope：Top100 仍保留为快速信号诊断，但后续不能只用固定 Top100
+定义可接受性。下一阶段需要补三类生产化验收：风格暴露评测、风险暴露评测和容量约束组合。
+容量口径从“选 Top100”推进到“给定目标容量的可承载组合”，例如 `10 亿` 资金规模，并显式约束
+单票成交占比、可成交量/ADV 占比、单票权重、行业或风格集中度、换手和费用，防止容量指标本身
+依赖过高参与率或过度集中。
+
 当前主线是单模型 mixed label：
 
 ```text
@@ -30,7 +36,7 @@ train_label = short_label + 0.30 * long_label
 复盘理由和运行细节见 [experiment_log.md](experiment_log.md)。
 
 固定研究流程：尝试新的特征工程或模型优化，在集群上按固定 rolling 口径重新训练，同步
-pool-internal artifacts，然后用固定两张验收图评估，避免临时口径漂移。
+pool-internal artifacts，然后先用固定两张验收图评估信号增量，再补暴露和容量评测，避免临时口径漂移。
 
 验收口径：
 
@@ -38,7 +44,10 @@ pool-internal artifacts，然后用固定两张验收图评估，避免临时口
 | --- | --- |
 | universe short Rank IC | 提升；直接检验短期模型本身的排序能力。 |
 | `pool_L` Top100 next internal excess | 提升；检验短期模型叠加到 mentor 股池后的 overnight overlay 效果。 |
-| cumulative next net / baseline-relative return | 保持可解释、稳定；上 panel 同时显示 `pool_L` background。 |
+| cumulative next net / market-relative alpha | 保持可解释、稳定；上 panel 同时显示全 A 股市场平均和 `pool_L` background。 |
+| style exposure | 待补；检查 Top picks / capacity portfolio 是否只是风格偏置收益。 |
+| risk exposure | 待补；重点检查市值、流动性、价格、波动、行业集中度等风险暴露。 |
+| capacity-constrained portfolio | 待补；从固定 Top100 推进到目标资金规模组合，例如 `10 亿`，并约束单票参与率、ADV / 可成交量占比、权重和换手。 |
 固定两张图：
 
 ```text
@@ -47,8 +56,9 @@ pool-internal artifacts，然后用固定两张验收图评估，避免临时口
 ```
 
 默认图上展示 baseline、hist_surprise 和 path_shape；也可以在保留 baseline 的前提下选择
-2-3 个新的 comparison models 一起画。累计图上半 panel 额外显示 `pool_L` background；
-下半 panel 只显示 comparison models 相对 baseline。
+1-3 个新的 comparison models 一起画。累计图上半 panel 额外显示全 A 股市场平均和
+`pool_L` background；下半 panel 显示 `pool_L` background、baseline 和 comparison models
+相对全 A 股市场平均的累计 alpha。
 
 不再把 `pool_L` short Rank IC、short Top100 excess、universe next excess 或 next Rank IC
 作为主验收项：short 端在 A 股 T+1 下不能直接交易，短期收益能力由 universe short Rank IC
@@ -68,8 +78,9 @@ pool-internal artifacts，然后用固定两张验收图评估，避免临时口
 | cross-sectional relative features | `xs_relative_v1` 提升 universe short Rank IC，但 `pool_L` next overlay 变弱；带 recent weight 的交互组不作为纯特征结论。 |
 | model ensemble | `model_ensemble_v1` 的 overlay next 和 short 侧表现均弱于 baseline，本轮不通过。 |
 | fullxs feature batch | `hist_same_minute_surprise` short/next 同向改善；`path_shape_confirm` 主要改善 overlay next；`rank_label_regression` 说明 IC 高但 Top100 失败的路线不能直接接受。 |
-| price / scale batch | `scale_norm` 是当前综合最好候选：`pool_L` short `+0.615 bps`、next `+0.480 bps` vs baseline；`price_scale_norm` short 更强但 next / capital-adjusted 累计净收益略弱。 |
-| feature audit | `pool_L` grouped audit 已归档；ablation 中 postopen_v1/v2 对 Top100 最敏感，permutation 中 orderbook_depth 对 Rank IC 最敏感。 |
+| price / scale batch | `scale_norm` 曾是综合最好候选：`pool_L` short `+0.615 bps`、next `+0.480 bps` vs baseline；`price_scale_norm` short 更强但 next / capital-adjusted 累计净收益略弱。 |
+| hist + path exact-union | `rank_centered` 是最新最好候选：universe short Rank IC `0.1531`，`pool_L` next `+9.45 bps`，优于 baseline 的 `0.1489` / `+7.97 bps`。 |
+| feature audit / hygiene | `pool_L` grouped audit 和 baseline 276 hygiene 已归档；fullxs `hist_path` corr09 sensitivity 也已补齐，用于复核 hist_surprise/path_shape 相关簇。 |
 
 完整实验顺序、run id、K8s 状态、归档路径和逐项数字见 [experiment_log.md](experiment_log.md)。
 
@@ -87,7 +98,7 @@ pool-internal artifacts，然后用固定两张验收图评估，避免临时口
 | main display | 短期模型 universe 排序 + `pool_L` overnight overlay |
 | main metrics | universe short Rank IC；`pool_L` Top100 next internal excess |
 | acceptance figures | `experiments/results/backtests/optimization_overlay_acceptance_2022_2025/` |
-| current research focus | 继续做强开盘短期模型；优先 price-regime 干预和尺度归一化特征，并用 `pool_L` overnight overlay 验收 |
+| current research focus | 继续做强开盘短期模型；优先 price-regime 干预和尺度归一化特征，并补风格/风险暴露与容量约束验收 |
 
 短线 label：
 
@@ -114,9 +125,11 @@ label      = sell_vwap / buy_price - 1 - fee_bps / 10000
 | --- | --- |
 | `Rank IC` | 同一 `date x decision_time` 横截面内的排序能力。 |
 | `Top100 excess` | 池内 Top100 均值减同一 selection mask 内全体候选均值。 |
+| `capacity portfolio` | 在目标资金规模和成交约束下构造的可承载组合；后续用于替代固定 Top100 作为生产化验收口径。 |
 | `selection mask` | universe / `pool_S` / `pool_M` / `pool_L` 的切片维度。 |
 | `overlay` | mentor 隔夜模型给出 `pool_L`，开盘短期模型在池内选 Top100。 |
 | `next close` | overlay 的隔夜验收收益；当前主看 `pool_L` Top100 next internal excess。 |
+| `exposure audit` | 对选股或容量组合的风格、风险和集中度暴露做归因，判断收益是否来自目标 alpha 而非不可接受偏置。 |
 
 ## 里程碑
 
@@ -129,6 +142,7 @@ label      = sell_vwap / buy_price - 1 - fee_bps / 10000
 | 2022-2025 baseline | universe + `pool_L` 集群侧分析已归档，后续信号增强聚焦这一窗口。 |
 | 2022-2025 sweeps | 首轮和第二批常规增强尚未形成实质增量。 |
 | current signal-enhancement phase | 常规特征/模型 sweep 增量变小；下一步验证价格生态分层和尺度归一化特征，并用固定两张图验收。 |
+| mentor capacity / exposure re-scope | Top100 降为诊断口径；下一步补风格暴露、风险暴露和 `10 亿` 级容量约束组合验收。 |
 
 ## 入口
 

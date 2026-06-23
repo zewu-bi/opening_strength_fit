@@ -10,12 +10,19 @@
   当前验收是两个视角的 overlay：universe short Rank IC 检验开盘短期模型本身，
   `pool_L` Top100 next internal excess 检验叠加 mentor 隔夜股池后的隔夜收益。
 - 已归档：2024 月度、2018H1..2025H2 半年/OOS、2022-2025 baseline、second sweep、xs-relative、
-  model ensemble、fullxs batch、feature audit、price-regime / scale-normalization batch、hist+path exact-union batch。
-- 当前增量候选：`scale_norm`；`price_scale_norm` short 更强但 next overlay / capital-adjusted 累计净收益略弱于
-  `scale_norm`。
+  model ensemble、fullxs batch、feature audit / hygiene、price-regime / scale-normalization batch、
+  hist+path exact-union batch 和 hist+path hygiene sensitivity。
+- 当前增量候选：`hist_path_rank_centered`；`scale_norm` / `price_scale_norm` 是上一轮 price-scale
+  候选，其中 `scale_norm` 的 next overlay / capital-adjusted 累计净收益略好，`price_scale_norm`
+  short 更强。
 - 固定研究流程：新的特征工程/模型优化 -> 集群重训 -> pool-internal analysis -> 同步轻量 artifacts ->
   用 `optimization_overlay_acceptance_2022_2025` 两张图评估；默认画 hist_surprise / path_shape，
-  后续可替换为任意 2-3 个新的 comparison models。
+  后续可替换为任意 1-3 个新的 comparison models。累计图上 panel 画全 A 股市场平均、
+  扣费后的 `pool_L` background、baseline 和 comparison models；下 panel 画这些
+  pool/model 线相对全 A 股市场平均的累计 alpha。
+- 2026-06-23 mentor re-scope：Top100 继续作为信号诊断；后续生产化验收需要补风格暴露、
+  风险暴露和容量约束组合。容量口径应从固定 Top100 改为目标资金规模组合，例如 `10 亿`，
+  并显式限制单票成交占比、ADV / 可成交量占比、单票权重、换手和集中度。
 - 封存路线：两模型 `final_score = alpha_rank - lambda * gap_risk_rank`，保留为历史证据，不再定义当前目标。
 
 关键分叉结果：
@@ -66,6 +73,7 @@
 | 2026-06-12 | price-regime / scale-normalization jobs submitted | 三组 2022-2025 fullxs 实验已挂到集群：`price_bucket`、`scale_norm`、`price_scale_norm`。 |
 | 2026-06-17 | price-regime / scale-normalization archive | `price_bucket`、`scale_norm`、`price_scale_norm` 已补齐归档；`scale_norm` 综合最好，`price_scale_norm` 更偏 short。 |
 | 2026-06-23 | hist + path exact-union archive | `hist_path`、`hist_path_zscore`、`rank_centered` 已补齐 metrics 和 pool-internal analysis 并归档；本批 `rank_centered` 的 short Rank IC 与 `pool_L` next excess 最好。 |
+| 2026-06-23 | mentor re-scope | Top100 降为诊断口径；后续补风格暴露、风险暴露和 `10 亿` 级容量约束组合验收。 |
 
 ## 2026-05-20 小窗结果
 
@@ -2639,6 +2647,16 @@ optimization_directions_trace.json
 internal excess 为 `+9.50 bps`，均为本批最高；`hist_path` 次之，`hist_path_zscore`
 整体弱于 raw / rank-centered。
 
+2026-06-23 追加重画口径：`optimization_acceptance_plots.py` 的 cumulative 图改为：
+上 panel 固定画全 A 股市场平均、扣费后的 `pool_L` background、baseline Top100 和传入的
+comparison models Top100；下 panel 固定画 `pool_L` background、baseline 和 comparison
+models 相对全 A 股市场平均的累计 alpha。单模型 comparison 现在也允许，用于 baseline vs
+`deviation+path` 的精简图：
+
+```text
+experiments/results/backtests/optimization_overlay_acceptance_baseline_deviation_path_2022_2025/
+```
+
 ### 2026-06-18 baseline 276 feature hygiene / correlation audit
 
 针对 `lgbm_delay2_36m_2022_2025_pool_l_feature_audit_v1` 的 276 个 baseline 特征补了一轮
@@ -2686,6 +2704,26 @@ artifact run。`corr09` 版本现在作为独立 sensitivity artifact run 归档
 `corr09` sensitivity 结果：`high_corr_pairs=51`、`corr_clusters=25`、`drop_features=16`、
 `review=23`、`keep_features=260`。它用于检查 0.98 阈值外还有多少 0.90 以上的相关簇需要人工
 复核，不改变主 drop-list 口径。
+
+2026-06-23 追加 fullxs `hist_path` hygiene sensitivity 归档：为了检查
+baseline + `hist_surprise_` + `path_shape_` 的精确并集是否引入新的相关簇，新增
+`lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1`。该 run 使用
+1 day / sampled month、50k rows 的轻量抽样，以控制历史 same-minute context 的内存占用；
+run config 和 K8s job 已纳入索引：
+
+```text
+experiments/runs/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1.toml
+experiments/jobs/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1_job.yaml
+output/artifacts/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1/
+/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1/
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1/
+```
+
+fullxs `hist_path` corr09 结果：`features=354`、`rows=50,000`、`high_corr_pairs=96`、
+`corr_clusters=38`、`drop_features=19`、`review=47`、`keep_features=335`。新增 drop
+主要来自 path_shape 常数/近重复项、hist_surprise zscore/ratio 同源高相关项，以及
+postopen_v2 交易额/成交量深度比的近重复项；这组结果作为人工复核 sensitivity，不直接改变
+当前 baseline 276 特征的主 drop-list。
 
 建议第一轮 hard-drop 的 17 个特征：
 
@@ -2796,6 +2834,7 @@ CSV / JSON / SVG 包；`output/legacy/**` 只保留旧本地分析和 debug 产�
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_audit_v1/` | grouped feature audit 的 8 个半年 shard 合并结果：metrics、permutation、feature/group importance 和 trace。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_v1/` | baseline 276 特征 hygiene / correlation 主审计：0.98 相关阈值、drop/review candidates、keep/drop list 和 trace。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_corr09_v1/` | 同一抽样的 0.90 相关阈值 sensitivity hygiene 审计，用于人工复核更宽相关簇。 |
+| `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1/` | baseline + hist_surprise + path_shape 精确并集的 0.90 相关阈值 hygiene sensitivity；50k rows，354 features，19 个 drop candidates。 |
 | `experiments/results/backtests/gap_risk_penalized_attribution_v1/` | rolling gap-risk Top100 替换归因的 outcome、feature exposure 和 residual-control 证据。 |
 | `output/artifacts/<run_id>` | 当前 2022-2025 cluster baseline / pool_L 优化实验的本地查看副本；正式摘要另归档到 `experiments/results/backtests/`。 |
 | `output/legacy/artifacts/<run_id>` | 旧 artifact 拉取和 raw shard metrics，保留给 debug / history。 |
@@ -2841,3 +2880,27 @@ top100_excess_bps     = 36.829821
   `score adapter`：在固定 `api_time`（如 `09:40` / `09:50` / `10:30`）用当时以前可见的高频信息
   生成 `date x symbol` 分数，并和 neutral baseline 做同口径比较。
 - 不再用暴力 `09:31-09:40 mean score + mean label` 把原高频策略强行压成日频分数来解释收益。
+
+### 2026-06-23 Mentor Re-scope: 暴露和容量验收
+
+mentor 进一步明确：后续不能只盯固定 Top100 的收益增强。Top100 仍可作为研发阶段的快速信号诊断，
+但进入更接近生产验收时，需要补三类评测：
+
+1. 风格暴露评测：检查选股或组合收益是否主要来自已知风格偏置，而不是 opening short alpha 本身。
+   待定义的风格维度包括但不限于动量、反转、波动、流动性、价格层级、成交活跃度和行业/主题集中。
+2. 风险暴露评测：重点补市值、流通市值、成交额/换手、价格、波动、行业集中度和极端流动性风险。
+   评测对象应同时覆盖 Top100 诊断篮子和后续容量组合。
+3. 容量约束组合：从固定 Top100 推进到目标资金规模组合，例如 `10 亿`。容量本身必须有约束，
+   不能为了塞满资金而接受过高单票成交占比或过度集中。
+
+容量组合的 first-pass 约束应显式记录：
+
+- 单票下单额 / 当日或近期 ADV 的占比上限。
+- 单票下单额 / 开盘可见深度、可成交量或估计可成交量的占比上限。
+- 单票权重、行业权重、风格暴露和风险暴露上限。
+- 换手、费用和持仓重叠；必要时区分 gross notional、capital-adjusted notional 和实际可成交 notional。
+- 若目标容量无法在合理参与率下填满，应报告 feasible capacity，而不是机械输出 `10 亿` 满仓结果。
+
+后续研发顺序：先保留现有 fixed Top100 acceptance 图作为信号对照；再新增 exposure audit 和
+capacity portfolio audit，最终用 capacity-constrained next net / market-relative alpha 判断候选是否
+真正可推进。
