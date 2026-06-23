@@ -16,6 +16,7 @@ Run kind entrypoints:
 | --- | --- |
 | standard training / exploration | `osf-train` |
 | feature audit | `osf-audit-feature-dependence` |
+| feature hygiene | `osf-audit-feature-hygiene` |
 | labeled cache | `osf-build-labeled-cache` |
 | cache transform / target cache | `osf-build-target-label-cache` |
 | next-close label cache | `osf-build-next-close-labels` |

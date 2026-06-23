@@ -273,7 +273,7 @@ osf-sync-experiment-artifacts \
 `--allow-partial` 写入 `output/artifacts/_partial_metrics/`。
 
 非标准轻量 artifact：`score_risk_sweep`、`alpha_conditioned_rolling_validation`、
-`gap_risk_attribution` 会同步各自 summary/trace CSV。
+`gap_risk_attribution`、`feature_hygiene` 会同步各自 summary/trace CSV 或审计报告。
 
 ## 7. 汇总和作图
 
