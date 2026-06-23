@@ -30,6 +30,26 @@ class FeatureAuditGroupTest(unittest.TestCase):
             "orderbook_depth",
         )
         self.assertEqual(_feature_group_name("return_10t", groups), "momentum")
+        self.assertEqual(
+            _feature_group_name("hist_surprise_volume_diff_1t_20d_zscore", groups),
+            "historical_surprise",
+        )
+        self.assertEqual(
+            _feature_group_name("norm_hist_surprise_volume_diff_1t_20d_zscore_zscore", groups),
+            "historical_surprise",
+        )
+        self.assertEqual(
+            _feature_group_name("path_shape_return_positive_fraction", groups),
+            "path_shape",
+        )
+        self.assertEqual(
+            _feature_group_name("price_scale_tick_bps", groups),
+            "price_scale",
+        )
+        self.assertEqual(
+            _feature_group_name("norm_ask_price_1_zscore", groups),
+            "cross_sectional_relative",
+        )
 
     def test_enabled_groups_filter_defaults(self) -> None:
         groups = _feature_groups(

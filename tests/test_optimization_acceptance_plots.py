@@ -8,6 +8,7 @@ import pytest
 from opening_strength_fit.optimization_acceptance_plots import (
     add_background_cumulative_data,
     add_cumulative_baseline_relative_data,
+    add_cumulative_percent_display_columns,
     combine_net_alpha_cumulative_data,
     default_plot_directions,
     ensure_plot_colors,
@@ -147,6 +148,22 @@ def test_baseline_relative_curve_uses_capital_adjusted_cumulative_difference() -
     assert model["next_cumulative_internal_excess_vs_baseline_bps"].tolist() == pytest.approx(
         [100.0, 0.0]
     )
+
+
+def test_cumulative_percent_display_columns_preserve_source_bps() -> None:
+    data = pd.DataFrame(
+        {
+            "next_cumulative_net_return_bps": [1234.0, -50.0],
+            "next_cumulative_vs_baseline_bps": [321.0, -25.0],
+        }
+    )
+
+    out = add_cumulative_percent_display_columns(data)
+
+    assert out["next_cumulative_net_return_bps"].tolist() == pytest.approx([1234.0, -50.0])
+    assert out["next_cumulative_vs_baseline_bps"].tolist() == pytest.approx([321.0, -25.0])
+    assert out["next_cumulative_net_return_pct"].tolist() == pytest.approx([12.34, -0.5])
+    assert out["next_cumulative_vs_baseline_pct"].tolist() == pytest.approx([3.21, -0.25])
 
 
 def test_realized_cumulative_can_use_stock_pool_membership_fee(tmp_path: Path) -> None:

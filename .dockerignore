@@ -6,6 +6,6 @@ __pycache__
 .mypy_cache
 *.egg-info
 output
+experiments/results
 
 experiments/jobs/*.yaml
-

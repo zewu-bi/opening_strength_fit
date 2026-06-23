@@ -52,6 +52,7 @@ DISPLAY_LABELS = {
 DEFAULT_PLOT_DIRECTION_KEYS = ("hist_surprise", "path_shape")
 MIN_PLOT_DIRECTIONS = 2
 MAX_PLOT_DIRECTIONS = 3
+BPS_PER_PERCENT = 100.0
 AUTO_COLOR_SEQUENCE = (
     "#0072b2",
     "#d55e00",
@@ -62,6 +63,11 @@ AUTO_COLOR_SEQUENCE = (
     "#7f3c8d",
     "#11a579",
 )
+
+CUMULATIVE_PERCENT_DISPLAY_COLUMNS = {
+    "next_cumulative_net_return_bps": "next_cumulative_net_return_pct",
+    "next_cumulative_vs_baseline_bps": "next_cumulative_vs_baseline_pct",
+}
 
 
 def default_plot_directions(
@@ -148,6 +154,13 @@ def combine_net_alpha_cumulative_data(
         combined["next_capital_net_return_bps"] - combined["pool_next_capital_net_return_bps"]
     )
     return combined
+
+
+def add_cumulative_percent_display_columns(cumulative_data: pd.DataFrame) -> pd.DataFrame:
+    data = cumulative_data.copy()
+    for source, target in CUMULATIVE_PERCENT_DISPLAY_COLUMNS.items():
+        data[target] = pd.to_numeric(data[source], errors="coerce") / BPS_PER_PERCENT
+    return data
 
 
 def add_background_cumulative_data(
@@ -301,6 +314,7 @@ def write_optimization_direction_plots(
     pool_turnover_path: str | Path | None = "auto",
     pool_fee_mode: str = DEFAULT_POOL_FEE_MODE,
     title_prefix: str = "2022-2025",
+    top_n: int = 100,
 ) -> dict[str, str]:
     if directions is None:
         plot_directions = default_plot_directions()
@@ -390,6 +404,7 @@ def write_optimization_direction_plots(
     )
     net_alpha_cumulative_svg = output_dir / "optimization_directions_net_alpha_cumulative.svg"
     trace_path = output_dir / "optimization_directions_trace.json"
+    top_n_label = f"Top{top_n}"
 
     overlay_acceptance_data.to_csv(overlay_acceptance_csv, index=False, float_format="%.6f")
     write_two_panel_bar_svg(
@@ -410,7 +425,7 @@ def write_optimization_direction_plots(
                 "min_tick_step": 0.005,
             },
             {
-                "title": "next pool_L Top 100 excess",
+                "title": f"next pool_L {top_n_label} excess",
                 "ylabel": "bps",
                 "column": "next_internal_excess_bps",
                 "default_ylim": (0.0, 12.0),
@@ -432,33 +447,36 @@ def write_optimization_direction_plots(
         index=False,
         float_format="%.6f",
     )
-    cumulative_title = f"{title_prefix} fee {realized_fee_bps:g}bps 池内Top100隔夜净收益累和"
+    net_alpha_cumulative_plot_data = add_cumulative_percent_display_columns(
+        net_alpha_cumulative_data
+    )
+    cumulative_title = f"{title_prefix} fee {realized_fee_bps:g}bps 池内{top_n_label}隔夜净收益累和"
     write_two_panel_line_svg(
-        net_alpha_cumulative_data,
+        net_alpha_cumulative_plot_data,
         title=cumulative_title,
         panels=[
             {
                 "title": "累计净收益",
-                "ylabel": "bps",
-                "column": "next_cumulative_net_return_bps",
+                "ylabel": "%",
+                "column": "next_cumulative_net_return_pct",
                 "default_ylim": line_axis(
-                    net_alpha_cumulative_data["next_cumulative_net_return_bps"]
+                    net_alpha_cumulative_plot_data["next_cumulative_net_return_pct"]
                 ),
                 "tick_step": line_step(
-                    net_alpha_cumulative_data["next_cumulative_net_return_bps"]
+                    net_alpha_cumulative_plot_data["next_cumulative_net_return_pct"]
                 ),
                 "tick_decimals": None,
                 "fixed_ylim": True,
             },
             {
                 "title": "vs base",
-                "ylabel": "bps",
-                "column": "next_cumulative_vs_baseline_bps",
+                "ylabel": "%",
+                "column": "next_cumulative_vs_baseline_pct",
                 "default_ylim": line_axis(
-                    net_alpha_cumulative_data["next_cumulative_vs_baseline_bps"]
+                    net_alpha_cumulative_plot_data["next_cumulative_vs_baseline_pct"]
                 ),
                 "tick_step": line_step(
-                    net_alpha_cumulative_data["next_cumulative_vs_baseline_bps"]
+                    net_alpha_cumulative_plot_data["next_cumulative_vs_baseline_pct"]
                 ),
                 "tick_decimals": None,
                 "fixed_ylim": True,
@@ -478,6 +496,7 @@ def write_optimization_direction_plots(
         "return_bps_denominator": RETURN_BPS_DENOMINATOR,
         "next_close_capital_divisor": NEXT_CLOSE_CAPITAL_DIVISOR,
         "realized_fee_bps": realized_fee_bps,
+        "top_n": top_n,
         "pool_turnover_path": str(pool_turnover_path) if pool_turnover_path else None,
         "pool_fee_mode": pool_fee_mode,
         "daily_cumulative_semantics": (
@@ -489,7 +508,7 @@ def write_optimization_direction_plots(
             "figure_title": f"{title_prefix} short rank IC和next pool_L 超额",
             "panels": [
                 "short universe rank IC",
-                f"next {pool} Top 100 excess",
+                f"next {pool} {top_n_label} excess",
             ],
             "reason": (
                 "short pool excess is omitted because A-share T+1 makes short-horizon "
@@ -522,11 +541,13 @@ def write_optimization_direction_plots(
             "panels": ["累计净收益", "vs base"],
             "background_series": "pool_L background overnight return",
             "reason": "short cumulative is omitted because this workflow cannot trade T+0",
-            "unit": "bps",
+            "unit": "%",
+            "source_unit": "bps",
             "fee_bps_per_trade": realized_fee_bps,
             "absolute_definition": (
                 "main panel plots selected_next_mean_bps minus selected_fee_bps, divided by "
-                "next_close_capital_divisor and cumulatively summed; background plots "
+                "next_close_capital_divisor and cumulatively summed; figure axis displays "
+                "the cumulative bps divided by 100 as percent. Background plots "
                 "pool_next_mean_bps minus pool_fee_bps with the same capital divisor"
             ),
             "background_definition": (
@@ -536,7 +557,7 @@ def write_optimization_direction_plots(
             "pool_turnover_source": "see pool_turnover_source column in cumulative plot data",
             "relative_to_baseline_definition": (
                 "comparison capital-adjusted cumulative net bps minus baseline "
-                "capital-adjusted cumulative net bps"
+                "capital-adjusted cumulative net bps, displayed as percent"
             ),
             "accumulation_definition": (
                 "capital-adjusted cumulative net bps = cumsum(daily_net_bps / "

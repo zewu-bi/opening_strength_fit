@@ -104,6 +104,19 @@ DEFAULT_GROUPS = (
         prefixes=("return_",),
         columns=("return_vs_prev_close", "return_vs_open"),
     ),
+    FeatureGroup(
+        "historical_surprise",
+        prefixes=("hist_surprise_", "norm_hist_surprise_", "xs_rel_hist_surprise_"),
+    ),
+    FeatureGroup(
+        "path_shape",
+        prefixes=("path_shape_", "norm_path_shape_", "xs_rel_path_shape_"),
+    ),
+    FeatureGroup(
+        "price_scale",
+        prefixes=("price_scale_", "norm_price_scale_", "xs_rel_price_scale_"),
+    ),
+    FeatureGroup("cross_sectional_relative", prefixes=("xs_rel_", "norm_")),
 )
 
 
@@ -184,10 +197,12 @@ def _summary_row(
     stock_pool: pd.DataFrame | None = None,
 ) -> dict[str, object]:
     if stock_pool is not None and stock_pool_settings is not None:
-        predictions, selection_predictions, stock_pool_summary = configured_stock_pool_selection_frame(
-            predictions,
-            stock_pool_settings,
-            stock_pool,
+        predictions, selection_predictions, stock_pool_summary = (
+            configured_stock_pool_selection_frame(
+                predictions,
+                stock_pool_settings,
+                stock_pool,
+            )
         )
     else:
         selection_predictions = predictions

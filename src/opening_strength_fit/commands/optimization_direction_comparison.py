@@ -63,6 +63,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Backtest directory used for the baseline pool reference.",
     )
     parser.add_argument(
+        "--top-n",
+        type=int,
+        default=100,
+        help="Selection count label used in plot titles and trace metadata.",
+    )
+    parser.add_argument(
         "--realized-fee-bps",
         type=float,
         default=DEFAULT_REALIZED_FEE_BPS,
@@ -123,6 +129,7 @@ def main(argv: list[str] | None = None) -> None:
         pool_turnover_path=args.pool_turnover_path,
         pool_fee_mode=args.pool_fee_mode,
         title_prefix=args.title_prefix,
+        top_n=args.top_n,
     )
     print("optimization_direction_comparison_outputs:")
     for key, value in outputs.items():
