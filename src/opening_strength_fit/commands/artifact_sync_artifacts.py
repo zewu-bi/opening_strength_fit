@@ -53,6 +53,15 @@ FEATURE_AUDIT_COMBINED_CSVS = (
     "feature_importance.csv",
     "feature_group_importance.csv",
 )
+FEATURE_HYGIENE_ARTIFACTS = (
+    "feature_hygiene.csv",
+    "feature_correlation_pairs.csv",
+    "feature_correlation_clusters.csv",
+    "feature_prune_candidates.csv",
+    "feature_keep_list.txt",
+    "feature_drop_list.txt",
+    "feature_hygiene_trace.json",
+)
 GAP_ATTRIBUTION_ARTIFACTS = (
     "gap_attribution_outcomes_by_month.csv",
     "gap_attribution_outcomes_overall.csv",
@@ -90,6 +99,10 @@ def is_feature_audit(spec: RunSpec) -> bool:
     return spec.kind == "feature_audit"
 
 
+def is_feature_hygiene(spec: RunSpec) -> bool:
+    return spec.kind == "feature_hygiene"
+
+
 def is_pool_internal_analysis(spec: RunSpec) -> bool:
     return spec.pool_internal_analysis_enabled
 
@@ -100,6 +113,7 @@ def is_non_standard_artifact_run(spec: RunSpec) -> bool:
         or is_rolling_validation(spec)
         or is_gap_attribution(spec)
         or is_feature_audit(spec)
+        or is_feature_hygiene(spec)
     )
 
 
@@ -242,6 +256,27 @@ def pull_feature_audit_artifacts(
         pulled.extend(shard_paths)
     if not pulled:
         raise SystemExit(f"{spec.run_id}: no feature-audit artifacts found under {spec.pvc_dir}")
+    record_artifact_fetch(spec, output_dir, pulled, missing)
+    return pulled
+
+
+def pull_feature_hygiene_artifacts(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    output_root: Path | None,
+) -> list[Path]:
+    output_dir, pulled, missing = pull_artifact_set(
+        hfcli,
+        spec,
+        pod_name,
+        output_root,
+        FEATURE_HYGIENE_ARTIFACTS,
+    )
+    if not pulled:
+        raise SystemExit(
+            f"{spec.run_id}: no feature-hygiene artifacts found under {spec.pvc_dir}"
+        )
     record_artifact_fetch(spec, output_dir, pulled, missing)
     return pulled
 
@@ -568,6 +603,9 @@ def record_lightweight_artifacts(
                 archive_dir / "feature_audit_trace.json",
             ),
         ]
+    elif is_feature_hygiene(spec):
+        archive_dir = backtests_dir / spec.run_id
+        records = [(output_dir / name, archive_dir / name) for name in FEATURE_HYGIENE_ARTIFACTS]
     else:
         return []
 

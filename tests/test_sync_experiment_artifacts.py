@@ -12,6 +12,7 @@ from opening_strength_fit.commands.artifact_sync import (
     combine_metric_frames,  # noqa: E402
     combine_rolling_validation_shards,  # noqa: E402
     pull_feature_audit_artifacts,  # noqa: E402
+    pull_feature_hygiene_artifacts,  # noqa: E402
     pull_gap_attribution_artifacts,  # noqa: E402
     pull_next_close_labels,  # noqa: E402
     pull_pool_internal_analysis_artifacts,  # noqa: E402
@@ -616,6 +617,55 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
                 "backtests/feature_audit_v1/feature_group_importance.csv",
                 "backtests/feature_audit_v1/feature_audit_trace.json",
             ],
+        )
+
+    def test_feature_hygiene_artifacts_are_pulled_and_recorded(self) -> None:
+        spec = _run_spec(
+            "feature_hygiene_v1",
+            kind="feature_hygiene",
+        )
+        artifact_names = {
+            "feature_hygiene.csv",
+            "feature_correlation_pairs.csv",
+            "feature_correlation_clusters.csv",
+            "feature_prune_candidates.csv",
+            "feature_keep_list.txt",
+            "feature_drop_list.txt",
+            "feature_hygiene_trace.json",
+        }
+
+        def fake_fetch(_hfcli, _spec, _pod, remote_path, local_path):
+            if Path(remote_path).name not in artifact_names:
+                return False
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            local_path.write_text("artifact\n", encoding="utf-8")
+            return True
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch(
+                "opening_strength_fit.commands.artifact_sync_artifacts.fetch_remote_file_if_exists",
+                side_effect=fake_fetch,
+            ):
+                pulled = pull_feature_hygiene_artifacts(
+                    "hfcli",
+                    spec,
+                    "helper-pod",
+                    root,
+                )
+            recorded = record_lightweight_artifacts(
+                spec,
+                root,
+                root / "results",
+            )
+
+        self.assertEqual({path.name for path in pulled}, artifact_names)
+        self.assertEqual(
+            {
+                path.relative_to(root / "results" / "backtests" / spec.run_id).as_posix()
+                for path in recorded
+            },
+            artifact_names,
         )
 
 

@@ -32,6 +32,7 @@ dev = [
 osf-analyze-pool-internal-top100 = "opening_strength_fit.cli.analyze_pool_internal_top100:main"
 osf-audit-experiments = "opening_strength_fit.cli.audit_experiments:main"
 osf-audit-feature-dependence = "opening_strength_fit.cli.audit_feature_dependence:main"
+osf-audit-feature-hygiene = "opening_strength_fit.cli.audit_feature_hygiene:main"
 osf-audit-labels = "opening_strength_fit.cli.audit_labels:main"
 osf-build-labeled-cache = "opening_strength_fit.cli.build_labeled_cache:main"
 osf-build-labels = "opening_strength_fit.cli.build_labels:main"

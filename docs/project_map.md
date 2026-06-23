@@ -89,6 +89,7 @@ CLI:
 ## Diagnostics And Research Loops
 
 - `osf-audit-feature-dependence`: grouped feature importance, permutation, and drop-retrain ablation audits.
+- `osf-audit-feature-hygiene`: lightweight sampled feature hygiene, group-aware correlation clusters, and conservative keep/drop candidate reports.
 - `osf-run-opening-intraday-backtest`: constrained opening TopN replay.
 - `osf-run-lgbm-delay-replays`: standard delay0/1/2 replay grid.
 - `osf-plot-lgbm-delay-decay`: plot delay replay decay summaries.

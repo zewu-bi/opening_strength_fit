@@ -90,6 +90,7 @@ def has_training_job(kinds: set[str]) -> bool:
 def is_artifact_run(record: RunRecord) -> bool:
     return record.kind in {
         "feature_audit",
+        "feature_hygiene",
         "cache_transform",
         "labeled_cache",
         "clickhouse_labeled_cache",

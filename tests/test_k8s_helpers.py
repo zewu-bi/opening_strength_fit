@@ -6,6 +6,7 @@ from pathlib import Path
 from opening_strength_fit.commands.k8s_rendering import (
     _k8s_job_name,  # noqa: E402
     render_pool_internal_analysis_job,  # noqa: E402
+    render_training_job,  # noqa: E402
     render_sharded_training_job,  # noqa: E402
     training_command,  # noqa: E402
 )
@@ -173,6 +174,56 @@ class K8sHelperTest(unittest.TestCase):
         config = {"run": {"kind": "next_close_label_cache"}}
 
         self.assertEqual(training_command(config), "osf-build-next-close-labels")
+
+    def test_feature_hygiene_uses_hygiene_audit_script(self) -> None:
+        config = {
+            "run": {
+                "id": "feature_hygiene_v1",
+                "kind": "feature_hygiene",
+            },
+            "window": {
+                "mode": "rolling_monthly",
+                "train_months": 36,
+                "test_months": 6,
+                "test_stride_months": 6,
+                "test_start_month": "2022-01",
+                "test_end_month": "2022-06",
+            },
+            "output": {"k8s_dir": "/mnt/output/opening_strength_fit/feature_hygiene_v1"},
+            "k8s": {"resources": {"memory_limit": "128Gi"}},
+        }
+
+        manifest = render_sharded_training_job(
+            Path("experiments/runs/feature_hygiene_v1.toml"),
+            config,
+            "image:tag",
+        )
+
+        self.assertEqual(training_command(config), "osf-audit-feature-hygiene")
+        self.assertIn('[ -f "${OUT}/feature_hygiene_trace.json" ]', manifest)
+        self.assertIn('[ -f "${OUT}/feature_hygiene.csv" ]', manifest)
+
+    def test_training_job_waits_for_configured_paths(self) -> None:
+        config = {
+            "run": {
+                "id": "feature_hygiene_v1",
+                "kind": "feature_hygiene",
+            },
+            "output": {"k8s_dir": "/mnt/output/opening_strength_fit/feature_hygiene_v1"},
+            "k8s": {
+                "wait_for_paths": ["/mnt/output/source/feature_importance.csv"],
+                "resources": {"memory_limit": "128Gi"},
+            },
+        }
+
+        manifest = render_training_job(
+            Path("experiments/runs/feature_hygiene_v1.toml"),
+            config,
+            "image:tag",
+        )
+
+        self.assertIn("WAIT_PATHS=(\"/mnt/output/source/feature_importance.csv\")", manifest)
+        self.assertIn("exec osf-audit-feature-hygiene", manifest)
 
     def test_ensemble_model_uses_standard_training_script(self) -> None:
         config = {"run": {"kind": "exploration"}, "model": {"name": "ensemble"}}

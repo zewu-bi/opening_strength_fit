@@ -34,6 +34,8 @@ def training_command(config: dict) -> str:
     run_kind = str(get(config, "run", "kind", "experiment")).strip().lower()
     if run_kind == "feature_audit":
         return "osf-audit-feature-dependence"
+    if run_kind == "feature_hygiene":
+        return "osf-audit-feature-hygiene"
     if run_kind in {"cache_transform", "target_cache"}:
         return "osf-build-target-label-cache"
     if run_kind == "next_close_label_cache":
@@ -73,6 +75,8 @@ def _rolling_completion_files(config: dict, command: str) -> list[str]:
         return ["rolling_summary.csv"]
     if run_kind == "feature_audit":
         return ["feature_audit_trace.json", "feature_audit_metrics.csv"]
+    if run_kind == "feature_hygiene":
+        return ["feature_hygiene_trace.json", "feature_hygiene.csv"]
     if command == "osf-train":
         return ["_SUCCESS", "metrics_by_year.csv", "predictions.parquet"]
     return ["metrics_by_year.csv"]
@@ -127,7 +131,7 @@ def _gpu_opencl_bootstrap_yaml(resources: dict, indent: int) -> str:
     )
 
 
-def _wait_for_paths_yaml(config: dict, indent: int) -> str:
+def _wait_for_paths_script(config: dict) -> str:
     paths = get(config, "k8s", "wait_for_paths", []) or []
     if isinstance(paths, str):
         paths = paths.replace(",", " ").split()
@@ -141,8 +145,15 @@ def _wait_for_paths_yaml(config: dict, indent: int) -> str:
         paths,
         timeout_seconds=timeout_seconds,
         interval_seconds=interval_seconds,
-        indent=indent,
+        indent=0,
     )
+
+
+def _wait_for_paths_yaml(config: dict, indent: int) -> str:
+    script = _wait_for_paths_script(config)
+    if not script:
+        return ""
+    return textwrap.indent(script, " " * indent)
 
 
 def _scheduler_yaml(config: dict, resources: dict, indent: int = 14) -> str:
@@ -162,26 +173,36 @@ def _training_command_yaml(
     config_path: Path,
     output_dir: str,
     resources: dict,
+    wait_for_paths: str = "",
     indent: int = 18,
 ) -> str:
-    if _gpu_count(resources):
-        return textwrap.indent(
-            textwrap.dedent(
-                f"""\
-                command:
-                  - /bin/bash
-                  - -lc
-                  - |
-                    set -euo pipefail
-                    mkdir -p /etc/OpenCL/vendors
-                    echo libnvidia-opencl.so.1 > /etc/OpenCL/vendors/nvidia.icd
-                    exec {command} \\
-                      --config {config_path.as_posix()} \\
-                      --output-dir {output_dir}
-                """
-            ),
-            " " * indent,
+    if _gpu_count(resources) or wait_for_paths.strip():
+        preamble_lines: list[str] = []
+        if _gpu_count(resources):
+            preamble_lines.extend(
+                [
+                    "mkdir -p /etc/OpenCL/vendors",
+                    "echo libnvidia-opencl.so.1 > /etc/OpenCL/vendors/nvidia.icd",
+                ]
+            )
+        if wait_for_paths.strip():
+            preamble_lines.extend(wait_for_paths.rstrip().splitlines())
+        lines = [
+            "command:",
+            "  - /bin/bash",
+            "  - -lc",
+            "  - |",
+            "    set -euo pipefail",
+        ]
+        lines.extend(f"    {line}" for line in preamble_lines)
+        lines.extend(
+            [
+                f"    exec {command} \\",
+                f"      --config {config_path.as_posix()} \\",
+                f"      --output-dir {output_dir}",
+            ]
         )
+        return textwrap.indent("\n".join(lines) + "\n", " " * indent)
     return textwrap.indent(
         textwrap.dedent(
             f"""\
@@ -295,6 +316,7 @@ def render_training_job(config_path: Path, config: dict, image: str) -> str:
         config_path=config_path,
         output_dir=output_dir,
         resources=resources,
+        wait_for_paths=_wait_for_paths_script(config),
         indent=18,
     )
 
