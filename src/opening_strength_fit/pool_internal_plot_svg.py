@@ -61,13 +61,14 @@ def write_two_panel_bar_svg(
         f'<rect width="{width}" height="{height}" fill="#fbfaf7"/>',
         _svg_text(width / 2, 42, title, size=34, weight=800, anchor="middle"),
     ]
-    legend_item_width = 230.0
-    legend_start = (
-        438.0 if pools == PLOT_POOLS else width / 2 - (legend_item_width * pool_count) / 2
-    )
-    legend_y = 80.0
-    for index, pool in enumerate(pools):
-        x = legend_start + legend_item_width * index
+    for pool, x, legend_y in _legend_layout(
+        legend_labels,
+        pools,
+        width=width,
+        left=left,
+        right=right,
+        y=80.0,
+    ):
         lines.append(
             f'<rect x="{x:.1f}" y="{legend_y - 12:.1f}" width="34" height="18" '
             f'fill="{PLOT_COLORS[pool]}"/>'
@@ -197,6 +198,7 @@ def write_two_panel_line_svg(
     pools: tuple[str, ...] = PLOT_POOLS,
     x_label_mode: str = "dates_at_ends",
     line_width: float = 3.0,
+    line_marker_count: int = 24,
 ) -> None:
     pools = tuple(pools)
     if not pools:
@@ -242,13 +244,14 @@ def write_two_panel_line_svg(
         f'<rect width="{width}" height="{height}" fill="#fbfaf7"/>',
         _svg_text(width / 2, 42, title, size=34, weight=800, anchor="middle"),
     ]
-    legend_item_width = 230.0
-    legend_start = (
-        438.0 if pools == PLOT_POOLS else width / 2 - (legend_item_width * len(pools)) / 2
-    )
-    legend_y = 80.0
-    for index, pool in enumerate(pools):
-        x = legend_start + legend_item_width * index
+    for pool, x, legend_y in _legend_layout(
+        legend_labels,
+        pools,
+        width=width,
+        left=left,
+        right=right,
+        y=80.0,
+    ):
         lines.append(
             f'<line x1="{x:.1f}" y1="{legend_y - 3:.1f}" x2="{x + 34.0:.1f}" '
             f'y2="{legend_y - 3:.1f}" stroke="{PLOT_COLORS[pool]}" '
@@ -352,12 +355,14 @@ def write_two_panel_line_svg(
                 'stroke-linejoin="round" '
                 'stroke-linecap="round"/>'
             )
-            for row in item.iloc[:: max(1, len(item) // 24)].itertuples(index=False):
-                lines.append(
-                    f'<circle cx="{xmap(row.week_start):.1f}" '
-                    f'cy="{ymap(float(getattr(row, column))):.1f}" r="2.6" '
-                    f'fill="{PLOT_COLORS[pool]}"/>'
-                )
+            if line_marker_count > 0:
+                marker_step = max(1, len(item) // line_marker_count)
+                for row in item.iloc[::marker_step].itertuples(index=False):
+                    lines.append(
+                        f'<circle cx="{xmap(row.week_start):.1f}" '
+                        f'cy="{ymap(float(getattr(row, column))):.1f}" r="2.6" '
+                        f'fill="{PLOT_COLORS[pool]}"/>'
+                    )
 
     lines.append("</svg>")
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -389,6 +394,65 @@ def _legend_labels(plot_data: pd.DataFrame, pools: tuple[str, ...]) -> dict[str,
     return labels
 
 
+def _legend_layout(
+    legend_labels: dict[str, str],
+    pools: tuple[str, ...],
+    *,
+    width: float,
+    left: float,
+    right: float,
+    y: float,
+) -> list[tuple[str, float, float]]:
+    marker_and_gap = 46.0
+    trailing_gap = 34.0
+    font_size = 19.0
+    min_item_width = 110.0
+    row_gap = 28.0
+    available_width = max(right - left, width * 0.6)
+    item_widths = {
+        pool: max(
+            min_item_width,
+            marker_and_gap + _svg_text_width(legend_labels[pool], font_size) + trailing_gap,
+        )
+        for pool in pools
+    }
+    rows: list[tuple[list[str], float]] = []
+    current: list[str] = []
+    current_width = 0.0
+    for pool in pools:
+        item_width = item_widths[pool]
+        if current and current_width + item_width > available_width:
+            rows.append((current, current_width))
+            current = []
+            current_width = 0.0
+        current.append(pool)
+        current_width += item_width
+    if current:
+        rows.append((current, current_width))
+
+    start_y = y - (len(rows) - 1) * row_gap / 2.0
+    positions: list[tuple[str, float, float]] = []
+    for row_index, (row, row_width) in enumerate(rows):
+        x = max(left, width / 2.0 - row_width / 2.0)
+        row_y = start_y + row_gap * row_index
+        for pool in row:
+            positions.append((pool, x, row_y))
+            x += item_widths[pool]
+    return positions
+
+
+def _svg_text_width(text: str, size: float) -> float:
+    units = 0.0
+    for char in text:
+        if char.isspace():
+            units += 0.35
+        elif ord(char) < 128:
+            units += 0.54
+        else:
+            units += 0.95
+    return units * size
+
+
 def _should_label_bar(mode: str, category: str) -> bool:
     if mode == "none":
         return False
@@ -408,8 +472,7 @@ def _line_x_ticks(
         if max_date.month != 1 or max_date.day != 1:
             end_year += 1
         return [
-            pd.Timestamp(year=year, month=1, day=1)
-            for year in range(min_date.year, end_year + 1)
+            pd.Timestamp(year=year, month=1, day=1) for year in range(min_date.year, end_year + 1)
         ]
 
     ticks = [

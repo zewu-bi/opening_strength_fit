@@ -29,45 +29,48 @@ from opening_strength_fit.pool_internal_plot_svg import (
 DIRECTION_COLORS = {
     "baseline": "#1f2937",
     "baseline_pool_l": "#1f2937",
-    "baseline_universe": "#9aa0a6",
-    "background": "#6b7280",
-    "xs_relative": "#0072b2",
-    "hist_surprise": "#d55e00",
-    "path_shape": "#009e73",
-    "scale_norm": "#56b4e9",
-    "clock_segment": "#cc79a7",
+    "baseline_universe": "#7f7f7f",
+    "market": "#7f7f7f",
+    "background": "#ff7f0e",
 }
 
 DISPLAY_LABELS = {
-    "baseline": "base",
-    "baseline_pool_l": "base",
+    "baseline": "baseline",
+    "baseline_pool_l": "baseline",
+    "market": "market",
     "background": "pool",
     "xs_relative": "xs",
     "hist_surprise": "deviation",
+    "hist_path": "deviation+path",
+    "hist_path_zscore": "deviation+path zscore",
+    "rank_centered": "deviation+path rank",
     "path_shape": "path",
     "scale_norm": "scale",
     "clock_segment": "clock",
 }
 
 DEFAULT_PLOT_DIRECTION_KEYS = ("hist_surprise", "path_shape")
-MIN_PLOT_DIRECTIONS = 2
+MIN_PLOT_DIRECTIONS = 1
 MAX_PLOT_DIRECTIONS = 3
 BPS_PER_PERCENT = 100.0
 AUTO_COLOR_SEQUENCE = (
-    "#0072b2",
-    "#d55e00",
-    "#009e73",
-    "#cc79a7",
-    "#56b4e9",
-    "#e69f00",
-    "#7f3c8d",
-    "#11a579",
+    "#1f77b4",
+    "#2ca02c",
+    "#d62728",
+    "#9467bd",
+    "#17becf",
+    "#bcbd22",
+    "#8c564b",
+    "#e377c2",
 )
 
 CUMULATIVE_PERCENT_DISPLAY_COLUMNS = {
     "next_cumulative_net_return_bps": "next_cumulative_net_return_pct",
     "next_cumulative_vs_baseline_bps": "next_cumulative_vs_baseline_pct",
+    "next_cumulative_alpha_vs_market_bps": "next_cumulative_alpha_vs_market_pct",
 }
+CUMULATIVE_NET_RETURN_PANEL_TITLE = "扣除手续费累和收益"
+CUMULATIVE_MARKET_ALPHA_PANEL_TITLE = "对比全A股市场平均alpha"
 
 
 def default_plot_directions(
@@ -87,10 +90,10 @@ def default_plot_directions(
 def validate_plot_directions(directions: tuple[DirectionSpec, ...]) -> tuple[DirectionSpec, ...]:
     if not MIN_PLOT_DIRECTIONS <= len(directions) <= MAX_PLOT_DIRECTIONS:
         raise ValueError(
-            "acceptance plots require 2-3 comparison models besides baseline; "
+            "acceptance plots require 1-3 comparison models besides baseline; "
             f"got {len(directions)}"
         )
-    reserved_keys = {"baseline", "baseline_pool_l", "baseline_universe", "background"}
+    reserved_keys = {"baseline", "baseline_pool_l", "baseline_universe", "market", "background"}
     key_counts = Counter(direction.key for direction in directions)
     duplicate_keys = sorted(key for key, count in key_counts.items() if count > 1)
     if duplicate_keys:
@@ -147,8 +150,7 @@ def combine_net_alpha_cumulative_data(
         combined["next_net_return_bps"] - combined["pool_next_net_return_bps"]
     )
     combined["next_cumulative_alpha_bps"] = (
-        combined["next_cumulative_net_return_bps"]
-        - combined["pool_next_cumulative_net_return_bps"]
+        combined["next_cumulative_net_return_bps"] - combined["pool_next_cumulative_net_return_bps"]
     )
     combined["next_capital_alpha_bps"] = (
         combined["next_capital_net_return_bps"] - combined["pool_next_capital_net_return_bps"]
@@ -184,9 +186,8 @@ def add_background_cumulative_data(
     background["next_internal_excess_bps"] = pd.NA
     background["fee_bps"] = background["pool_fee_bps"]
     background["next_net_return_bps"] = background["pool_next_net_return_bps"]
-    background["next_cumulative_net_return_bps"] = (
-        background["pool_next_cumulative_net_return_bps"]
-    )
+    background["next_capital_net_return_bps"] = background["pool_next_capital_net_return_bps"]
+    background["next_cumulative_net_return_bps"] = background["pool_next_cumulative_net_return_bps"]
     background["next_alpha_bps"] = pd.NA
     background["next_cumulative_alpha_bps"] = pd.NA
     background["next_capital_internal_excess_bps"] = 0.0
@@ -202,6 +203,68 @@ def add_background_cumulative_data(
     return pd.concat([out, background], ignore_index=True)
 
 
+def add_market_cumulative_data(
+    cumulative_data: pd.DataFrame,
+    *,
+    source_key: str = "baseline_universe",
+    market_key: str = "market",
+) -> pd.DataFrame:
+    source = cumulative_data.loc[cumulative_data["pool"].astype(str).eq(source_key)].copy()
+    if source.empty:
+        raise ValueError(f"cumulative data has no market source rows for {source_key!r}")
+    source["week_start"] = pd.to_datetime(source["week_start"], errors="coerce")
+    source = source.dropna(subset=["week_start"]).sort_values("week_start")
+    if source.empty:
+        raise ValueError(f"cumulative data has no dated market source rows for {source_key!r}")
+
+    market = source.copy()
+    market_label = DISPLAY_LABELS.get(market_key, market_key)
+    raw_market_next_bps = pd.to_numeric(market["pool_next_mean_bps"], errors="coerce")
+    market["pool"] = market_key
+    market["pool_label"] = market_label
+    market["variant"] = market_label
+    market["selected_next_mean_bps"] = pd.NA
+    market["selected_turnover"] = pd.NA
+    market["selected_fee_bps"] = pd.NA
+    market["pool_turnover"] = pd.NA
+    market["pool_turnover_source"] = "universe_pool_next_mean_bps"
+    market["pool_fee_bps"] = 0.0
+    market["fee_bps"] = 0.0
+    market["next_internal_excess_bps"] = pd.NA
+    market["next_net_return_bps"] = raw_market_next_bps
+    market["pool_next_net_return_bps"] = raw_market_next_bps
+    market["next_capital_net_return_bps"] = raw_market_next_bps / NEXT_CLOSE_CAPITAL_DIVISOR
+    market["pool_next_capital_net_return_bps"] = market["next_capital_net_return_bps"]
+    market["next_cumulative_net_return_bps"] = market["next_capital_net_return_bps"].cumsum()
+    market["pool_next_cumulative_net_return_bps"] = market["next_cumulative_net_return_bps"]
+    market["next_alpha_bps"] = pd.NA
+    market["next_capital_alpha_bps"] = pd.NA
+    market["next_cumulative_alpha_bps"] = pd.NA
+    market["next_capital_internal_excess_bps"] = pd.NA
+    market["next_cumulative_internal_excess_return_bps"] = pd.NA
+    for column in (
+        "next_vs_baseline_bps",
+        "next_cumulative_vs_baseline_bps",
+        "next_internal_excess_vs_baseline_bps",
+        "next_cumulative_internal_excess_vs_baseline_bps",
+        "next_alpha_vs_market_bps",
+        "next_capital_alpha_vs_market_bps",
+        "next_cumulative_alpha_vs_market_bps",
+    ):
+        market[column] = pd.NA
+
+    out = cumulative_data.loc[~cumulative_data["pool"].astype(str).eq(source_key)].copy()
+    for column in market.columns:
+        if column not in out.columns:
+            out[column] = pd.NA
+    for column in out.columns:
+        if column not in market.columns:
+            market[column] = pd.NA
+    market = market[out.columns]
+    market["week_start"] = market["week_start"].dt.strftime("%Y-%m-%d")
+    return pd.concat([out, market], ignore_index=True)
+
+
 def add_cumulative_baseline_relative_data(
     cumulative_data: pd.DataFrame,
     *,
@@ -211,13 +274,16 @@ def add_cumulative_baseline_relative_data(
     data = cumulative_data.copy()
     data["week_start"] = pd.to_datetime(data["week_start"], errors="coerce")
     data = data.dropna(subset=["week_start"])
-    baseline = data.loc[data["pool"].astype(str).eq(baseline_key), [
-        "week_start",
-        "next_net_return_bps",
-        "next_cumulative_net_return_bps",
-        "next_capital_internal_excess_bps",
-        "next_cumulative_internal_excess_return_bps",
-    ]].rename(
+    baseline = data.loc[
+        data["pool"].astype(str).eq(baseline_key),
+        [
+            "week_start",
+            "next_net_return_bps",
+            "next_cumulative_net_return_bps",
+            "next_capital_internal_excess_bps",
+            "next_cumulative_internal_excess_return_bps",
+        ],
+    ].rename(
         columns={
             "next_net_return_bps": "baseline_next_net_bps",
             "next_cumulative_net_return_bps": "baseline_next_cumulative_net_bps",
@@ -279,6 +345,73 @@ def add_cumulative_baseline_relative_data(
     return data
 
 
+def add_cumulative_market_relative_data(
+    cumulative_data: pd.DataFrame,
+    *,
+    market_key: str,
+    comparison_keys: tuple[str, ...],
+) -> pd.DataFrame:
+    data = cumulative_data.copy()
+    data["week_start"] = pd.to_datetime(data["week_start"], errors="coerce")
+    data = data.dropna(subset=["week_start"])
+    market = data.loc[
+        data["pool"].astype(str).eq(market_key),
+        [
+            "week_start",
+            "next_net_return_bps",
+            "next_capital_net_return_bps",
+            "next_cumulative_net_return_bps",
+        ],
+    ].rename(
+        columns={
+            "next_net_return_bps": "market_next_net_bps",
+            "next_capital_net_return_bps": "market_next_capital_net_bps",
+            "next_cumulative_net_return_bps": "market_next_cumulative_net_bps",
+        }
+    )
+    if market.empty:
+        raise ValueError(f"cumulative data has no market rows for {market_key!r}")
+
+    data["next_alpha_vs_market_bps"] = pd.NA
+    data["next_capital_alpha_vs_market_bps"] = pd.NA
+    data["next_cumulative_alpha_vs_market_bps"] = pd.NA
+    for key in comparison_keys:
+        item = data.loc[data["pool"].astype(str).eq(key), ["week_start"]].merge(
+            market,
+            on="week_start",
+            how="left",
+        )
+        index = data.index[data["pool"].astype(str).eq(key)]
+        if len(index) != len(item):
+            raise ValueError(f"cannot align cumulative market rows for {key!r}")
+        if item["market_next_cumulative_net_bps"].isna().any():
+            raise ValueError(f"missing market rows for cumulative alpha key {key!r}")
+        data.loc[index, "next_alpha_vs_market_bps"] = (
+            pd.to_numeric(data.loc[index, "next_net_return_bps"], errors="coerce").to_numpy()
+            - pd.to_numeric(item["market_next_net_bps"], errors="coerce").to_numpy()
+        )
+        data.loc[index, "next_capital_alpha_vs_market_bps"] = (
+            pd.to_numeric(
+                data.loc[index, "next_capital_net_return_bps"],
+                errors="coerce",
+            ).to_numpy()
+            - pd.to_numeric(item["market_next_capital_net_bps"], errors="coerce").to_numpy()
+        )
+        data.loc[index, "next_cumulative_alpha_vs_market_bps"] = (
+            pd.to_numeric(
+                data.loc[index, "next_cumulative_net_return_bps"],
+                errors="coerce",
+            ).to_numpy()
+            - pd.to_numeric(item["market_next_cumulative_net_bps"], errors="coerce").to_numpy()
+        )
+    data["week_start"] = data["week_start"].dt.strftime("%Y-%m-%d")
+    return data
+
+
+def _panel_values(data: pd.DataFrame, *, pools: tuple[str, ...], column: str) -> pd.Series:
+    return data.loc[data["pool"].astype(str).isin(pools), column]
+
+
 def apply_display_labels(frame: pd.DataFrame) -> pd.DataFrame:
     out = frame.copy()
     if "pool" not in out.columns:
@@ -293,11 +426,13 @@ def apply_display_labels(frame: pd.DataFrame) -> pd.DataFrame:
 
 def ensure_plot_colors(keys: tuple[str, ...]) -> None:
     PLOT_COLORS.update(DIRECTION_COLORS)
+    assigned_keys: set[str] = set()
     sequence_index = 0
     for key in keys:
-        if key in PLOT_COLORS:
+        if key in DIRECTION_COLORS or key in assigned_keys:
             continue
         PLOT_COLORS[key] = AUTO_COLOR_SEQUENCE[sequence_index % len(AUTO_COLOR_SEQUENCE)]
+        assigned_keys.add(key)
         sequence_index += 1
 
 
@@ -321,23 +456,19 @@ def write_optimization_direction_plots(
     else:
         plot_directions = validate_plot_directions(tuple(directions))
     if not include_baseline_pool_cumulative:
-        raise ValueError("baseline pool cumulative series is required for baseline-relative plots")
+        raise ValueError("baseline pool cumulative series is required for cumulative plots")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     series = tuple(direction.key for direction in plot_directions)
+    model_cumulative_series = ("baseline_pool_l", *series)
+    top_cumulative_series = ("market", "background", *model_cumulative_series)
+    alpha_cumulative_series = ("background", *model_cumulative_series)
     acceptance_directions = (
         DirectionSpec(key="baseline", label="baseline", run_id=baseline_run_id),
         *plot_directions,
     )
     acceptance_series = tuple(direction.key for direction in acceptance_directions)
-    cumulative_series = tuple(
-        [
-            "baseline_pool_l",
-            *series,
-            *(["baseline_universe"] if include_baseline_universe_cumulative else []),
-        ]
-    )
-    ensure_plot_colors((*acceptance_series, *cumulative_series, "background"))
+    ensure_plot_colors((*acceptance_series, *top_cumulative_series, *alpha_cumulative_series))
 
     short_universe_data = apply_display_labels(
         load_horizon_plot_data(
@@ -360,7 +491,7 @@ def write_optimization_direction_plots(
         directions=plot_directions,
         pool=pool,
         include_baseline_pool=include_baseline_pool_cumulative,
-        include_baseline_universe=include_baseline_universe_cumulative,
+        include_baseline_universe=True,
         baseline_run_id=baseline_run_id,
         fee_bps=realized_fee_bps,
         pool_turnover_path=pool_turnover_path,
@@ -394,10 +525,14 @@ def write_optimization_direction_plots(
         net_alpha_cumulative_data,
         baseline_key="baseline_pool_l",
     )
-
-    overlay_acceptance_csv = (
-        output_dir / "optimization_directions_overlay_acceptance_plot_data.csv"
+    net_alpha_cumulative_data = add_market_cumulative_data(net_alpha_cumulative_data)
+    net_alpha_cumulative_data = add_cumulative_market_relative_data(
+        net_alpha_cumulative_data,
+        market_key="market",
+        comparison_keys=alpha_cumulative_series,
     )
+
+    overlay_acceptance_csv = output_dir / "optimization_directions_overlay_acceptance_plot_data.csv"
     overlay_acceptance_svg = output_dir / "optimization_directions_overlay_acceptance.svg"
     net_alpha_cumulative_csv = (
         output_dir / "optimization_directions_net_alpha_cumulative_plot_data.csv"
@@ -451,41 +586,44 @@ def write_optimization_direction_plots(
         net_alpha_cumulative_data
     )
     cumulative_title = f"{title_prefix} fee {realized_fee_bps:g}bps 池内{top_n_label}隔夜净收益累和"
+    cumulative_net_values = _panel_values(
+        net_alpha_cumulative_plot_data,
+        pools=top_cumulative_series,
+        column="next_cumulative_net_return_pct",
+    )
+    market_alpha_values = _panel_values(
+        net_alpha_cumulative_plot_data,
+        pools=alpha_cumulative_series,
+        column="next_cumulative_alpha_vs_market_pct",
+    )
     write_two_panel_line_svg(
         net_alpha_cumulative_plot_data,
         title=cumulative_title,
         panels=[
             {
-                "title": "累计净收益",
+                "title": CUMULATIVE_NET_RETURN_PANEL_TITLE,
                 "ylabel": "%",
                 "column": "next_cumulative_net_return_pct",
-                "default_ylim": line_axis(
-                    net_alpha_cumulative_plot_data["next_cumulative_net_return_pct"]
-                ),
-                "tick_step": line_step(
-                    net_alpha_cumulative_plot_data["next_cumulative_net_return_pct"]
-                ),
+                "default_ylim": line_axis(cumulative_net_values),
+                "tick_step": line_step(cumulative_net_values),
                 "tick_decimals": None,
                 "fixed_ylim": True,
             },
             {
-                "title": "vs base",
+                "title": CUMULATIVE_MARKET_ALPHA_PANEL_TITLE,
                 "ylabel": "%",
-                "column": "next_cumulative_vs_baseline_pct",
-                "default_ylim": line_axis(
-                    net_alpha_cumulative_plot_data["next_cumulative_vs_baseline_pct"]
-                ),
-                "tick_step": line_step(
-                    net_alpha_cumulative_plot_data["next_cumulative_vs_baseline_pct"]
-                ),
+                "column": "next_cumulative_alpha_vs_market_pct",
+                "default_ylim": line_axis(market_alpha_values),
+                "tick_step": line_step(market_alpha_values),
                 "tick_decimals": None,
                 "fixed_ylim": True,
             },
         ],
         output_path=net_alpha_cumulative_svg,
-        pools=(*cumulative_series, "background"),
+        pools=top_cumulative_series,
         x_label_mode="years_only",
         line_width=2.1,
+        line_marker_count=0,
     )
 
     trace = {
@@ -523,11 +661,22 @@ def write_optimization_direction_plots(
             "pool": pool,
             "key": "baseline_pool_l",
         },
+        "market_cumulative": {
+            "enabled": True,
+            "run_id": baseline_run_id,
+            "pool": "universe",
+            "key": "market",
+            "definition": "universe pool_next_mean_bps divided by next_close_capital_divisor and cumulatively summed",
+        },
         "directions": [
             {"key": item.key, "label": item.label, "run_id": item.run_id}
             for item in plot_directions
         ],
-        "plotted_series": ["baseline", *series],
+        "plotted_series": {
+            "overlay_acceptance": ["baseline", *series],
+            "cumulative_top": list(top_cumulative_series),
+            "cumulative_market_alpha": list(alpha_cumulative_series),
+        },
         "figures": {
             "overlay_acceptance": str(overlay_acceptance_svg),
             "net_alpha_cumulative": str(net_alpha_cumulative_svg),
@@ -538,26 +687,32 @@ def write_optimization_direction_plots(
         },
         "cumulative_acceptance": {
             "figure_title": cumulative_title,
-            "panels": ["累计净收益", "vs base"],
-            "background_series": "pool_L background overnight return",
+            "panels": [
+                CUMULATIVE_NET_RETURN_PANEL_TITLE,
+                CUMULATIVE_MARKET_ALPHA_PANEL_TITLE,
+            ],
+            "market_series": "full A-share market average overnight return",
+            "background_series": "pool_L background overnight return after pool_fee_bps",
             "reason": "short cumulative is omitted because this workflow cannot trade T+0",
             "unit": "%",
             "source_unit": "bps",
             "fee_bps_per_trade": realized_fee_bps,
             "absolute_definition": (
-                "main panel plots selected_next_mean_bps minus selected_fee_bps, divided by "
-                "next_close_capital_divisor and cumulatively summed; figure axis displays "
-                "the cumulative bps divided by 100 as percent. Background plots "
-                "pool_next_mean_bps minus pool_fee_bps with the same capital divisor"
+                "top panel plots market, pool background, baseline selected TopN, and "
+                "comparison selected TopN cumulative next-close returns. Pool/model lines "
+                "subtract their realized fee before dividing by next_close_capital_divisor "
+                "and cumulative summation; market uses universe pool_next_mean_bps without "
+                "a trading fee. Figure axis displays cumulative bps divided by 100 as percent"
             ),
             "background_definition": (
                 "pool_L background overnight return minus pool_fee_bps; pool fee uses "
                 "equal-weight stock-pool membership turnover when available"
             ),
             "pool_turnover_source": "see pool_turnover_source column in cumulative plot data",
-            "relative_to_baseline_definition": (
-                "comparison capital-adjusted cumulative net bps minus baseline "
-                "capital-adjusted cumulative net bps, displayed as percent"
+            "market_alpha_definition": (
+                "bottom panel plots pool/background and model capital-adjusted cumulative "
+                "net bps minus full-market capital-adjusted cumulative bps, displayed as "
+                "percent"
             ),
             "accumulation_definition": (
                 "capital-adjusted cumulative net bps = cumsum(daily_net_bps / "
@@ -566,14 +721,15 @@ def write_optimization_direction_plots(
         },
         "source_files": source_files(backtests_root, plot_directions),
     }
-    if include_baseline_universe_cumulative:
-        trace["baseline_universe_cumulative"] = {
-            "enabled": True,
-            "run_id": baseline_run_id,
-            "pool": "universe",
-            "key": "baseline_universe",
-            "panels": ["next"],
-        }
+    trace["baseline_universe_cumulative"] = {
+        "enabled": True,
+        "requested_by_cli": include_baseline_universe_cumulative,
+        "run_id": baseline_run_id,
+        "pool": "universe",
+        "key": "baseline_universe",
+        "used_as": "market source",
+        "panels": ["next"],
+    }
     write_json(trace_path, trace, ensure_ascii=True)
 
     return {

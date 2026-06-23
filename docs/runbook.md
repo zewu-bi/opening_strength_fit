@@ -250,7 +250,8 @@ osf-check-project-contracts
 ```
 
 主要输出：`experiments/results/metrics/`、`output/artifacts/<run_id>/`、
-`experiments/results/backtests/<record-prefix>/`。
+`experiments/results/backtests/<record-prefix>/`。其中 `experiments/results/` 是本地 compact
+归档根目录，默认被 Git 忽略；正式事实索引同步写入 [experiment_log.md](experiment_log.md)。
 
 常见文件：
 
@@ -322,12 +323,13 @@ short rank IC和next pool_L 超额: optimization_directions_overlay_acceptance.s
 第一张图是主验收：上 panel 用 `universe short Rank IC` 检查开盘短期模型本身；下 panel 用
 `pool_L Top100 next internal excess` 检查叠加 mentor 股池后的 overnight overlay 效果。
 默认图上画 baseline、hist_surprise 和 path_shape，也可以通过重复 `--direction key=label=run_id`
-选择 2-3 个新的 comparison models；baseline 始终由 `--baseline-run-id` 提供，不需要作为
+选择 1-3 个新的 comparison models；baseline 始终由 `--baseline-run-id` 提供，不需要作为
 `--direction` 传入。柱顶标数值。
 不再主看 short excess、`pool_L` short IC、universe next excess 或 next IC。
 
-第二张 cumulative 图只画 next：上 panel 是扣费 selected net return，并额外画一条
-`pool_L` background；下 panel 是 comparison models 相对 baseline 的累计差值。
+第二张 cumulative 图只画 next：上 panel 是全 A 股市场平均、扣费后的 `pool_L`
+background、baseline Top100 和 comparison models Top100 的累计收益；下 panel 是扣费后的
+`pool_L` background、baseline 和 comparison models 相对全 A 股市场平均的累计 alpha。
 本仓库目前没有公司回测 API 封装；未来若接入公司回测 API，可替换 background 数据源。
 默认扣费口径为 A 股 all-in round-trip 估计 `8 bps`；如需 stress 旧口径可传
 `--realized-fee-bps 5`。底层来自 daily pool-internal summary，图上保留日频累计点。
@@ -337,9 +339,7 @@ short rank IC和next pool_L 超额: optimization_directions_overlay_acceptance.s
 ```bash
 osf-plot-optimization-direction-comparison \
   --output-dir experiments/results/backtests/<comparison_dir> \
-  --direction price_bucket=price_bucket=<price_bucket_run_id> \
-  --direction scale_norm=scale_norm=<scale_norm_run_id> \
-  --direction price_scale_norm=price_scale_norm=<price_scale_norm_run_id>
+  --direction scale_norm=scale_norm=<scale_norm_run_id>
 ```
 
 周度 4w rolling 稳定性补充：

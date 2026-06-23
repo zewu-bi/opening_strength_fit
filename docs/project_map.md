@@ -79,7 +79,7 @@ CLI:
 - `osf-train` / `osf-run-experiment`: train/evaluate a configured experiment.
 - `osf-evaluate-predictions`: evaluate an existing prediction file.
 - `osf-analyze-pool-internal-top100`: join predictions with next-close labels and selection masks to produce Top100 pool-internal validation panels.
-- `osf-plot-optimization-direction-comparison`: render the fixed overlay acceptance figures for baseline plus 2-3 selected comparison models: universe short Rank IC, `pool_L` Top100 next internal excess, and next net/background with baseline-relative cumulative return.
+- `osf-plot-optimization-direction-comparison`: render the fixed overlay acceptance figures for baseline plus 1-3 selected comparison models: universe short Rank IC, `pool_L` Top100 next internal excess, and full-market / pool / model cumulative next net returns with full-market-relative alpha.
 - `osf-plot-weekly-pool-internal`: render optional trading-day-equal weekly / 4w rolling pool-internal stability diagnostics from `pool_internal_group_metrics.csv`.
 - `osf-plot-weekly-pool-internal-cumulative`: render cumulative short/next pool-internal excess from pre-aggregated daily or weekly summary rows.
 - `osf-summarize-opening-results`: summarize metrics CSVs.
@@ -123,11 +123,12 @@ CLI:
 - `experiments/runs/*.toml`: run configs. `run.id` must match the filename.
 - `experiments/jobs/*.yaml`: rendered K8s jobs.
 - `experiments/config_templates/`: reusable TOML snippets for run configs.
-- `experiments/results/metrics/`: tracked metrics CSV evidence.
-- `experiments/results/backtests/`: tracked replay, horizon-decay, sweep, and rolling summaries. Multi-file pool-internal archives use `backtests/<record_prefix>/`.
+- `experiments/results/metrics/`: local compact metrics CSV evidence produced by artifact sync; ignored by Git unless explicitly force-added.
+- `experiments/results/backtests/`: local replay, horizon-decay, sweep, hygiene, and rolling archives. Multi-file pool-internal archives use `backtests/<record_prefix>/`; this tree is ignored by Git and indexed through `docs/experiment_log.md`.
 - `*_sharded_job.yaml`: monthly/yearly sharded K8s jobs.
 
 ## Ignored Outputs
 
 - `output/artifacts/<run_id>/` and `output/artifacts/_partial_metrics/`: current local mirrors and partial metrics; ignored.
 - `output/legacy/{artifacts,predictions,analysis,labels,reports}/`: old pulls, debug prediction/label/report state, local analysis output, and heavy diagnostics; ignored.
+- `experiments/results/`: compact local archive root; ignored by Git to avoid committing large or frequently refreshed evidence files.

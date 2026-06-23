@@ -32,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Render 2022-2025 fixed opening-strength acceptance plots for "
-            "baseline plus 2-3 comparison model results."
+            "baseline plus 1-3 comparison model results."
         )
     )
     parser.add_argument(
@@ -95,14 +95,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--include-baseline-universe-cumulative",
         action="store_true",
-        help="Also add baseline universe as a next-panel reference line on the cumulative plot.",
+        help=(
+            "Compatibility flag retained in trace metadata; the cumulative plot now always "
+            "loads baseline universe data to derive the full-market reference line."
+        ),
     )
     parser.add_argument(
         "--direction",
         action="append",
         type=parse_direction_spec,
         help=(
-            "Comparison model to plot besides baseline. Repeat 2-3 times as "
+            "Comparison model to plot besides baseline. Repeat 1-3 times as "
             "key=label=run_id. If omitted, defaults are "
             f"{'/'.join(DEFAULT_PLOT_DIRECTION_KEYS)}."
         ),
@@ -114,9 +117,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
     directions = (
-        tuple(args.direction)
-        if args.direction
-        else default_plot_directions(DEFAULT_DIRECTIONS)
+        tuple(args.direction) if args.direction else default_plot_directions(DEFAULT_DIRECTIONS)
     )
     outputs = write_optimization_direction_plots(
         backtests_root=args.backtests_root,
