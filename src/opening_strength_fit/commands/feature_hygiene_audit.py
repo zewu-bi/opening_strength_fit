@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import os
 import re
 from pathlib import Path
@@ -255,21 +256,72 @@ def _sample_labeled_pvc_frame(args: argparse.Namespace, config: dict) -> pd.Data
             "historical_context_calendar_days",
             max(historical_lookback * 2 + 10, historical_lookback + 30),
         )
-        raw_parts = []
+        unique_target_dates = sorted(set(target_dates))
+        per_date_sample_rows = (
+            max(1, (int(max_rows) + len(unique_target_dates) - 1) // len(unique_target_dates))
+            if max_rows and unique_target_dates
+            else 0
+        )
+        target_key_config = dict(config)
+        target_key_features = dict(config.get("features", {}))
+        target_key_features["include_historical_same_minute_surprise"] = False
+        target_key_config["features"] = target_key_features
         context_ranges = []
-        for date in sorted(set(target_dates)):
+        raw_context_rows = 0
+        for date_index, date in enumerate(unique_target_dates):
             context_start = str(
                 (pd.Timestamp(date) - pd.Timedelta(days=int(context_calendar_days))).date()
             )
             context_ranges.append(f"{context_start}:{date}")
+            target_day_parts = []
+            target_day_filters = [("date", "==", date)]
+            for file in files:
+                if not _file_overlaps_date_range(file, date, date):
+                    continue
+                part = _read_frame_file(file, columns=columns, filters=target_day_filters)
+                if not part.empty:
+                    target_day_parts.append(part)
+            if not target_day_parts:
+                continue
+
+            target_day = pd.concat(target_day_parts, ignore_index=True)
+            target_day_labeled = filter_labeled_frame(target_day, target_key_config)
+            target_rows_before_sample = len(target_day_labeled)
+            if per_date_sample_rows and len(target_day_labeled) > per_date_sample_rows:
+                target_day_labeled = target_day_labeled.sample(
+                    n=per_date_sample_rows,
+                    random_state=int(random_state) + date_index,
+                ).sort_index()
+
+            key_columns = [
+                column
+                for column in ("date", "symbol", "timestamp", "decision_target_timestamp")
+                if column in target_day_labeled.columns
+            ]
+            if not key_columns:
+                continue
+            target_keys = target_day_labeled[key_columns].drop_duplicates()
+            symbols = (
+                sorted(target_keys["symbol"].dropna().astype(str).unique().tolist())
+                if "symbol" in target_keys.columns
+                else []
+            )
+
             date_filters = [("date", ">=", context_start), ("date", "<=", date)]
+            if symbols:
+                date_filters.append(("symbol", "in", symbols))
+            raw_parts = []
+            raw_rows_for_date = 0
             for file in files:
                 if not _file_overlaps_date_range(file, context_start, date):
                     continue
                 part = _read_frame_file(file, columns=columns, filters=date_filters)
                 if not part.empty:
+                    raw_rows_for_date += len(part)
                     raw_parts.append(part)
-        if raw_parts:
+            if not raw_parts:
+                continue
+            raw_context_rows += raw_rows_for_date
             context = pd.concat(raw_parts, ignore_index=True)
             dedupe_columns = [
                 column
@@ -279,11 +331,40 @@ def _sample_labeled_pvc_frame(args: argparse.Namespace, config: dict) -> pd.Data
             if dedupe_columns:
                 context = context.drop_duplicates(subset=dedupe_columns)
             labeled = filter_labeled_frame(context, config)
-            target_date_set = set(target_dates)
-            date_key = pd.to_datetime(labeled["date"], errors="coerce").dt.date.astype(str)
-            labeled = labeled.loc[date_key.isin(target_date_set)].copy()
-            if not labeled.empty:
-                parts.append(labeled)
+            merge_keys = [column for column in key_columns if column in labeled.columns]
+            if merge_keys:
+                target_labeled = labeled.merge(
+                    target_keys[merge_keys].drop_duplicates(),
+                    on=merge_keys,
+                    how="inner",
+                )
+            else:
+                date_key = pd.to_datetime(labeled["date"], errors="coerce").dt.date.astype(str)
+                target_labeled = labeled.loc[date_key.eq(date)].copy()
+            if not target_labeled.empty:
+                parts.append(target_labeled)
+            print_mapping(
+                "feature_hygiene_historical_context_target",
+                {
+                    "date": date,
+                    "target_rows_before_sample": target_rows_before_sample,
+                    "sampled_target_rows": len(target_keys),
+                    "symbols": len(symbols),
+                    "raw_context_rows": raw_rows_for_date,
+                    "output_rows": len(target_labeled),
+                },
+            )
+            del (
+                target_day_parts,
+                target_day,
+                target_day_labeled,
+                target_keys,
+                raw_parts,
+                context,
+                labeled,
+                target_labeled,
+            )
+            gc.collect()
         print_mapping(
             "feature_hygiene_historical_context",
             {
@@ -291,7 +372,7 @@ def _sample_labeled_pvc_frame(args: argparse.Namespace, config: dict) -> pd.Data
                 "target_dates": len(set(target_dates)),
                 "context_calendar_days": context_calendar_days,
                 "context_ranges": ";".join(context_ranges),
-                "raw_context_rows": sum(len(part) for part in raw_parts),
+                "raw_context_rows": raw_context_rows,
             },
         )
 

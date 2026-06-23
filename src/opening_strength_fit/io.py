@@ -28,6 +28,8 @@ def _filter_frame(frame: pd.DataFrame, filters: FrameFilters | None) -> pd.DataF
             mask &= values <= value
         elif op == "<":
             mask &= values < value
+        elif op == "in":
+            mask &= values.isin(value)
         else:
             raise SystemExit(f"unsupported frame filter operator: {op}")
     return frame.loc[mask].copy()

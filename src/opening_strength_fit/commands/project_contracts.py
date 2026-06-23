@@ -31,6 +31,7 @@ REQUIRED_DIRS = (
     "docs",
     "tests",
 )
+LOCAL_ARCHIVE_DIRS = {"experiments/results"}
 SKIP_PARTS = {
     ".git",
     ".mypy_cache",
@@ -140,8 +141,25 @@ def check_project_scripts(files: list[str], errors: list[str]) -> None:
 
 def check_required_dirs(files: list[str], errors: list[str]) -> None:
     for directory in REQUIRED_DIRS:
-        if not any(path.startswith(f"{directory}/") for path in files):
-            errors.append(f"{directory}: no files found")
+        if any(path.startswith(f"{directory}/") for path in files):
+            continue
+        if directory in LOCAL_ARCHIVE_DIRS or _has_local_files(directory):
+            continue
+        errors.append(f"{directory}: no files found")
+
+
+def _has_local_files(directory: str) -> bool:
+    root = ROOT / directory
+    if not root.is_dir():
+        return False
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(ROOT)
+        if set(rel.parts) & SKIP_PARTS:
+            continue
+        return True
+    return False
 
 
 def check_legacy_script_tree(files: list[str], errors: list[str]) -> None:

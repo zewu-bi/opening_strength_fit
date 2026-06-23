@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from pathlib import Path
 
 import pandas as pd
@@ -8,6 +9,7 @@ import pytest
 from opening_strength_fit.commands.feature_hygiene_audit import (
     _context_dates_for_targets,
     _file_overlaps_date_range,
+    _sample_labeled_pvc_frame,
     build_prune_report,
     feature_correlation_pairs,
     load_feature_importance,
@@ -147,6 +149,75 @@ def test_labeled_cache_file_overlap_uses_year_from_name() -> None:
     assert _file_overlaps_date_range(path, "2024-12-01", "2025-01-02")
     assert _file_overlaps_date_range(path, "2025-02-21", "2025-07-01")
     assert not _file_overlaps_date_range(path, "2024-01-01", "2024-07-01")
+
+
+def test_labeled_pvc_historical_context_samples_each_target_day(tmp_path) -> None:
+    input_dir = tmp_path / "cache"
+    input_dir.mkdir()
+    rows = []
+    for date, value in [
+        ("2021-12-29", 10.0),
+        ("2021-12-30", 12.0),
+        ("2022-01-04", 14.0),
+        ("2022-01-27", 20.0),
+        ("2022-01-28", 22.0),
+        ("2022-02-01", 24.0),
+    ]:
+        rows.append(
+            {
+                "date": date,
+                "symbol": "000001.SZ",
+                "timestamp": f"{date} 09:31:00",
+                "decision_time": "09:31:00",
+                "decision_target_timestamp": f"{date} 09:31:00",
+                "decision_lag_seconds": 0,
+                "label": 0.1,
+                "valid_label": True,
+                "base_feature": value,
+            }
+        )
+    pd.DataFrame(rows).to_csv(input_dir / "opening_2022_labeled.csv", index=False)
+
+    args = SimpleNamespace(
+        labeled_input="",
+        sample_months=None,
+        test_start_month=None,
+        test_end_month=None,
+        sample_month_stride=None,
+        days_per_month=None,
+        sample_rows=None,
+        random_state=None,
+    )
+    config = {
+        "data": {"labeled_path": str(input_dir)},
+        "universe": {"enabled": False},
+        "sample": {
+            "mode": "decision_points",
+            "decision_times": ["09:31:00"],
+            "decision_max_lag_seconds": 5,
+        },
+        "features": {
+            "include_historical_same_minute_surprise": True,
+            "historical_surprise_columns": ["base_feature"],
+            "historical_surprise_windows": [2],
+            "historical_surprise_min_periods": 2,
+            "historical_surprise_modes": ["ratio"],
+        },
+        "feature_hygiene": {
+            "sample_months": ["2022-01", "2022-02"],
+            "days_per_month": 1,
+            "sample_rows": 2,
+            "random_state": 7,
+            "historical_context_calendar_days": 10,
+        },
+    }
+
+    sampled = _sample_labeled_pvc_frame(args, config)
+
+    assert sampled["date"].tolist() == ["2022-01-04", "2022-02-01"]
+    surprise_col = "hist_surprise_base_feature_2d_ratio"
+    assert surprise_col in sampled.columns
+    assert sampled[surprise_col].notna().all()
 
 
 def test_feature_hygiene_main_writes_reports_for_labeled_input(tmp_path) -> None:
