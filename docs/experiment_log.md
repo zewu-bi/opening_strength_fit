@@ -10,7 +10,7 @@
   当前验收是两个视角的 overlay：universe short Rank IC 检验开盘短期模型本身，
   `pool_L` Top100 next internal excess 检验叠加 mentor 隔夜股池后的隔夜收益。
 - 已归档：2024 月度、2018H1..2025H2 半年/OOS、2022-2025 baseline、second sweep、xs-relative、
-  model ensemble、fullxs batch、feature audit、price-regime / scale-normalization batch。
+  model ensemble、fullxs batch、feature audit、price-regime / scale-normalization batch、hist+path exact-union batch。
 - 当前增量候选：`scale_norm`；`price_scale_norm` short 更强但 next overlay / capital-adjusted 累计净收益略弱于
   `scale_norm`。
 - 固定研究流程：新的特征工程/模型优化 -> 集群重训 -> pool-internal analysis -> 同步轻量 artifacts ->
@@ -65,6 +65,7 @@
 | 2026-06-12 | mentor re-scope | 继续强化开盘短期模型；下一阶段显式做 price-regime 干预和尺度归一化特征。 |
 | 2026-06-12 | price-regime / scale-normalization jobs submitted | 三组 2022-2025 fullxs 实验已挂到集群：`price_bucket`、`scale_norm`、`price_scale_norm`。 |
 | 2026-06-17 | price-regime / scale-normalization archive | `price_bucket`、`scale_norm`、`price_scale_norm` 已补齐归档；`scale_norm` 综合最好，`price_scale_norm` 更偏 short。 |
+| 2026-06-23 | hist + path exact-union archive | `hist_path`、`hist_path_zscore`、`rank_centered` 已补齐 metrics 和 pool-internal analysis 并归档；本批 `rank_centered` 的 short Rank IC 与 `pool_L` next excess 最好。 |
 
 ## 2026-05-20 小窗结果
 
@@ -2575,6 +2576,178 @@ experiments/results/backtests/pool_sml_i500_benchmark_acceptance_2022_2025/
 Top100 overlay 相对各自 pool 的 next excess 并不随股池变小而提高，`pool_L` 略高。这说明
 小池优势主要来自 pool selection 本身，而不是池内短期模型排序更强。
 
+### 2026-06-18 hist + path exact-union experiments submitted
+
+按“baseline 276 + hist_same_minute_surprise 52 + path_shape_confirm 26”口径补三组 2022-2025
+fullxs rolling 实验，三者都使用 36m train -> next 6m test、8 个半年 shard，并行度
+`shard_parallelism = 4`。
+
+| run_id | training job | analysis job | feature口径 |
+| --- | --- | --- | --- |
+| `lgbm_delay2_36m_2022_2025_fullxs_hist_path_v1` | `os-lgbm-36m-2225-hist-path` | `os-analyze-36m-2225-hist-path` | 精确叠加 baseline + `hist_surprise_` + `path_shape_`；不加入 price-scale / bucket / xs-relative。 |
+| `lgbm_delay2_36m_2022_2025_fullxs_hist_path_norm_rank_v1` | `os-lgbm-36m-2225-hist-path-norm` | `os-analyze-36m-2225-hist-path-rank` | rank-centered 对照：使用同一批源特征，按 `date,decision_target_timestamp` 生成单一 `rank_centered` 的 `norm_` 特征，模型只吃 `norm_`。后续 analysis 名和展示名改为 `hist_path_rank_centered`；training job/run_id/output 保留原名以对应已运行中的集群产物。 |
+| `lgbm_delay2_36m_2022_2025_fullxs_hist_path_zscore_v1` | `os-lgbm-36m-2225-hist-path-zscore` | `os-analyze-36m-2225-hist-path-zscore` | 干净 zscore 归一化版本：同一批源特征按 `date,decision_target_timestamp` 做单一 `zscore` 的 `norm_` 特征，模型只吃 `norm_`。 |
+
+rank-centered / zscore 版显式复用 raw 版的窄 feature selector：`postopen_v2_*` 只保留既有白名单前缀，
+普通 postopen 用 `^postopen_(?!v2_)`；没有使用宽 `postopen_` 前缀，避免把未计划的
+postopen_v2 派生列纳入。
+
+2026-06-18 追加说明：`hist_path_norm_rank` 不是普通特征归一化，而是 rank-centered
+对照。真正的干净归一化实验为 `hist_path_zscore_v1`，每个源特征只生成一个横截面 zscore
+特征，不生成 rank 特征。
+
+### 2026-06-23 hist + path exact-union archive
+
+三组 2022-2025 fullxs rolling 训练 metrics 均已同步到
+`experiments/results/metrics/`，pool-internal analysis 轻量结果归档到：
+
+```text
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_v1/
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_zscore_v1/
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_norm_rank_v1/
+```
+
+`norm_rank` 训练 shard 已先完成，但缺少 `analysis/pool_internal_top100/`。2026-06-23
+补跑 `os-analyze-36m-2225-hist-path-rank` 后完成归档；该 run 的 analysis 展示名为
+`hist_path_rank_centered`。
+
+pool-internal summary：
+
+| model | universe short Rank IC | universe short excess bps | `pool_L` short Rank IC | `pool_L` short excess bps | `pool_L` next excess bps | `pool_L` next positive months |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `hist_path` | 0.1515 | +17.60 | 0.1409 | +9.26 | +8.85 | 33 / 48 |
+| `hist_path_zscore` | 0.1483 | +16.55 | 0.1392 | +8.89 | +8.42 | 32 / 48 |
+| `rank_centered` | 0.1531 | +17.25 | 0.1440 | +9.30 | +9.45 | 34 / 48 |
+
+三模型对比验收图归档到：
+
+```text
+experiments/results/backtests/optimization_overlay_acceptance_hist_path_2022_2025/
+```
+
+核心文件：
+
+```text
+optimization_directions_overlay_acceptance.svg
+optimization_directions_net_alpha_cumulative.svg
+optimization_directions_overlay_acceptance_plot_data.csv
+optimization_directions_net_alpha_cumulative_plot_data.csv
+optimization_directions_trace.json
+```
+
+这组三模型内部，`rank_centered` 的 mean short Rank IC 为 `0.1530`，`pool_L` mean next
+internal excess 为 `+9.50 bps`，均为本批最高；`hist_path` 次之，`hist_path_zscore`
+整体弱于 raw / rank-centered。
+
+### 2026-06-18 baseline 276 feature hygiene / correlation audit
+
+针对 `lgbm_delay2_36m_2022_2025_pool_l_feature_audit_v1` 的 276 个 baseline 特征补了一轮
+轻量 feature hygiene / correlation audit。数据从 PVC 上
+`opening_13y_201301_202512_delay2_mixed_w030_labeled_v1` 抽样，覆盖
+2022-01、2022-07、2023-01、2023-07、2024-01、2024-07、2025-01、2025-07，
+每月 3 天，共 24 个交易日；最终抽样 100k rows。样本实际 decision window 为
+09:31:00 到 09:40:05，对应当前 baseline 配置的 09:31-09:40 decision points，而不是
+09:45。
+
+产物路径：
+
+```text
+output/artifacts/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_v1/
+output/artifacts/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_corr09_v1/
+/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_v1/
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_v1/
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_corr09_v1/
+```
+
+归档状态：2026-06-23 已按正式 `feature_hygiene` artifact run 归档。新增
+`experiments/runs/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_v1.toml` 和
+`experiments/runs/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_corr09_v1.toml`，
+并用 k8s renderer 生成对应 job yaml；`osf-sync-experiment-artifacts --record` 会把
+`feature_hygiene.csv`、相关性 pairs/clusters、prune candidates、keep/drop list 和 trace
+按原名记录到 `experiments/results/backtests/<run_id>/`。此前审计把它们列为未归档，是因为
+只有一份手写 hygiene job，且该 job 直接引用 feature-audit config，没有自己的 run config；
+artifact sync / experiment audit / k8s contract 当时也还未把 `feature_hygiene` 定义为标准
+artifact run。`corr09` 版本现在作为独立 sensitivity artifact run 归档，语义是同一抽样下把
+相关性阈值从 `0.98` 放宽到 `0.90`。
+
+主要结果：
+
+| item | value |
+| --- | ---: |
+| features | 276 |
+| rows | 100,000 |
+| high-corr pairs, threshold 0.98 | 28 |
+| corr clusters, threshold 0.98 | 14 |
+| hard-drop candidates | 17 |
+| review candidates | 5 |
+| constant features | 1 |
+| near-constant features | 0 |
+
+`corr09` sensitivity 结果：`high_corr_pairs=51`、`corr_clusters=25`、`drop_features=16`、
+`review=23`、`keep_features=260`。它用于检查 0.98 阈值外还有多少 0.90 以上的相关簇需要人工
+复核，不改变主 drop-list 口径。
+
+建议第一轮 hard-drop 的 17 个特征：
+
+```text
+preopen_price_min
+ask_price_1
+mid_price
+preopen_price_max
+trade_vwap_1t
+trade_vwap_3t
+trade_vwap_30t
+postopen_volume_rel_1m
+postopen_volume_rel_3m
+postopen_volume_rel_5m
+postopen_v2_trade_volume_to_ask_depth10_1t
+postopen_v2_trade_volume_to_ask_depth10_3t
+postopen_v2_trade_volume_to_ask_depth10_10t
+postopen_v2_trade_volume_to_ask_depth10_30t
+postopen_v2_trade_vwap_vs_mid_1t_bps
+postopen_v2_trade_vwap_vs_mid_3t_bps
+postopen_v2_trade_vwap_vs_mid_10t_bps
+```
+
+解释和注意事项：
+
+- `preopen_price_min` 在当前 cache 中为 100% 常数 0；`preopen_price_max` 与
+  `preopen_last_price` 相关为 1.0。当前 preopen price path 没有提供有效连续竞价路径信息，
+  first-pass 应保留 `preopen_last_price`，后续若继续做集合竞价路径特征，需要改为只用
+  `price > 0` 的 auction price 或换更合适的 indicative-price 字段。
+- `trade_vwap_1t = turnover_diff_1t / volume_diff_1t`，代表最近 1 tick 区间成交均价。
+  当窗口内无成交时 `0/0` 语义是“没有 VWAP”，保持 NaN 合理；不应填 0 或 1。LightGBM
+  可以学习 NaN 分支，但若要区分“无成交”和“坏数据”，后续可显式增加 `has_trade_*`
+  indicator。
+- `postopen_volume_rel_3m/5m` 是 decision grid 上的 lag-relative 特征：
+  `(current - lag) / abs(lag)`。当前 baseline 只用 09:31-09:40 的 10 个 decision points，
+  因此前半段天然没有 3m/5m lag；5m 缺失率约 41% 属于窗口边界效应。是否保留长 lag
+  应通过 per-decision-time 表现和 drop 对照确认。
+- 对 LightGBM 而言，NaN 是可学习状态，不需要机械填补；但 NaN 的经济含义必须一致。
+  “无成交导致 VWAP undefined”可以保留 NaN，“字段清洗错误导致 preopen min=0”则应回到
+  feature construction 修。
+- 相关性阈值解读：`|corr| >= 0.995` 可视为 near duplicate，适合第一轮 hard-drop；
+  `0.98-0.995` 是强重复，需要 importance/backtest 确认；`0.90-0.98` 多为同家族窗口梯度，
+  只 review 不机械删除。
+
+同一抽样下放宽到 `corr_threshold = 0.90` 后：
+
+| abs corr bin | pair count |
+| --- | ---: |
+| 0.90-0.95 | 15 |
+| 0.95-0.98 | 8 |
+| 0.98-0.995 | 5 |
+| >=0.995 | 23 |
+
+整体从 `corr>=0.98` 的 28 pairs / 14 clusters 扩展到 `corr>=0.90` 的
+51 pairs / 25 clusters。新增部分主要是同家族不同窗口或不同口径特征，例如
+`postopen_volume_diff_1m/3m/5m`、`postopen_ask_price_1_rel_1m/3m/5m`、
+`avg_ask_price/avg_bid_price`、`postopen_v2_*_depth_3/5/10`。这些属于 review
+对象，不作为自动 drop。
+
+下一步：用 hard-drop 17 个特征跑 `hygiene_drop17` 对照，只从模型 feature list 中移除，
+不要从 cache 或回测所需列中物理删除 `ask_price_1` 等基础字段。
+
 ### 归档和保留口径
 
 - 按用户要求，`build_delay2_2024_cache_v1` 已停止；旧 2023/2024 v1 cache 和过期派生 cache 已从 PVC 清掉。
@@ -2621,7 +2794,50 @@ CSV / JSON / SVG 包；`output/legacy/**` 只保留旧本地分析和 debug 产�
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_<variant>_v1/` | 2022-2025 pool_L 优化归档；包含首轮 `reg_strong` / `bagging` / `no_preopen_reg_mid` 和第二批 9 个模型实验的集群侧 pool-internal summary / plot data / SVG；flat summary 包括 `pilot_sweep_summary.csv` 和 `second_sweep_summary.csv`。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_summary.csv` | fullxs 四组 2022-2025 universe / `pool_L` pool-internal summary 和 baseline delta。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_audit_v1/` | grouped feature audit 的 8 个半年 shard 合并结果：metrics、permutation、feature/group importance 和 trace。 |
+| `experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_v1/` | baseline 276 特征 hygiene / correlation 主审计：0.98 相关阈值、drop/review candidates、keep/drop list 和 trace。 |
+| `experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_corr09_v1/` | 同一抽样的 0.90 相关阈值 sensitivity hygiene 审计，用于人工复核更宽相关簇。 |
 | `experiments/results/backtests/gap_risk_penalized_attribution_v1/` | rolling gap-risk Top100 替换归因的 outcome、feature exposure 和 residual-control 证据。 |
 | `output/artifacts/<run_id>` | 当前 2022-2025 cluster baseline / pool_L 优化实验的本地查看副本；正式摘要另归档到 `experiments/results/backtests/`。 |
 | `output/legacy/artifacts/<run_id>` | 旧 artifact 拉取和 raw shard metrics，保留给 debug / history。 |
 | `output/legacy/predictions/rolling_alpha_conditioned_top100_validation_v1/raw` | 18m rolling 各测试月 prediction shard，用于 alpha Top100 内 risk/short/next 相关诊断。 |
+
+### 2026-06-23 公司 API bridge 口径纠偏
+
+背景：为了排查公司 API `identity` / `negate` 和本地验收的矛盾，曾生成临时桥接诊断
+`experiments/results/backtests/company_score_top100_local_next_bridge.csv`。其中 `path_identity`
+的 `top100_excess_bps = 36.829821` 来自：
+
+```text
+top100_local_next_bps = 48.293240
+pool_local_next_bps   = 11.463418
+top100_excess_bps     = 36.829821
+```
+
+该数值的构造方式是：先把 `09:31-09:40` 的 prediction 按 `date x symbol` 求 mean，按这个
+完整窗口 mean score 每天取一次 Top100；再把本地 next-close label 也按 `date x symbol` 对
+`09:31-09:40` 求 mean，计算 Top100 减 pool。
+
+结论：`36.829821 bps/day` 不是合法的验收收益，不能作为策略可交易性证据，也不能用来证明
+高频 overlay 可以直接融入公司 API。原因是完整窗口 mean score 在 `09:31-09:39` 的买入时点
+不可见，若用它解释或回测早期分钟 label，包含未来信息泄露。它最多只能作为
+`hindsight stability diagnostic`，说明“事后看 10 分钟持续高分”的股票在 stock-day 层面
+表现更强，但不是因果策略。
+
+同日补算的因果/非因果拆分产物为
+`experiments/results/backtests/path_shape_daily_score_causal_tradeability_variants.csv`：
+
+| variant | selected bps/day | pool bps/day | excess bps/day | interpretation |
+| --- | ---: | ---: | ---: | --- |
+| `current_minute_top100_each_minute` | 19.881 | 11.255 | 8.626 | 合法，接近正式本地分钟验收。 |
+| `prefix_mean_top100_each_minute_causal` | 18.331 | 11.255 | 7.076 | 合法，每分钟只用当时及以前 score。 |
+| `full_window_mean_top100_all_minutes_noncausal` | 43.754 | 11.255 | 32.499 | 非法，早期分钟使用未来 score。 |
+| `full_window_mean_top100_0940_only` | 14.083 | 9.450 | 4.633 | 合法，完整 10 分钟 mean 只能在 09:40 后使用。 |
+
+后续口径要求：
+
+- 正式高频策略验收继续使用 `date x decision_time` 的本地分钟级 Top100 / 分批买入 / 换手约束口径；
+  不使用完整窗口日频聚合 label 作为 acceptance metric。
+- 公司 API 不是该高频 overlay 的天然验收器。若要借用 API 交易逻辑，只能另建因果
+  `score adapter`：在固定 `api_time`（如 `09:40` / `09:50` / `10:30`）用当时以前可见的高频信息
+  生成 `date x symbol` 分数，并和 neutral baseline 做同口径比较。
+- 不再用暴力 `09:31-09:40 mean score + mean label` 把原高频策略强行压成日频分数来解释收益。
