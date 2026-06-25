@@ -66,6 +66,8 @@ Library:
 - `src/opening_strength_fit/model.py`: Ridge, sklearn GBM, LightGBM, prediction, feature filtering, and IC helpers.
 - `src/opening_strength_fit/training.py`: unified training pipeline, configured feature transforms/filters, and output writer.
 - `src/opening_strength_fit/evaluation.py`: score buckets and top-score summaries.
+- `src/opening_strength_fit/capacity_audit.py`: capacity-constrained score portfolio allocation, fill diagnostics, participation limits, and concentration summaries.
+- `src/opening_strength_fit/exposure_audit.py`: TopN / supplied-portfolio exposure metrics, score-exposure correlations, and daily concentration summaries.
 - `src/opening_strength_fit/reports.py`: compact dataset summaries, metrics reporting, and yearly aggregation.
 - `src/opening_strength_fit/pool_internal_plots.py` / `pool_internal_plot_svg.py`: pool-internal plot specs and SVG rendering.
 - `src/opening_strength_fit/optimization_acceptance_plots.py`: shared data preparation and rendering for the fixed two-figure overlay acceptance workflow.
@@ -82,8 +84,9 @@ CLI:
 - `osf-plot-optimization-direction-comparison`: render the fixed overlay acceptance figures for baseline plus 1-3 selected comparison models: universe short Rank IC, `pool_L` Top100 next internal excess, and full-market / pool / model cumulative next net returns with full-market-relative alpha.
 - `osf-plot-weekly-pool-internal`: render optional trading-day-equal weekly / 4w rolling pool-internal stability diagnostics from `pool_internal_group_metrics.csv`.
 - `osf-plot-weekly-pool-internal-cumulative`: render cumulative short/next pool-internal excess from pre-aggregated daily or weekly summary rows.
-- `osf-build-exposure-input`: build daily `date,symbol` market-cap and industry exposure inputs from ClickHouse for use by exposure audits.
-- `osf-audit-exposure`: audit selected TopN or supplied portfolio exposure versus the candidate pool; outputs style/size exposure summaries, concentration diagnostics, and industry active-share diagnostics.
+- `osf-audit-capacity`: build target-notional capacity portfolios from prediction scores and visible liquidity/depth constraints; outputs fill, return, participation, and concentration diagnostics.
+- `osf-build-exposure-input`: build daily `date,symbol` market-cap and industry exposure inputs from ClickHouse for use by exposure/capacity audits.
+- `osf-audit-exposure`: audit selected TopN or supplied portfolio exposure versus the candidate pool; outputs price/liquidity/activity/momentum/size/volatility exposure summaries plus symbol concentration, industry concentration, and industry active-share diagnostics.
 - `osf-summarize-opening-results`: summarize metrics CSVs.
 - `osf-compare-opening-results`: compare archived model metrics.
 - `osf-run-rule-baselines`: evaluate simple visible-information rules.

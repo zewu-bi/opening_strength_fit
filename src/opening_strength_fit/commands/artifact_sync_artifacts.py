@@ -62,6 +62,14 @@ FEATURE_HYGIENE_ARTIFACTS = (
     "feature_drop_list.txt",
     "feature_hygiene_trace.json",
 )
+CAPACITY_AUDIT_ARTIFACTS = (
+    "capacity_audit_selected.csv",
+    "capacity_audit_group_metrics.csv",
+    "capacity_audit_daily_summary.csv",
+    "capacity_audit_month_summary.csv",
+    "capacity_audit_summary.csv",
+    "capacity_audit_trace.json",
+)
 EXPOSURE_AUDIT_ARTIFACTS = (
     "exposure_audit_group_metrics.csv",
     "exposure_audit_month_summary.csv",
@@ -107,6 +115,10 @@ def is_gap_attribution(spec: RunSpec) -> bool:
     return spec.kind == "gap_risk_attribution"
 
 
+def is_capacity_audit(spec: RunSpec) -> bool:
+    return spec.kind == "capacity_audit"
+
+
 def is_exposure_audit(spec: RunSpec) -> bool:
     return spec.kind == "exposure_audit"
 
@@ -128,6 +140,7 @@ def is_non_standard_artifact_run(spec: RunSpec) -> bool:
         is_score_risk_sweep(spec)
         or is_rolling_validation(spec)
         or is_gap_attribution(spec)
+        or is_capacity_audit(spec)
         or is_exposure_audit(spec)
         or is_feature_audit(spec)
         or is_feature_hygiene(spec)
@@ -247,6 +260,25 @@ def pull_gap_attribution_artifacts(
     )
     if not pulled:
         raise SystemExit(f"{spec.run_id}: no gap-attribution artifacts found under {spec.pvc_dir}")
+    record_artifact_fetch(spec, output_dir, pulled, missing)
+    return pulled
+
+
+def pull_capacity_audit_artifacts(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    output_root: Path | None,
+) -> list[Path]:
+    output_dir, pulled, missing = pull_artifact_set(
+        hfcli,
+        spec,
+        pod_name,
+        output_root,
+        CAPACITY_AUDIT_ARTIFACTS,
+    )
+    if not pulled:
+        raise SystemExit(f"{spec.run_id}: no capacity-audit artifacts found under {spec.pvc_dir}")
     record_artifact_fetch(spec, output_dir, pulled, missing)
     return pulled
 
@@ -618,6 +650,9 @@ def record_lightweight_artifacts(
     elif is_exposure_audit(spec):
         archive_dir = backtests_dir / spec.run_id
         records = [(output_dir / name, archive_dir / name) for name in EXPOSURE_AUDIT_ARTIFACTS]
+    elif is_capacity_audit(spec):
+        archive_dir = backtests_dir / spec.run_id
+        records = [(output_dir / name, archive_dir / name) for name in CAPACITY_AUDIT_ARTIFACTS]
     elif is_feature_audit(spec):
         archive_dir = backtests_dir / spec.run_id
         records = [

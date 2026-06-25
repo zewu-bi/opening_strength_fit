@@ -15,6 +15,7 @@ Run kind entrypoints:
 | run kind | entrypoint |
 | --- | --- |
 | standard training / exploration | `osf-train` |
+| capacity audit | `osf-audit-capacity` |
 | exposure input | `osf-build-exposure-input` |
 | exposure audit | `osf-audit-exposure` |
 | feature audit | `osf-audit-feature-dependence` |

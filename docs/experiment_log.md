@@ -12,7 +12,7 @@
 - 已归档：2024 月度、2018H1..2025H2 半年/OOS、2022-2025 baseline、second sweep、xs-relative、
   model ensemble、fullxs batch、feature audit / hygiene、price-regime / scale-normalization batch、
   hist+path exact-union batch、hist+path hygiene sensitivity、hist_path high-dup prune closeout，
-  以及剪枝后 `pool_L` exposure audits。
+  以及剪枝后 `pool_L` exposure / split20 capacity audits。
 - 当前增量候选：`hist_path_rank_centered`；`scale_norm` / `price_scale_norm` 是上一轮 price-scale
   候选，其中 `scale_norm` 的 next overlay / capital-adjusted 累计净收益略好，`price_scale_norm`
   short 更强。
@@ -81,6 +81,7 @@
 | 2026-06-25 | hist_path high-dup prune closeout | `hist_path_pruned_highdup` 已完成训练、pool-internal analysis、artifact sync 和 experiment alignment audit；删除 26 个高重复 hist/path 特征后信号基本保留，作为 hygiene simplification 通过。 |
 | 2026-06-25 | hist_path pruned exposure audit | 已对剪枝后实验补 `pool_L` Top100 core exposure audit：选股显著偏 opening activity / turnover heat、低 spread、单票集中度不高；这被记录为开盘强势股 alpha 行为画像，而不是默认负面暴露。 |
 | 2026-06-25 | hist_path pruned size / industry audit | 已接 ClickHouse 日频市值和申万行业 exposure input：`pool_L` Top100 中等偏大市值，行业上超配电子、电力设备、计算机，低配机械设备、基础化工；行业集中存在但不是单行业押注。 |
+| 2026-06-25 | hist_path pruned split20 capacity audit | 正式容量口径按 `10 亿` 总资金 `/20`，即每个 `date x clock` 目标 `5000 万`。在 `pool_L`、`10% * turnover_diff_30t` 参与率和 `1%` 单票目标权重上限下，`9690/9690` 截面全满；平均吃到 top `124`、p95 top `161`、最深 top `291`。Top100 内仅 `0.7%` 截面够，top200 内 `99.3%` 够；结论是切片容量充足，但生产组合不应硬卡 Top100。 |
 
 ## 2026-05-20 小窗结果
 
@@ -2835,7 +2836,8 @@ microstructure 都明显更弱；其中 liquidity 更准确的读法是“低 sp
 解读：这次 audit 不是把所有可命名暴露都定性为坏事。对开盘强势股模型来说，opening activity /
 turnover heat 很可能就是 alpha mechanism 的主要载体；审计结论应写成“模型确实在买开盘活跃、
 成交增量强、同时 spread 较低的股票”，这和策略定义一致。生产化剩余问题不是机械中性化 activity
-heat，而是在组合实现层面继续监控冲击、参与率、ADV / 可成交量、单票和行业集中度。
+heat，而是验证 heat 内仍有增量排序力，并在容量约束下确认冲击、参与率、ADV / 可成交量、
+单票和行业集中度仍可接受。本次 split20 capacity audit 已补第一轮可见成交量容量证据，见下节。
 
 #### pool_L size / industry exposure audit
 
@@ -2911,6 +2913,78 @@ industry HHI 均值 `0.082`，effective industries 约 `12.9`。这说明行业�
 这些不需要机械中性化，但生产验收应把它们作为组合约束候选：容量组合里监控行业 active weight、
 行业 HHI、Top5 industry share，并在 mentor 汇报中明确“行业偏好是模型行为画像，但不是单一行业
 收益押注”。
+
+#### pool_L split20 capacity audit
+
+正式容量口径按策略总资金 `10 亿`、分 `20` 份执行理解，因此每个
+`date x decision_target_timestamp` 的目标 notional 为 `5000 万`，而不是每个 clock 都塞
+`10 亿`。早先 `10 亿/clock` 的容量跑法只保留为功能 smoke，不作为生产容量结论。
+
+run / job / artifact 索引：
+
+```text
+experiments/runs/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_v1.toml
+experiments/jobs/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_v1_job.yaml
+experiments/results/backtests/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_v1/
+output/artifacts/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_v1/
+/mnt/output/opening_strength_fit/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_v1/
+```
+
+tracked archive 保留 summary / month / daily / trace；逐截面 `capacity_audit_group_metrics.csv`
+和逐票 `capacity_audit_selected.csv` 体积较大，保留在 `output/artifacts/...` 和 PVC 侧用于细查，
+不纳入轻量结果归档。
+
+约束和读法：
+
+- selection universe：`pool_L`，每个 `date x clock` 按 `prediction` 从高到低拿。
+- target notional：`5000 万` / group，对应 `10 亿` 总资金 `/20`。
+- 单票上限：`min(1% * target_notional, 10% * turnover_diff_30t)`；本轮未加 ask depth，
+  `ask_depth_levels = 0`。
+- 主读容量字段，不读收益列：`fill_success_rate`、`mean_top_depth_to_target`、
+  `p95_top_depth_to_target`、`max_top_depth_to_target`。
+
+总体结果：
+
+| metric | value | read |
+| --- | ---: | --- |
+| groups | 9690 | `2022-01-04` 至 `2025-12-31`，每日 `09:31-09:40` 共 10 个 clock。 |
+| target_notional | 50,000,000 | `10 亿 / 20` 的单切片容量。 |
+| filled_groups | 9690 | 所有截面都能塞满。 |
+| fill_success_rate | 100.0% | 切片容量充足。 |
+| mean_top_depth_to_target | 124 | 平均需要吃到 top124。 |
+| p50_top_depth_to_target | 120 | 中位需要吃到 top120。 |
+| p90_top_depth_to_target | 149 | 90% 截面 top149 以内可塞满。 |
+| p95_top_depth_to_target | 161 | 95% 截面 top161 以内可塞满。 |
+| max_top_depth_to_target | 291 | 最深一次需要吃到 top291。 |
+
+TopN 覆盖率：
+
+| depth cap | filled groups | share |
+| ---: | ---: | ---: |
+| top100 | 66 / 9690 | 0.7% |
+| top120 | 4977 / 9690 | 51.4% |
+| top150 | 8792 / 9690 | 90.7% |
+| top160 | 9181 / 9690 | 94.7% |
+| top200 | 9623 / 9690 | 99.3% |
+| top300 | 9690 / 9690 | 100.0% |
+
+结论：`5000 万/切片` 在 `pool_L` 内容量完全够，但固定 Top100 不是稳健容量篮子；生产化容量组合应允许
+按分数继续往后拿到约 top160/top200，极端日内截面最深到 top291。下一轮若做更严格生产验收，应补
+ask-depth 约束、行业/风格上限和 next-close capacity return 口径；但“能不能塞入 `10 亿/20`”
+这一问，本轮答案为可以。
+
+supporting capacity runs：
+
+```text
+experiments/results/backtests/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/
+experiments/results/backtests/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_t10_v1/
+```
+
+- `capacity_audit_..._pruned_highdup_v1` 是早期 `10 亿/clock` 功能 smoke，不作为生产容量结论：
+  平均 fill ratio `89.9%`，min fill ratio `33.6%`，说明这个口径过重。
+- `capacity_audit_..._split20_t10_v1` 是 `10 亿/20` 下把参与率基准换成
+  `turnover_diff_10t` 的 sensitivity：仍然 `9690/9690` 截面全满，但平均需要吃到 top `237`，
+  p95 top `449`，极端 max top `1611`，比主口径 `turnover_diff_30t` 明显更紧。
 
 建议第一轮 hard-drop 的 17 个特征：
 
@@ -3026,7 +3100,9 @@ CSV / JSON / SVG 包；`output/legacy/**` 只保留旧本地分析和 debug 产�
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_exposure_audit/` | 剪枝后实验的 `pool_L` Top100 core exposure audit；主要画像是 opening activity / turnover heat 高、spread 低、单票集中度不高，作为生产化暴露验收的第一轮证据。 |
 | `experiments/results/backtests/exposure_input_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_size_industry_v1/` | 剪枝后 size/industry audit 的外部 exposure input trace；完整 parquet 留在 `output/legacy/exposures/` 和 PVC。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_size_industry_exposure_audit/` | 剪枝后实验补齐市值和申万一级行业暴露：中等偏大市值，超配电子/电力设备/计算机，低配机械设备/基础化工，并输出行业 active-share 明细。 |
-| `output/artifacts/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_v1/` | 剪枝后实验的 `pool_L` split20 capacity audit；`10 亿 / 20 = 5000 万` 每切片，`10% * turnover_diff_30t` 和单票 `1%` 上限，全部截面装满，平均吃到 Top124。 |
+| `experiments/results/backtests/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/` | 剪枝后容量 audit 的早期 `10 亿/clock` 功能 smoke；该口径过重，不作为生产容量结论。 |
+| `experiments/results/backtests/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_v1/` | 剪枝后实验的正式 split20 capacity audit；按 `10 亿 / 20 = 5000 万` 每切片目标，`9690/9690` 截面全满，平均 top depth `124`，p95 top depth `161`，max top depth `291`。 |
+| `experiments/results/backtests/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_t10_v1/` | split20 capacity sensitivity；把参与率基准换成 `turnover_diff_10t` 后仍全满，但需要吃得更深，p95 top depth `449`。 |
 | `experiments/results/backtests/gap_risk_penalized_attribution_v1/` | rolling gap-risk Top100 替换归因的 outcome、feature exposure 和 residual-control 证据。 |
 | `output/artifacts/<run_id>` | 当前 2022-2025 cluster baseline / pool_L 优化实验的本地查看副本；正式摘要另归档到 `experiments/results/backtests/`。 |
 | `output/legacy/artifacts/<run_id>` | 旧 artifact 拉取和 raw shard metrics，保留给 debug / history。 |

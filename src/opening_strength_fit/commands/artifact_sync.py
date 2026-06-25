@@ -7,6 +7,7 @@ from opening_strength_fit.commands.artifact_sync_artifacts import (
     combine_rolling_validation_shards as combine_rolling_validation_shards,
 )
 from opening_strength_fit.commands.artifact_sync_artifacts import (
+    is_capacity_audit,
     is_exposure_audit,
     is_feature_hygiene,
     is_gap_attribution,
@@ -15,6 +16,7 @@ from opening_strength_fit.commands.artifact_sync_artifacts import (
     is_rolling_validation,
     is_score_risk_sweep,
     local_artifact_dir,
+    pull_capacity_audit_artifacts,
     pull_exposure_audit_artifacts,
     pull_feature_audit_artifacts,
     pull_feature_hygiene_artifacts,
@@ -315,6 +317,13 @@ def main() -> None:
                     )
                 elif is_gap_attribution(spec):
                     paths = pull_gap_attribution_artifacts(
+                        args.hfcli,
+                        spec,
+                        pod_name,
+                        artifacts_root,
+                    )
+                elif is_capacity_audit(spec):
+                    paths = pull_capacity_audit_artifacts(
                         args.hfcli,
                         spec,
                         pod_name,

@@ -32,6 +32,8 @@ def load_config(path: Path) -> dict:
 
 def training_command(config: dict) -> str:
     run_kind = str(get(config, "run", "kind", "experiment")).strip().lower()
+    if run_kind == "capacity_audit":
+        return "osf-audit-capacity"
     if run_kind == "exposure_input":
         return "osf-build-exposure-input"
     if run_kind == "exposure_audit":
@@ -75,6 +77,8 @@ def training_command(config: dict) -> str:
 
 def _rolling_completion_files(config: dict, command: str) -> list[str]:
     run_kind = str(get(config, "run", "kind", "")).strip().lower()
+    if run_kind == "capacity_audit":
+        return ["capacity_audit_trace.json", "capacity_audit_summary.csv"]
     if run_kind == "exposure_input":
         return ["exposure_input_trace.json", "exposure_input.parquet"]
     if run_kind == "exposure_audit":
