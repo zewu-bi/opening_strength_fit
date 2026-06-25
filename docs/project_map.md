@@ -1,7 +1,8 @@
 # Project Map
 
-代码、CLI 和项目目录索引。研究逻辑看 [project_brief.md](project_brief.md)，实验顺序看
-[experiment_log.md](experiment_log.md)，运行命令看 [runbook.md](runbook.md)。
+代码、CLI 和项目目录索引。本文件只回答“东西在哪里”。研究判断看
+[project_brief.md](project_brief.md)，实验事实看 [experiment_log.md](experiment_log.md)，运行命令看
+[runbook.md](runbook.md)。
 
 ## Root
 

@@ -1,163 +1,85 @@
-# 项目简介
+# Project Brief
 
-`opening_strength_fit` 研究 A 股开盘阶段的 cross-sectional short-horizon alpha。样本是
-`trading day x symbol x opening decision time`，特征只使用 decision point 当时及以前可见的信息。
+本文件只回答当前研究怎么走：目标、固定口径、验收 gate 和下一步。完整实验流水、
+run id、数字和归档路径见 [experiment_log.md](experiment_log.md)；命令见
+[runbook.md](runbook.md)；代码索引见 [project_map.md](project_map.md)。
 
-当前优化窗口是 `09:31:00-09:40:00`。`09:30` opening snapshot 单独看作 regime。
+## 当前目标
 
-## 当前判断
+继续强化 `09:31-09:40` 开盘短期模型。模型只使用 decision point 当时及以前可见的信息，
+在 full universe 上训练和打分；mentor 的隔夜视角以 `pool_L` 股池进入验收。正式展示不是直接
+交易 short-horizon return，而是检查短期模型在 `pool_L` 内选 Top100 后，是否增强 next-close
+overlay。
 
-目标：继续强化 `09:31-09:40` 开盘短期模型。我们的职责是做好开盘强势股短期模型；
-mentor 提供的隔夜模型以 `pool_L` 股池形式进入验收。两者做 overlay：先用隔夜视角给出
-`pool_L`，再在池内用短期模型选 Top100，最终看隔夜池内收益是否增强。
-
-2026-06-23 mentor re-scope：Top100 仍保留为快速信号诊断，但后续不能只用固定 Top100
-定义可接受性。下一阶段需要补三类生产化验收：风格暴露评测、风险暴露评测和容量约束组合。
-容量口径从“选 Top100”推进到“给定目标容量的可承载组合”，例如 `10 亿` 资金规模，并显式约束
-单票成交占比、可成交量/ADV 占比、单票权重、行业或风格集中度、换手和费用，防止容量指标本身
-依赖过高参与率或过度集中。
-
-2026-06-25 已对剪枝后 `hist_path_pruned_highdup` 补第一轮 `pool_L` Top100 core exposure audit：
-模型画像显著偏 opening activity / turnover heat、低 spread、单票集中度不高；这和开盘强势股 alpha
-定义一致，不作为默认负面暴露处理。随后补齐 ClickHouse 日频市值和申万一级行业暴露：Top100
-中等偏大市值，超配电子、电力设备、计算机，低配机械设备和基础化工；行业偏好可见但不是单行业押注。
-
-当前主线是单模型 mixed label：
+当前主线仍是单模型 mixed label：
 
 ```text
-short_label = xs_norm(持有约 1 分钟后用 VWAP 卖出的收益 | date, decision_time)
-long_label  = xs_norm(同一买入价持有到第二天收盘的收益 | date, decision_time)
+short_label = xs_norm(约 1 分钟持有收益 | date, decision_time)
+long_label  = xs_norm(同一买入价到次日收盘收益 | date, decision_time)
 train_label = short_label + 0.30 * long_label
 ```
-
-核心假设：短期模型在 full universe 上学到开盘强弱、承接、资金方向和微观结构优势；
-隔夜模型给出的 `pool_L` 包含另一套中低频质量/隔夜收益视角。如果短期模型的排序能力真实存在，
-它在 `pool_L` 内仍应有正向排序力，并通过 Top100 overlay 强化原本隔夜股池。
-
-下一步方向是继续做强开盘短期模型至收敛，并显式做 price-regime / price-bucket 诊断与交互。
-这里的 price-regime 是盘口生态干预：便宜股和贵股的一档集中度、tick/bps 尺度、queue 和成交冲击
-不能默认共享同一套特征生效模式。hist-surprise、xs-relative 一类结果说明，下一阶段应优先做
-相对 tick、bps、ratio、zscore、rank 和 per-symbol history 的尺度归一化特征。具体实验记录、
-复盘理由和运行细节见 [experiment_log.md](experiment_log.md)。
-
-模型路线也纳入下一步计划：先在当前 causal feature set 和固定 rolling / pool-internal 口径下训练
-神经网络模型，检查它是否能学到不同于 LGBM 的非线性排序信息；若 NN 单模型通过基础诊断，再做
-NN 与 LGBM 的 ensemble，对比单模型、纯 LGBM ensemble 和 NN+LGBM ensemble 在 short Rank IC、
-`pool_L` next overlay、暴露和容量约束口径下的增量。
-
-固定研究流程：尝试新的特征工程或模型优化，在集群上按固定 rolling 口径重新训练，同步
-pool-internal artifacts，然后先用固定两张验收图评估信号增量，再补暴露和容量评测，避免临时口径漂移。
-
-验收口径：
-
-| metric | expectation |
-| --- | --- |
-| universe short Rank IC | 提升；直接检验短期模型本身的排序能力。 |
-| `pool_L` Top100 next internal excess | 提升；检验短期模型叠加到 mentor 股池后的 overnight overlay 效果。 |
-| cumulative next net / market-relative alpha | 保持可解释、稳定；上 panel 同时显示全 A 股市场平均和 `pool_L` background。 |
-| style exposure | 第一轮 core + size/industry audit 已补：Top100 明显偏 opening activity / turnover heat，且中等偏大市值、超配电子/电力设备/计算机；这些更像目标 alpha 行为画像和可监控结构偏好。 |
-| risk exposure | 第一轮 core + size/industry audit 已补：低 spread、无明显单票集中、行业集中不是单行业押注；波动、容量组合行业约束和真实执行风险仍需继续验收。 |
-| capacity-constrained portfolio | first-pass 已补；`10 亿` 总资金按 20 个 `date x decision_time` 切片拆成每组 `5000 万`，用 `10% * turnover_diff_30t` 和单票 `1%` 权重上限构造容量组合，`9690/9690` 截面全满。 |
-
-固定两张图：
-
-```text
-2022-2025 short rank IC和next pool_L 超额
-2022-2025 池内Top100隔夜净收益累和
-```
-
-默认图上展示 baseline、hist_surprise 和 path_shape；也可以在保留 baseline 的前提下选择
-1-3 个新的 comparison models 一起画。累计图上半 panel 额外显示全 A 股市场平均和
-`pool_L` background；下半 panel 显示 `pool_L` background、baseline 和 comparison models
-相对全 A 股市场平均的累计 alpha。
-
-不再把 `pool_L` short Rank IC、short Top100 excess、universe next excess 或 next Rank IC
-作为主验收项：short 端在 A 股 T+1 下不能直接交易，短期收益能力由 universe short Rank IC
-概括；next 端模型本身不负责预测隔夜排序，只看 `pool_L` 内 overlay 后的 Top100 next excess。
-
-## 当前证据
-
-| run / batch | result |
-| --- | --- |
-| mixed-label selection | `w_long=0.30` 在 S/M/L 复核后固定。 |
-| current baseline | `soft_core_reg_light`，36m rolling，集群侧 pool-internal analysis。 |
-| 2020-2025 rolling summary | S/M/L 池内 short 和 next 均为正；`pool_L` short `+11.1 bps`，next `+13.3 bps`。 |
-| 2022-2025 baseline | universe short `+16.8 bps`、next `-8.5 bps`；`pool_L` short `+8.6 bps`、next `+8.0 bps`。 |
-| S/M/L pool tradeoff | 2022-2025 `pool_S/M/L` pool next 均值 `19.8 / 15.2 / 11.2 bps`，真实 pool 换手 `23.3% / 16.2% / 9.9%`，确认小池收益底子更高但换手成本也更高。 |
-| first pilot sweep | `reg_strong`、`bagging`、`no_preopen_reg_mid` 均未超过 baseline。 |
-| second batch, 9 runs | 历史四格口径下几乎无增量，说明宽泛特征族加减和轻量调参边际收益很低。 |
-| cross-sectional relative features | `xs_relative_v1` 提升 universe short Rank IC，但 `pool_L` next overlay 变弱；带 recent weight 的交互组不作为纯特征结论。 |
-| model ensemble | `model_ensemble_v1` 的 overlay next 和 short 侧表现均弱于 baseline，本轮不通过。 |
-| fullxs feature batch | `hist_same_minute_surprise` short/next 同向改善；`path_shape_confirm` 主要改善 overlay next；`rank_label_regression` 说明 IC 高但 Top100 失败的路线不能直接接受。 |
-| price / scale batch | `scale_norm` 曾是综合最好候选：`pool_L` short `+0.615 bps`、next `+0.480 bps` vs baseline；`price_scale_norm` short 更强但 next / capital-adjusted 累计净收益略弱。 |
-| hist + path exact-union | `rank_centered` 是最新最好候选：universe short Rank IC `0.1531`，`pool_L` next `+9.45 bps`，优于 baseline 的 `0.1489` / `+7.97 bps`。 |
-| feature audit / hygiene | `pool_L` grouped audit 和 baseline 276 hygiene 已归档；fullxs `hist_path` corr09 sensitivity 也已补齐，用于复核 hist_surprise/path_shape 相关簇。 |
-| hist_path high-dup prune + production audits | `hist_path_pruned_highdup` 删除 26 个高重复 `hist_surprise_` / `path_shape_` 特征，训练特征数 `354 -> 328`；universe short Rank IC 几乎不变，`pool_L` next excess 小幅 `+0.016 bps`。Top100 exposure audit 显示模型明显偏 opening activity / turnover heat（`turnover_diff_10t` rank `0.877`、z `+1.53`），同时低 spread（`spread_bps` rank `0.334`）、中等偏大市值（`log_market_cap` rank `0.650`、z `+0.54`），行业上超配电子/电力设备/计算机、低配机械设备/基础化工；日均约 `526` 个 symbols、effective symbols 约 `358`，effective industries 约 `12.9`。split20 capacity audit 按 `10 亿` 总资金 `/20`，即每个 `date x clock` 塞 `5000 万`，`9690/9690` 截面全满，平均 / p95 / 最深吃到 top `124 / 161 / 291`；Top100 仅 `0.7%` 截面够，top200 `99.3%` 截面够。结论是去冗余成立，行为画像符合开盘强势股 alpha，`5000 万/切片` 容量充足，但生产组合不应硬卡 Top100。 |
-
-完整实验顺序、run id、K8s 状态、归档路径和逐项数字见 [experiment_log.md](experiment_log.md)。
 
 ## 固定口径
 
 | item | setting |
 | --- | --- |
-| data source | ClickHouse `ch.db.prod.highfortfunds.com / stock.tick` |
-| data window | `09:15:00-09:45:00` |
-| project window | `09:30:00-09:40:00` integer-minute decision points |
-| sample slice | `09:31:00-09:40:00` |
-| label | mixed label, `w_long=0.30` |
-| training universe | A 股 `00/30.SZ` 和 `60/68.SH` full universe |
+| data source | ClickHouse `stock.tick` |
+| sample slice | `09:31:00-09:40:00` integer-minute decision points |
+| training universe | A 股 `00/30.SZ`、`60/68.SH`、full universe |
+| label | mixed label, `w_long = 0.30` |
 | current baseline | archived `soft_core_reg_light` |
-| main display | 短期模型 universe 排序 + `pool_L` overnight overlay |
-| main metrics | universe short Rank IC；`pool_L` Top100 next internal excess |
+| selection masks | universe / `pool_S` / `pool_M` / `pool_L` only at TopN selection |
+| primary gates | universe short Rank IC; `pool_L` Top100 next internal excess |
 | acceptance figures | `experiments/results/backtests/optimization_overlay_acceptance_2022_2025/` |
-| current research focus | 继续做强开盘短期模型；优先 price-regime 干预、尺度归一化特征、当前特征 NN 和 NN+LGBM ensemble，并继续补风格/风险暴露；容量已有 `turnover_diff_30t` first-pass 验收 |
 
-短线 label：
+`pool_S ⊂ pool_M ⊂ pool_L`，来自 `lml.bzw@ssd/data/pool_{S,M,L}.parquet`。Top100 仍是
+研发诊断口径；生产化验收要看容量约束组合。
 
-```text
-decision_t = sampled decision tick
-entry_t    = decision_t 之后第 entry_tick_delay 个 tick
-buy_price  = ask_price_1[entry_t]
-sell_vwap  = VWAP(entry_t + 60s, entry_t + 120s)
-label      = sell_vwap / buy_price - 1 - fee_bps / 10000
-```
+## 当前判断
 
-外部股池来自 `lml.bzw@ssd/data/pool_{L,M,S}.parquet`，覆盖 `2020-01-02` 至 `2025-12-31`。
-`pool_S ⊂ pool_M ⊂ pool_L`。
+- 2022-2025 baseline 已固定：universe short 有稳定排序力，`pool_L` overlay next 为正。
+- 常规 LGBM 调参、宽泛特征族加减、简单模型 ensemble 的边际收益很低。
+- 有效增量集中在尺度处理和历史/路径类特征：`hist_same_minute_surprise`、`path_shape_confirm`、
+  `scale_norm`、`hist_path_rank_centered`。
+- `hist_path_rank_centered` 是当前信号强度标尺：universe short Rank IC 和 `pool_L` next excess
+  都高于 baseline。
+- `hist_path_pruned_highdup` 是当前更干净的生产化候选：删除 26 个高重复 hist/path 特征后，
+  信号基本保留，并已补 Top100 exposure、size/industry exposure 和 split20 capacity first-pass。
 
-当前口径称为 decision-time visible / causal feature set。集合竞价摘要、`09:30` 开盘快照、
-`09:31-09:40` 开盘后轨迹都可以作为特征，条件是在下单决策时已经可见。
+## 验收 Gate
 
-`09:40` 是正式 decision point，它的 label 使用到约 `09:41-09:42` 的 VWAP。ClickHouse
-原始 tick 偶尔出现 6 秒间隔时，通常表示上一条 3 秒 tick 所有字段未变。
-
-## 术语
-
-| term | meaning |
+| gate | 通过含义 |
 | --- | --- |
-| `Rank IC` | 同一 `date x decision_time` 横截面内的排序能力。 |
-| `Top100 excess` | 池内 Top100 均值减同一 selection mask 内全体候选均值。 |
-| `capacity portfolio` | 在目标资金规模和成交约束下构造的可承载组合；后续用于替代固定 Top100 作为生产化验收口径。 |
-| `selection mask` | universe / `pool_S` / `pool_M` / `pool_L` 的切片维度。 |
-| `overlay` | mentor 隔夜模型给出 `pool_L`，开盘短期模型在池内选 Top100。 |
-| `next close` | overlay 的隔夜验收收益；当前主看 `pool_L` Top100 next internal excess。 |
-| `exposure audit` | 对选股或容量组合的风格、风险和集中度暴露做归因，判断收益是否来自目标 alpha 而非不可接受偏置。 |
+| universe short Rank IC | 短期模型本身更强。 |
+| `pool_L` Top100 next internal excess | 叠加 mentor 股池后，隔夜 overlay 更强。 |
+| cumulative next net / market-relative alpha | 改善不是少数点造成，累计曲线可解释。 |
+| exposure audit | 收益画像可解释，未退化为不可接受的风格、行业或流动性押注。 |
+| capacity portfolio | 给定资金规模下，能在参与率、单票权重和集中度约束内装入。 |
 
-## 里程碑
+不再把 `pool_L` short excess、universe next excess 或 next Rank IC 作为主 gate。short 端不能直接
+变成 A 股 T+1 交易收益；next 端由 mentor 股池负责基础收益，短期模型只负责池内 overlay。
 
-| stage | conclusion |
-| --- | --- |
-| baseline / delay | 开盘短线信号为正；delay2 后仍有可学排序。 |
-| post-open features | 开盘后盘口动态有增量，`09:31-09:40` 是当前主样本域。 |
-| dirty-tail diagnostics | raw short score 有短正长负 tail，后续改为 mixed label 主线。 |
-| 2020-2025 mainline | S/M/L 池内 short 和 next 均为正。 |
-| 2022-2025 baseline | universe + `pool_L` 集群侧分析已归档，后续信号增强聚焦这一窗口。 |
-| 2022-2025 sweeps | 首轮和第二批常规增强尚未形成实质增量。 |
-| current signal-enhancement phase | 常规特征/模型 sweep 增量变小；`hist_path` 高重复剪枝已验收为可接受简化；下一步验证价格生态分层、尺度归一化特征、当前特征 NN 和 NN+LGBM ensemble，并用固定两张图及后续生产化口径验收。 |
-| mentor capacity / exposure re-scope | Top100 降为诊断口径；下一步补风格暴露、风险暴露和 `10 亿` 级容量约束组合验收。 |
+## 已知生产化事实
 
-## 入口
+`hist_path_pruned_highdup` 的 first-pass 验收结论：
 
-- 命令、K8s、artifact sync、股池读取：见 [runbook.md](runbook.md)。
-- 实验记录和归档路径：见 [experiment_log.md](experiment_log.md)。
-- 代码和脚本索引：见 [project_map.md](project_map.md)。
+- 行为画像偏 opening activity / turnover heat，且 spread 偏低；这符合开盘强势股 alpha 机制。
+- 市值偏中大，不是小票拥挤；行业超配电子、电力设备、计算机，低配机械设备、基础化工，但不是单行业押注。
+- `10 亿 / 20` 的 split20 容量口径下，每个 `date x clock` 目标 `5000 万`，`9690/9690` 截面全满。
+- 固定 Top100 不是容量组合：主口径平均吃到 top124，p95 top161，最深 top291；生产组合应允许向后取票并加行业/风格约束。
+
+## 下一步目标
+
+1. 在当前 causal feature set 上训练 NN 单模型，用同一 rolling、pool-internal 和 acceptance 口径比较
+   baseline、`hist_path_rank_centered`、`hist_path_pruned_highdup`。
+2. 只有 NN 单模型通过主 gate 后，才推进 NN + LGBM ensemble；否则不继续堆 ensemble。
+3. 同步补生产化验收：ask-depth 约束、行业/风格上限、capacity-constrained next net 和
+   market-relative alpha。
+4. 可并行做一个低风险 hygiene 对照：按审计建议 hard-drop 17 个基础高重复/坏语义特征，只从模型
+   feature list 移除，不物理删除 cache 或回测所需字段。
+
+## 非目标
+
+- 不重启两模型 `alpha_rank - lambda * gap_risk_rank` 路线；它已作为历史证据封存。
+- 不用完整 `09:31-09:40` mean score 压成日频分数做正式验收；那会引入未来信息。
+- 不把公司 API 回测当作当前高频 overlay 的天然验收器；若需要，另建因果 score adapter。

@@ -1,44 +1,22 @@
 # Experiment Log
 
-本文件是实验事实源：run id、数字、K8s 状态、归档路径和配置索引。当前判断先看
-[project_brief.md](project_brief.md)；这里按日期和关键词查，不适合从头顺读。
+本文件是实验事实源：run id、数字、K8s 状态、归档路径和配置索引。当前判断只放在
+[project_brief.md](project_brief.md)；命令只放在 [runbook.md](runbook.md)。这里按日期、run id
+或关键词查，不适合从头顺读。
 
-## 当前路线摘要
+## 快速索引
 
-- 样本域：`09:31-09:40`；训练 full universe，S/M/L 只作 TopN selection mask。
-- 主线：single mixed label，`w_long=0.30`；展示 baseline 是 `soft_core_reg_light`。
-  当前验收是两个视角的 overlay：universe short Rank IC 检验开盘短期模型本身，
-  `pool_L` Top100 next internal excess 检验叠加 mentor 隔夜股池后的隔夜收益。
-- 已归档：2024 月度、2018H1..2025H2 半年/OOS、2022-2025 baseline、second sweep、xs-relative、
-  model ensemble、fullxs batch、feature audit / hygiene、price-regime / scale-normalization batch、
-  hist+path exact-union batch、hist+path hygiene sensitivity、hist_path high-dup prune closeout，
-  以及剪枝后 `pool_L` exposure / split20 capacity audits。
-- 当前增量候选：`hist_path_rank_centered`；`scale_norm` / `price_scale_norm` 是上一轮 price-scale
-  候选，其中 `scale_norm` 的 next overlay / capital-adjusted 累计净收益略好，`price_scale_norm`
-  short 更强。
-- 下一步模型路线：在当前 causal feature set 上先训练神经网络模型，按同一 rolling 和 pool-internal
-  口径检验是否存在 LGBM 未捕捉的非线性增量；若 NN 单模型通过基础诊断，再做 NN + LGBM ensemble，
-  并和现有 LGBM baseline / LGBM ensemble 用相同 acceptance、暴露和容量口径比较。
-- 固定研究流程：新的特征工程/模型优化 -> 集群重训 -> pool-internal analysis -> 同步轻量 artifacts ->
-  用 `optimization_overlay_acceptance_2022_2025` 两张图评估；默认画 hist_surprise / path_shape，
-  后续可替换为任意 1-3 个新的 comparison models。累计图上 panel 画全 A 股市场平均、
-  扣费后的 `pool_L` background、baseline 和 comparison models；下 panel 画这些
-  pool/model 线相对全 A 股市场平均的累计 alpha。
-- 2026-06-23 mentor re-scope：Top100 继续作为信号诊断；后续生产化验收需要补风格暴露、
-  风险暴露和容量约束组合。容量口径应从固定 Top100 改为目标资金规模组合，例如 `10 亿`，
-  并显式限制单票成交占比、ADV / 可成交量占比、单票权重、换手和集中度。
-- 封存路线：两模型 `final_score = alpha_rank - lambda * gap_risk_rank`，保留为历史证据，不再定义当前目标。
+- 当前 brief：`09:31-09:40`、mixed label `w_long=0.30`、baseline `soft_core_reg_light`。
+- 主验收图：`experiments/results/backtests/optimization_overlay_acceptance_2022_2025/`。
+- 2022-2025 baseline：`experiments/results/backtests/baseline_2022_2025_cluster/`。
+- 当前信号候选：`hist_path_rank_centered`；当前干净候选：`hist_path_pruned_highdup`。
+- 最新生产化证据：剪枝后 Top100 exposure、size/industry exposure、split20 capacity audits。
+- 封存路线：两模型 `alpha_rank - lambda * gap_risk_rank`，只保留为历史证据。
 
-关键分叉结果：
+关键分叉事实：
 
 | stage / score | short Top100 excess bps | next Top100 excess bps | decision |
 | --- | ---: | ---: | --- |
-| raw post-open baseline | +22.21 | -32.21 | short 强，但 next tail 脏。 |
-| hard `next_flip_guard_10t` | +6.77 | +11.88 | 可见信息能排雷，但太防守。 |
-| `guard_shrunk_target_050_v1` | +14.55 | -20.98 | clean target 有效但仍不够干净。 |
-| `guard_shrunk_target_075_v1` | +6.21 | +0.07 | next 接近修复，short 掉太多。 |
-| alpha-conditioned `gap_penalty_030_p80` | +16.79 | +4.49 | 两模型单月 frontier 最好。 |
-| 18m rolling `gap_penalty_030_p80` | +21.20 | +7.84 | 证明短+长目标跨月有信息。 |
 | S/M/L pool-internal mixed `w=0.30` | +10.0 / +12.2 / +14.1 | +6.6 / +9.0 / +9.4 | 固定单模型主线权重；三列为 pool_S/M/L。 |
 | `soft_core_reg_light` vs `w030` baseline | +0.24 / +0.31 / +0.58 | +0.92 / -0.01 / +1.17 | 固定权重后的 feature/model 候选；三列为 pool_S/M/L 的增量。 |
 | 36m `baseline` full year | +8.3 / +9.3 / +10.4 | +7.7 / +5.6 / +4.4 | 2024-01..2024-12 已同步归档；三列为 pool_S/M/L。 |
@@ -46,6 +24,8 @@
 | 2022-2025 `pool_L` second sweep | +0.017 best delta | +0.232 best delta | 9 个模型实验已完成并归档；最佳 short 增量仅 `price_path_plus` +0.017 bps，后续落实为 cross-sectional relative features 和 model ensemble。 |
 | 2022-2025 fullxs batch | +0.501 best delta | +0.665 best delta | `hist_same_minute_surprise` short/next 同向改善；`path_shape_confirm` 主要改善 next；`rank_label_regression` IC 高但 Top100 变弱。 |
 | 2022-2025 price / scale batch | +0.687 best delta | +0.480 best delta | `price_scale_norm` 的 `pool_L` short 增量最高；`scale_norm` 的 `pool_L` next overlay 和 capital-adjusted 累计净收益最好。 |
+| 2022-2025 hist + path exact union | +0.676 best delta | +1.478 best delta | `hist_path_rank_centered` 是当前信号强度标尺。 |
+| hist_path high-dup prune | -0.055 vs hist_path | +0.016 vs hist_path | 删除 26 个高重复 hist/path 特征后信号基本保留，作为 hygiene simplification 通过。 |
 
 ## 实验时间线
 

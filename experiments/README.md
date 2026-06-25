@@ -1,7 +1,8 @@
 # Experiments
 
 This file describes experiment directory conventions and run-kind entrypoints.
-Run results and decisions live in `docs/experiment_log.md`.
+It does not record experiment results or research decisions; those live in
+`docs/experiment_log.md` and `docs/project_brief.md`.
 
 | path | content |
 | --- | --- |
