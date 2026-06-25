@@ -35,6 +35,11 @@ train_label = short_label + 0.30 * long_label
 相对 tick、bps、ratio、zscore、rank 和 per-symbol history 的尺度归一化特征。具体实验记录、
 复盘理由和运行细节见 [experiment_log.md](experiment_log.md)。
 
+模型路线也纳入下一步计划：先在当前 causal feature set 和固定 rolling / pool-internal 口径下训练
+神经网络模型，检查它是否能学到不同于 LGBM 的非线性排序信息；若 NN 单模型通过基础诊断，再做
+NN 与 LGBM 的 ensemble，对比单模型、纯 LGBM ensemble 和 NN+LGBM ensemble 在 short Rank IC、
+`pool_L` next overlay、暴露和容量约束口径下的增量。
+
 固定研究流程：尝试新的特征工程或模型优化，在集群上按固定 rolling 口径重新训练，同步
 pool-internal artifacts，然后先用固定两张验收图评估信号增量，再补暴露和容量评测，避免临时口径漂移。
 
@@ -81,6 +86,7 @@ pool-internal artifacts，然后先用固定两张验收图评估信号增量，
 | price / scale batch | `scale_norm` 曾是综合最好候选：`pool_L` short `+0.615 bps`、next `+0.480 bps` vs baseline；`price_scale_norm` short 更强但 next / capital-adjusted 累计净收益略弱。 |
 | hist + path exact-union | `rank_centered` 是最新最好候选：universe short Rank IC `0.1531`，`pool_L` next `+9.45 bps`，优于 baseline 的 `0.1489` / `+7.97 bps`。 |
 | feature audit / hygiene | `pool_L` grouped audit 和 baseline 276 hygiene 已归档；fullxs `hist_path` corr09 sensitivity 也已补齐，用于复核 hist_surprise/path_shape 相关簇。 |
+| hist_path high-dup prune | `hist_path_pruned_highdup` 删除 26 个高重复 `hist_surprise_` / `path_shape_` 特征，训练特征数 `354 -> 328`；universe short Rank IC 几乎不变，`pool_L` next excess 小幅 `+0.016 bps`，结论是去冗余成立但不宣称收益提升。 |
 
 完整实验顺序、run id、K8s 状态、归档路径和逐项数字见 [experiment_log.md](experiment_log.md)。
 
@@ -98,7 +104,7 @@ pool-internal artifacts，然后先用固定两张验收图评估信号增量，
 | main display | 短期模型 universe 排序 + `pool_L` overnight overlay |
 | main metrics | universe short Rank IC；`pool_L` Top100 next internal excess |
 | acceptance figures | `experiments/results/backtests/optimization_overlay_acceptance_2022_2025/` |
-| current research focus | 继续做强开盘短期模型；优先 price-regime 干预和尺度归一化特征，并补风格/风险暴露与容量约束验收 |
+| current research focus | 继续做强开盘短期模型；优先 price-regime 干预、尺度归一化特征、当前特征 NN 和 NN+LGBM ensemble，并补风格/风险暴露与容量约束验收 |
 
 短线 label：
 
@@ -141,7 +147,7 @@ label      = sell_vwap / buy_price - 1 - fee_bps / 10000
 | 2020-2025 mainline | S/M/L 池内 short 和 next 均为正。 |
 | 2022-2025 baseline | universe + `pool_L` 集群侧分析已归档，后续信号增强聚焦这一窗口。 |
 | 2022-2025 sweeps | 首轮和第二批常规增强尚未形成实质增量。 |
-| current signal-enhancement phase | 常规特征/模型 sweep 增量变小；下一步验证价格生态分层和尺度归一化特征，并用固定两张图验收。 |
+| current signal-enhancement phase | 常规特征/模型 sweep 增量变小；`hist_path` 高重复剪枝已验收为可接受简化；下一步验证价格生态分层、尺度归一化特征、当前特征 NN 和 NN+LGBM ensemble，并用固定两张图及后续生产化口径验收。 |
 | mentor capacity / exposure re-scope | Top100 降为诊断口径；下一步补风格暴露、风险暴露和 `10 亿` 级容量约束组合验收。 |
 
 ## 入口

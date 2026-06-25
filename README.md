@@ -11,7 +11,8 @@ Current snapshot:
 sample window: 09:30:00-09:40:00, current slice 09:31:00-09:40:00
 main label: mixed short + next-close label, w_long = 0.30
 current baseline: soft_core_reg_light
-current focus: 继续做强开盘短期模型；补 pool_L overlay、暴露和容量约束验收
+current focus: 继续做强开盘短期模型；补 NN / LGBM ensemble、pool_L overlay、暴露和容量约束验收
+latest closeout: hist_path_pruned_highdup 已完成；高重复 hist/path 特征 354 -> 328，信号基本保留
 acceptance plots: experiments/results/backtests/optimization_overlay_acceptance_2022_2025/
 current brief: docs/project_brief.md
 run facts and artifact index: docs/experiment_log.md

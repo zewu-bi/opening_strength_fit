@@ -11,10 +11,13 @@
   `pool_L` Top100 next internal excess 检验叠加 mentor 隔夜股池后的隔夜收益。
 - 已归档：2024 月度、2018H1..2025H2 半年/OOS、2022-2025 baseline、second sweep、xs-relative、
   model ensemble、fullxs batch、feature audit / hygiene、price-regime / scale-normalization batch、
-  hist+path exact-union batch 和 hist+path hygiene sensitivity。
+  hist+path exact-union batch、hist+path hygiene sensitivity 和 hist_path high-dup prune closeout。
 - 当前增量候选：`hist_path_rank_centered`；`scale_norm` / `price_scale_norm` 是上一轮 price-scale
   候选，其中 `scale_norm` 的 next overlay / capital-adjusted 累计净收益略好，`price_scale_norm`
   short 更强。
+- 下一步模型路线：在当前 causal feature set 上先训练神经网络模型，按同一 rolling 和 pool-internal
+  口径检验是否存在 LGBM 未捕捉的非线性增量；若 NN 单模型通过基础诊断，再做 NN + LGBM ensemble，
+  并和现有 LGBM baseline / LGBM ensemble 用相同 acceptance、暴露和容量口径比较。
 - 固定研究流程：新的特征工程/模型优化 -> 集群重训 -> pool-internal analysis -> 同步轻量 artifacts ->
   用 `optimization_overlay_acceptance_2022_2025` 两张图评估；默认画 hist_surprise / path_shape，
   后续可替换为任意 1-3 个新的 comparison models。累计图上 panel 画全 A 股市场平均、
@@ -74,6 +77,7 @@
 | 2026-06-17 | price-regime / scale-normalization archive | `price_bucket`、`scale_norm`、`price_scale_norm` 已补齐归档；`scale_norm` 综合最好，`price_scale_norm` 更偏 short。 |
 | 2026-06-23 | hist + path exact-union archive | `hist_path`、`hist_path_zscore`、`rank_centered` 已补齐 metrics 和 pool-internal analysis 并归档；本批 `rank_centered` 的 short Rank IC 与 `pool_L` next excess 最好。 |
 | 2026-06-23 | mentor re-scope | Top100 降为诊断口径；后续补风格暴露、风险暴露和 `10 亿` 级容量约束组合验收。 |
+| 2026-06-25 | hist_path high-dup prune closeout | `hist_path_pruned_highdup` 已完成训练、pool-internal analysis、artifact sync 和 experiment alignment audit；删除 26 个高重复 hist/path 特征后信号基本保留，作为 hygiene simplification 通过。 |
 
 ## 2026-05-20 小窗结果
 
@@ -2725,6 +2729,56 @@ fullxs `hist_path` corr09 结果：`features=354`、`rows=50,000`、`high_corr_p
 postopen_v2 交易额/成交量深度比的近重复项；这组结果作为人工复核 sensitivity，不直接改变
 当前 baseline 276 特征的主 drop-list。
 
+### 2026-06-25 hist_path high-dup prune closeout
+
+基于 fullxs `hist_path` corr09 hygiene sensitivity，把 `feature_prune_candidates.csv` 中所有
+`hist_surprise_` / `path_shape_` 的 high-duplicate candidates 一次性从模型 feature list 删除，
+用于验证“删高重复特征是否仍保留信号”。完整 drop 列表记录在 run config 的
+`features.drop_feature_columns`；其中非 hist/path 的 `volume`、`turnover`、`iopv` 是原有基础
+drop，真正新增删除为 26 个 `hist_surprise_` / `path_shape_` 特征。
+
+run / job / artifact 索引：
+
+```text
+experiments/runs/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1.toml
+experiments/jobs/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_sharded_job.yaml
+experiments/jobs/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_pool_internal_analysis_job.yaml
+experiments/results/metrics/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_metrics_by_year.csv
+experiments/results/metrics/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_metrics_by_month.csv
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/
+output/artifacts/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/
+/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/
+```
+
+状态审计：
+
+| item | status |
+| --- | --- |
+| run config | `status = "completed"` |
+| training job | `os-lgbm-36m-2225-hist-path-prunedup`，8 个半年 shard 已完成并落 `_SUCCESS` / metrics / predictions。 |
+| analysis job | `os-analyze-36m-2225-hist-path-prunedup` 已完成，pool-internal top100 artifacts 已同步。 |
+| feature count | metrics 记录 `features=328`；剪枝前 `hist_path` 为 `354`。 |
+| experiment alignment | `.venv/bin/osf-audit-experiments` 输出 `alignment_ok: yes`；该 run 显示 `completed`、`pool_internal_analysis,sharded_training`、`metrics=yes`。 |
+
+与剪枝前 `hist_path` 对比：
+
+| pool | metric | before | pruned | delta |
+| --- | ---: | ---: | ---: | ---: |
+| universe | short_internal_excess_bps | 17.5994 | 17.5893 | -0.0101 |
+| universe | next_internal_excess_bps | -7.8433 | -7.9182 | -0.0749 |
+| universe | short_rank_ic | 0.151529 | 0.151508 | -0.000021 |
+| universe | next_rank_ic | 0.005227 | 0.005180 | -0.000047 |
+| `pool_L` | short_internal_excess_bps | 9.2633 | 9.2080 | -0.0554 |
+| `pool_L` | next_internal_excess_bps | 8.8485 | 8.8643 | +0.0158 |
+| `pool_L` | short_rank_ic | 0.140879 | 0.140789 | -0.000091 |
+| `pool_L` | next_rank_ic | 0.002921 | 0.002830 | -0.000092 |
+
+稳定性没有实质退化：universe / `pool_L` 的 `short_positive_months` 均保持 `48 / 48`；
+`pool_L` 的 `next_positive_months` 保持 `33 / 48`；`pool_L` short / next positive clocks
+均保持 `10 / 10`。因此这次剪枝在 feature hygiene 角度成立：高重复 hist/path 特征可以删除，
+信号基本保留；但它不是收益增强实验，不应宣称 performance lift。主线是否切换取决于是否更重视
+更干净的特征集合和更低冗余。
+
 建议第一轮 hard-drop 的 17 个特征：
 
 ```text
@@ -2835,6 +2889,7 @@ CSV / JSON / SVG 包；`output/legacy/**` 只保留旧本地分析和 debug 产�
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_v1/` | baseline 276 特征 hygiene / correlation 主审计：0.98 相关阈值、drop/review candidates、keep/drop list 和 trace。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_corr09_v1/` | 同一抽样的 0.90 相关阈值 sensitivity hygiene 审计，用于人工复核更宽相关簇。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1/` | baseline + hist_surprise + path_shape 精确并集的 0.90 相关阈值 hygiene sensitivity；50k rows，354 features，19 个 drop candidates。 |
+| `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/` | `hist_path` 删除 26 个高重复 hist/path 特征后的 pool-internal closeout；328 features，信号基本保留，`hist_path_pruned_vs_before_summary.csv` 为剪枝前后 compact 对比。 |
 | `experiments/results/backtests/gap_risk_penalized_attribution_v1/` | rolling gap-risk Top100 替换归因的 outcome、feature exposure 和 residual-control 证据。 |
 | `output/artifacts/<run_id>` | 当前 2022-2025 cluster baseline / pool_L 优化实验的本地查看副本；正式摘要另归档到 `experiments/results/backtests/`。 |
 | `output/legacy/artifacts/<run_id>` | 旧 artifact 拉取和 raw shard metrics，保留给 debug / history。 |
@@ -2901,6 +2956,6 @@ mentor 进一步明确：后续不能只盯固定 Top100 的收益增强。Top10
 - 换手、费用和持仓重叠；必要时区分 gross notional、capital-adjusted notional 和实际可成交 notional。
 - 若目标容量无法在合理参与率下填满，应报告 feasible capacity，而不是机械输出 `10 亿` 满仓结果。
 
-后续研发顺序：先保留现有 fixed Top100 acceptance 图作为信号对照；再新增 exposure audit 和
-capacity portfolio audit，最终用 capacity-constrained next net / market-relative alpha 判断候选是否
-真正可推进。
+后续研发顺序：先保留现有 fixed Top100 acceptance 图作为信号对照；同时推进当前特征 NN 单模型，
+若单模型有增量再做 NN + LGBM ensemble；再新增 exposure audit 和 capacity portfolio audit，最终用
+capacity-constrained next net / market-relative alpha 判断候选是否真正可推进。
