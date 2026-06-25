@@ -1,0 +1,51 @@
+[run]
+id = "exposure_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_core_v1"
+kind = "exposure_audit"
+description = "Core visible-feature exposure audit for the 2022-2025 hist_path high-duplicate pruning experiment. Covers opening activity, liquidity, price, short momentum, and microstructure exposure for pool_L Top100."
+status = "completed"
+
+[exposure_audit]
+predictions = ["/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1"]
+pool = ["L"]
+pool_date_lag_sessions = 0
+score_col = "prediction"
+top_n = 100
+exposure_cols = [
+  "buy_price",
+  "spread_bps",
+  "ask_depth_10",
+  "bid_depth_10",
+  "preopen_volume",
+  "preopen_turnover",
+  "volume_diff_10t",
+  "turnover_diff_10t",
+  "volume_diff_30t",
+  "turnover_diff_30t",
+  "return_10t",
+  "return_30t",
+  "depth_imbalance_10",
+]
+skip_score_exposure_corr = true
+
+[output]
+local_dir = "output/legacy/analysis/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_exposure_audit"
+k8s_dir = "/mnt/output/opening_strength_fit/exposure_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_core_v1"
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-expaud-2225-pruned-core"
+image_pull_secret = "highfort"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:latest"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+env_secrets = ["xy-fit-ceph-credentials"]
+avoid_nodes = ["node7", "node8"]
+wait_for_paths = ["/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/month_2025-07/_SUCCESS"]
+wait_for_path_timeout_seconds = 21600
+wait_for_path_interval_seconds = 120
+
+[k8s.resources]
+cpu_request = "8"
+cpu_limit = "16"
+memory_request = "128Gi"
+memory_limit = "256Gi"

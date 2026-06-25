@@ -11,7 +11,8 @@
   `pool_L` Top100 next internal excess 检验叠加 mentor 隔夜股池后的隔夜收益。
 - 已归档：2024 月度、2018H1..2025H2 半年/OOS、2022-2025 baseline、second sweep、xs-relative、
   model ensemble、fullxs batch、feature audit / hygiene、price-regime / scale-normalization batch、
-  hist+path exact-union batch、hist+path hygiene sensitivity 和 hist_path high-dup prune closeout。
+  hist+path exact-union batch、hist+path hygiene sensitivity、hist_path high-dup prune closeout，
+  以及剪枝后 `pool_L` exposure audits。
 - 当前增量候选：`hist_path_rank_centered`；`scale_norm` / `price_scale_norm` 是上一轮 price-scale
   候选，其中 `scale_norm` 的 next overlay / capital-adjusted 累计净收益略好，`price_scale_norm`
   short 更强。
@@ -78,6 +79,8 @@
 | 2026-06-23 | hist + path exact-union archive | `hist_path`、`hist_path_zscore`、`rank_centered` 已补齐 metrics 和 pool-internal analysis 并归档；本批 `rank_centered` 的 short Rank IC 与 `pool_L` next excess 最好。 |
 | 2026-06-23 | mentor re-scope | Top100 降为诊断口径；后续补风格暴露、风险暴露和 `10 亿` 级容量约束组合验收。 |
 | 2026-06-25 | hist_path high-dup prune closeout | `hist_path_pruned_highdup` 已完成训练、pool-internal analysis、artifact sync 和 experiment alignment audit；删除 26 个高重复 hist/path 特征后信号基本保留，作为 hygiene simplification 通过。 |
+| 2026-06-25 | hist_path pruned exposure audit | 已对剪枝后实验补 `pool_L` Top100 core exposure audit：选股显著偏 opening activity / turnover heat、低 spread、单票集中度不高；这被记录为开盘强势股 alpha 行为画像，而不是默认负面暴露。 |
+| 2026-06-25 | hist_path pruned size / industry audit | 已接 ClickHouse 日频市值和申万行业 exposure input：`pool_L` Top100 中等偏大市值，行业上超配电子、电力设备、计算机，低配机械设备、基础化工；行业集中存在但不是单行业押注。 |
 
 ## 2026-05-20 小窗结果
 
@@ -2779,6 +2782,136 @@ output/artifacts/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/
 信号基本保留；但它不是收益增强实验，不应宣称 performance lift。主线是否切换取决于是否更重视
 更干净的特征集合和更低冗余。
 
+#### pool_L Top100 exposure audit
+
+对剪枝后实验补了 `pool_L` Top100 core exposure audit。输入为 PVC 同步回本地的 8 个半年
+prediction shard，按 shard 运行后合并；为控制 runtime，本轮跳过 `score_exposure_spearman`，
+主读 `selected_mean_rank`、`selected_mean_z` 和 `selected_top_decile_share`。审计列覆盖
+price、spread/depth、opening activity、short momentum 和 depth imbalance；市值和行业字段不在
+prediction parquet 中，本小节先不含，下一小节已用 ClickHouse 日频 exposure input 补齐。
+
+归档：
+
+```text
+experiments/runs/exposure_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_core_v1.toml
+experiments/jobs/exposure_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_core_v1_job.yaml
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_exposure_audit/
+output/legacy/analysis/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_exposure_audit/
+```
+
+说明：这轮 core exposure audit 最初是本地按 shard 运行后合并，因此早先只记录结果目录。
+现已补正式 `exposure_audit` OSF run config 和 K8s job，集群复跑时会直接用同一份 pruned
+prediction 输出生成 core exposure artifact。
+
+总体读数：
+
+| exposure | category | selected_mean_rank | selected_mean_z | top decile share | read |
+| --- | --- | ---: | ---: | ---: | --- |
+| `turnover_diff_10t` | activity | 0.877 | +1.526 | 59.2% | 最强 post-open turnover heat。 |
+| `turnover_diff_30t` | activity | 0.866 | +1.508 | 57.4% | turnover heat 在更长窗口仍稳定。 |
+| `volume_diff_10t` | activity | 0.804 | +0.948 | 42.8% | 明显偏高成交量增量。 |
+| `preopen_turnover` | activity | 0.767 | +0.902 | 41.2% | 盘前活跃度高。 |
+| `preopen_volume` | activity | 0.691 | +0.523 | 29.3% | 盘前量能偏高但弱于 turnover 增量。 |
+| `spread_bps` | liquidity | 0.334 | -0.212 | 3.6% | 明显避开高 spread，交易可执行性更友好。 |
+| `buy_price` | price | 0.655 | +0.270 | 18.0% | 中等 higher-price tilt，需要和 price-regime 一起读。 |
+| `return_10t` | momentum | 0.562 | +0.193 | 25.5% | 轻度短窗强势。 |
+| `return_30t` | momentum | 0.535 | +0.061 | 27.1% | 接近中性到轻度强势。 |
+| `depth_imbalance_10` | microstructure | 0.463 | -0.142 | 12.5% | 盘口 imbalance 不是主导暴露，且月度有切换。 |
+| `ask_depth_10` | liquidity | 0.505 | -0.087 | 5.4% | 接近中性。 |
+| `bid_depth_10` | liquidity | 0.485 | -0.109 | 3.6% | 接近中性到略低。 |
+
+类别汇总显示 activity 是最主要的行为画像：5 个 activity 暴露的平均 `|z| = 1.081`，
+平均 rank deviation `0.301`，平均 top-decile share `46.0%`。price / liquidity / momentum /
+microstructure 都明显更弱；其中 liquidity 更准确的读法是“低 spread 倾向”，不是无脑追逐差流动性。
+
+月度稳定性：`turnover_diff_10t` 的 monthly selected mean rank 在 48 个月中约为 `0.819-0.908`，
+`turnover_diff_30t` 为 `0.799-0.904`，`preopen_turnover` 为 `0.682-0.812`；`spread_bps`
+长期处在低分位，约 `0.242-0.380`。因此 activity heat / low-spread 画像不是少数月份造成的。
+
+日内集中度也没有明显单票拥挤：969 个交易日、每日 10 个 decision clocks、Top100 日均约
+`526` 个不同 symbols，repeat rate `47.4%`，effective symbols 约 `358`，单票最大占比均值
+`0.83%`，Top5 symbols 占比均值 `3.69%`。
+
+解读：这次 audit 不是把所有可命名暴露都定性为坏事。对开盘强势股模型来说，opening activity /
+turnover heat 很可能就是 alpha mechanism 的主要载体；审计结论应写成“模型确实在买开盘活跃、
+成交增量强、同时 spread 较低的股票”，这和策略定义一致。生产化剩余问题不是机械中性化 activity
+heat，而是在组合实现层面继续监控冲击、参与率、ADV / 可成交量、单票和行业集中度。
+
+#### pool_L size / industry exposure audit
+
+为补齐市值和行业暴露，新增 `osf-build-exposure-input` 从 ClickHouse 构建日频 `date,symbol`
+外部 exposure input：`stock.daily_bar_jy` 提供 `market_cap` / `float_market_cap` / log cap，
+`stock.industry` 提供申万一二三级行业。对剪枝实验的 8 个 prediction shards 先按 `pool_L`
+过滤，再生成 `3,281,701` 个日频 key；市值字段仅缺 `4` 个 key，申万一级行业缺 `170` 个 key。
+
+归档：
+
+```text
+output/legacy/exposures/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_pool_l_size_industry_daily.parquet
+experiments/results/backtests/exposure_input_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_size_industry_v1/
+output/legacy/analysis/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_size_industry_exposure_audit/
+experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_size_industry_exposure_audit/
+```
+
+tracked archive 只保留 exposure input trace；完整 `exposure_input.parquet` 体积较大，保留在
+`output/legacy/exposures/...` 和 PVC 侧供复跑 audit 使用。
+
+正式 OSF 链路拆成两步是合理的：`osf-build-exposure-input` 是外部数据准备 run，负责把
+ClickHouse 的日频市值/行业数据落成标准 keyed parquet；`osf-audit-exposure` 是验收 run，
+只消费 prediction parquet 和这个 exposure input。这样可以复用同一份市值/行业输入，也能让
+K8s job 明确等待外部 exposure input 的 trace 文件后再开始 audit。
+
+run / job 索引：
+
+```text
+experiments/runs/exposure_input_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_size_industry_v1.toml
+experiments/jobs/exposure_input_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_size_industry_v1_job.yaml
+experiments/runs/exposure_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_size_industry_v1.toml
+experiments/jobs/exposure_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_size_industry_v1_job.yaml
+```
+
+集群复跑时先提交 exposure input job，再提交 exposure audit job；两个 manifest 当前用
+`opening-strength-fit:latest`，正式提交前应替换为包含 `osf-build-exposure-input` 的固定镜像 tag。
+
+市值暴露总体读数：
+
+| exposure | selected_mean_rank | selected_mean_z | top decile share | bottom decile share | read |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `log_market_cap` | 0.650 | +0.544 | 22.2% | 3.5% | 中等偏大总市值。 |
+| `log_float_market_cap` | 0.641 | +0.522 | 22.4% | 4.7% | 中等偏大流通市值。 |
+| `market_cap` | 0.650 | +0.228 | 22.2% | 3.5% | 原值受极端大票影响，主读 rank/log z。 |
+| `float_market_cap` | 0.641 | +0.246 | 22.4% | 4.7% | 原值同样只作辅助。 |
+
+月度稳定性：`log_market_cap` selected mean rank 在 48 个月中约 `0.586-0.726`，
+`log_float_market_cap` 约 `0.585-0.712`；top decile share 约 `16.4%-33.1%`。因此模型不是
+小票暴露，反而稳定偏中大市值，这对后续容量是加分项，但也要向 mentor 说明不是市值中性策略。
+
+申万一级行业 active share 总体读数：
+
+| industry | candidate share | selected share | active share | read |
+| --- | ---: | ---: | ---: | --- |
+| 电子 | 8.8% | 12.1% | +3.2% | 最主要超配之一。 |
+| 电力设备 | 6.8% | 9.9% | +3.1% | 稳定超配，尤其 2024-2025。 |
+| 计算机 | 6.7% | 8.7% | +2.0% | 超配但月度有切换。 |
+| 通信 | 2.4% | 3.7% | +1.3% | 小权重行业的温和超配。 |
+| 有色金属 | 2.8% | 3.9% | +1.2% | 温和超配。 |
+| 国防军工 | 2.7% | 3.8% | +1.2% | 温和超配。 |
+| 机械设备 | 10.1% | 8.1% | -2.1% | 主要低配。 |
+| 基础化工 | 7.9% | 6.0% | -1.9% | 主要低配。 |
+| 轻工制造 | 3.1% | 1.7% | -1.5% | 低配。 |
+| 环保 | 2.6% | 1.1% | -1.4% | 低配。 |
+
+行业集中度：`pool_L` 候选平均约 `31.0` 个申万一级行业，Top100 平均约 `29.8` 个行业；
+selected industry max share 均值 `16.9%`，Top5 industries share 均值 `53.1%`，
+industry HHI 均值 `0.082`，effective industries 约 `12.9`。这说明行业偏好可见，但不是
+单行业押注；最主要的 active 行业集中在电子/电力设备/计算机等更容易出现开盘活跃和成交增量的板块。
+
+解读：市值和行业 audit 的结论比“有暴露/没暴露”更具体。市值上，模型偏中大市值，不是小票拥挤；
+行业上，模型有科技制造方向的结构性偏好，尤其电子、电力设备、计算机，同时低配机械设备、基础化工。
+这些不需要机械中性化，但生产验收应把它们作为组合约束候选：容量组合里监控行业 active weight、
+行业 HHI、Top5 industry share，并在 mentor 汇报中明确“行业偏好是模型行为画像，但不是单一行业
+收益押注”。
+
 建议第一轮 hard-drop 的 17 个特征：
 
 ```text
@@ -2890,6 +3023,10 @@ CSV / JSON / SVG 包；`output/legacy/**` 只保留旧本地分析和 debug 产�
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_corr09_v1/` | 同一抽样的 0.90 相关阈值 sensitivity hygiene 审计，用于人工复核更宽相关簇。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1/` | baseline + hist_surprise + path_shape 精确并集的 0.90 相关阈值 hygiene sensitivity；50k rows，354 features，19 个 drop candidates。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/` | `hist_path` 删除 26 个高重复 hist/path 特征后的 pool-internal closeout；328 features，信号基本保留，`hist_path_pruned_vs_before_summary.csv` 为剪枝前后 compact 对比。 |
+| `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_exposure_audit/` | 剪枝后实验的 `pool_L` Top100 core exposure audit；主要画像是 opening activity / turnover heat 高、spread 低、单票集中度不高，作为生产化暴露验收的第一轮证据。 |
+| `experiments/results/backtests/exposure_input_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_size_industry_v1/` | 剪枝后 size/industry audit 的外部 exposure input trace；完整 parquet 留在 `output/legacy/exposures/` 和 PVC。 |
+| `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_size_industry_exposure_audit/` | 剪枝后实验补齐市值和申万一级行业暴露：中等偏大市值，超配电子/电力设备/计算机，低配机械设备/基础化工，并输出行业 active-share 明细。 |
+| `output/artifacts/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_v1/` | 剪枝后实验的 `pool_L` split20 capacity audit；`10 亿 / 20 = 5000 万` 每切片，`10% * turnover_diff_30t` 和单票 `1%` 上限，全部截面装满，平均吃到 Top124。 |
 | `experiments/results/backtests/gap_risk_penalized_attribution_v1/` | rolling gap-risk Top100 替换归因的 outcome、feature exposure 和 residual-control 证据。 |
 | `output/artifacts/<run_id>` | 当前 2022-2025 cluster baseline / pool_L 优化实验的本地查看副本；正式摘要另归档到 `experiments/results/backtests/`。 |
 | `output/legacy/artifacts/<run_id>` | 旧 artifact 拉取和 raw shard metrics，保留给 debug / history。 |

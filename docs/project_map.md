@@ -82,6 +82,8 @@ CLI:
 - `osf-plot-optimization-direction-comparison`: render the fixed overlay acceptance figures for baseline plus 1-3 selected comparison models: universe short Rank IC, `pool_L` Top100 next internal excess, and full-market / pool / model cumulative next net returns with full-market-relative alpha.
 - `osf-plot-weekly-pool-internal`: render optional trading-day-equal weekly / 4w rolling pool-internal stability diagnostics from `pool_internal_group_metrics.csv`.
 - `osf-plot-weekly-pool-internal-cumulative`: render cumulative short/next pool-internal excess from pre-aggregated daily or weekly summary rows.
+- `osf-build-exposure-input`: build daily `date,symbol` market-cap and industry exposure inputs from ClickHouse for use by exposure audits.
+- `osf-audit-exposure`: audit selected TopN or supplied portfolio exposure versus the candidate pool; outputs style/size exposure summaries, concentration diagnostics, and industry active-share diagnostics.
 - `osf-summarize-opening-results`: summarize metrics CSVs.
 - `osf-compare-opening-results`: compare archived model metrics.
 - `osf-run-rule-baselines`: evaluate simple visible-information rules.

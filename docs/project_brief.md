@@ -17,6 +17,11 @@ mentor 提供的隔夜模型以 `pool_L` 股池形式进入验收。两者做 ov
 单票成交占比、可成交量/ADV 占比、单票权重、行业或风格集中度、换手和费用，防止容量指标本身
 依赖过高参与率或过度集中。
 
+2026-06-25 已对剪枝后 `hist_path_pruned_highdup` 补第一轮 `pool_L` Top100 core exposure audit：
+模型画像显著偏 opening activity / turnover heat、低 spread、单票集中度不高；这和开盘强势股 alpha
+定义一致，不作为默认负面暴露处理。随后补齐 ClickHouse 日频市值和申万一级行业暴露：Top100
+中等偏大市值，超配电子、电力设备、计算机，低配机械设备和基础化工；行业偏好可见但不是单行业押注。
+
 当前主线是单模型 mixed label：
 
 ```text
@@ -50,8 +55,8 @@ pool-internal artifacts，然后先用固定两张验收图评估信号增量，
 | universe short Rank IC | 提升；直接检验短期模型本身的排序能力。 |
 | `pool_L` Top100 next internal excess | 提升；检验短期模型叠加到 mentor 股池后的 overnight overlay 效果。 |
 | cumulative next net / market-relative alpha | 保持可解释、稳定；上 panel 同时显示全 A 股市场平均和 `pool_L` background。 |
-| style exposure | 待补；检查 Top picks / capacity portfolio 是否只是风格偏置收益。 |
-| risk exposure | 待补；重点检查市值、流动性、价格、波动、行业集中度等风险暴露。 |
+| style exposure | 第一轮 core + size/industry audit 已补：Top100 明显偏 opening activity / turnover heat，且中等偏大市值、超配电子/电力设备/计算机；这些更像目标 alpha 行为画像和可监控结构偏好。 |
+| risk exposure | 第一轮 core + size/industry audit 已补：低 spread、无明显单票集中、行业集中不是单行业押注；波动、容量组合行业约束和真实执行风险仍需继续验收。 |
 | capacity-constrained portfolio | 待补；从固定 Top100 推进到目标资金规模组合，例如 `10 亿`，并约束单票参与率、ADV / 可成交量占比、权重和换手。 |
 固定两张图：
 
@@ -86,7 +91,7 @@ pool-internal artifacts，然后先用固定两张验收图评估信号增量，
 | price / scale batch | `scale_norm` 曾是综合最好候选：`pool_L` short `+0.615 bps`、next `+0.480 bps` vs baseline；`price_scale_norm` short 更强但 next / capital-adjusted 累计净收益略弱。 |
 | hist + path exact-union | `rank_centered` 是最新最好候选：universe short Rank IC `0.1531`，`pool_L` next `+9.45 bps`，优于 baseline 的 `0.1489` / `+7.97 bps`。 |
 | feature audit / hygiene | `pool_L` grouped audit 和 baseline 276 hygiene 已归档；fullxs `hist_path` corr09 sensitivity 也已补齐，用于复核 hist_surprise/path_shape 相关簇。 |
-| hist_path high-dup prune | `hist_path_pruned_highdup` 删除 26 个高重复 `hist_surprise_` / `path_shape_` 特征，训练特征数 `354 -> 328`；universe short Rank IC 几乎不变，`pool_L` next excess 小幅 `+0.016 bps`，结论是去冗余成立但不宣称收益提升。 |
+| hist_path high-dup prune + exposure audits | `hist_path_pruned_highdup` 删除 26 个高重复 `hist_surprise_` / `path_shape_` 特征，训练特征数 `354 -> 328`；universe short Rank IC 几乎不变，`pool_L` next excess 小幅 `+0.016 bps`。Top100 exposure audit 显示模型明显偏 opening activity / turnover heat（`turnover_diff_10t` rank `0.877`、z `+1.53`），同时低 spread（`spread_bps` rank `0.334`）、中等偏大市值（`log_market_cap` rank `0.650`、z `+0.54`），行业上超配电子/电力设备/计算机、低配机械设备/基础化工；日均约 `526` 个 symbols、effective symbols 约 `358`，effective industries 约 `12.9`。结论是去冗余成立，行为画像符合开盘强势股 alpha，但生产组合仍需继续由容量/执行约束验收。 |
 
 完整实验顺序、run id、K8s 状态、归档路径和逐项数字见 [experiment_log.md](experiment_log.md)。
 
@@ -104,7 +109,7 @@ pool-internal artifacts，然后先用固定两张验收图评估信号增量，
 | main display | 短期模型 universe 排序 + `pool_L` overnight overlay |
 | main metrics | universe short Rank IC；`pool_L` Top100 next internal excess |
 | acceptance figures | `experiments/results/backtests/optimization_overlay_acceptance_2022_2025/` |
-| current research focus | 继续做强开盘短期模型；优先 price-regime 干预、尺度归一化特征、当前特征 NN 和 NN+LGBM ensemble，并补风格/风险暴露与容量约束验收 |
+| current research focus | 继续做强开盘短期模型；优先 price-regime 干预、尺度归一化特征、当前特征 NN 和 NN+LGBM ensemble，并继续补风格/风险暴露与容量约束验收 |
 
 短线 label：
 

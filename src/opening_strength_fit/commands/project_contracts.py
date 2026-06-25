@@ -9,9 +9,11 @@ from opening_strength_fit.config import load_toml
 ROOT = Path(__file__).resolve().parents[3]
 MAX_COMMAND_MODULE_LINES = 800
 K8S_JOB_ENTRYPOINTS = (
+    "osf-audit-exposure",
     "osf-audit-feature-dependence",
     "osf-audit-feature-hygiene",
     "osf-analyze-pool-internal-top100",
+    "osf-build-exposure-input",
     "osf-build-labeled-cache",
     "osf-build-next-close-labels",
     "osf-build-target-label-cache",

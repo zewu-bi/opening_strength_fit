@@ -274,9 +274,60 @@ osf-sync-experiment-artifacts \
 `--allow-partial` 写入 `output/artifacts/_partial_metrics/`。
 
 非标准轻量 artifact：`score_risk_sweep`、`alpha_conditioned_rolling_validation`、
-`gap_risk_attribution`、`feature_hygiene` 会同步各自 summary/trace CSV 或审计报告。
+`gap_risk_attribution`、`feature_hygiene`、`exposure_audit` 会同步各自 summary/trace CSV
+或审计报告。
 
-## 7. 汇总和作图
+## 7. Exposure Audit
+
+Top100 生产化前的暴露验收使用 `osf-audit-exposure`。默认审 `pool_L`，会从 prediction
+parquet 自动检测常见可见暴露列：price、spread、depth、成交/换手代理、短窗 return、
+市值/ADV/波动等；也可以用 `--exposure-col` 显式指定列。若暴露列不在 prediction parquet
+中，可用 `--exposure-input` 传 keyed exposure frame。`--exposure-input` 支持日频
+`date,symbol` key，也支持 intraday `date,symbol,decision_target_timestamp` key。
+
+市值/行业外部 exposure input 可从 ClickHouse 日频表构建：
+
+```bash
+osf-build-exposure-input \
+  --predictions output/legacy/predictions/<run_id>/raw \
+  --pool L \
+  --output output/legacy/exposures/<run_id>_pool_l_size_industry_daily.parquet
+```
+
+默认从 `stock.daily_bar_jy` 拉 `market_cap` / `float_market_cap` / log cap / 日频成交额，
+从 `stock.industry` 拉申万一二三级行业。输出是日频 keyed parquet，可被
+`osf-audit-exposure` 直接 join。
+
+最小本地命令：
+
+```bash
+osf-audit-exposure \
+  --predictions output/legacy/predictions/<run_id>/predictions_all.parquet \
+  --exposure-input output/legacy/exposures/<run_id>_pool_l_size_industry_daily.parquet \
+  --output-dir output/legacy/analysis/<run_id>_exposure_audit \
+  --pool L \
+  --top-n 100 \
+  --exposure-col log_market_cap \
+  --exposure-col log_float_market_cap \
+  --industry-col industry_sw1
+```
+
+常用输出：
+
+```text
+exposure_audit_summary.csv                 # pool x category x exposure 总体暴露
+exposure_audit_month_summary.csv           # 月度稳定性
+exposure_audit_group_metrics.csv           # date x clock 明细
+exposure_audit_category_summary.csv         # 类别级最大/平均暴露
+exposure_audit_industry_group_metrics.csv   # date x clock x industry active share 明细
+exposure_audit_industry_month_summary.csv   # 月度行业 active share 稳定性
+exposure_audit_industry_summary.csv         # 总体行业超/低配
+exposure_audit_daily_concentration.csv      # 日内重复选股和行业集中
+exposure_audit_concentration_summary.csv    # 集中度总体摘要
+exposure_audit_trace.json
+```
+
+## 8. 汇总和作图
 
 Metrics：
 
@@ -357,7 +408,62 @@ Legacy diagnostics entrypoints: `osf-plot-rolling-validation-tradeoff`、
 `osf-audit-feature-dependence`、`osf-run-lgbm-delay-replays`、`osf-plot-lgbm-delay-decay`、
 `osf-run-alpha-horizon-decay`。
 
-## 8. 排查
+## 9. Capacity Audit
+
+生产化容量验收使用 `osf-audit-capacity`。它按每个 `date x decision_time` 在候选池内按
+score 由高到低分配目标资金，显式限制单票权重、可见成交额参与率、盘口深度参与率、行业权重，
+并报告未填满资金而不是强行满仓。
+
+`target_notional` 是单个 `date x decision_time` group 的目标资金；若策略总资金需要分成
+`N` 个执行切片，应先用总资金除以 `N`。当前正式 first-pass 容量口径为：
+
+```text
+总资金: 10 亿
+执行切片: 20
+target_notional: 10 亿 / 20 = 5000 万
+capacity_notional_col: turnover_diff_30t
+max_participation_rate: 0.10
+max_symbol_weight: 0.01
+```
+
+最小命令：
+
+```bash
+osf-audit-capacity \
+  --predictions output/legacy/predictions/<run_id> \
+  --output-dir output/artifacts/<capacity_run_id> \
+  --pool L \
+  --target-notional 50000000 \
+  --capacity-notional-col turnover_diff_30t \
+  --max-participation-rate 0.10 \
+  --max-symbol-weight 0.01 \
+  --selected-output-limit 200000
+```
+
+主读字段：
+
+```text
+fill_success_rate          # 截面塞满目标资金的比例
+mean_top_depth_to_target   # 塞满目标资金平均要吃到 score 排名第几
+p95_top_depth_to_target    # 95% 截面塞满所需的 top depth
+max_top_depth_to_target    # 最深一次塞满所需的 top depth
+capital_excess_bps         # 容量组合收益 - pool background 收益
+```
+
+剪枝后 `pool_L` split20 容量验收结果：
+
+```text
+run_id: capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_v1
+artifact: output/artifacts/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_v1/
+fill_success_rate: 100.0% (9690/9690)
+mean / p95 / max top depth: 124 / 161 / 291
+capital_excess_bps: +9.04
+```
+
+读法：Top100 是固定诊断篮子，不是容量组合。该口径下 `5000 万/切片` 可以全部装满，但平均需要
+吃到 Top124，极端情况下到 Top291；因此生产化执行不应硬卡 Top100。
+
+## 10. 排查
 
 | symptom | action |
 | --- | --- |

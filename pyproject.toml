@@ -31,11 +31,13 @@ dev = [
 [project.scripts]
 osf-analyze-pool-internal-top100 = "opening_strength_fit.cli.analyze_pool_internal_top100:main"
 osf-audit-experiments = "opening_strength_fit.cli.audit_experiments:main"
+osf-audit-exposure = "opening_strength_fit.cli.audit_exposure:main"
 osf-audit-feature-dependence = "opening_strength_fit.cli.audit_feature_dependence:main"
 osf-audit-feature-hygiene = "opening_strength_fit.cli.audit_feature_hygiene:main"
 osf-audit-labels = "opening_strength_fit.cli.audit_labels:main"
 osf-build-labeled-cache = "opening_strength_fit.cli.build_labeled_cache:main"
 osf-build-labels = "opening_strength_fit.cli.build_labels:main"
+osf-build-exposure-input = "opening_strength_fit.cli.build_exposure_input:main"
 osf-build-next-close-labels = "opening_strength_fit.cli.build_next_close_labels:main"
 osf-build-target-label-cache = "opening_strength_fit.cli.build_target_label_cache:main"
 osf-check-project-contracts = "opening_strength_fit.cli.project_contracts:main"

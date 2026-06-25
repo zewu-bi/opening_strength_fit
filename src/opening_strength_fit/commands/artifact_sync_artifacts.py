@@ -62,6 +62,18 @@ FEATURE_HYGIENE_ARTIFACTS = (
     "feature_drop_list.txt",
     "feature_hygiene_trace.json",
 )
+EXPOSURE_AUDIT_ARTIFACTS = (
+    "exposure_audit_group_metrics.csv",
+    "exposure_audit_month_summary.csv",
+    "exposure_audit_summary.csv",
+    "exposure_audit_category_summary.csv",
+    "exposure_audit_industry_group_metrics.csv",
+    "exposure_audit_industry_month_summary.csv",
+    "exposure_audit_industry_summary.csv",
+    "exposure_audit_daily_concentration.csv",
+    "exposure_audit_concentration_summary.csv",
+    "exposure_audit_trace.json",
+)
 GAP_ATTRIBUTION_ARTIFACTS = (
     "gap_attribution_outcomes_by_month.csv",
     "gap_attribution_outcomes_overall.csv",
@@ -95,6 +107,10 @@ def is_gap_attribution(spec: RunSpec) -> bool:
     return spec.kind == "gap_risk_attribution"
 
 
+def is_exposure_audit(spec: RunSpec) -> bool:
+    return spec.kind == "exposure_audit"
+
+
 def is_feature_audit(spec: RunSpec) -> bool:
     return spec.kind == "feature_audit"
 
@@ -112,6 +128,7 @@ def is_non_standard_artifact_run(spec: RunSpec) -> bool:
         is_score_risk_sweep(spec)
         or is_rolling_validation(spec)
         or is_gap_attribution(spec)
+        or is_exposure_audit(spec)
         or is_feature_audit(spec)
         or is_feature_hygiene(spec)
     )
@@ -230,6 +247,25 @@ def pull_gap_attribution_artifacts(
     )
     if not pulled:
         raise SystemExit(f"{spec.run_id}: no gap-attribution artifacts found under {spec.pvc_dir}")
+    record_artifact_fetch(spec, output_dir, pulled, missing)
+    return pulled
+
+
+def pull_exposure_audit_artifacts(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    output_root: Path | None,
+) -> list[Path]:
+    output_dir, pulled, missing = pull_artifact_set(
+        hfcli,
+        spec,
+        pod_name,
+        output_root,
+        EXPOSURE_AUDIT_ARTIFACTS,
+    )
+    if not pulled:
+        raise SystemExit(f"{spec.run_id}: no exposure-audit artifacts found under {spec.pvc_dir}")
     record_artifact_fetch(spec, output_dir, pulled, missing)
     return pulled
 
@@ -579,6 +615,9 @@ def record_lightweight_artifacts(
                 archive_dir / "trace.json",
             ),
         ]
+    elif is_exposure_audit(spec):
+        archive_dir = backtests_dir / spec.run_id
+        records = [(output_dir / name, archive_dir / name) for name in EXPOSURE_AUDIT_ARTIFACTS]
     elif is_feature_audit(spec):
         archive_dir = backtests_dir / spec.run_id
         records = [

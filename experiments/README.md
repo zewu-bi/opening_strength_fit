@@ -15,6 +15,8 @@ Run kind entrypoints:
 | run kind | entrypoint |
 | --- | --- |
 | standard training / exploration | `osf-train` |
+| exposure input | `osf-build-exposure-input` |
+| exposure audit | `osf-audit-exposure` |
 | feature audit | `osf-audit-feature-dependence` |
 | feature hygiene | `osf-audit-feature-hygiene` |
 | labeled cache | `osf-build-labeled-cache` |
