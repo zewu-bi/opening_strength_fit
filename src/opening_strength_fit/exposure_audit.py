@@ -17,6 +17,13 @@ class ExposureSpec:
     category: str
 
 
+@dataclass(frozen=True)
+class DerivedExposureSpec:
+    column: str
+    category: str
+    source_column: str
+
+
 DEFAULT_EXPOSURES = (
     ExposureSpec("buy_price", "price"),
     ExposureSpec("mid_price", "price"),
@@ -49,7 +56,15 @@ DEFAULT_EXPOSURES = (
     ExposureSpec("volatility_20d", "volatility"),
 )
 
+DERIVED_EXPOSURES = (
+    DerivedExposureSpec("abs_return_vs_prev_close", "volatility", "return_vs_prev_close"),
+    DerivedExposureSpec("abs_return_vs_open", "volatility", "return_vs_open"),
+    DerivedExposureSpec("abs_return_10t", "volatility", "return_10t"),
+    DerivedExposureSpec("abs_return_30t", "volatility", "return_30t"),
+)
+
 _DEFAULT_CATEGORY_BY_COLUMN = {spec.column: spec.category for spec in DEFAULT_EXPOSURES}
+_DERIVED_EXPOSURE_BY_COLUMN = {spec.column: spec for spec in DERIVED_EXPOSURES}
 
 
 def normalize_audit_frame(frame: pd.DataFrame) -> pd.DataFrame:
@@ -66,6 +81,8 @@ def normalize_audit_frame(frame: pd.DataFrame) -> pd.DataFrame:
 def category_for_exposure(column: str) -> str:
     if column in _DEFAULT_CATEGORY_BY_COLUMN:
         return _DEFAULT_CATEGORY_BY_COLUMN[column]
+    if column in _DERIVED_EXPOSURE_BY_COLUMN:
+        return _DERIVED_EXPOSURE_BY_COLUMN[column].category
     lowered = column.lower()
     if "industry" in lowered or "sector" in lowered:
         return "industry"
@@ -75,9 +92,11 @@ def category_for_exposure(column: str) -> str:
         return "liquidity"
     if "volume" in lowered or "trade" in lowered:
         return "activity"
+    if lowered.startswith("abs_return") or "volatility" in lowered or "sigma" in lowered:
+        return "volatility"
     if "return" in lowered or "momentum" in lowered or "reversal" in lowered:
         return "momentum"
-    if "vol" in lowered or "sigma" in lowered:
+    if "vol" in lowered:
         return "volatility"
     if "price" in lowered or lowered.endswith("_px"):
         return "price"
@@ -98,7 +117,60 @@ def exposure_specs(columns: Iterable[str]) -> list[ExposureSpec]:
 
 def active_default_exposures(available_columns: Iterable[str]) -> list[ExposureSpec]:
     available = set(available_columns)
-    return [spec for spec in DEFAULT_EXPOSURES if spec.column in available]
+    specs = [spec for spec in DEFAULT_EXPOSURES if spec.column in available]
+    seen = {spec.column for spec in specs}
+    for spec in DERIVED_EXPOSURES:
+        if spec.column not in seen and (
+            spec.column in available or spec.source_column in available
+        ):
+            specs.append(ExposureSpec(spec.column, spec.category))
+            seen.add(spec.column)
+    return specs
+
+
+def derivable_exposure_columns(available_columns: Iterable[str]) -> set[str]:
+    available = set(available_columns)
+    return {
+        spec.column
+        for spec in DERIVED_EXPOSURES
+        if spec.column in available or spec.source_column in available
+    }
+
+
+def derived_exposure_source_columns(
+    exposure_columns: Iterable[str],
+    available_columns: Iterable[str],
+) -> list[str]:
+    available = set(available_columns)
+    sources: list[str] = []
+    for column in exposure_columns:
+        spec = _DERIVED_EXPOSURE_BY_COLUMN.get(column)
+        if spec is None:
+            continue
+        if spec.column not in available and spec.source_column in available:
+            sources.append(spec.source_column)
+    return sources
+
+
+def add_derived_exposure_columns(
+    frame: pd.DataFrame,
+    exposure_columns: Iterable[str],
+) -> tuple[pd.DataFrame, dict[str, str]]:
+    requested = set(exposure_columns)
+    derived_sources: dict[str, str] = {}
+    out = frame
+    for spec in DERIVED_EXPOSURES:
+        if spec.column not in requested:
+            continue
+        if spec.column in out.columns:
+            continue
+        if spec.source_column not in out.columns:
+            continue
+        if out is frame:
+            out = frame.copy()
+        out[spec.column] = finite_numeric(out[spec.source_column]).abs()
+        derived_sources[spec.column] = spec.source_column
+    return out, derived_sources
 
 
 def finite_numeric(values: pd.Series) -> pd.Series:

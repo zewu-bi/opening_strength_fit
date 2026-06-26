@@ -18,8 +18,11 @@ from opening_strength_fit.config import (
     run_id,
 )
 from opening_strength_fit.exposure_audit import (
+    add_derived_exposure_columns,
     active_default_exposures,
     category_summary,
+    derivable_exposure_columns,
+    derived_exposure_source_columns,
     daily_concentration,
     exposure_group_metrics,
     exposure_specs,
@@ -263,7 +266,8 @@ def _load_audit_frame(
     available = prediction_available | exposure_available
 
     if exposure_columns:
-        missing_exposures = sorted(set(exposure_columns) - available)
+        available_or_derivable = available | derivable_exposure_columns(available)
+        missing_exposures = sorted(set(exposure_columns) - available_or_derivable)
         if missing_exposures:
             raise SystemExit(f"requested exposure columns are missing: {missing_exposures}")
         active_exposure_columns = exposure_columns
@@ -291,12 +295,22 @@ def _load_audit_frame(
     external_exposure_columns = [
         column for column in active_exposure_columns if column in exposure_available
     ]
+    derived_source_columns = derived_exposure_source_columns(active_exposure_columns, available)
+    external_derived_source_columns = [
+        column for column in derived_source_columns if column in exposure_available
+    ]
     prediction_exposure_columns = [
         column
         for column in active_exposure_columns
         if column in prediction_available and column not in external_exposure_columns
     ]
+    prediction_derived_source_columns = [
+        column for column in derived_source_columns if column in prediction_available
+    ]
     for column in prediction_exposure_columns:
+        if column not in prediction_columns:
+            prediction_columns.append(column)
+    for column in prediction_derived_source_columns:
         if column not in prediction_columns:
             prediction_columns.append(column)
     if industry_col and industry_col in prediction_available and industry_col not in exposure_available:
@@ -316,11 +330,15 @@ def _load_audit_frame(
         frame, exposure_merge_trace = _merge_exposure_files(
             frame,
             files=exposure_files_list,
-            exposure_columns=external_exposure_columns,
+            exposure_columns=[
+                *external_exposure_columns,
+                *external_derived_source_columns,
+            ],
             industry_col=industry_col,
         )
     else:
         exposure_merge_trace = []
+    frame, derived_sources = add_derived_exposure_columns(frame, active_exposure_columns)
 
     missing_after_join = {
         column: int(frame[column].isna().sum()) if column in frame.columns else len(frame)
@@ -333,6 +351,7 @@ def _load_audit_frame(
         "prediction_rows": int(len(predictions)),
         "joined_rows": int(len(frame)),
         "active_exposure_columns": active_exposure_columns,
+        "derived_exposure_sources": derived_sources,
         "missing_exposure_values_after_join": missing_after_join,
         "selection_mode": (
             "selection_col" if selection_col else "weight_col" if weight_col else "top_n"

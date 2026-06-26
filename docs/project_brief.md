@@ -29,8 +29,8 @@ train_label = short_label + 0.30 * long_label
 | label | mixed label, `w_long = 0.30` |
 | current baseline | archived `soft_core_reg_light` |
 | selection masks | universe / `pool_S` / `pool_M` / `pool_L` only at TopN selection |
-| primary gates | universe short Rank IC; `pool_L` Top100 next internal excess |
-| acceptance figures | `experiments/results/backtests/optimization_overlay_acceptance_2022_2025/` |
+| primary gates | universe short Rank IC; `pool_L` Top100 next internal excess; market-relative next alpha |
+| acceptance figures | `optimization_overlay_acceptance_2022_2025/`; `optimization_overlay_acceptance_nn_base_vs_lgbm328/`; `optimization_overlay_acceptance_nn_3way_vs_lgbm328/` |
 
 `pool_S ⊂ pool_M ⊂ pool_L`，来自 `lml.bzw@ssd/data/pool_{S,M,L}.parquet`。Top100 仍是
 研发诊断口径；生产化验收要看容量约束组合。
@@ -45,6 +45,10 @@ train_label = short_label + 0.30 * long_label
   都高于 baseline。
 - `hist_path_pruned_highdup` 是当前更干净的生产化候选：删除 26 个高重复 hist/path 特征后，
   信号基本保留，并已补 Top100 exposure、size/industry exposure 和 split20 capacity first-pass。
+- NN 单模型已经完成第一轮 2022-2025 训练和归档，不再处于“是否值得跑”的阶段；`mlp_base` 的
+  `pool_L` next excess 最高，`mlp_wide_huber` 的 universe short Rank IC 和 next Rank IC 最好。
+- 当前决策点从“NN 是否过 gate”转为“在 NN 候选和 `hist_path_pruned_highdup` 之间做 tradeoff，
+  并验证小规模 NN + LGBM ensemble 是否提供真实增量”。
 
 ## 验收 Gate
 
@@ -52,7 +56,7 @@ train_label = short_label + 0.30 * long_label
 | --- | --- |
 | universe short Rank IC | 短期模型本身更强。 |
 | `pool_L` Top100 next internal excess | 叠加 mentor 股池后，隔夜 overlay 更强。 |
-| cumulative next net / market-relative alpha | 改善不是少数点造成，累计曲线可解释。 |
+| cumulative next net / market-relative alpha | 改善不是少数点造成，且相对 full-market / pool baseline 可解释。 |
 | exposure audit | 收益画像可解释，未退化为不可接受的风格、行业或流动性押注。 |
 | capacity portfolio | 给定资金规模下，能在参与率、单票权重和集中度约束内装入。 |
 
@@ -61,22 +65,41 @@ train_label = short_label + 0.30 * long_label
 
 ## 已知生产化事实
 
-`hist_path_pruned_highdup` 的 first-pass 验收结论：
+`hist_path_pruned_highdup` 的 first-pass 生产化验收结论：
 
 - 行为画像偏 opening activity / turnover heat，且 spread 偏低；这符合开盘强势股 alpha 机制。
 - 市值偏中大，不是小票拥挤；行业超配电子、电力设备、计算机，低配机械设备、基础化工，但不是单行业押注。
 - `10 亿 / 20` 的 split20 容量口径下，每个 `date x clock` 目标 `5000 万`，`9690/9690` 截面全满。
 - 固定 Top100 不是容量组合：主口径平均吃到 top124，p95 top161，最深 top291；生产组合应允许向后取票并加行业/风格约束。
 
+NN 单模型第一轮验收结论：
+
+- `mlp_base`、`mlp_shallow_fast`、`mlp_wide_huber` 已完成 2022-2025 rolling metrics、pool-internal
+  analysis 和 NN vs LGBM 328 acceptance 归档。
+- 相对 `hist_path_pruned_highdup` 的 `pool_L` summary（short `9.2080`、next `8.8643`、
+  short Rank IC `0.140789`、next Rank IC `0.002830`），三个 MLP 的 short / next excess 都更高。
+- `mlp_base` 的 `pool_L` next excess 为 `12.4320 bps`，最适合作为 overlay 收益候选；
+  `mlp_wide_huber` 的 universe short Rank IC 为 `0.162945`，最适合作为排序力候选。
+- NN acceptance 图已经包含 cumulative next net / market-relative alpha，不再只是 fixed Top100
+  excess 表。
+
+Hygiene 事实：
+
+- baseline 276 特征 hygiene / correlation audit 已归档，主口径给出 17 个 hard-drop candidates；
+  fullxs `hist_path` corr09 sensitivity 也已归档。该事项不再作为下一步待办。
+- 这类 drop 只作用于模型 feature list；`ask_price_1` 等 cache / label / 回测所需基础字段不应物理删除。
+
 ## 下一步目标
 
-1. 在当前 causal feature set 上训练 NN 单模型，用同一 rolling、pool-internal 和 acceptance 口径比较
-   baseline、`hist_path_rank_centered`、`hist_path_pruned_highdup`。
-2. 只有 NN 单模型通过主 gate 后，才推进 NN + LGBM ensemble；否则不继续堆 ensemble。
-3. 同步补生产化验收：ask-depth 约束、行业/风格上限、capacity-constrained next net 和
-   market-relative alpha。
-4. 可并行做一个低风险 hygiene 对照：按审计建议 hard-drop 17 个基础高重复/坏语义特征，只从模型
-   feature list 移除，不物理删除 cache 或回测所需字段。
+下一阶段是候选收敛，而不是补第一轮验收。
+
+1. 以 `mlp_base` 和 `mlp_wide_huber` 作为 NN 主候选，明确 next overlay 收益和 short Rank IC 的取舍。
+2. 做小规模 NN + LGBM 328 ensemble，对照 `hist_path_pruned_highdup`、`mlp_base`、`mlp_wide_huber`，
+   只接受同时改善主 gate 和 market-relative alpha 的组合。
+3. 对最终候选复用现有 exposure / size-industry / split20 capacity 口径；若候选从 LGBM 切到 NN 或
+   ensemble，需要重新跑对应候选的暴露和容量，而不是重建工具链。
+4. `wide_deep_h32` 只作为 NN 结构补充验证；除非明显超过 `mlp_base` / `mlp_wide_huber`，不阻塞
+   ensemble 和候选选择。
 
 ## 非目标
 

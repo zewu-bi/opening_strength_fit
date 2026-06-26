@@ -7,11 +7,17 @@
 ## 快速索引
 
 - 当前 brief：`09:31-09:40`、mixed label `w_long=0.30`、baseline `soft_core_reg_light`。
-- 主验收图：`experiments/results/backtests/optimization_overlay_acceptance_2022_2025/`。
+- 主验收图：`experiments/results/backtests/optimization_overlay_acceptance_2022_2025/`；
+  NN 对照补充看 `optimization_overlay_acceptance_nn_base_vs_lgbm328/` 和
+  `optimization_overlay_acceptance_nn_3way_vs_lgbm328/`。
 - 2022-2025 baseline：`experiments/results/backtests/baseline_2022_2025_cluster/`。
-- 当前信号候选：`hist_path_rank_centered`；当前干净候选：`hist_path_pruned_highdup`。
-- 当前 NN 对照：3 个 `torch_mlp` MLP 变体已完成并归档；`wide_deep_h32` 待跑/待归档。
+- 当前信号候选：`hist_path_pruned_highdup` 是 LGBM 干净候选；NN 侧重点看 `mlp_base`
+  和 `mlp_wide_huber`。
+- 当前 NN 对照：3 个 `torch_mlp` MLP 变体已完成并归档，且已与
+  `hist_path_pruned_highdup` 做 pool-internal 和 market-relative alpha 验收图对比；
+  `wide_deep_h32` 只作为结构补充验证。
 - 最新生产化证据：剪枝后 Top100 exposure、size/industry exposure、split20 capacity audits。
+- 最新 hygiene 证据：baseline 276 特征 hard-drop 17 candidates 已归档，不再列为下一步待办。
 - 封存路线：两模型 `alpha_rank - lambda * gap_risk_rank`，只保留为历史证据。
 
 关键分叉事实：
@@ -27,6 +33,7 @@
 | 2022-2025 price / scale batch | +0.687 best delta | +0.480 best delta | `price_scale_norm` 的 `pool_L` short 增量最高；`scale_norm` 的 `pool_L` next overlay 和 capital-adjusted 累计净收益最好。 |
 | 2022-2025 hist + path exact union | +0.676 best delta | +1.478 best delta | `hist_path_rank_centered` 是当前信号强度标尺。 |
 | hist_path high-dup prune | -0.055 vs hist_path | +0.016 vs hist_path | 删除 26 个高重复 hist/path 特征后信号基本保留，作为 hygiene simplification 通过。 |
+| NN MLP vs `hist_path_pruned_highdup` | +0.956 best delta | +3.568 best delta | `mlp_base` 的 `pool_L` next excess 最高；`mlp_wide_huber` 的 short / next Rank IC 最好；后续做小规模 NN + LGBM ensemble。 |
 
 ## 实验时间线
 
@@ -3127,7 +3134,8 @@ postopen_v2_trade_vwap_vs_mid_10t_bps
 `avg_ask_price/avg_bid_price`、`postopen_v2_*_depth_3/5/10`。这些属于 review
 对象，不作为自动 drop。
 
-下一步：用 hard-drop 17 个特征跑 `hygiene_drop17` 对照，只从模型 feature list 中移除，
+状态更新：hard-drop 17 已作为 baseline 276 特征 hygiene / correlation audit 的归档结论，
+不再作为当前 brief 的下一步待办。后续若重跑模型对照，也只从模型 feature list 中移除，
 不要从 cache 或回测所需列中物理删除 `ask_price_1` 等基础字段。
 
 ### 归档和保留口径
@@ -3253,6 +3261,6 @@ mentor 进一步明确：后续不能只盯固定 Top100 的收益增强。Top10
 - 换手、费用和持仓重叠；必要时区分 gross notional、capital-adjusted notional 和实际可成交 notional。
 - 若目标容量无法在合理参与率下填满，应报告 feasible capacity，而不是机械输出 `10 亿` 满仓结果。
 
-后续研发顺序：先保留现有 fixed Top100 acceptance 图作为信号对照；同时推进当前特征 NN 单模型，
-若单模型有增量再做 NN + LGBM ensemble；再新增 exposure audit 和 capacity portfolio audit，最终用
-capacity-constrained next net / market-relative alpha 判断候选是否真正可推进。
+状态更新：该段是 2026-06-23 的 re-scope 记录；后续已完成剪枝后 Top100/core exposure、
+size/industry exposure、split20 capacity audit、NN 单模型训练，以及带 market-relative alpha 的
+NN acceptance 图。当前 brief 以“候选收敛和小规模 NN + LGBM ensemble”为下一步。

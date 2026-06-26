@@ -6,6 +6,9 @@ import pytest
 from opening_strength_fit.commands.exposure_audit import main
 from opening_strength_fit.commands.exposure_input_build import build_exposure_input
 from opening_strength_fit.exposure_audit import (
+    active_default_exposures,
+    add_derived_exposure_columns,
+    category_for_exposure,
     daily_concentration,
     exposure_group_metrics,
     exposure_specs,
@@ -24,6 +27,11 @@ def _audit_frame() -> pd.DataFrame:
             ("000002.SZ", 2.0, 20.0, 200.0, "tech"),
             ("600000.SH", 1.0, 10.0, 100.0, "tech"),
         ]:
+            return_10t = {
+                "000001.SZ": 0.02,
+                "000002.SZ": -0.01,
+                "600000.SH": 0.0,
+            }[symbol]
             rows.append(
                 {
                     "date": "2022-01-03",
@@ -32,6 +40,7 @@ def _audit_frame() -> pd.DataFrame:
                     "prediction": score,
                     "buy_price": price,
                     "turnover_diff_10t": turnover,
+                    "return_10t": return_10t,
                     "industry": industry,
                 }
             )
@@ -55,6 +64,17 @@ def test_exposure_group_metrics_quantify_selected_bias() -> None:
     assert summary.loc["buy_price", "selected_mean_rank"] == pytest.approx(1.0)
     assert summary.loc["buy_price", "selected_mean_z"] == pytest.approx(1.224744871, rel=1e-6)
     assert summary.loc["turnover_diff_10t", "score_exposure_spearman"] == pytest.approx(1.0)
+
+
+def test_derived_volatility_exposures_from_returns() -> None:
+    frame = _audit_frame()
+    derived, sources = add_derived_exposure_columns(frame, ["abs_return_10t"])
+    specs = active_default_exposures(frame.columns)
+
+    assert sources == {"abs_return_10t": "return_10t"}
+    assert derived["abs_return_10t"].tolist()[:3] == pytest.approx([0.02, 0.01, 0.0])
+    assert category_for_exposure("abs_return_10t") == "volatility"
+    assert "abs_return_10t" in {spec.column for spec in specs}
 
 
 def test_daily_concentration_counts_repeated_intraday_symbols() -> None:
@@ -183,6 +203,38 @@ def test_exposure_audit_cli_joins_daily_exposure_input(tmp_path, monkeypatch) ->
     assert summary.loc[0, "exposure"] == "market_cap"
     assert summary.loc[0, "selected_mean_rank"] == pytest.approx(1.0)
     assert set(industries["industry"]) == {"bank", "tech"}
+
+
+def test_exposure_audit_cli_derives_requested_volatility_exposure(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    predictions = tmp_path / "predictions.parquet"
+    output_dir = tmp_path / "audit"
+    _audit_frame().drop(columns=["buy_price", "industry"]).to_parquet(predictions, index=False)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "osf-audit-exposure",
+            "--predictions",
+            str(predictions),
+            "--output-dir",
+            str(output_dir),
+            "--pool",
+            "universe",
+            "--top-n",
+            "1",
+            "--exposure-col",
+            "abs_return_10t",
+        ],
+    )
+
+    main()
+
+    summary = pd.read_csv(output_dir / "exposure_audit_summary.csv")
+    assert summary.loc[0, "exposure"] == "abs_return_10t"
+    assert summary.loc[0, "category"] == "volatility"
+    assert summary.loc[0, "selected_mean"] == pytest.approx(0.02)
 
 
 class _FakeExposureClient:

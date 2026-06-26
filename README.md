@@ -11,9 +11,9 @@ Current snapshot:
 slice: 09:31:00-09:40:00 decision points
 label: mixed short + next-close, w_long = 0.30
 baseline: soft_core_reg_light
-current candidate family: hist/path + scale/rank normalization
-next objective: current-feature NN, then NN + LGBM ensemble only if the NN clears gates
-acceptance: universe short Rank IC + pool_L Top100 next internal excess
+current candidate family: hist_path_pruned_highdup + NN MLP on pruned 328 features
+next objective: small NN + LGBM ensemble / candidate selection; reuse existing production acceptance
+acceptance: universe short Rank IC + pool_L Top100 next excess + market-relative alpha + exposure/capacity
 ```
 
 ## 文档职责
