@@ -3055,6 +3055,10 @@ experiments/results/metrics/nn_delay2_36m_2025h2_fullxs_hist_path_pruned_highdup
 experiments/results/metrics/nn_delay2_36m_2025h2_fullxs_hist_path_pruned_highdup_mlp_smoke_v1_metrics_by_month.csv
 ```
 
+归档口径：上述 `experiments/results/` 下 metrics 和 pool-internal compact artifacts 已按
+[runbook.md](runbook.md) 作为轻量 evidence 强制纳入 Git；`output/artifacts/nn/**` 仍只是本地
+镜像，不提交；prediction parquet 未拉取。
+
 本地验证：
 
 ```text
@@ -3176,6 +3180,7 @@ CSV / JSON / SVG 包；`output/legacy/**` 只保留旧本地分析和 debug 产�
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_corr09_v1/` | 同一抽样的 0.90 相关阈值 sensitivity hygiene 审计，用于人工复核更宽相关簇。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1/` | baseline + hist_surprise + path_shape 精确并集的 0.90 相关阈值 hygiene sensitivity；50k rows，354 features，19 个 drop candidates。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/` | `hist_path` 删除 26 个高重复 hist/path 特征后的 pool-internal closeout；328 features，信号基本保留，`hist_path_pruned_vs_before_summary.csv` 为剪枝前后 compact 对比。 |
+| `experiments/results/backtests/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_*_v1/` | 剪枝后 328 特征上的 PyTorch MLP 单模型对照；`base`、`shallow_fast`、`wide_huber` 已归档 pool-internal compact artifacts，`wide_huber` Rank IC 最好、`base` 的 `pool_L` next excess 最高。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_exposure_audit/` | 剪枝后实验的 `pool_L` Top100 core exposure audit；主要画像是 opening activity / turnover heat 高、spread 低、单票集中度不高，作为生产化暴露验收的第一轮证据。 |
 | `experiments/results/backtests/exposure_input_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_size_industry_v1/` | 剪枝后 size/industry audit 的外部 exposure input trace；完整 parquet 留在 `output/legacy/exposures/` 和 PVC。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_size_industry_exposure_audit/` | 剪枝后实验补齐市值和申万一级行业暴露：中等偏大市值，超配电子/电力设备/计算机，低配机械设备/基础化工，并输出行业 active-share 明细。 |
