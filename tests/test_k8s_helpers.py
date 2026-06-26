@@ -6,8 +6,8 @@ from pathlib import Path
 from opening_strength_fit.commands.k8s_rendering import (
     _k8s_job_name,  # noqa: E402
     render_pool_internal_analysis_job,  # noqa: E402
-    render_training_job,  # noqa: E402
     render_sharded_training_job,  # noqa: E402
+    render_training_job,  # noqa: E402
     training_command,  # noqa: E402
 )
 from opening_strength_fit.k8s import KUBERNETES_NAME_LIMIT, temporary_pod_name
@@ -222,13 +222,35 @@ class K8sHelperTest(unittest.TestCase):
             "image:tag",
         )
 
-        self.assertIn("WAIT_PATHS=(\"/mnt/output/source/feature_importance.csv\")", manifest)
+        self.assertIn('WAIT_PATHS=("/mnt/output/source/feature_importance.csv")', manifest)
         self.assertIn("exec osf-audit-feature-hygiene", manifest)
 
     def test_ensemble_model_uses_standard_training_script(self) -> None:
         config = {"run": {"kind": "exploration"}, "model": {"name": "ensemble"}}
 
         self.assertEqual(training_command(config), "osf-train")
+
+    def test_torch_mlp_model_uses_standard_training_script_and_gpu_resource(self) -> None:
+        config = {
+            "run": {"id": "nn_smoke", "kind": "exploration"},
+            "model": {"name": "torch_mlp"},
+            "output": {"k8s_dir": "/mnt/output/opening_strength_fit/nn/nn_smoke"},
+            "k8s": {
+                "resources": {"gpu_limit": 1, "memory_limit": "128Gi"},
+                "node_selector": {"has_gpu": "true"},
+            },
+        }
+
+        manifest = render_training_job(
+            Path("experiments/runs/nn_smoke.toml"),
+            config,
+            "image:tag",
+        )
+
+        self.assertEqual(training_command(config), "osf-train")
+        self.assertIn('nvidia.com/gpu: "1"', manifest)
+        self.assertIn('has_gpu: "true"', manifest)
+        self.assertIn("exec osf-train", manifest)
 
     def test_pool_internal_analysis_job_uses_cluster_artifacts(self) -> None:
         config = {
@@ -286,6 +308,50 @@ class K8sHelperTest(unittest.TestCase):
         self.assertIn("--pool \\\n                universe", manifest)
         self.assertIn("--pool \\\n                L", manifest)
         self.assertIn("memory: 384Gi", manifest)
+
+    def test_pool_internal_analysis_does_not_inherit_training_gpu_selector(self) -> None:
+        config = {
+            "run": {
+                "id": "nn_mlp_base",
+                "kind": "exploration",
+            },
+            "window": {
+                "mode": "rolling_monthly",
+                "train_months": 36,
+                "test_months": 6,
+                "test_stride_months": 6,
+                "test_start_month": "2022-01",
+                "test_end_month": "2022-06",
+            },
+            "output": {"k8s_dir": "/mnt/output/opening_strength_fit/nn/nn_mlp_base"},
+            "k8s": {
+                "namespace": "bizewu",
+                "pvc": "bizewu-private-data",
+                "clickhouse_secret": "opening-strength-clickhouse",
+                "node_selector": {"has_gpu": "true", "mem_per_gpu_tier": "high"},
+                "avoid_nodes": ["node20"],
+            },
+            "analysis": {
+                "pool_internal": {
+                    "enabled": True,
+                    "job_name": "os-analyze-nn-base",
+                    "variant": "nn_base",
+                    "env_secrets": ["xy-fit-ceph-credentials"],
+                    "pools": ["universe", "L"],
+                    "resources": {"memory_limit": "384Gi"},
+                }
+            },
+        }
+
+        manifest = render_pool_internal_analysis_job(
+            Path("experiments/runs/nn_mlp_base.toml"),
+            config,
+            "image:tag",
+        )
+
+        self.assertNotIn('has_gpu: "true"', manifest)
+        self.assertNotIn('mem_per_gpu_tier: "high"', manifest)
+        self.assertIn("- node20", manifest)
 
 
 if __name__ == "__main__":

@@ -75,6 +75,20 @@ def _analysis_env_from(config: dict, indent: int = 22) -> str:
     return _env_from_secrets_yaml(secret_names, indent=indent)
 
 
+def _analysis_scheduler_yaml(config: dict, indent: int = 14) -> str:
+    analysis = _analysis_config(config)
+    scheduler_config = {"k8s": {}}
+    if isinstance(analysis.get("node_selector", {}), dict):
+        scheduler_config["k8s"]["node_selector"] = analysis.get("node_selector", {})
+    if "avoid_nodes" in analysis:
+        scheduler_config["k8s"]["avoid_nodes"] = analysis.get("avoid_nodes", [])
+    else:
+        scheduler_config["k8s"]["avoid_nodes"] = get(config, "k8s", "avoid_nodes", [])
+    return _node_selector_yaml(scheduler_config, indent=indent) + _avoid_nodes_affinity_yaml(
+        scheduler_config, indent=indent
+    )
+
+
 def _window_mode(config: dict) -> str:
     return str(get(config, "window", "mode", "chronological"))
 
@@ -266,7 +280,7 @@ def render_pool_internal_analysis_job(config_path: Path, config: dict, image: st
                 - name: opening-strength-output
                   persistentVolumeClaim:
                     claimName: {pvc}
-{(_node_selector_yaml(config, indent=14) + _avoid_nodes_affinity_yaml(config, indent=14)).rstrip()}
+{_analysis_scheduler_yaml(config, indent=14).rstrip()}
               containers:
                 - name: opening-strength-fit
                   image: {image}

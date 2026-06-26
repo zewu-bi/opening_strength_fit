@@ -31,6 +31,7 @@ from opening_strength_fit.model import (
     fit_gbm_frame,
     fit_lightgbm_frame,
     fit_ridge_frame,
+    fit_torch_mlp_frame,
     predict_frame,
 )
 from opening_strength_fit.reports import print_mapping
@@ -203,9 +204,37 @@ def fit_single_prediction_model(
             max_bin=config_optional_int(config, "model", "max_bin", None),
             gpu_use_dp=config_bool(config, "model", "gpu_use_dp", False),
         )
+    if model_name in {"torch_mlp", "mlp", "nn"}:
+        hidden_layers = tuple(
+            int(value)
+            for value in config_list(config, "model", "hidden_layers", ["512", "256", "128"])
+        )
+        return fit_torch_mlp_frame(
+            train,
+            feature_limit=configured_feature_limit,
+            target_col=target_col,
+            sample_weight_col=config_str(config, "model", "sample_weight_col", ""),
+            feature_filters=configured_feature_filters,
+            hidden_layers=hidden_layers,
+            architecture=config_str(config, "model", "architecture", "mlp"),
+            dropout=config_float(config, "model", "dropout", 0.1),
+            activation=config_str(config, "model", "activation", "relu"),
+            batch_size=config_int(config, "model", "batch_size", 32768),
+            predict_batch_size=config_int(config, "model", "predict_batch_size", 65536),
+            learning_rate=config_float(config, "model", "learning_rate", 3e-4),
+            weight_decay=config_float(config, "model", "weight_decay", 1e-4),
+            max_epochs=config_int(config, "model", "max_epochs", 8),
+            validation_fraction=config_float(config, "model", "validation_fraction", 0.02),
+            validation_max_rows=config_int(config, "model", "validation_max_rows", 250_000),
+            early_stopping_patience=config_int(config, "model", "early_stopping_patience", 2),
+            loss=config_str(config, "model", "loss", "mse"),
+            device=config_str(config, "model", "device", "auto"),
+            random_state=config_int(config, "model", "random_state", 7),
+            num_workers=config_int(config, "model", "num_workers", 0),
+        )
     raise SystemExit(
         f"unsupported model.name={model_name!r}; "
-        "expected ridge, gbm, lightgbm, ensemble, or clock_segment_lightgbm"
+        "expected ridge, gbm, lightgbm, torch_mlp, ensemble, or clock_segment_lightgbm"
     )
 
 
@@ -443,6 +472,38 @@ def model_config_payload(config: dict, alpha: float) -> dict[str, object]:
             "n_jobs": config_int(config, "model", "n_jobs", -1),
             "max_bin": config_optional_int(config, "model", "max_bin", None),
             "gpu_use_dp": config_bool(config, "model", "gpu_use_dp", False),
+            "sample_weight_col": config_str(config, "model", "sample_weight_col", ""),
+        }
+    if model_name in {"torch_mlp", "mlp", "nn"}:
+        return {
+            "name": "torch_mlp",
+            "target_col": target_col,
+            "hidden_layers": config_list(
+                config,
+                "model",
+                "hidden_layers",
+                ["512", "256", "128"],
+            ),
+            "architecture": config_str(config, "model", "architecture", "mlp"),
+            "dropout": config_float(config, "model", "dropout", 0.1),
+            "activation": config_str(config, "model", "activation", "relu"),
+            "batch_size": config_int(config, "model", "batch_size", 32768),
+            "predict_batch_size": config_int(config, "model", "predict_batch_size", 65536),
+            "learning_rate": config_float(config, "model", "learning_rate", 3e-4),
+            "weight_decay": config_float(config, "model", "weight_decay", 1e-4),
+            "max_epochs": config_int(config, "model", "max_epochs", 8),
+            "validation_fraction": config_float(config, "model", "validation_fraction", 0.02),
+            "validation_max_rows": config_int(config, "model", "validation_max_rows", 250_000),
+            "early_stopping_patience": config_int(
+                config,
+                "model",
+                "early_stopping_patience",
+                2,
+            ),
+            "loss": config_str(config, "model", "loss", "mse"),
+            "device": config_str(config, "model", "device", "auto"),
+            "random_state": config_int(config, "model", "random_state", 7),
+            "num_workers": config_int(config, "model", "num_workers", 0),
             "sample_weight_col": config_str(config, "model", "sample_weight_col", ""),
         }
     if model_name == "ensemble":

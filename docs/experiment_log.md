@@ -10,6 +10,7 @@
 - 主验收图：`experiments/results/backtests/optimization_overlay_acceptance_2022_2025/`。
 - 2022-2025 baseline：`experiments/results/backtests/baseline_2022_2025_cluster/`。
 - 当前信号候选：`hist_path_rank_centered`；当前干净候选：`hist_path_pruned_highdup`。
+- 当前 NN 对照：3 个 `torch_mlp` MLP 变体已完成并归档；`wide_deep_h32` 待跑/待归档。
 - 最新生产化证据：剪枝后 Top100 exposure、size/industry exposure、split20 capacity audits。
 - 封存路线：两模型 `alpha_rank - lambda * gap_risk_rank`，只保留为历史证据。
 
@@ -62,6 +63,7 @@
 | 2026-06-25 | hist_path pruned exposure audit | 已对剪枝后实验补 `pool_L` Top100 core exposure audit：选股显著偏 opening activity / turnover heat、低 spread、单票集中度不高；这被记录为开盘强势股 alpha 行为画像，而不是默认负面暴露。 |
 | 2026-06-25 | hist_path pruned size / industry audit | 已接 ClickHouse 日频市值和申万行业 exposure input：`pool_L` Top100 中等偏大市值，行业上超配电子、电力设备、计算机，低配机械设备、基础化工；行业集中存在但不是单行业押注。 |
 | 2026-06-25 | hist_path pruned split20 capacity audit | 正式容量口径按 `10 亿` 总资金 `/20`，即每个 `date x clock` 目标 `5000 万`。在 `pool_L`、`10% * turnover_diff_30t` 参与率和 `1%` 单票目标权重上限下，`9690/9690` 截面全满；平均吃到 top `124`、p95 top `161`、最深 top `291`。Top100 内仅 `0.7%` 截面够，top200 内 `99.3%` 够；结论是切片容量充足，但生产组合不应硬卡 Top100。 |
+| 2026-06-26 | NN single-model first archive | 新增 PyTorch `torch_mlp` 训练入口和 GPU K8s 渲染；`mlp_base` / `mlp_shallow_fast` / `mlp_wide_huber` 已有 2022-2025 pool-internal 归档，`wide_deep_h32` 待跑/待归档。 |
 
 ## 2026-05-20 小窗结果
 
@@ -2965,6 +2967,103 @@ experiments/results/backtests/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hi
 - `capacity_audit_..._split20_t10_v1` 是 `10 亿/20` 下把参与率基准换成
   `turnover_diff_10t` 的 sensitivity：仍然 `9690/9690` 截面全满，但平均需要吃到 top `237`，
   p95 top `449`，极端 max top `1611`，比主口径 `turnover_diff_30t` 明显更紧。
+
+### 2026-06-26 NN single-model first archive
+
+按 2026-06-23 mentor re-scope，先推进当前特征上的 NN 单模型，只有单模型有增量时再做
+NN + LGBM ensemble。本次提交补齐 PyTorch MLP 训练入口、GPU K8s 渲染和 NN run/job scaffold；
+其中 `mlp_base` / `mlp_shallow_fast` / `mlp_wide_huber` 已有 2022-2025 metrics 和
+pool-internal 归档，`2025h2_mlp_smoke` 已有 smoke metrics，`wide_deep_h32` 仍待跑/待归档。
+
+代码能力：
+
+- `model.name = "torch_mlp"`，别名 `mlp` / `nn`；支持普通 MLP 和
+  `architecture = "wide_deep_residual"`。
+- 训练端对数值特征做 train-set mean/std 标准化；预测端复用同一组 mean/std。
+- Docker image 可用 `INSTALL_TORCH_CUDA=1` 安装 CUDA torch wheel；CPU 环境未安装 torch 时，
+  torch 单测跳过，不影响 LightGBM / K8s helper 测试。
+- training job 可申请 GPU；pool-internal analysis job 不再继承 training 的 GPU node selector，
+  只保留 analysis 自己的 scheduler 配置或全局 avoid_nodes。
+
+run / job 索引：
+
+```text
+experiments/runs/nn_delay2_36m_2025h2_fullxs_hist_path_pruned_highdup_mlp_smoke_v1.toml
+experiments/jobs/nn_delay2_36m_2025h2_fullxs_hist_path_pruned_highdup_mlp_smoke_v1_sharded_job.yaml
+
+experiments/runs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_v1.toml
+experiments/jobs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_v1_sharded_job.yaml
+experiments/jobs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_v1_pool_internal_analysis_job.yaml
+
+experiments/runs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_shallow_fast_v1.toml
+experiments/jobs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_shallow_fast_v1_sharded_job.yaml
+experiments/jobs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_shallow_fast_v1_pool_internal_analysis_job.yaml
+
+experiments/runs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_wide_huber_v1.toml
+experiments/jobs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_wide_huber_v1_sharded_job.yaml
+experiments/jobs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_wide_huber_v1_pool_internal_analysis_job.yaml
+
+experiments/runs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_h32_v1.toml
+experiments/jobs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_h32_v1_sharded_job.yaml
+experiments/jobs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_h32_v1_pool_internal_analysis_job.yaml
+```
+
+变体口径：
+
+| run suffix | status | purpose |
+| --- | --- | --- |
+| `2025h2_mlp_smoke` | completed metrics | 单 epoch 2025H2 smoke，验证 GPU image / data path / sharded output。 |
+| `mlp_base` | completed + pool-internal archived | 512/256/128 ReLU MLP，MSE，作为 NN 主基线。 |
+| `mlp_shallow_fast` | completed + pool-internal archived | 384/192 小网络、更大 batch、更少 epoch，验证欠/快训口径。 |
+| `mlp_wide_huber` | completed + pool-internal archived | 1024/512/256 GELU + Huber，验证更宽网络和抗尾部 loss。 |
+| `wide_deep_h32` | queued / pending | 线性分支 + h32 residual hidden，模仿 ridge-plus-small-hidden residual 思路。 |
+
+已归档 MLP pool-internal summary：
+
+| variant | pool | short excess bps | next excess bps | short Rank IC | next Rank IC | positive months short / next |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| `nn_mlp_base` | universe | 19.8778 | -1.9729 | 0.149818 | 0.009136 | 48 / 20 |
+| `nn_mlp_base` | `pool_L` | 10.1642 | 12.4320 | 0.137205 | 0.004981 | 48 / 37 |
+| `nn_mlp_shallow_fast` | universe | 18.7725 | -3.7495 | 0.146876 | 0.008550 | 48 / 19 |
+| `nn_mlp_shallow_fast` | `pool_L` | 9.7789 | 11.4480 | 0.134616 | 0.004571 | 48 / 36 |
+| `nn_mlp_wide_huber` | universe | 19.4997 | -3.6225 | 0.162945 | 0.019860 | 48 / 20 |
+| `nn_mlp_wide_huber` | `pool_L` | 9.8349 | 10.4238 | 0.149704 | 0.014322 | 48 / 39 |
+
+相对 `hist_path_pruned_highdup` 的 `pool_L` summary（short `9.2080`、next `8.8643`、
+short Rank IC `0.140789`、next Rank IC `0.002830`）：三个 MLP 的 short excess 都略高，
+next excess 也更高；`mlp_base` 的 next excess 最高，`mlp_wide_huber` 的 short / next Rank IC
+最好。初步结论：NN 单模型有足够信号增量，值得补 `wide_deep_h32` 和后续 NN + LGBM ensemble；
+但需注意 2025 年 metrics 里的 `model_test_r2` 出现异常大负值，应以后续诊断 loss / target scale
+为准，不把 R2 作为本批验收指标。
+
+artifact 索引：
+
+```text
+experiments/results/metrics/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_v1_metrics_by_year.csv
+experiments/results/metrics/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_v1_metrics_by_month.csv
+experiments/results/backtests/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_v1/
+
+experiments/results/metrics/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_shallow_fast_v1_metrics_by_year.csv
+experiments/results/metrics/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_shallow_fast_v1_metrics_by_month.csv
+experiments/results/backtests/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_shallow_fast_v1/
+
+experiments/results/metrics/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_wide_huber_v1_metrics_by_year.csv
+experiments/results/metrics/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_wide_huber_v1_metrics_by_month.csv
+experiments/results/backtests/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_wide_huber_v1/
+
+experiments/results/metrics/nn_delay2_36m_2025h2_fullxs_hist_path_pruned_highdup_mlp_smoke_v1_metrics_by_year.csv
+experiments/results/metrics/nn_delay2_36m_2025h2_fullxs_hist_path_pruned_highdup_mlp_smoke_v1_metrics_by_month.csv
+```
+
+本地验证：
+
+```text
+git diff --check
+.venv/bin/python -m pytest tests/test_torch_mlp.py tests/test_k8s_helpers.py -q
+```
+
+结果：`git diff --check` clean；targeted pytest `14 passed, 2 skipped`。跳过项是本地
+`.venv` 未安装 torch，符合可选依赖设计；集群 GPU image 需要用含 torch 的 tag 运行。
 
 建议第一轮 hard-drop 的 17 个特征：
 
