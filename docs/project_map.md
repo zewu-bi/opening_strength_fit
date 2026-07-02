@@ -36,14 +36,7 @@ Library:
 CLI:
 
 - `osf-build-labeled-cache`: build a single labeled cache from ClickHouse without training a model.
-- `osf-inspect-labeled-cache`: inspect a labeled cache schema/summary and write a compact manifest.
 - `osf-build-target-label-cache`: derive target-aligned labeled caches while preserving raw labels.
-- `osf-build-labels`: build labeled rows from existing tick files.
-- `osf-audit-labels`: audit labeled dataset quality.
-- `osf-fetch-clickhouse-ticks`: fetch one symbol/day tick window.
-- `osf-inspect-dataset`: local source inspection and small labeled sample generation.
-- `osf-prepare-research-dataset`: partition labeled research datasets by date.
-- `osf-concat-frames`: concatenate parquet/csv frames.
 - `osf-probe-clickhouse-data`: inspect ClickHouse schema and opening-window coverage.
 - `osf-build-next-close-labels`: fetch/cache ClickHouse next-close labels for decision rows.
 
@@ -80,7 +73,6 @@ Library:
 CLI:
 
 - `osf-train` / `osf-run-experiment`: train/evaluate a configured experiment.
-- `osf-evaluate-predictions`: evaluate an existing prediction file.
 - `osf-analyze-pool-internal-top100`: join predictions with next-close labels and selection masks to produce Top100 pool-internal validation panels.
 - `osf-plot-optimization-direction-comparison`: render the fixed overlay acceptance figures for baseline plus 1-3 selected comparison models: universe short Rank IC, `pool_L` Top100 next internal excess, and full-market / pool / model cumulative next net returns with full-market-relative alpha.
 - `osf-plot-weekly-pool-internal`: render optional trading-day-equal weekly / 4w rolling pool-internal stability diagnostics from `pool_internal_group_metrics.csv`.
@@ -90,7 +82,6 @@ CLI:
 - `osf-audit-exposure`: audit selected TopN or supplied portfolio exposure versus the candidate pool; outputs price/liquidity/activity/momentum/size/volatility exposure summaries plus symbol concentration, industry concentration, and industry active-share diagnostics.
 - `osf-summarize-opening-results`: summarize metrics CSVs.
 - `osf-compare-opening-results`: compare archived model metrics.
-- `osf-run-rule-baselines`: evaluate simple visible-information rules.
 
 ## Diagnostics And Research Loops
 
