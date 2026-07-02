@@ -359,8 +359,7 @@ osf-plot-weekly-pool-internal \
 ```
 
 Legacy diagnostics entrypoints: `osf-plot-rolling-validation-tradeoff`、
-`osf-audit-feature-dependence`、`osf-run-lgbm-delay-replays`、`osf-plot-lgbm-delay-decay`、
-`osf-run-alpha-horizon-decay`。
+`osf-audit-feature-dependence`、`osf-run-alpha-horizon-decay`。
 
 ## 8. Capacity Audit
 
