@@ -15,7 +15,7 @@
   和 `deep_gelu_huber`，分别代表 next overlay 和 Rank IC 两条主候选。
 - 当前 NN 对照：第一轮 3 个 `torch_mlp` MLP 变体、第二轮 5 个 NN 结构扫描和 1 个
   NN+LGBM rankblend 均已完成并归档，且已与 `hist_path_pruned_highdup` / `mlp_base`
-  做 pool-internal 和 market-relative alpha 验收图对比；`wide_deep_h32` 只作为结构补充验证。
+  做 pool-internal 和 market-relative alpha 验收图对比。
 - 最新生产化证据：剪枝后 Top100 exposure、size/industry exposure、split20 capacity audits。
 - 最新 hygiene 证据：baseline 276 特征 hard-drop 17 candidates 已归档，不再列为下一步待办。
 - 封存路线：两模型 `alpha_rank - lambda * gap_risk_rank`，只保留为历史证据。
@@ -33,7 +33,7 @@
 | 2022-2025 price / scale batch | +0.687 best delta | +0.480 best delta | `price_scale_norm` 的 `pool_L` short 增量最高；`scale_norm` 的 `pool_L` next overlay 和 capital-adjusted 累计净收益最好。 |
 | 2022-2025 hist + path exact union | +0.676 best delta | +1.478 best delta | `hist_path_rank_centered` 是当前信号强度标尺。 |
 | hist_path high-dup prune | -0.055 vs hist_path | +0.016 vs hist_path | 删除 26 个高重复 hist/path 特征后信号基本保留，作为 hygiene simplification 通过。 |
-| NN MLP vs `hist_path_pruned_highdup` | +0.956 best delta | +3.568 best delta | `mlp_base` 的 `pool_L` next excess 最高；`mlp_wide_huber` 的 short / next Rank IC 最好；后续做小规模 NN + LGBM ensemble。 |
+| NN MLP vs `hist_path_pruned_highdup` | +0.956 best delta | +3.568 best delta | `mlp_base` 的 `pool_L` next excess 最高；`mlp_wide_huber` 的 short / next Rank IC 最好；触发第二轮 NN 扫参和 rankblend 对照。 |
 | NN scan + rankblend | +0.990 best delta | +3.101 best delta | 第二轮 6 个任务已归档；`deep_gelu_huber` 的 short / next Rank IC 最好，`silu_wide_lowdrop` 是本轮最接近 `mlp_base` 的 overlay challenger，NN+LGBM rankblend 未打过已有 NN 候选。 |
 
 ## 实验时间线
@@ -77,7 +77,7 @@
 | 2026-06-25 | hist_path pruned exposure audit | 已对剪枝后实验补 `pool_L` Top100 core exposure audit：选股显著偏 opening activity / turnover heat、低 spread、单票集中度不高；这被记录为开盘强势股 alpha 行为画像，而不是默认负面暴露。 |
 | 2026-06-25 | hist_path pruned size / industry audit | 已接 ClickHouse 日频市值和申万行业 exposure input：`pool_L` Top100 中等偏大市值，行业上超配电子、电力设备、计算机，低配机械设备、基础化工；行业集中存在但不是单行业押注。 |
 | 2026-06-25 | hist_path pruned split20 capacity audit | 正式容量口径按 `10 亿` 总资金 `/20`，即每个 `date x clock` 目标 `5000 万`。在 `pool_L`、`10% * turnover_diff_30t` 参与率和 `1%` 单票目标权重上限下，`9690/9690` 截面全满；平均吃到 top `124`、p95 top `161`、最深 top `291`。Top100 内仅 `0.7%` 截面够，top200 内 `99.3%` 够；结论是切片容量充足，但生产组合不应硬卡 Top100。 |
-| 2026-06-26 | NN single-model first archive | 新增 PyTorch `torch_mlp` 训练入口和 GPU K8s 渲染；`mlp_base` / `mlp_shallow_fast` / `mlp_wide_huber` 已有 2022-2025 pool-internal 归档，`wide_deep_h32` 待跑/待归档。 |
+| 2026-06-26 | NN single-model first archive | 新增 PyTorch `torch_mlp` 训练入口和 GPU K8s 渲染；`mlp_base` / `mlp_shallow_fast` / `mlp_wide_huber` 已有 2022-2025 pool-internal 归档。 |
 | 2026-07-02 | NN scan + rankblend archive | 6 个新增任务训练、pool-internal analysis、artifact sync 和 market-relative acceptance 图均已完成。`deep_gelu_huber` universe short Rank IC `0.164169`、`pool_L` short/next Rank IC `0.150744 / 0.015041` 为当前最高；`silu_wide_lowdrop` 的 `pool_L` next excess `11.9652 bps` 为本轮最高但仍低于 `mlp_base` 的 `12.4320 bps`；NN+LGBM rankblend 相对 LGBM 328 有增量但不晋级。 |
 
 ## 2026-05-20 小窗结果
@@ -2646,7 +2646,8 @@ mentor 进一步明确：后续不能只盯固定 Top100 的收益增强。Top10
 
 状态更新：该段是 2026-06-23 的 re-scope 记录；后续已完成剪枝后 Top100/core exposure、
 size/industry exposure、split20 capacity audit、NN 单模型训练，以及带 market-relative alpha 的
-NN acceptance 图。当前 brief 以“候选收敛和小规模 NN + LGBM ensemble”为下一步。
+NN acceptance 图。当前 brief 以 `mlp_base` / `deep_gelu_huber` 候选收敛和小规模 NN+NN blend
+为下一步。
 
 ## 2026-06-25 hist_path high-dup prune closeout
 
@@ -2903,10 +2904,10 @@ experiments/results/backtests/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hi
 
 ## 2026-06-26 NN single-model first archive
 
-按 2026-06-23 mentor re-scope，先推进当前特征上的 NN 单模型，只有单模型有增量时再做
-NN + LGBM ensemble。本次提交补齐 PyTorch MLP 训练入口、GPU K8s 渲染和 NN run/job scaffold；
+按 2026-06-23 mentor re-scope，当时先推进当前特征上的 NN 单模型，并把 NN + LGBM ensemble
+作为有增量后的互补性对照。本次提交补齐 PyTorch MLP 训练入口、GPU K8s 渲染和 NN run/job scaffold；
 其中 `mlp_base` / `mlp_shallow_fast` / `mlp_wide_huber` 已有 2022-2025 metrics 和
-pool-internal 归档，`2025h2_mlp_smoke` 已有 smoke metrics，`wide_deep_h32` 仍待跑/待归档。
+pool-internal 归档，`2025h2_mlp_smoke` 已有 smoke metrics。
 
 代码能力：
 
@@ -2935,10 +2936,6 @@ experiments/jobs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_sha
 experiments/runs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_wide_huber_v1.toml
 experiments/jobs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_wide_huber_v1_sharded_job.yaml
 experiments/jobs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_wide_huber_v1_pool_internal_analysis_job.yaml
-
-experiments/runs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_h32_v1.toml
-experiments/jobs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_h32_v1_sharded_job.yaml
-experiments/jobs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_h32_v1_pool_internal_analysis_job.yaml
 ```
 
 变体口径：
@@ -2949,7 +2946,6 @@ experiments/jobs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_de
 | `mlp_base` | completed + pool-internal archived | 512/256/128 ReLU MLP，MSE，作为 NN 主基线。 |
 | `mlp_shallow_fast` | completed + pool-internal archived | 384/192 小网络、更大 batch、更少 epoch，验证欠/快训口径。 |
 | `mlp_wide_huber` | completed + pool-internal archived | 1024/512/256 GELU + Huber，验证更宽网络和抗尾部 loss。 |
-| `wide_deep_h32` | queued / pending | 线性分支 + h32 residual hidden，模仿 ridge-plus-small-hidden residual 思路。 |
 
 已归档 MLP pool-internal summary：
 
@@ -2965,7 +2961,7 @@ experiments/jobs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_de
 相对 `hist_path_pruned_highdup` 的 `pool_L` summary（short `9.2080`、next `8.8643`、
 short Rank IC `0.140789`、next Rank IC `0.002830`）：三个 MLP 的 short excess 都略高，
 next excess 也更高；`mlp_base` 的 next excess 最高，`mlp_wide_huber` 的 short / next Rank IC
-最好。初步结论：NN 单模型有足够信号增量，值得补 `wide_deep_h32` 和后续 NN + LGBM ensemble；
+最好。初步结论：NN 单模型有足够信号增量，值得后续做结构扫参和组合对照；
 但需注意 2025 年 metrics 里的 `model_test_r2` 出现异常大负值，应以后续诊断 loss / target scale
 为准，不把 R2 作为本批验收指标。
 
@@ -3094,14 +3090,6 @@ experiments/results/backtests/<run_id>/{short,next}_excess_rank_ic_plot_data.csv
 
 这些 `experiments/results/` 文件按项目约定是本地 compact artifacts，目录默认被 Git 忽略；
 正式可追溯事实以本节数字、run TOML、K8s manifest 和 PVC 路径为准。
-
-`wide_deep_h32` 仍不是完成态：`experiments/runs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_h32_v1.toml`
-仍为 `status = "queued"`；K8s sharded training / analysis manifests 已渲染，但本地没有对应
-`experiments/results/metrics/*wide_deep_h32*`、没有
-`experiments/results/backtests/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_h32_v1/`，
-也没有本地 `output/artifacts/nn/...wide_deep_h32...` 同步目录。`osf-audit-experiments`
-显示该 run 为 `queued` 且 `metrics=pending`。因此当前仓库证据表明它是未完成 / 未形成可同步结果，
-不是“已跑完但未归档”。考虑到 h64 / h128 已完成且未晋级，h32 不阻塞当前候选选择。
 
 pool-internal summary 主表如下。`lgbm328` 指剪枝后 `hist_path_pruned_highdup` LGBM，
 作为 328 特征树模型参照。

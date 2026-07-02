@@ -418,22 +418,21 @@ max_symbol_weight = 0.01
 ask_depth_levels = 0
 ```
 
-剪枝后 `pool_L` split20 正式容量验收口径和结论：
+正式 split20 容量验收的当前事实数字放在 [project_brief.md](project_brief.md) 和
+[experiment_log.md](experiment_log.md)。本手册只保留标准配置口径和字段读法：
 
 ```text
-run_id: capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_v1
-target_notional: 50,000,000 per date x clock
+total capital example: 1,000,000,000 split into 20 execution slices
+target_notional: 50,000,000 per date x clock and slice
 capacity_notional_col: turnover_diff_30t
-filled_groups: 9690 / 9690
-fill_success_rate: 100.0%
-mean / p95 / max top depth: 124 / 161 / 291
-Top100 coverage: 66 / 9690 = 0.7%
-Top200 coverage: 9623 / 9690 = 99.3%
+max_participation_rate: 0.10
+max_symbol_weight: 0.01
+ask_depth_levels: 0
 ```
 
-读法：`10 亿` 总资金按 `20` 个执行切片拆开后，`5000 万/切片` 可以全部装满；
-但固定 Top100 不是稳健容量篮子，正式容量组合应允许按分数往后拿到约 top160/top200，
-极端截面最深到 top291。
+读法：`fill_success_rate` 看截面是否能塞满目标资金；`mean/p95/max_top_depth_to_target`
+看需要沿 score 排名往后拿多深。若 Top100 覆盖不足但较深排名可以塞满，结论应写成
+“容量组合可行但不能硬卡固定 Top100”。
 
 如果 next-close label 不在 prediction parquet 中，可用 `label_input` 传 keyed label frame，
 并设置 `label_col`。若 ADV、市值、行业或额外容量列不在 prediction parquet 中，可用

@@ -12,7 +12,7 @@ slice: 09:31:00-09:40:00 decision points
 label: mixed short + next-close, w_long = 0.30
 baseline: soft_core_reg_light
 current candidate family: hist_path_pruned_highdup + NN MLP on pruned 328 features
-next objective: small NN + LGBM ensemble / candidate selection; reuse existing production acceptance
+next objective: mlp_base vs deep_gelu_huber candidate convergence; optional NN+NN blend
 acceptance: universe short Rank IC + pool_L Top100 next excess + market-relative alpha + exposure/capacity
 ```
 

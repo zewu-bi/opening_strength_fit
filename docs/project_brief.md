@@ -115,7 +115,7 @@ Hygiene 事实：
    NN + LGBM rankblend，除非有新的互补性证据。
 3. 对 `mlp_base` 和 `deep_gelu_huber` 复用现有 exposure / size-industry / split20 capacity 口径；
    最终候选必须同时解释收益、风格/行业暴露和容量。
-4. `wide_deep_h32`、`compact_huber`、`wide_deep_h64`、`wide_deep_h128_huber` 不阻塞候选选择；只有
+4. `compact_huber`、`wide_deep_h64`、`wide_deep_h128_huber` 不阻塞候选选择；只有
    后续出现明确超过 `mlp_base` / `deep_gelu_huber` 的证据才重新打开结构扫参。
 
 ## 非目标

@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: os-nn-36m-2225-wd-h32
+  name: os-nn-2225-deep-gelu-mse
   namespace: bizewu
 spec:
   backoffLimit: 0
@@ -40,7 +40,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: opening-strength-fit
-          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260626-nn-gpu-v2
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260626-nn-scan-v1
           imagePullPolicy: Always
           envFrom:
             - secretRef:
@@ -73,7 +73,7 @@ spec:
                 done
                 echo "dependency file is ready: ${WAIT_PATH}"
               done
-              ROOT=/mnt/output/opening_strength_fit/nn/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_h32_v1
+              ROOT=/mnt/output/opening_strength_fit/nn/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_deep_gelu_mse_v1
               mkdir -p "${ROOT}"
               TEST_STARTS=(2022-01 2022-07 2023-01 2023-07 2024-01 2024-07 2025-01 2025-07)
               TEST_ENDS=(2022-06 2022-12 2023-06 2023-12 2024-06 2024-12 2025-06 2025-12)
@@ -96,11 +96,11 @@ spec:
               fi
 
               echo
-              echo "running nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_h32_v1 shard test=${TEST_START}..${TEST_END} index=${INDEX}"
+              echo "running nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_deep_gelu_mse_v1 shard test=${TEST_START}..${TEST_END} index=${INDEX}"
               echo "output_dir=${OUT}"
 
               osf-train \
-                --config experiments/runs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_h32_v1.toml \
+                --config experiments/runs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_deep_gelu_mse_v1.toml \
                 --rolling-monthly \
                 --train-months 36 \
                 --test-months 6 \
