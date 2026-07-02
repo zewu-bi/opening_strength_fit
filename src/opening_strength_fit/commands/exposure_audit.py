@@ -18,12 +18,12 @@ from opening_strength_fit.config import (
     run_id,
 )
 from opening_strength_fit.exposure_audit import (
-    add_derived_exposure_columns,
     active_default_exposures,
+    add_derived_exposure_columns,
     category_summary,
+    daily_concentration,
     derivable_exposure_columns,
     derived_exposure_source_columns,
-    daily_concentration,
     exposure_group_metrics,
     exposure_specs,
     industry_group_metrics,
