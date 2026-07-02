@@ -2,7 +2,7 @@
 id = "nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_silu_wide_lowdrop_v1"
 kind = "exploration"
 description = "GPU PyTorch wide low-dropout SiLU MLP over 2022-2025 on 328 hist_path_pruned_highdup features; tests smooth activation and less dropout against wide_huber."
-status = "queued"
+status = "completed"
 
 [data]
 source = "labeled_pvc"
@@ -134,7 +134,7 @@ pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260626-nn-gpu-v2"
-avoid_nodes = ["node20", "node21"]
+avoid_nodes = ["node7", "node8", "node20", "node21"]
 wait_for_paths = ["/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2019_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2020_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2021_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2022_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2023_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2024_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2025_delay2_mixed_w030_labeled_v1.parquet"]
 wait_for_path_timeout_seconds = 43200
 wait_for_path_interval_seconds = 120

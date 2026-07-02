@@ -2,7 +2,7 @@
 id = "nn_lgbm328_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_base_rankblend_v1"
 kind = "exploration"
 description = "2022-2025 rank-centered ensemble of NN MLP base and LGBM 328 on hist_path_pruned_highdup features, testing whether NN next overlay and LGBM tree stability combine cleanly."
-status = "queued"
+status = "completed"
 
 [data]
 source = "labeled_pvc"
@@ -157,7 +157,7 @@ pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260626-nn-gpu-v2"
-avoid_nodes = ["node20", "node21"]
+avoid_nodes = ["node7", "node8", "node20", "node21"]
 wait_for_paths = ["/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2019_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2020_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2021_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2022_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2023_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2024_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2025_delay2_mixed_w030_labeled_v1.parquet"]
 wait_for_path_timeout_seconds = 43200
 wait_for_path_interval_seconds = 120

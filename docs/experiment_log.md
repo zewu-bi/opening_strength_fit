@@ -12,10 +12,10 @@
   `optimization_overlay_acceptance_nn_3way_vs_lgbm328/`。
 - 2022-2025 baseline：`experiments/results/backtests/baseline_2022_2025_cluster/`。
 - 当前信号候选：`hist_path_pruned_highdup` 是 LGBM 干净候选；NN 侧重点看 `mlp_base`
-  和 `mlp_wide_huber`。
-- 当前 NN 对照：3 个 `torch_mlp` MLP 变体已完成并归档，且已与
-  `hist_path_pruned_highdup` 做 pool-internal 和 market-relative alpha 验收图对比；
-  `wide_deep_h32` 只作为结构补充验证。
+  和 `deep_gelu_huber`，分别代表 next overlay 和 Rank IC 两条主候选。
+- 当前 NN 对照：第一轮 3 个 `torch_mlp` MLP 变体、第二轮 5 个 NN 结构扫描和 1 个
+  NN+LGBM rankblend 均已完成并归档，且已与 `hist_path_pruned_highdup` / `mlp_base`
+  做 pool-internal 和 market-relative alpha 验收图对比；`wide_deep_h32` 只作为结构补充验证。
 - 最新生产化证据：剪枝后 Top100 exposure、size/industry exposure、split20 capacity audits。
 - 最新 hygiene 证据：baseline 276 特征 hard-drop 17 candidates 已归档，不再列为下一步待办。
 - 封存路线：两模型 `alpha_rank - lambda * gap_risk_rank`，只保留为历史证据。
@@ -34,6 +34,7 @@
 | 2022-2025 hist + path exact union | +0.676 best delta | +1.478 best delta | `hist_path_rank_centered` 是当前信号强度标尺。 |
 | hist_path high-dup prune | -0.055 vs hist_path | +0.016 vs hist_path | 删除 26 个高重复 hist/path 特征后信号基本保留，作为 hygiene simplification 通过。 |
 | NN MLP vs `hist_path_pruned_highdup` | +0.956 best delta | +3.568 best delta | `mlp_base` 的 `pool_L` next excess 最高；`mlp_wide_huber` 的 short / next Rank IC 最好；后续做小规模 NN + LGBM ensemble。 |
+| NN scan + rankblend | +0.990 best delta | +3.101 best delta | 第二轮 6 个任务已归档；`deep_gelu_huber` 的 short / next Rank IC 最好，`silu_wide_lowdrop` 是本轮最接近 `mlp_base` 的 overlay challenger，NN+LGBM rankblend 未打过已有 NN 候选。 |
 
 ## 实验时间线
 
@@ -77,6 +78,7 @@
 | 2026-06-25 | hist_path pruned size / industry audit | 已接 ClickHouse 日频市值和申万行业 exposure input：`pool_L` Top100 中等偏大市值，行业上超配电子、电力设备、计算机，低配机械设备、基础化工；行业集中存在但不是单行业押注。 |
 | 2026-06-25 | hist_path pruned split20 capacity audit | 正式容量口径按 `10 亿` 总资金 `/20`，即每个 `date x clock` 目标 `5000 万`。在 `pool_L`、`10% * turnover_diff_30t` 参与率和 `1%` 单票目标权重上限下，`9690/9690` 截面全满；平均吃到 top `124`、p95 top `161`、最深 top `291`。Top100 内仅 `0.7%` 截面够，top200 内 `99.3%` 够；结论是切片容量充足，但生产组合不应硬卡 Top100。 |
 | 2026-06-26 | NN single-model first archive | 新增 PyTorch `torch_mlp` 训练入口和 GPU K8s 渲染；`mlp_base` / `mlp_shallow_fast` / `mlp_wide_huber` 已有 2022-2025 pool-internal 归档，`wide_deep_h32` 待跑/待归档。 |
+| 2026-07-02 | NN scan + rankblend archive | 6 个新增任务训练、pool-internal analysis、artifact sync 和 market-relative acceptance 图均已完成。`deep_gelu_huber` universe short Rank IC `0.164169`、`pool_L` short/next Rank IC `0.150744 / 0.015041` 为当前最高；`silu_wide_lowdrop` 的 `pool_L` next excess `11.9652 bps` 为本轮最高但仍低于 `mlp_base` 的 `12.4320 bps`；NN+LGBM rankblend 相对 LGBM 328 有增量但不晋级。 |
 
 ## 2026-05-20 小窗结果
 
@@ -3259,7 +3261,11 @@ CSV / JSON / SVG 包；`output/legacy/**` 只保留旧本地分析和 debug 产�
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_corr09_v1/` | 同一抽样的 0.90 相关阈值 sensitivity hygiene 审计，用于人工复核更宽相关簇。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1/` | baseline + hist_surprise + path_shape 精确并集的 0.90 相关阈值 hygiene sensitivity；50k rows，354 features，19 个 drop candidates。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/` | `hist_path` 删除 26 个高重复 hist/path 特征后的 pool-internal closeout；328 features，信号基本保留，`hist_path_pruned_vs_before_summary.csv` 为剪枝前后 compact 对比。 |
-| `experiments/results/backtests/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_*_v1/` | 剪枝后 328 特征上的 PyTorch MLP 单模型对照；`base`、`shallow_fast`、`wide_huber` 已归档 pool-internal compact artifacts，`wide_huber` Rank IC 最好、`base` 的 `pool_L` next excess 最高。 |
+| `experiments/results/backtests/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_*_v1/` | 剪枝后 328 特征上的 PyTorch MLP 单模型对照；`base` 的 `pool_L` next excess 最高，第二轮 `deep_gelu_huber` 的 short / next Rank IC 最好，`silu_wide_lowdrop` 是本轮最接近 `base` 的 overlay challenger。 |
+| `experiments/results/backtests/nn_lgbm328_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_base_rankblend_v1/` | `mlp_base` 与 LGBM 328 的 rank-centered ensemble；相对 LGBM 328 改善，但没有超过 `mlp_base`、`silu_wide_lowdrop` 或 `deep_gelu_huber`。 |
+| `experiments/results/backtests/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_*_v1/` | wide-deep h64 / h128 Huber 结构扫描归档；h64 overlay 有改善但 Rank IC 弱，h128 next overlay 低于 LGBM 328，均不晋级。 |
+| `experiments/results/backtests/optimization_overlay_acceptance_nn_scan_top3_vs_lgbm328/` | 第二轮 NN scan top3 和 NN+LGBM rankblend 对 LGBM 328 的 market-relative acceptance 图与 plot data。 |
+| `experiments/results/backtests/optimization_overlay_acceptance_nn_scan_vs_mlp_base/` | `deep_gelu_huber`、`silu_wide_lowdrop`、`mlp_wide_huber` 对 `mlp_base` 的 market-relative acceptance 图与 plot data。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_exposure_audit/` | 剪枝后实验的 `pool_L` Top100 core exposure audit；主要画像是 opening activity / turnover heat 高、spread 低、单票集中度不高，作为生产化暴露验收的第一轮证据。 |
 | `experiments/results/backtests/exposure_input_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_size_industry_v1/` | 剪枝后 size/industry audit 的外部 exposure input trace；完整 parquet 留在 `output/legacy/exposures/` 和 PVC。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_size_industry_exposure_audit/` | 剪枝后实验补齐市值和申万一级行业暴露：中等偏大市值，超配电子/电力设备/计算机，低配机械设备/基础化工，并输出行业 active-share 明细。 |

@@ -30,7 +30,7 @@ train_label = short_label + 0.30 * long_label
 | current baseline | archived `soft_core_reg_light` |
 | selection masks | universe / `pool_S` / `pool_M` / `pool_L` only at TopN selection |
 | primary gates | universe short Rank IC; `pool_L` Top100 next internal excess; market-relative next alpha |
-| acceptance figures | `optimization_overlay_acceptance_2022_2025/`; `optimization_overlay_acceptance_nn_base_vs_lgbm328/`; `optimization_overlay_acceptance_nn_3way_vs_lgbm328/` |
+| acceptance figures | `optimization_overlay_acceptance_2022_2025/`; `optimization_overlay_acceptance_nn_base_vs_lgbm328/`; `optimization_overlay_acceptance_nn_3way_vs_lgbm328/`; `optimization_overlay_acceptance_nn_scan_top3_vs_lgbm328/`; `optimization_overlay_acceptance_nn_scan_vs_mlp_base/` |
 
 `pool_S ⊂ pool_M ⊂ pool_L`，来自 `lml.bzw@ssd/data/pool_{S,M,L}.parquet`。Top100 仍是
 研发诊断口径；生产化验收要看容量约束组合。
@@ -45,10 +45,13 @@ train_label = short_label + 0.30 * long_label
   都高于 baseline。
 - `hist_path_pruned_highdup` 是当前更干净的生产化候选：删除 26 个高重复 hist/path 特征后，
   信号基本保留，并已补 Top100 exposure、size/industry exposure 和 split20 capacity first-pass。
-- NN 单模型已经完成第一轮 2022-2025 训练和归档，不再处于“是否值得跑”的阶段；`mlp_base` 的
-  `pool_L` next excess 最高，`mlp_wide_huber` 的 universe short Rank IC 和 next Rank IC 最好。
-- 当前决策点从“NN 是否过 gate”转为“在 NN 候选和 `hist_path_pruned_highdup` 之间做 tradeoff，
-  并验证小规模 NN + LGBM ensemble 是否提供真实增量”。
+- NN 已完成第一轮和第二轮 2022-2025 扫参/ensemble 归档，不再处于“是否值得跑”的阶段。
+  `mlp_base` 仍是 `pool_L` next overlay 收益冠军，`deep_gelu_huber` 取代 `mlp_wide_huber`
+  成为 short / next Rank IC 最强候选。
+- NN + LGBM 328 rankblend 相对 LGBM 有改善，但没有打过已有 NN 候选；当前不把 LGBM rankblend
+  作为主晋级方向。
+- 当前决策点转为候选收敛：在 `mlp_base` 的 next overlay、`deep_gelu_huber` 的排序力，以及
+  `silu_wide_lowdrop` 作为接近 overlay challenger 的备选之间做 tradeoff，并补最终候选的暴露/容量验收。
 
 ## 验收 Gate
 
@@ -83,6 +86,19 @@ NN 单模型第一轮验收结论：
 - NN acceptance 图已经包含 cumulative next net / market-relative alpha，不再只是 fixed Top100
   excess 表。
 
+NN 第二轮扫参 / ensemble 结论：
+
+- 6 个任务（NN+LGBM rankblend、deep GELU Huber、SiLU wide low-drop、compact Huber、wide-deep h64、
+  wide-deep h128 Huber）已完成训练、pool-internal analysis、artifact sync 和 acceptance 图归档。
+- `deep_gelu_huber` 是排序力冠军：universe short Rank IC `0.164169`，`pool_L` short / next Rank IC
+  `0.150744 / 0.015041`，均高于 `mlp_wide_huber`。
+- `silu_wide_lowdrop` 是本轮最接近 `mlp_base` 的 next overlay 候选：`pool_L` next excess
+  `11.9652 bps`，但仍低于 `mlp_base` 的 `12.4320 bps`。
+- `nn_lgbm_rankblend` 的 `pool_L` next excess `10.4098 bps`，相对 LGBM 328 有增量，但低于
+  `mlp_base`、`silu_wide_lowdrop` 和 `deep_gelu_huber`，暂不晋级。
+- `compact_huber` 被 `deep_gelu_huber` / `mlp_wide_huber` 支配；`wide_deep_h64` 排序力弱；
+  `wide_deep_h128_huber` 的 `pool_L` next excess 低于 LGBM 328，直接淘汰。
+
 Hygiene 事实：
 
 - baseline 276 特征 hygiene / correlation audit 已归档，主口径给出 17 个 hard-drop candidates；
@@ -91,15 +107,16 @@ Hygiene 事实：
 
 ## 下一步目标
 
-下一阶段是候选收敛，而不是补第一轮验收。
+下一阶段是候选收敛，而不是继续宽扫网络结构。
 
-1. 以 `mlp_base` 和 `mlp_wide_huber` 作为 NN 主候选，明确 next overlay 收益和 short Rank IC 的取舍。
-2. 做小规模 NN + LGBM 328 ensemble，对照 `hist_path_pruned_highdup`、`mlp_base`、`mlp_wide_huber`，
-   只接受同时改善主 gate 和 market-relative alpha 的组合。
-3. 对最终候选复用现有 exposure / size-industry / split20 capacity 口径；若候选从 LGBM 切到 NN 或
-   ensemble，需要重新跑对应候选的暴露和容量，而不是重建工具链。
-4. `wide_deep_h32` 只作为 NN 结构补充验证；除非明显超过 `mlp_base` / `mlp_wide_huber`，不阻塞
-   ensemble 和候选选择。
+1. 主候选保留两条：`mlp_base` 代表最高 next overlay，`deep_gelu_huber` 代表最高 short / next
+   Rank IC；`silu_wide_lowdrop` 只作为 overlay 备选，不单独挑战排序力主线。
+2. 若还要做模型组合，优先测 `mlp_base` + `deep_gelu_huber` 的小规模 score/rank blend；不再优先做
+   NN + LGBM rankblend，除非有新的互补性证据。
+3. 对 `mlp_base` 和 `deep_gelu_huber` 复用现有 exposure / size-industry / split20 capacity 口径；
+   最终候选必须同时解释收益、风格/行业暴露和容量。
+4. `wide_deep_h32`、`compact_huber`、`wide_deep_h64`、`wide_deep_h128_huber` 不阻塞候选选择；只有
+   后续出现明确超过 `mlp_base` / `deep_gelu_huber` 的证据才重新打开结构扫参。
 
 ## 非目标
 

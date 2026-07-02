@@ -23,6 +23,8 @@ spec:
                 - key: kubernetes.io/hostname
                   operator: NotIn
                   values:
+                    - node7
+                    - node8
                     - node20
                     - node21
       containers:
