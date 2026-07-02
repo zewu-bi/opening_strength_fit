@@ -3064,6 +3064,84 @@ postopen_v2_trade_vwap_vs_mid_10t_bps
 不再作为当前 brief 的下一步待办。后续若重跑模型对照，也只从模型 feature list 中移除，
 不要从 cache 或回测所需列中物理删除 `ask_price_1` 等基础字段。
 
+## 2026-07-02 NN scan + rankblend archive
+
+第二轮 NN scan 和 NN+LGBM rankblend 已按最新 TOML 与本地结果完成归档。这里的
+`blend` / `rankblend` 指现有 `model.name = "ensemble"` 路径下的横截面分数组合，
+不是另训 stacking 模型；已跑的 NN+LGBM 版本使用 `combine_mode = "rank_centered"`，
+成员为 `mlp_base` 权重 `0.60` + LGBM 328 权重 `0.40`。
+
+本轮 completed 任务：
+
+```text
+nn_lgbm328_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_base_rankblend_v1
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_deep_gelu_huber_v1
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_silu_wide_lowdrop_v1
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_compact_huber_v1
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_h64_v1
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_h128_huber_v1
+```
+
+这些 run 的 `experiments/runs/*.toml` 均为 `status = "completed"`，本地均已有：
+
+```text
+experiments/results/metrics/<run_id>_metrics_by_year.csv
+experiments/results/metrics/<run_id>_metrics_by_month.csv
+experiments/results/backtests/<run_id>/pool_internal_summary.csv
+experiments/results/backtests/<run_id>/daily_pool_internal_summary.csv
+experiments/results/backtests/<run_id>/{short,next}_excess_rank_ic_plot_data.csv
+```
+
+这些 `experiments/results/` 文件按项目约定是本地 compact artifacts，目录默认被 Git 忽略；
+正式可追溯事实以本节数字、run TOML、K8s manifest 和 PVC 路径为准。
+
+`wide_deep_h32` 仍不是完成态：`experiments/runs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_h32_v1.toml`
+仍为 `status = "queued"`；K8s sharded training / analysis manifests 已渲染，但本地没有对应
+`experiments/results/metrics/*wide_deep_h32*`、没有
+`experiments/results/backtests/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_h32_v1/`，
+也没有本地 `output/artifacts/nn/...wide_deep_h32...` 同步目录。`osf-audit-experiments`
+显示该 run 为 `queued` 且 `metrics=pending`。因此当前仓库证据表明它是未完成 / 未形成可同步结果，
+不是“已跑完但未归档”。考虑到 h64 / h128 已完成且未晋级，h32 不阻塞当前候选选择。
+
+pool-internal summary 主表如下。`lgbm328` 指剪枝后 `hist_path_pruned_highdup` LGBM，
+作为 328 特征树模型参照。
+
+| model | universe short Rank IC | `pool_L` short excess bps | `pool_L` next excess bps | `pool_L` short Rank IC | `pool_L` next Rank IC | `pool_L` next positive months |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `lgbm328` | 0.151508 | +9.2080 | +8.8643 | 0.140789 | 0.002830 | 33/48 |
+| `mlp_base` | 0.149818 | +10.1642 | +12.4320 | 0.137205 | 0.004981 | 37/48 |
+| `mlp_wide_huber` | 0.162945 | +9.8349 | +10.4238 | 0.149704 | 0.014322 | 39/48 |
+| `deep_gelu_huber` | 0.164169 | +10.1054 | +10.7105 | 0.150744 | 0.015041 | 38/48 |
+| `silu_wide_lowdrop` | 0.150461 | +9.9660 | +11.9652 | 0.137854 | 0.005305 | 37/48 |
+| `compact_huber` | 0.161504 | +9.8762 | +10.1274 | 0.148231 | 0.013928 | 38/48 |
+| `wide_deep_h64` | 0.147291 | +9.2116 | +11.3467 | 0.135609 | 0.005592 | 37/48 |
+| `wide_deep_h128_huber` | 0.156847 | +8.1395 | +7.8530 | 0.144978 | 0.012883 | 37/48 |
+| `nn_lgbm_rankblend` | 0.155179 | +10.1975 | +10.4098 | 0.142883 | 0.003926 | 35/48 |
+
+验收图归档：
+
+```text
+experiments/results/backtests/optimization_overlay_acceptance_nn_scan_top3_vs_lgbm328/
+experiments/results/backtests/optimization_overlay_acceptance_nn_scan_vs_mlp_base/
+```
+
+结论：
+
+- `mlp_base` 仍是 `pool_L` next overlay 收益冠军，`pool_L` next excess `+12.4320 bps`。
+- `deep_gelu_huber` 是当前排序力冠军，universe short Rank IC `0.164169`，
+  `pool_L` short / next Rank IC `0.150744 / 0.015041`，均超过 `mlp_wide_huber`。
+- `silu_wide_lowdrop` 是本轮最接近 `mlp_base` 的 overlay challenger，`pool_L` next excess
+  `+11.9652 bps`，但仍低于 `mlp_base`。
+- `nn_lgbm_rankblend` 相对 LGBM 328 有改善，但没有超过 `mlp_base`、`silu_wide_lowdrop` 或
+  `deep_gelu_huber`，因此 NN+LGBM rankblend 暂不晋级。
+- `compact_huber` 被 `deep_gelu_huber` / `mlp_wide_huber` 支配；`wide_deep_h64` 的 next
+  overlay 有改善但排序力弱；`wide_deep_h128_huber` 的 next overlay 低于 LGBM 328，直接淘汰。
+
+下一步从“结构扫参”转为“候选收敛”：主候选保留 `mlp_base` 和 `deep_gelu_huber` 两条；
+若继续做组合，优先做 `mlp_base` + `deep_gelu_huber` 的小规模 rank / score blend grid，
+而不是继续扩大 NN+LGBM rankblend。最终候选需要复用现有 exposure、size/industry exposure 和
+split20 capacity audit 口径。
+
 ## 查找索引与归档口径
 
 下面只做定位用；研究逻辑以上面的时间线为准。

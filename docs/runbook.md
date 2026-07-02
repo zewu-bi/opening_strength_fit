@@ -52,8 +52,9 @@ analysis:   /mnt/output/opening_strength_fit/<run_id>/analysis/pool_internal_top
 local pull: output/artifacts/<run_id>/
 ```
 
-Tracked evidence 写入 `experiments/results/{metrics,backtests}/`。旧 pulls、prediction parquet、
-本地分析、label shards 和重报告放 `output/legacy/`。
+Compact artifacts 同步到 `experiments/results/{metrics,backtests}/`，该目录默认被 Git 忽略；
+正式事实索引写入 [experiment_log.md](experiment_log.md)。旧 pulls、prediction parquet、本地分析、
+label shards 和重报告放 `output/legacy/`。
 
 大规模 analysis / attribution / audit 默认在集群侧读取 PVC 上的 prediction parquet 和 cache，
 只把 summary、group metrics、trace、报告图等 compact artifacts 同步回本地。只有调试单个
