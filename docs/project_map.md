@@ -61,6 +61,7 @@ Library:
 - `src/opening_strength_fit/training.py`: unified training pipeline, configured feature transforms/filters, and output writer.
 - `src/opening_strength_fit/evaluation.py`: score buckets and top-score summaries.
 - `src/opening_strength_fit/capacity_audit.py`: capacity-constrained score portfolio allocation, fill diagnostics, participation limits, and concentration summaries.
+- `src/opening_strength_fit/capacity_acceptance.py`: capacity-weighted next-close return summaries from capacity audit selected allocations.
 - `src/opening_strength_fit/exposure_audit.py`: TopN / supplied-portfolio exposure metrics, score-exposure correlations, and daily concentration summaries.
 - `src/opening_strength_fit/reports.py`: compact dataset summaries, metrics reporting, and yearly aggregation.
 - `src/opening_strength_fit/pool_internal_plots.py` / `pool_internal_plot_svg.py`: pool-internal plot specs and SVG rendering.
@@ -74,10 +75,11 @@ CLI:
 
 - `osf-train` / `osf-run-experiment`: train/evaluate a configured experiment.
 - `osf-analyze-pool-internal-top100`: join predictions with next-close labels and selection masks to produce Top100 pool-internal validation panels.
-- `osf-plot-optimization-direction-comparison`: render the fixed overlay acceptance figures for baseline plus 1-3 selected comparison models: universe short Rank IC, `pool_L` Top100 next internal excess, and full-market / pool / model cumulative next net returns with full-market-relative alpha.
+- `osf-analyze-capacity-acceptance`: join capacity audit selected allocations with next-close labels and produce capacity-weighted daily return summaries.
+- `osf-plot-optimization-direction-comparison`: render the fixed overlay acceptance figures for baseline plus 1-3 selected comparison models: universe short Rank IC, `pool_L` next internal excess, and full-market / pool / model cumulative next net returns with full-market-relative alpha. The cumulative figure supports default Top100 mode and 1bn-CNY / 10亿 capacity mode; capacity mode requires `osf-audit-capacity` followed by `osf-analyze-capacity-acceptance` for the baseline and each comparison model.
 - `osf-plot-weekly-pool-internal`: render optional trading-day-equal weekly / 4w rolling pool-internal stability diagnostics from `pool_internal_group_metrics.csv`.
 - `osf-plot-weekly-pool-internal-cumulative`: render cumulative short/next pool-internal excess from pre-aggregated daily or weekly summary rows.
-- `osf-audit-capacity`: build target-notional capacity portfolios from prediction scores and visible liquidity/depth constraints; outputs fill, return, participation, and concentration diagnostics.
+- `osf-audit-capacity`: build target-notional capacity portfolios from prediction scores and visible liquidity/depth constraints; outputs fill, depth, participation, and concentration diagnostics.
 - `osf-build-exposure-input`: build daily `date,symbol` market-cap and industry exposure inputs from ClickHouse for use by exposure/capacity audits.
 - `osf-audit-exposure`: audit selected TopN or supplied portfolio exposure versus the candidate pool; outputs price/liquidity/activity/momentum/size/volatility exposure summaries plus symbol concentration, industry concentration, and industry active-share diagnostics.
 - `osf-summarize-opening-results`: summarize metrics CSVs.

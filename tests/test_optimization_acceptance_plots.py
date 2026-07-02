@@ -5,6 +5,13 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from opening_strength_fit.capacity_acceptance import (
+    DEFAULT_CAPACITY_DECISION_NOTIONAL,
+    DEFAULT_CAPACITY_TOTAL_NOTIONAL,
+    load_capacity_selected,
+    load_label_frame,
+    summarize_capacity_acceptance,
+)
 from opening_strength_fit.optimization_acceptance_plots import (
     AUTO_COLOR_SEQUENCE,
     add_background_cumulative_data,
@@ -13,6 +20,7 @@ from opening_strength_fit.optimization_acceptance_plots import (
     add_cumulative_percent_display_columns,
     add_market_cumulative_data,
     apply_display_labels,
+    capacity_label,
     combine_net_alpha_cumulative_data,
     default_plot_directions,
     ensure_plot_colors,
@@ -23,6 +31,7 @@ from opening_strength_fit.optimization_direction_data import (
     DEFAULT_REALIZED_FEE_BPS,
     NEXT_CLOSE_CAPITAL_DIVISOR,
     DirectionSpec,
+    load_capacity_cumulative_plot_data,
     load_realized_cumulative_plot_data,
 )
 from opening_strength_fit.pool_internal_plot_svg import PLOT_COLORS
@@ -61,6 +70,8 @@ def test_default_realized_fee_and_pool_fee_mode_match_acceptance_assumptions() -
     assert DEFAULT_REALIZED_FEE_BPS == 8.0
     assert DEFAULT_POOL_FEE_MODE == "stock_pool_membership"
     assert NEXT_CLOSE_CAPITAL_DIVISOR == 2.0
+    assert DEFAULT_CAPACITY_TOTAL_NOTIONAL == pytest.approx(1_000_000_000.0)
+    assert DEFAULT_CAPACITY_DECISION_NOTIONAL == pytest.approx(50_000_000.0)
 
 
 def test_validate_plot_directions_accepts_one_to_three_models() -> None:
@@ -149,6 +160,80 @@ def test_realized_cumulative_uses_capital_adjusted_cumsum_and_round_trip_pool_fe
         first["pool_next_cumulative_net_return_bps"]
     )
     assert background["next_cumulative_internal_excess_return_bps"] == pytest.approx(0.0)
+
+
+def test_capacity_cumulative_uses_capacity_weighted_acceptance_summary(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "capacity_run"
+    run_dir.mkdir()
+    label_dir = tmp_path / "labels"
+    label_dir.mkdir()
+    pd.DataFrame(
+        {
+            "pool": ["pool_L", "pool_L", "pool_L"],
+            "date": ["2024-01-02", "2024-01-02", "2024-01-03"],
+            "decision_target_timestamp": [
+                "2024-01-02 09:31:00",
+                "2024-01-02 09:31:00",
+                "2024-01-03 09:40:00",
+            ],
+            "symbol": ["000001.SZ", "000002.SZ", "000003.SZ"],
+            "target_notional": [50_000_000.0, 50_000_000.0, 50_000_000.0],
+            "allocated_notional": [30_000_000.0, 20_000_000.0, 50_000_000.0],
+        }
+    ).to_csv(run_dir / "capacity_audit_selected.csv", index=False)
+    pd.DataFrame(
+        {
+            "date": ["2024-01-02", "2024-01-02", "2024-01-03"],
+            "symbol": ["000001.SZ", "000002.SZ", "000003.SZ"],
+            "decision_target_timestamp": [
+                "2024-01-02 09:31:00",
+                "2024-01-02 09:31:00",
+                "2024-01-03 09:40:00",
+            ],
+            "alpha_return_next_close": [0.0100, 0.0200, 0.0200],
+        }
+    ).to_parquet(label_dir / "labels.parquet", index=False)
+    selected = load_capacity_selected((run_dir / "capacity_audit_selected.csv",))
+    labels = load_label_frame(
+        (label_dir,),
+        label_col="alpha_return_next_close",
+        dates=set(selected["date"].astype(str)),
+    )
+    daily = summarize_capacity_acceptance(
+        selected,
+        labels,
+        capacity_total_notional=100_000_000.0,
+        fee_bps=8.0,
+        label_col="alpha_return_next_close",
+    )
+    daily.to_csv(run_dir / "capacity_acceptance_daily_summary.csv", index=False)
+
+    realized = load_capacity_cumulative_plot_data(
+        backtests_root=tmp_path,
+        capacity_directions=(
+            DirectionSpec(key="baseline_pool_l", label="lgbm326", run_id="capacity_run"),
+        ),
+        pool="pool_L",
+        capacity_total_notional=100_000_000.0,
+    )
+
+    assert realized["pool_label"].tolist() == ["lgbm326", "lgbm326"]
+    assert realized["capacity_daily_capital_fraction"].tolist() == pytest.approx([0.5, 0.5])
+    assert realized["selected_next_mean_bps"].tolist() == pytest.approx([140.0, 200.0])
+    assert realized["next_net_return_bps"].tolist() == pytest.approx([132.0, 192.0])
+    assert realized["selected_fee_bps"].tolist() == pytest.approx([8.0, 8.0])
+    assert realized["next_capital_net_return_bps"].tolist() == pytest.approx([66.0, 96.0])
+    assert realized["next_cumulative_net_return_bps"].tolist() == pytest.approx([66.0, 162.0])
+    assert realized["next_net_pnl"].tolist() == pytest.approx([660_000.0, 960_000.0])
+    assert realized["next_cumulative_net_pnl"].tolist() == pytest.approx(
+        [660_000.0, 1_620_000.0]
+    )
+    assert capacity_label(
+        capacity_total_notional=1_000_000_000.0,
+        capacity_decision_notional=50_000_000.0,
+    ) == "10亿容量"
 
 
 def test_baseline_relative_curve_uses_capital_adjusted_cumulative_difference() -> None:

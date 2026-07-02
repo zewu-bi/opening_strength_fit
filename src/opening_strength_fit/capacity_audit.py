@@ -14,7 +14,6 @@ GROUP_COLS = ("date", "decision_target_timestamp")
 class CapacityConstraints:
     target_notional: float
     score_col: str = "prediction"
-    label_col: str = "label"
     capacity_notional_col: str = "turnover_diff_30t"
     capacity_volume_col: str = ""
     capacity_price_col: str = "ask_price_1"
@@ -27,8 +26,6 @@ class CapacityConstraints:
     allow_decision_depth_fallback: bool = False
     industry_col: str = ""
     max_industry_weight: float = 0.0
-    fee_bps: float = 0.0
-    slippage_bps: float = 0.0
 
 
 def finite_numeric(values: pd.Series) -> pd.Series:
@@ -88,11 +85,6 @@ def add_capacity_limits(frame: pd.DataFrame, constraints: CapacityConstraints) -
 
     out = frame.copy()
     out[constraints.score_col] = finite_numeric(out[constraints.score_col])
-    out[constraints.label_col] = finite_numeric(out[constraints.label_col])
-    out["_net_label"] = (
-        out[constraints.label_col]
-        - (float(constraints.fee_bps) + float(constraints.slippage_bps)) / 10_000.0
-    )
 
     limit_parts: list[pd.Series] = []
     if constraints.max_symbol_weight > 0:
@@ -214,8 +206,6 @@ def _selected_record(
         "rank": rank,
         "symbol": row["symbol"],
         "score": float(row[constraints.score_col]),
-        "label": float(row[constraints.label_col]),
-        "net_label": float(row["_net_label"]),
         "target_notional": target,
         "allocated_notional": allocated,
         "target_weight": allocated / target,
@@ -277,7 +267,6 @@ def _fast_selected_rows(
     ).dt.strftime("%H:%M")
     selected["pool"] = pool
     selected["score"] = finite_numeric(selected[constraints.score_col])
-    selected["net_label"] = finite_numeric(selected["_net_label"])
     selected["capacity_participation_rate"] = selected["allocated_notional"] / finite_numeric(
         selected["_capacity_notional"]
     )
@@ -295,8 +284,6 @@ def _fast_selected_rows(
             "rank",
             "symbol",
             "score",
-            constraints.label_col,
-            "net_label",
             "target_notional",
             "allocated_notional",
             "target_weight",
@@ -311,7 +298,6 @@ def _fast_selected_rows(
         ]
     ].rename(
         columns={
-            constraints.label_col: "label",
             "_row_limit_notional": "row_limit_notional",
             "_capacity_notional": "capacity_notional",
             "_capacity_limit_notional": "capacity_limit_notional",
@@ -381,14 +367,6 @@ def _allocate_group(
 
     selected = selected_for_metrics
     allocated_notional = float(selected["allocated_notional"].sum()) if not selected.empty else 0.0
-    pnl = (
-        float((selected["allocated_notional"] * selected["net_label"]).sum())
-        if not selected.empty
-        else 0.0
-    )
-    pool_return = finite_numeric(group["_net_label"]).mean()
-    portfolio_return = _safe_div(pnl, allocated_notional)
-    capital_return = _safe_div(pnl, target)
     filled = allocated_notional >= target * (1.0 - 1e-9)
     max_rank_reached = int(len(selected_rows))
     symbol_stats = (
@@ -413,21 +391,6 @@ def _allocate_group(
         "max_rank_reached": max_rank_reached,
         "top_depth_to_target": float(max_rank_reached) if filled else float("nan"),
         "capacity_exhausted_depth": float(max_rank_reached) if not filled else float("nan"),
-        "portfolio_pnl": pnl,
-        "pool_return": float(pool_return) if pd.notna(pool_return) else float("nan"),
-        "portfolio_net_return": portfolio_return,
-        "capital_net_return": capital_return,
-        "pool_net_return_bps": float(pool_return) * 10_000.0
-        if pd.notna(pool_return)
-        else float("nan"),
-        "portfolio_net_return_bps": portfolio_return * 10_000.0,
-        "capital_net_return_bps": capital_return * 10_000.0,
-        "portfolio_excess_bps": (portfolio_return - float(pool_return)) * 10_000.0
-        if pd.notna(pool_return) and pd.notna(portfolio_return)
-        else float("nan"),
-        "capital_excess_bps": (capital_return - float(pool_return)) * 10_000.0
-        if pd.notna(pool_return) and pd.notna(capital_return)
-        else float("nan"),
         "max_symbol_weight": symbol_stats["max_share"],
         "top5_symbol_weight": symbol_stats["top5_share"],
         "symbol_hhi": symbol_stats["hhi"],
@@ -469,7 +432,7 @@ def build_capacity_portfolios(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     work = normalize_capacity_frame(frame)
     work = add_capacity_limits(work, constraints)
-    work = work.dropna(subset=[constraints.score_col, constraints.label_col]).copy()
+    work = work.dropna(subset=[constraints.score_col]).copy()
     selected_rows: list[dict[str, object]] = []
     metric_rows: list[dict[str, object]] = []
     for _, group in work.groupby(list(GROUP_COLS), sort=False):
@@ -487,8 +450,6 @@ def _aggregate_metrics(group: pd.DataFrame, by: list[str]) -> pd.DataFrame:
         key_values = keys if isinstance(keys, tuple) else (keys,)
         target = float(item["target_notional"].sum())
         allocated = float(item["allocated_notional"].sum())
-        pnl = float(item["portfolio_pnl"].sum())
-        pool_pnl = float((item["pool_return"] * item["target_notional"]).sum())
         filled = (
             item["filled"].fillna(False).astype(bool)
             if "filled" in item.columns
@@ -516,13 +477,6 @@ def _aggregate_metrics(group: pd.DataFrame, by: list[str]) -> pd.DataFrame:
                 "max_top_depth_to_target": _series_max(item["top_depth_to_target"]),
                 "mean_rank_reached": _series_mean(item["max_rank_reached"]),
                 "max_rank_reached": _series_max(item["max_rank_reached"]),
-                "portfolio_net_return_bps": _safe_div(pnl, allocated) * 10_000.0,
-                "capital_net_return_bps": _safe_div(pnl, target) * 10_000.0,
-                "pool_net_return_bps": _safe_div(pool_pnl, target) * 10_000.0,
-                "portfolio_excess_bps": (_safe_div(pnl, allocated) - _safe_div(pool_pnl, target))
-                * 10_000.0,
-                "capital_excess_bps": (_safe_div(pnl, target) - _safe_div(pool_pnl, target))
-                * 10_000.0,
                 "max_symbol_weight": float(item["max_symbol_weight"].max()),
                 "mean_effective_symbols": float(item["effective_symbols"].mean()),
                 "max_capacity_participation_rate": float(

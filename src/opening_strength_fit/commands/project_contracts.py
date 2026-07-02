@@ -9,6 +9,7 @@ from opening_strength_fit.config import load_toml
 ROOT = Path(__file__).resolve().parents[3]
 MAX_COMMAND_MODULE_LINES = 800
 K8S_JOB_ENTRYPOINTS = (
+    "osf-analyze-capacity-acceptance",
     "osf-audit-capacity",
     "osf-audit-exposure",
     "osf-audit-feature-dependence",

@@ -70,6 +70,11 @@ CAPACITY_AUDIT_ARTIFACTS = (
     "capacity_audit_summary.csv",
     "capacity_audit_trace.json",
 )
+CAPACITY_ACCEPTANCE_ARTIFACTS = (
+    "capacity_acceptance_daily_summary.csv",
+    "capacity_acceptance_summary.csv",
+    "capacity_acceptance_trace.json",
+)
 EXPOSURE_AUDIT_ARTIFACTS = (
     "exposure_audit_group_metrics.csv",
     "exposure_audit_month_summary.csv",
@@ -119,6 +124,10 @@ def is_capacity_audit(spec: RunSpec) -> bool:
     return spec.kind == "capacity_audit"
 
 
+def is_capacity_acceptance(spec: RunSpec) -> bool:
+    return spec.kind == "capacity_acceptance"
+
+
 def is_exposure_audit(spec: RunSpec) -> bool:
     return spec.kind == "exposure_audit"
 
@@ -140,6 +149,7 @@ def is_non_standard_artifact_run(spec: RunSpec) -> bool:
         is_score_risk_sweep(spec)
         or is_rolling_validation(spec)
         or is_gap_attribution(spec)
+        or is_capacity_acceptance(spec)
         or is_capacity_audit(spec)
         or is_exposure_audit(spec)
         or is_feature_audit(spec)
@@ -279,6 +289,27 @@ def pull_capacity_audit_artifacts(
     )
     if not pulled:
         raise SystemExit(f"{spec.run_id}: no capacity-audit artifacts found under {spec.pvc_dir}")
+    record_artifact_fetch(spec, output_dir, pulled, missing)
+    return pulled
+
+
+def pull_capacity_acceptance_artifacts(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    output_root: Path | None,
+) -> list[Path]:
+    output_dir, pulled, missing = pull_artifact_set(
+        hfcli,
+        spec,
+        pod_name,
+        output_root,
+        CAPACITY_ACCEPTANCE_ARTIFACTS,
+    )
+    if not pulled:
+        raise SystemExit(
+            f"{spec.run_id}: no capacity-acceptance artifacts found under {spec.pvc_dir}"
+        )
     record_artifact_fetch(spec, output_dir, pulled, missing)
     return pulled
 
@@ -653,6 +684,11 @@ def record_lightweight_artifacts(
     elif is_capacity_audit(spec):
         archive_dir = backtests_dir / spec.run_id
         records = [(output_dir / name, archive_dir / name) for name in CAPACITY_AUDIT_ARTIFACTS]
+    elif is_capacity_acceptance(spec):
+        archive_dir = backtests_dir / spec.run_id
+        records = [
+            (output_dir / name, archive_dir / name) for name in CAPACITY_ACCEPTANCE_ARTIFACTS
+        ]
     elif is_feature_audit(spec):
         archive_dir = backtests_dir / spec.run_id
         records = [

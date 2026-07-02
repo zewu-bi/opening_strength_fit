@@ -79,6 +79,7 @@
 | 2026-06-25 | hist_path pruned split20 capacity audit | 正式容量口径按 `10 亿` 总资金 `/20`，即每个 `date x clock` 目标 `5000 万`。在 `pool_L`、`10% * turnover_diff_30t` 参与率和 `1%` 单票目标权重上限下，`9690/9690` 截面全满；平均吃到 top `124`、p95 top `161`、最深 top `291`。Top100 内仅 `0.7%` 截面够，top200 内 `99.3%` 够；结论是切片容量充足，但生产组合不应硬卡 Top100。 |
 | 2026-06-26 | NN single-model first archive | 新增 PyTorch `torch_mlp` 训练入口和 GPU K8s 渲染；`mlp_base` / `mlp_shallow_fast` / `mlp_wide_huber` 已有 2022-2025 pool-internal 归档。 |
 | 2026-07-02 | NN scan + rankblend archive | 6 个新增任务训练、pool-internal analysis、artifact sync 和 market-relative acceptance 图均已完成。`deep_gelu_huber` universe short Rank IC `0.164169`、`pool_L` short/next Rank IC `0.150744 / 0.015041` 为当前最高；`silu_wide_lowdrop` 的 `pool_L` next excess `11.9652 bps` 为本轮最高但仍低于 `mlp_base` 的 `12.4320 bps`；NN+LGBM rankblend 相对 LGBM 328 有增量但不晋级。 |
+| 2026-07-02 | mlp_base split20 capacity + 1bn acceptance | 补跑 `lgbm326` 和 `mlp_base` split20 容量 audit：`mlp_base` 为 `9690/9690` 截面全满，平均吃到 top `132`、p95 top `183`、最深 top `326`。容量验收收益不应复用 TopN 等权逻辑，也不应来自 capacity audit daily summary；应由 capacity acceptance 分析按 `capacity_audit_selected.csv` 的 `allocated_notional` 加权 next-close label 后生成。 |
 
 ## 2026-05-20 小窗结果
 
@@ -2902,6 +2903,54 @@ experiments/results/backtests/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hi
   `turnover_diff_10t` 的 sensitivity：仍然 `9690/9690` 截面全满，但平均需要吃到 top `237`，
   p95 top `449`，极端 max top `1611`，比主口径 `turnover_diff_30t` 明显更紧。
 
+#### mlp_base pool_L split20 capacity audit + capacity acceptance
+
+按同一正式容量口径补跑 `mlp_base`：策略总资金 `10 亿` 分 `20` 个执行切片，
+每个 `date x decision_target_timestamp` 目标 notional 为 `5000 万`。容量 audit 本身只做
+买入时 fill / depth / participation / concentration 诊断，不计算收益；10 亿验收图的收益由
+后续 capacity acceptance 分析把 `capacity_audit_selected.csv` 的 `allocated_notional` 和
+next-close label 连接后按金额加权生成。
+
+run / job / artifact 索引：
+
+```text
+experiments/runs/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_capacityonly_v1.toml
+experiments/jobs/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_capacityonly_v1_job.yaml
+/mnt/output/opening_strength_fit/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_capacityonly_v1/
+
+experiments/runs/capacity_acceptance_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_capacityonly_fee8bps_v1.toml
+experiments/jobs/capacity_acceptance_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_capacityonly_fee8bps_v1_job.yaml
+experiments/results/backtests/capacity_acceptance_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_capacityonly_fee8bps_v1/
+output/artifacts/capacity_acceptance_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_capacityonly_fee8bps_v1/
+/mnt/output/opening_strength_fit/capacity_acceptance_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_capacityonly_fee8bps_v1/
+```
+
+容量 audit 结果：
+
+| metric | value | read |
+| --- | ---: | --- |
+| groups | 9690 | `2022-01-04` 至 `2025-12-31`，每日 `09:31-09:40` 共 10 个 clock。 |
+| target_notional | 50,000,000 | `10 亿 / 20` 的单切片容量。 |
+| filled_groups | 9690 | 所有截面都能塞满。 |
+| fill_success_rate | 100.0% | 切片容量充足。 |
+| mean_top_depth_to_target | 132.1 | 平均需要吃到 top132。 |
+| p50_top_depth_to_target | 125 | 中位需要吃到 top125。 |
+| p90_top_depth_to_target | 167 | 90% 截面 top167 以内可塞满。 |
+| p95_top_depth_to_target | 183 | 95% 截面 top183 以内可塞满。 |
+| max_top_depth_to_target | 326 | 最深一次需要吃到 top326。 |
+
+capacity acceptance 结果（fee 8bps，按 `allocated_notional` 加权 next-close label）：
+
+| model | days | mean deployed notional | mean deployed fraction | mean selected net bps | final capital net bps | total net PnL |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `lgbm326` | 969 | 500,000,000 | 0.50 | 12.402945 | 6009.226960 | 600,922,696 |
+| `mlp_base` | 969 | 500,000,000 | 0.50 | 15.803906 | 7656.992570 | 765,699,257 |
+
+结论：`mlp_base` 在 `5000 万/切片`、`turnover_diff_30t` 参与率上限下也能全截面塞满；
+比 LGBM split20 主口径吃得略深，平均 top depth `132` vs `124`，p95 `183` vs `161`，
+但仍在可接受容量范围内。收益验收上，`mlp_base` 的 10 亿容量加权累计净收益高于 `lgbm326`；
+该收益结论来自 capacity acceptance，不来自 capacity audit daily summary。
+
 ## 2026-06-26 NN single-model first archive
 
 按 2026-06-23 mentor re-scope，当时先推进当前特征上的 NN 单模型，并把 NN + LGBM ensemble
@@ -3332,12 +3381,20 @@ CSV / JSON / SVG 包；`output/legacy/**` 只保留旧本地分析和 debug 产�
 | `experiments/results/backtests/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_*_v1/` | wide-deep h64 / h128 Huber 结构扫描归档；h64 overlay 有改善但 Rank IC 弱，h128 next overlay 低于 LGBM 328，均不晋级。 |
 | `experiments/results/backtests/optimization_overlay_acceptance_nn_scan_top3_vs_lgbm328/` | 第二轮 NN scan top3 和 NN+LGBM rankblend 对 LGBM 328 的 market-relative acceptance 图与 plot data。 |
 | `experiments/results/backtests/optimization_overlay_acceptance_nn_scan_vs_mlp_base/` | `deep_gelu_huber`、`silu_wide_lowdrop`、`mlp_wide_huber` 对 `mlp_base` 的 market-relative acceptance 图与 plot data。 |
+| `experiments/results/backtests/optimization_overlay_acceptance_lgbm326_mlp_base_1bn_nextclose_fee8bps/` | 历史 `lgbm326` vs `mlp_base` 10 亿 split20 capacity acceptance 图；旧版模型累计曲线来自 capacity audit daily summary，已被新版 capacity acceptance 图 supersede。 |
+| `experiments/results/backtests/optimization_overlay_acceptance_lgbm326_mlp_base_1bn_capacity_fee8bps_v1/` | 正式 `lgbm326` vs `mlp_base` 10 亿容量验收图；模型累计线来自 `capacity_acceptance_daily_summary.csv`，按 `allocated_notional` 加权 next-close label。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_exposure_audit/` | 剪枝后实验的 `pool_L` Top100 core exposure audit；主要画像是 opening activity / turnover heat 高、spread 低、单票集中度不高，作为生产化暴露验收的第一轮证据。 |
 | `experiments/results/backtests/exposure_input_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_size_industry_v1/` | 剪枝后 size/industry audit 的外部 exposure input trace；完整 parquet 留在 `output/legacy/exposures/` 和 PVC。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_size_industry_exposure_audit/` | 剪枝后实验补齐市值和申万一级行业暴露：中等偏大市值，超配电子/电力设备/计算机，低配机械设备/基础化工，并输出行业 active-share 明细。 |
 | `experiments/results/backtests/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/` | 剪枝后容量 audit 的早期 `10 亿/clock` 功能 smoke；该口径过重，不作为生产容量结论。 |
 | `experiments/results/backtests/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_v1/` | 剪枝后实验的正式 split20 capacity audit；按 `10 亿 / 20 = 5000 万` 每切片目标，`9690/9690` 截面全满，平均 top depth `124`，p95 top depth `161`，max top depth `291`。 |
+| `experiments/results/backtests/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_nextclose_v1/` | 旧版 `lgbm326` split20 capacity audit，包含收益诊断，已被 capacity-only audit + capacity acceptance 口径 supersede。 |
+| `experiments/results/backtests/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_capacityonly_v1/` | `lgbm326` 的正式 capacity-only split20 audit；只含 fill / depth / participation / concentration 诊断，不含收益字段。 |
+| `experiments/results/backtests/capacity_acceptance_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_capacityonly_fee8bps_v1/` | `lgbm326` 的正式 10 亿 capacity acceptance summary；读 capacity-only audit selected，按 `allocated_notional` 加权 next-close label。 |
 | `experiments/results/backtests/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_t10_v1/` | split20 capacity sensitivity；把参与率基准换成 `turnover_diff_10t` 后仍全满，但需要吃得更深，p95 top depth `449`。 |
+| `experiments/results/backtests/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_nextclose_v1/` | 旧版 `mlp_base` split20 capacity audit，包含收益诊断，已被 capacity-only audit + capacity acceptance 口径 supersede。 |
+| `experiments/results/backtests/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_capacityonly_v1/` | `mlp_base` 的正式 capacity-only split20 audit；只含 fill / depth / participation / concentration 诊断，不含收益字段。 |
+| `experiments/results/backtests/capacity_acceptance_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_capacityonly_fee8bps_v1/` | `mlp_base` 的正式 10 亿 capacity acceptance summary；容量 audit 为 `9690/9690` 截面全满，平均 top depth `132`，p95 `183`，max `326`。 |
 | `experiments/results/backtests/gap_risk_penalized_attribution_v1/` | rolling gap-risk Top100 替换归因的 outcome、feature exposure 和 residual-control 证据。 |
 | `output/artifacts/<run_id>` | 当前 2022-2025 cluster baseline / pool_L 优化实验的本地查看副本；正式摘要另归档到 `experiments/results/backtests/`。 |
 | `output/legacy/artifacts/<run_id>` | 旧 artifact 拉取和 raw shard metrics，保留给 debug / history。 |

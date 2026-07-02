@@ -19,7 +19,6 @@ def _capacity_frame() -> pd.DataFrame:
                 "symbol": "000001.SZ",
                 "decision_target_timestamp": "2022-01-03 09:31:00",
                 "prediction": 3.0,
-                "label": 0.01,
                 "turnover_diff_30t": 10_000.0,
             },
             {
@@ -27,7 +26,6 @@ def _capacity_frame() -> pd.DataFrame:
                 "symbol": "000002.SZ",
                 "decision_target_timestamp": "2022-01-03 09:31:00",
                 "prediction": 2.0,
-                "label": 0.00,
                 "turnover_diff_30t": 4_000.0,
             },
             {
@@ -35,7 +33,6 @@ def _capacity_frame() -> pd.DataFrame:
                 "symbol": "600000.SH",
                 "decision_target_timestamp": "2022-01-03 09:31:00",
                 "prediction": 1.0,
-                "label": -0.01,
                 "turnover_diff_30t": 2_000.0,
             },
         ]
@@ -61,11 +58,11 @@ def test_capacity_portfolio_allocates_until_target_or_limits() -> None:
     assert metrics.loc[0, "fill_ratio"] == pytest.approx(1.0)
     assert metrics.loc[0, "filled"]
     assert metrics.loc[0, "top_depth_to_target"] == pytest.approx(3.0)
-    assert metrics.loc[0, "capital_net_return_bps"] == pytest.approx(40.0)
     assert metrics.loc[0, "max_capacity_participation_rate"] == pytest.approx(0.10)
     assert summary.loc["pool_L", "fill_success_rate"] == pytest.approx(1.0)
     assert summary.loc["pool_L", "mean_top_depth_to_target"] == pytest.approx(3.0)
-    assert summary.loc["pool_L", "capital_excess_bps"] == pytest.approx(40.0)
+    assert "capital_net_return_bps" not in metrics.columns
+    assert "capital_excess_bps" not in summary.columns
 
 
 def test_capacity_audit_cli_writes_outputs(tmp_path, monkeypatch) -> None:

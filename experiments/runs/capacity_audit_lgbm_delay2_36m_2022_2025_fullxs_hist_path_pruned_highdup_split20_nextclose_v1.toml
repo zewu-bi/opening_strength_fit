@@ -1,0 +1,55 @@
+[run]
+id = "capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_nextclose_v1"
+kind = "capacity_audit"
+description = "Capacity-only audit for the 2022-2025 hist_path high-duplicate pruning experiment, using pool_L, next-close returns, and a 1bn total strategy capital split across 20 slices, so each decision group targets 50m CNY notional."
+status = "completed"
+
+[capacity_audit]
+predictions = ["/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1"]
+label_input = ["/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1"]
+pool = ["L"]
+pool_date_lag_sessions = 0
+score_col = "prediction"
+label_col = "alpha_return_next_close"
+target_notional = 50000000
+capacity_notional_col = "turnover_diff_30t"
+capacity_volume_col = ""
+capacity_price_col = "ask_price_1"
+max_participation_rate = 0.10
+max_symbol_weight = 0.01
+min_trade_notional = 0
+max_names = 0
+ask_depth_levels = 0
+ask_depth_participation_rate = 0.25
+allow_decision_depth_fallback = false
+industry_col = ""
+max_industry_weight = 0
+fee_bps = 0
+slippage_bps = 0
+selected_output_limit = 200000
+
+[output]
+local_dir = "output/artifacts/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_nextclose_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_nextclose_v1"
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-cap-2225-lgbm-nc20"
+image_pull_secret = "highfort"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260625-capacity-audit-v6"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+env_secrets = ["xy-fit-ceph-credentials"]
+avoid_nodes = ["node7", "node8"]
+wait_for_paths = [
+  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/month_2025-07/_SUCCESS",
+  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/opening_2025_next_close_labels_v1.parquet",
+]
+wait_for_path_timeout_seconds = 21600
+wait_for_path_interval_seconds = 120
+
+[k8s.resources]
+cpu_request = "8"
+cpu_limit = "16"
+memory_request = "256Gi"
+memory_limit = "512Gi"

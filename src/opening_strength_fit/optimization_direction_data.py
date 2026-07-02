@@ -85,6 +85,7 @@ def load_cumulative_plot_data(
     include_baseline_pool: bool,
     include_baseline_universe: bool,
     baseline_run_id: str,
+    baseline_label: str = "baseline",
 ) -> pd.DataFrame:
     required = {
         "pool",
@@ -101,7 +102,7 @@ def load_cumulative_plot_data(
                 path=backtests_root / baseline_run_id / "daily_cumulative_plot_data.csv",
                 source_pool=pool,
                 key="baseline_pool_l",
-                label="baseline pool_L",
+                label=baseline_label,
                 required=required,
             )
         )
@@ -111,7 +112,7 @@ def load_cumulative_plot_data(
                 path=backtests_root / baseline_run_id / "daily_cumulative_plot_data.csv",
                 source_pool="universe",
                 key="baseline_universe",
-                label="baseline universe",
+                label=f"{baseline_label} universe",
                 required=required,
                 next_only=True,
             )
@@ -143,6 +144,7 @@ def load_realized_cumulative_plot_data(
     include_baseline_pool: bool,
     include_baseline_universe: bool,
     baseline_run_id: str,
+    baseline_label: str = "baseline",
     fee_bps: float,
     pool_turnover_path: str | Path | None = None,
     pool_fee_mode: str = DEFAULT_POOL_FEE_MODE,
@@ -173,7 +175,7 @@ def load_realized_cumulative_plot_data(
                 path=backtests_root / baseline_run_id / "daily_pool_internal_summary.csv",
                 source_pool=pool,
                 key="baseline_pool_l",
-                label="baseline pool_L",
+                label=baseline_label,
                 required=required,
                 fee_bps=fee_bps,
                 pool_turnover_by_date=pool_turnover_by_date,
@@ -186,7 +188,7 @@ def load_realized_cumulative_plot_data(
                 path=backtests_root / baseline_run_id / "daily_pool_internal_summary.csv",
                 source_pool="universe",
                 key="baseline_universe",
-                label="baseline universe",
+                label=f"{baseline_label} universe",
                 required=required,
                 fee_bps=fee_bps,
                 next_only=True,
@@ -211,17 +213,30 @@ def load_realized_cumulative_plot_data(
     combined = pd.concat(frames, ignore_index=True)
     combined["week_start"] = pd.to_datetime(combined["week_start"], errors="coerce")
     combined = combined.dropna(subset=["week_start"]).sort_values(["pool", "week_start"])
+    default_capital_fraction = 1.0 / NEXT_CLOSE_CAPITAL_DIVISOR
     for _, index in combined.groupby("pool", sort=False).groups.items():
         item = combined.loc[index].sort_values("week_start")
         short_values = pd.to_numeric(item["short_net_return_bps"], errors="coerce")
         next_values = pd.to_numeric(item["next_net_return_bps"], errors="coerce")
         pool_next_values = pd.to_numeric(item["pool_next_net_return_bps"], errors="coerce")
-        next_capital_values = next_values / NEXT_CLOSE_CAPITAL_DIVISOR
-        pool_next_capital_values = pool_next_values / NEXT_CLOSE_CAPITAL_DIVISOR
+        decision_groups = pd.to_numeric(item["decision_groups"], errors="coerce")
+        capital_fraction = pd.Series(
+            default_capital_fraction,
+            index=item.index,
+            dtype="float64",
+        )
+        next_capital_values = next_values * capital_fraction
+        pool_next_capital_values = pool_next_values * capital_fraction
         next_internal_excess_values = (
             pd.to_numeric(item["next_internal_excess_bps"], errors="coerce")
-            / NEXT_CLOSE_CAPITAL_DIVISOR
+            * capital_fraction
         )
+        combined.loc[item.index, "capacity_decision_groups"] = decision_groups.to_numpy()
+        combined.loc[item.index, "capacity_daily_capital_fraction"] = (
+            capital_fraction.to_numpy()
+        )
+        combined.loc[item.index, "capacity_total_notional"] = pd.NA
+        combined.loc[item.index, "capacity_decision_notional"] = pd.NA
         combined.loc[item.index, "next_capital_net_return_bps"] = next_capital_values
         combined.loc[item.index, "pool_next_capital_net_return_bps"] = pool_next_capital_values
         combined.loc[item.index, "next_capital_internal_excess_bps"] = (
@@ -241,6 +256,157 @@ def load_realized_cumulative_plot_data(
         )
     combined["week_start"] = combined["week_start"].dt.strftime("%Y-%m-%d")
     return combined
+
+
+def load_capacity_cumulative_plot_data(
+    *,
+    backtests_root: Path,
+    capacity_directions: tuple[DirectionSpec, ...],
+    pool: str,
+    capacity_total_notional: float | None = None,
+) -> pd.DataFrame:
+    required = {
+        "pool",
+        "date",
+        "capacity_decision_groups",
+        "selected_rows",
+        "target_notional",
+        "capacity_daily_capital_fraction",
+        "fee_bps",
+        "next_net_return_bps",
+    }
+    frames = []
+    for direction in capacity_directions:
+        path = backtests_root / direction.run_id / "capacity_acceptance_daily_summary.csv"
+        if not path.exists():
+            raise ValueError(
+                "capacity cumulative mode requires capacity_acceptance_daily_summary.csv "
+                f"for {direction.key!r}; missing {path}"
+            )
+        frame = pd.read_csv(path)
+        missing = sorted(required - set(frame.columns))
+        if missing:
+            raise ValueError(f"{path} missing columns: {missing}")
+        item = frame.loc[frame["pool"].astype(str).eq(pool)].copy()
+        if item.empty:
+            raise ValueError(f"{path} has no rows for pool {pool!r}")
+        item["pool"] = direction.key
+        item["pool_label"] = direction.label
+        item["variant"] = direction.label
+        item["week_start"] = pd.to_datetime(item["date"], errors="coerce")
+        item = item.dropna(subset=["week_start"]).sort_values("week_start")
+        for column in (
+            "capacity_decision_groups",
+            "selected_rows",
+            "target_notional",
+            "capacity_daily_capital_fraction",
+            "fee_bps",
+            "gross_next_return_bps",
+            "next_net_return_bps",
+            "next_capital_net_return_bps",
+            "next_net_pnl",
+        ):
+            if column in item.columns:
+                item[column] = pd.to_numeric(item[column], errors="coerce")
+        if capacity_total_notional is not None:
+            item["capacity_total_notional"] = float(capacity_total_notional)
+        elif "capacity_total_notional" not in item.columns:
+            item["capacity_total_notional"] = pd.NA
+        item["capacity_total_notional"] = pd.to_numeric(
+            item["capacity_total_notional"],
+            errors="coerce",
+        )
+        item["capacity_decision_notional"] = (
+            pd.to_numeric(item["target_notional"], errors="coerce")
+            / pd.to_numeric(item["capacity_decision_groups"], errors="coerce").replace(0, pd.NA)
+        )
+        missing_fraction = item["capacity_daily_capital_fraction"].isna()
+        if missing_fraction.any():
+            item.loc[missing_fraction, "capacity_daily_capital_fraction"] = (
+                pd.to_numeric(item.loc[missing_fraction, "target_notional"], errors="coerce")
+                / item.loc[missing_fraction, "capacity_total_notional"]
+            )
+        if "next_capital_net_return_bps" not in item.columns:
+            item["next_capital_net_return_bps"] = (
+                item["next_net_return_bps"] * item["capacity_daily_capital_fraction"]
+            )
+        if "next_net_pnl" not in item.columns:
+            item["next_net_pnl"] = (
+                item["next_capital_net_return_bps"]
+                / RETURN_BPS_DENOMINATOR
+                * item["capacity_total_notional"]
+            )
+        item["candidate_rows"] = pd.NA
+        item["decision_groups"] = item["capacity_decision_groups"]
+        item["clocks"] = item["capacity_decision_groups"]
+        item["selected_next_mean_bps"] = item.get(
+            "gross_next_return_bps",
+            item["next_net_return_bps"] + item["fee_bps"],
+        )
+        item["selected_turnover"] = pd.NA
+        item["selected_fee_bps"] = item["fee_bps"]
+        item["pool_next_mean_bps"] = pd.NA
+        item["pool_turnover"] = pd.NA
+        item["pool_turnover_source"] = "capacity_acceptance_pool_source_pending"
+        item["pool_fee_bps"] = 0.0
+        item["pool_next_net_return_bps"] = pd.NA
+        item["pool_next_capital_net_return_bps"] = pd.NA
+        item["pool_next_cumulative_net_return_bps"] = pd.NA
+        item["pool_next_net_pnl"] = pd.NA
+        item["pool_next_cumulative_net_pnl"] = pd.NA
+        item["next_internal_excess_bps"] = pd.NA
+        item["next_capital_internal_excess_bps"] = pd.NA
+        item["next_cumulative_internal_excess_return_bps"] = pd.NA
+        item["next_internal_excess_pnl"] = pd.NA
+        item["next_cumulative_internal_excess_pnl"] = pd.NA
+        item["next_cumulative_net_return_bps"] = cumulative_sum_bps(
+            item["next_capital_net_return_bps"]
+        )
+        item["next_cumulative_net_pnl"] = cumulative_sum_bps(item["next_net_pnl"])
+        item["week_start"] = item["week_start"].dt.strftime("%Y-%m-%d")
+        frames.append(
+            item[
+                [
+                    "pool",
+                    "pool_label",
+                    "week_start",
+                    "decision_groups",
+                    "clocks",
+                    "candidate_rows",
+                    "selected_rows",
+                    "capacity_decision_groups",
+                    "capacity_daily_capital_fraction",
+                    "capacity_total_notional",
+                    "capacity_decision_notional",
+                    "pool_next_mean_bps",
+                    "pool_turnover",
+                    "pool_turnover_source",
+                    "pool_fee_bps",
+                    "pool_next_net_return_bps",
+                    "pool_next_capital_net_return_bps",
+                    "pool_next_cumulative_net_return_bps",
+                    "pool_next_net_pnl",
+                    "pool_next_cumulative_net_pnl",
+                    "selected_next_mean_bps",
+                    "selected_turnover",
+                    "selected_fee_bps",
+                    "next_internal_excess_bps",
+                    "next_capital_internal_excess_bps",
+                    "next_cumulative_internal_excess_return_bps",
+                    "next_internal_excess_pnl",
+                    "next_cumulative_internal_excess_pnl",
+                    "fee_bps",
+                    "next_net_return_bps",
+                    "next_capital_net_return_bps",
+                    "next_cumulative_net_return_bps",
+                    "next_net_pnl",
+                    "next_cumulative_net_pnl",
+                    "target_notional",
+                    "variant",
+                ]
+            ]
+        )
+    return pd.concat(frames, ignore_index=True)
 
 
 def _load_one_cumulative_plot_data(
@@ -303,8 +469,14 @@ def _load_one_realized_plot_data(
     item["pool_label"] = label
     item["variant"] = label
     item["fee_bps_per_trade"] = float(fee_bps)
+    if "decision_groups" not in item.columns:
+        item["decision_groups"] = pd.NA
+    if "clocks" not in item.columns:
+        item["clocks"] = pd.NA
 
     for column in (
+        "decision_groups",
+        "clocks",
         "candidate_rows",
         "selected_rows",
         "pool_short_mean_bps",
@@ -349,6 +521,8 @@ def _load_one_realized_plot_data(
             "pool",
             "pool_label",
             "week_start",
+            "decision_groups",
+            "clocks",
             "candidate_rows",
             "selected_rows",
             "pool_short_mean_bps",

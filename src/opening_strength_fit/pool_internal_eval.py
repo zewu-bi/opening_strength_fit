@@ -221,4 +221,3 @@ def quarter_summary(group_metrics: pd.DataFrame) -> pd.DataFrame:
         pd.to_datetime(frame["date"], errors="coerce").dt.to_period("Q").astype(str)
     )
     return summarize_groups(frame, ["pool", "test_month"], month_col="_source_month")
-

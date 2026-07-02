@@ -48,7 +48,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Build a score-ranked capacity-constrained portfolio per decision group "
-            "and audit fill, participation, concentration, and cash-adjusted returns."
+            "and audit fill, participation, concentration, and capacity depth."
         )
     )
     parser.add_argument("--config", default="")
@@ -56,7 +56,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--label-input",
         action="append",
-        help="Optional keyed parquet/csv file or directory containing --label-col.",
+        help="Deprecated and ignored; capacity audit no longer computes realized returns.",
     )
     parser.add_argument(
         "--capacity-input",
@@ -67,7 +67,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-id", default="")
     parser.add_argument("--variant", default="")
     parser.add_argument("--score-col", default="")
-    parser.add_argument("--label-col", default="")
+    parser.add_argument("--label-col", default="", help=argparse.SUPPRESS)
     parser.add_argument("--target-notional", type=float, default=None)
     parser.add_argument("--capacity-notional-col", default="")
     parser.add_argument("--capacity-volume-col", default="")
@@ -81,8 +81,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--allow-decision-depth-fallback", action="store_true")
     parser.add_argument("--industry-col", default="")
     parser.add_argument("--max-industry-weight", type=float, default=None)
-    parser.add_argument("--fee-bps", type=float, default=None)
-    parser.add_argument("--slippage-bps", type=float, default=None)
+    parser.add_argument("--fee-bps", type=float, default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--slippage-bps", type=float, default=None, help=argparse.SUPPRESS)
     parser.add_argument(
         "--pool",
         action="append",
@@ -230,7 +230,6 @@ def _merge_keyed(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
 def _capacity_columns(constraints: CapacityConstraints) -> list[str]:
     columns = []
     for column in (
-        constraints.label_col,
         constraints.capacity_notional_col,
         constraints.capacity_volume_col,
         constraints.capacity_price_col,
@@ -260,8 +259,6 @@ def _validate_inputs(
     available = prediction_available | support_available
     if constraints.score_col not in prediction_available:
         raise SystemExit(f"score column is missing from predictions: {constraints.score_col}")
-    if constraints.label_col not in available:
-        raise SystemExit(f"label column is missing: {constraints.label_col}")
     if constraints.max_participation_rate > 0:
         has_notional = (
             constraints.capacity_notional_col and constraints.capacity_notional_col in available
@@ -299,14 +296,11 @@ def _validate_inputs(
 def _load_audit_frame(
     *,
     prediction_paths: list[str],
-    label_paths: list[str],
     capacity_paths: list[str],
     constraints: CapacityConstraints,
 ) -> tuple[pd.DataFrame, dict[str, object]]:
     prediction_files_list = _prediction_files(prediction_paths)
-    support_files = (
-        _generic_files(label_paths + capacity_paths) if label_paths or capacity_paths else []
-    )
+    support_files = _generic_files(capacity_paths) if capacity_paths else []
     print(f"reading_predictions: files={len(prediction_files_list)}")
     prediction_available = _available_columns(prediction_files_list)
     support_available = _available_columns(support_files) if support_files else set()
@@ -358,7 +352,6 @@ def _load_audit_frame(
 
     trace = {
         "prediction_files": [str(path) for path in prediction_files_list],
-        "label_files": [str(path) for path in _generic_files(label_paths)] if label_paths else [],
         "capacity_files": [str(path) for path in _generic_files(capacity_paths)]
         if capacity_paths
         else [],
@@ -542,7 +535,6 @@ def main() -> None:
     constraints = CapacityConstraints(
         target_notional=_arg_float(args, config, "target_notional", 1_000_000_000.0),
         score_col=_arg_str(args, config, "score_col", "prediction") or "prediction",
-        label_col=_arg_str(args, config, "label_col", "label") or "label",
         capacity_notional_col=_arg_str(
             args,
             config,
@@ -566,8 +558,6 @@ def main() -> None:
         or config_bool(config, "capacity_audit", "allow_decision_depth_fallback", False),
         industry_col=_arg_str(args, config, "industry_col", ""),
         max_industry_weight=_arg_float(args, config, "max_industry_weight", 0.0),
-        fee_bps=_arg_float(args, config, "fee_bps", 0.0),
-        slippage_bps=_arg_float(args, config, "slippage_bps", 0.0),
     )
     label_paths = _arg_list(args, config, "label_input", ())
     capacity_paths = _arg_list(args, config, "capacity_input", ())
@@ -586,7 +576,7 @@ def main() -> None:
         else config_int(config, "capacity_audit", "selected_output_limit", 0)
     )
 
-    if not label_paths and not capacity_paths:
+    if not capacity_paths:
         selected, group_metrics, load_trace = _run_capacity_audit_streaming(
             prediction_paths=prediction_paths,
             constraints=constraints,
@@ -597,7 +587,6 @@ def main() -> None:
     else:
         frame, load_trace = _load_audit_frame(
             prediction_paths=prediction_paths,
-            label_paths=label_paths,
             capacity_paths=capacity_paths,
             constraints=constraints,
         )
@@ -640,6 +629,7 @@ def main() -> None:
         "selected_output_limit": int(selected_output_limit),
         "selected_output_rows": selected_output_rows,
         "constraints": constraints.__dict__,
+        "ignored_label_inputs": label_paths,
         **load_trace,
     }
     _write_outputs(
@@ -677,10 +667,8 @@ def main() -> None:
         "p95_top_depth_to_target",
         "max_top_depth_to_target",
         "selected_rows",
-        "capital_net_return_bps",
-        "portfolio_net_return_bps",
-        "pool_net_return_bps",
-        "capital_excess_bps",
+        "filled_groups",
+        "unfilled_groups",
         "max_symbol_weight",
     ]
     print(summary[display_cols].to_string(index=False) if not summary.empty else "empty")

@@ -7,7 +7,7 @@ spec:
   backoffLimit: 0
   completionMode: Indexed
   completions: 8
-  parallelism: 1
+  parallelism: 2
   ttlSecondsAfterFinished: 86400
   template:
     spec:
@@ -31,6 +31,7 @@ spec:
                   values:
                     - node7
                     - node8
+                    - node16
                     - node20
                     - node21
       tolerations:
@@ -40,7 +41,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: opening-strength-fit
-          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260626-nn-scan-v1
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260702-nn-neighborhood-v1
           imagePullPolicy: Always
           envFrom:
             - secretRef:

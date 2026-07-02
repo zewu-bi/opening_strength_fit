@@ -114,14 +114,90 @@ universe 打分并额外写出 `stock_pool_member` 和 stock-pool score buckets�
 
 集群命令统一使用 `hfcli kubectl --cluster research ...`，namespace 是 `bizewu`。
 
+先判断镜像路径：
+
+```text
+没有可复用镜像，或改了 src / pyproject / Dockerfile / 依赖 -> 全量 build/push
+只有 experiments/runs/*.toml 变化，且旧镜像已有所需代码和依赖 -> 基于旧镜像做 config overlay
+```
+
+通用变量：
+
 ```bash
 IMAGE_REPO=registry.corp.highfortfunds.com/bizewu/opening-strength-fit
-VERSION=$(date +%Y%m%d)-lgbm-cpu-v1
+PURPOSE=lgbm-cpu
+VERSION=$(date +%Y%m%d)-${PURPOSE}-v1
+```
 
-docker build --build-arg CACHE_BUST=${VERSION} -t ${IMAGE_REPO}:${VERSION} .
+当前已验证 base tag（2026-07-02；有更新镜像后替换这里）：
+
+| use case | base tag | rule |
+| --- | --- | --- |
+| CPU-only：LightGBM、pool-internal analysis、capacity / exposure audit | `20260625-capacity-audit-v6` | 优先用 1G CPU base 做 TOML overlay。 |
+| GPU NN training：`torch_mlp` + `device = "cuda"` + GPU request | `20260702-nn-neighborhood-v1` | 优先用 9G GPU base 做 TOML overlay。 |
+| Dockerfile upstream base | `python:3.12-slim` | 只作为 build base，不直接用于 K8s Job。 |
+
+GPU 镜像能在 CPU 环境启动，但 CPU-only Job 不应该引用 9G GPU 镜像；它会让节点拉取 CUDA
+torch layer，成本高且没有收益。NN training 和 analysis 分开渲染时，同一批 TOML 可以分别做
+GPU overlay 给 training、CPU overlay 给 pool-internal analysis / audit。当前 1G CPU base 不含
+`osf-build-exposure-input`；复跑 exposure input 时应先 full build 一个新的 CPU 镜像，或临时用
+当前 9G GPU 镜像承载这个 CPU 命令。
+
+没有可复用镜像时做全量 build。CPU / LightGBM 镜像：
+
+```bash
+docker build \
+  --build-arg CACHE_BUST=${VERSION} \
+  -t ${IMAGE_REPO}:${VERSION} .
+
 docker push ${IMAGE_REPO}:${VERSION}
 ```
 
+NN / GPU 镜像需要包含 CUDA torch wheel：
+
+```bash
+docker build \
+  --build-arg INSTALL_TORCH_CUDA=1 \
+  --build-arg CACHE_BUST=${VERSION} \
+  -t ${IMAGE_REPO}:${VERSION} .
+
+docker push ${IMAGE_REPO}:${VERSION}
+```
+
+如果只是新增或修改 TOML，且已有可用的旧 CPU / GPU 镜像，用 config overlay。先按 Job 类型选
+base：CPU-only 用 CPU base，GPU NN training 用 GPU base。overlay 会把当前 repo 的
+`experiments/runs/` 同步进新镜像，日常效果就是在旧镜像代码和依赖层上加入新实验配置，
+同时去掉当前 repo 已经删除的旧配置，避免为每组新实验重新上传大 layer。
+如果 `docker pull ${BASE_IMAGE}` 失败，回到全量 build 路径：
+
+```bash
+BASE_VERSION=20260625-capacity-audit-v6   # CPU-only overlay
+# BASE_VERSION=20260702-nn-neighborhood-v1  # GPU NN training overlay
+PURPOSE=cpu-config
+# PURPOSE=nn-config
+VERSION=$(date +%Y%m%d)-${PURPOSE}-v1
+BASE_IMAGE=${IMAGE_REPO}:${BASE_VERSION}
+OVERLAY_IMAGE=${IMAGE_REPO}:${VERSION}
+
+docker pull ${BASE_IMAGE}
+
+docker build \
+  --build-arg BASE_IMAGE=${BASE_IMAGE} \
+  -t ${OVERLAY_IMAGE} \
+  -f - . <<'DOCKERFILE'
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+WORKDIR /app/opening_strength_fit
+
+RUN rm -rf experiments/runs
+COPY experiments/runs ./experiments/runs
+DOCKERFILE
+
+docker push ${OVERLAY_IMAGE}
+```
+
+后续 `osf-render-k8s-job --image` 使用刚 push 的 `${IMAGE_REPO}:${VERSION}` 或 `${OVERLAY_IMAGE}`。
 GPU TOML 模板见 [experiments/config_templates/gpu_lightgbm.toml](../experiments/config_templates/gpu_lightgbm.toml)。
 
 ## 4. 训练 Job
@@ -322,22 +398,40 @@ experiments/results/backtests/optimization_overlay_acceptance_2022_2025/
 
 ```text
 short rank IC和next pool_L 超额: optimization_directions_overlay_acceptance.svg
-池内Top100隔夜收益累和: optimization_directions_net_alpha_cumulative.svg
+Top100 或 10亿容量隔夜收益累和: optimization_directions_net_alpha_cumulative.svg
 ```
 
 第一张图是主验收：上 panel 用 `universe short Rank IC` 检查开盘短期模型本身；下 panel 用
-`pool_L Top100 next internal excess` 检查叠加 mentor 股池后的 overnight overlay 效果。
+`pool_L next internal excess` 检查叠加 mentor 股池后的 overnight overlay 效果。Top100 模式下
+这里是 `pool_L Top100 next internal excess`；10亿容量模式下这里是容量组合相对 `pool_L`
+的 next internal excess。
 默认图上画 baseline、hist_surprise 和 path_shape，也可以通过重复 `--direction key=label=run_id`
 选择 1-3 个新的 comparison models；baseline 始终由 `--baseline-run-id` 提供，不需要作为
 `--direction` 传入。柱顶标数值。
 不再主看 short excess、`pool_L` short IC、universe next excess 或 next IC。
 
-第二张 cumulative 图只画 next：上 panel 是全 A 股市场平均、扣费后的 `pool_L`
-background、baseline Top100 和 comparison models Top100 的累计收益；下 panel 是扣费后的
-`pool_L` background、baseline 和 comparison models 相对全 A 股市场平均的累计 alpha。
-本仓库目前没有公司回测 API 封装；未来若接入公司回测 API，可替换 background 数据源。
+第二张 cumulative 图只画 next，支持两种模式：
+
+```text
+--cumulative-mode top100    # 默认。baseline / comparison 使用 pool-internal Top100 summary。
+--cumulative-mode capacity  # 10亿容量。baseline / comparison 使用 capacity acceptance daily summary。
+```
+
+Top100 模式下，上 panel 是全 A 股市场平均、扣费后的 `pool_L` background、baseline Top100
+和 comparison models Top100 的累计收益；下 panel 是扣费后的 `pool_L` background、baseline
+和 comparison models 相对全 A 股市场平均的累计 alpha。底层来自 daily pool-internal summary，
+图上保留日频累计点。
+
+10亿容量模式下，上 panel 是全 A 股市场平均、扣费后的 `pool_L` background、baseline 容量组合
+和 comparison models 容量组合的累计收益；下 panel 是这些容量组合相对全 A 股市场平均的累计
+alpha。容量模式只把模型组合线换成 `capacity_acceptance_daily_summary.csv`，market 和 `pool_L`
+background 仍从 pool-internal next-close realized source 读取，因此 `pool_L` 线应和 Top100
+验收图里的 background 形状一致。容量模式不使用 Top100 等权 selected-return summary。
+
 默认扣费口径为 A 股 all-in round-trip 估计 `8 bps`；如需 stress 旧口径可传
-`--realized-fee-bps 5`。底层来自 daily pool-internal summary，图上保留日频累计点。
+`--realized-fee-bps 5`。capacity audit 本身不计算收益也不扣费；容量模式的模型收益由
+`osf-analyze-capacity-acceptance` 按 `capacity_audit_selected.csv` 里的
+`allocated_notional` 加权，并在该 acceptance 分析里扣费。
 
 选择新模型的例子：
 
@@ -345,6 +439,50 @@ background、baseline Top100 和 comparison models Top100 的累计收益；下 
 osf-plot-optimization-direction-comparison \
   --output-dir experiments/results/backtests/<comparison_dir> \
   --direction scale_norm=scale_norm=<scale_norm_run_id>
+```
+
+10亿容量验收图必须先对 baseline 和每个 comparison model 分别完成 capacity audit，再运行
+capacity acceptance 分析，把 `capacity_acceptance_daily_summary.csv` 同步到
+`experiments/results/backtests/<capacity_acceptance_run_id>/`。正式 split20 口径是：
+
+```text
+capacity_total_notional: 1,000,000,000
+capacity_slices: 20
+target_notional: 50,000,000 per date x decision_time
+```
+
+capacity audit 的核心是买入时容量检查：按 score 和约束构出每个 `date x decision_time`
+的目标组合，判断 `5000 万/切片` 能不能塞满。capacity audit 只关注 fill、参与率、深度和集中度；
+`capacity_audit_daily_summary.csv` 不包含收益字段。验收图里的隔夜收益口径固定是 next-close，
+并由 acceptance 分析读取 audit 的逐票 allocation 后另算：
+
+```toml
+[capacity_acceptance]
+selected_input = ["/mnt/output/opening_strength_fit/<capacity_audit_run>/capacity_audit_selected.csv"]
+label_input = ["/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1"]
+label_col = "alpha_return_next_close"
+fee_bps = 8
+capacity_total_notional = 1000000000
+```
+
+容量验收图命令模板：
+
+```bash
+osf-plot-optimization-direction-comparison \
+  --backtests-root experiments/results/backtests \
+  --output-dir experiments/results/backtests/<comparison_dir> \
+  --pool pool_L \
+  --baseline-run-id <baseline_model_run_id> \
+  --baseline-label <baseline_label> \
+  --direction <key>=<label>=<comparison_model_run_id> \
+  --realized-fee-bps 8 \
+  --pool-fee-mode stock_pool_membership \
+  --pool-turnover-path auto \
+  --cumulative-mode capacity \
+  --capacity-total-notional 1000000000 \
+  --capacity-slices 20 \
+  --capacity-baseline-run-id <baseline_capacity_acceptance_run_id> \
+  --capacity-direction <key>=<comparison_capacity_acceptance_run_id>
 ```
 
 周度 4w rolling 稳定性补充：
@@ -385,9 +523,9 @@ osf-audit-capacity \
 常用输出：
 
 ```text
-capacity_audit_summary.csv          # pool 级 fill / return / concentration 摘要
+capacity_audit_summary.csv          # pool 级 fill / depth / concentration 摘要
 capacity_audit_month_summary.csv    # 月度稳定性
-capacity_audit_daily_summary.csv    # 日度容量和收益摘要
+capacity_audit_daily_summary.csv    # 日度容量诊断
 capacity_audit_group_metrics.csv    # date x clock 组合构造结果
 capacity_audit_selected.csv         # 逐笔入选 notional / weight / participation
 capacity_audit_trace.json
@@ -511,7 +649,7 @@ top_n = 100
 | `kubectl` 没有 current-context | 使用 `hfcli kubectl --cluster research ...`。 |
 | PVC API 被 RBAC 拒绝 | 用 Pod/Job yaml 的 `claimName` 和容器内 `/mnt/output` 检查文件状态。 |
 | `field is immutable` | 删除同名 Job 后重新 apply。 |
-| K8s 内找不到新 config | 重新 build/push 镜像，并重新 render Job。 |
+| K8s 内找不到新 config | 若只改 TOML，基于旧镜像做 config overlay；若代码/依赖也变了，重新全量 build/push；然后重新 render Job。 |
 | cache 只有 `.tmp` / lock / heartbeat | 等待最终 `.parquet` 和 manifest。 |
 | replay 缺少上下文字段 | 传 `--context-input`，或先运行 interface check。 |
 | completed config 没有 metrics | 运行 `osf-sync-experiment-artifacts --all`，然后 audit。 |

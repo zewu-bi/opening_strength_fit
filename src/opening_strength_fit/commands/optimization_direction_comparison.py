@@ -3,7 +3,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from opening_strength_fit.capacity_acceptance import (
+    DEFAULT_CAPACITY_SLICES,
+    DEFAULT_CAPACITY_TOTAL_NOTIONAL,
+)
 from opening_strength_fit.optimization_acceptance_plots import (
+    CUMULATIVE_MODE_TOP100,
+    CUMULATIVE_MODES,
     DEFAULT_PLOT_DIRECTION_KEYS,
     default_plot_directions,
     write_optimization_direction_plots,
@@ -26,6 +32,17 @@ def parse_direction_spec(value: str) -> DirectionSpec:
         )
     key, label, run_id = (part.strip() for part in parts)
     return DirectionSpec(key=key, label=label, run_id=run_id)
+
+
+def parse_key_run_id(value: str) -> tuple[str, str]:
+    parts = value.split("=", 1)
+    if len(parts) != 2 or not all(part.strip() for part in parts):
+        raise argparse.ArgumentTypeError(
+            "--capacity-direction must use key=run_id, for example "
+            "mlp_base=capacity_acceptance_nn_mlp_base_split20_v1"
+        )
+    key, run_id = (part.strip() for part in parts)
+    return key, run_id
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -63,6 +80,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Backtest directory used for the baseline pool reference.",
     )
     parser.add_argument(
+        "--baseline-label",
+        default="baseline",
+        help="Display label for the baseline run in both acceptance figures.",
+    )
+    parser.add_argument(
         "--top-n",
         type=int,
         default=100,
@@ -93,6 +115,47 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--capacity-total-notional",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional total strategy capital for cumulative plot scaling. "
+            f"Use {DEFAULT_CAPACITY_TOTAL_NOTIONAL:g} for the 1bn split20 convention."
+        ),
+    )
+    parser.add_argument(
+        "--capacity-decision-notional",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional notional per date x decision_time group. If omitted with "
+            "--capacity-total-notional, it is derived as total / --capacity-slices."
+        ),
+    )
+    parser.add_argument(
+        "--capacity-slices",
+        type=float,
+        default=DEFAULT_CAPACITY_SLICES,
+        help="Execution slices used to derive per-decision notional from total capital.",
+    )
+    parser.add_argument(
+        "--cumulative-mode",
+        choices=CUMULATIVE_MODES,
+        default=CUMULATIVE_MODE_TOP100,
+        help="Cumulative plot source: TopN pool-internal summaries or capacity acceptance summaries.",
+    )
+    parser.add_argument(
+        "--capacity-baseline-run-id",
+        default="",
+        help="Capacity acceptance backtest directory for the baseline model in capacity mode.",
+    )
+    parser.add_argument(
+        "--capacity-direction",
+        action="append",
+        type=parse_key_run_id,
+        help="Capacity acceptance run for a comparison model, as key=run_id. Repeat as needed.",
+    )
+    parser.add_argument(
         "--include-baseline-universe-cumulative",
         action="store_true",
         help=(
@@ -119,6 +182,18 @@ def main(argv: list[str] | None = None) -> None:
     directions = (
         tuple(args.direction) if args.direction else default_plot_directions(DEFAULT_DIRECTIONS)
     )
+    capacity_total_notional = (
+        float(args.capacity_total_notional) if args.capacity_total_notional > 0 else None
+    )
+    capacity_decision_notional = (
+        float(args.capacity_decision_notional)
+        if args.capacity_decision_notional > 0
+        else (
+            float(args.capacity_total_notional) / float(args.capacity_slices)
+            if args.capacity_total_notional > 0 and args.capacity_slices > 0
+            else None
+        )
+    )
     outputs = write_optimization_direction_plots(
         backtests_root=args.backtests_root,
         output_dir=args.output_dir,
@@ -126,9 +201,15 @@ def main(argv: list[str] | None = None) -> None:
         pool=args.pool,
         include_baseline_universe_cumulative=args.include_baseline_universe_cumulative,
         baseline_run_id=args.baseline_run_id,
+        baseline_label=args.baseline_label,
         realized_fee_bps=args.realized_fee_bps,
         pool_turnover_path=args.pool_turnover_path,
         pool_fee_mode=args.pool_fee_mode,
+        cumulative_mode=args.cumulative_mode,
+        capacity_total_notional=capacity_total_notional,
+        capacity_decision_notional=capacity_decision_notional,
+        capacity_baseline_run_id=args.capacity_baseline_run_id or None,
+        capacity_run_ids=dict(args.capacity_direction or []),
         title_prefix=args.title_prefix,
         top_n=args.top_n,
     )
