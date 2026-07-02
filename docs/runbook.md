@@ -55,6 +55,10 @@ local pull: output/artifacts/<run_id>/
 Tracked evidence 写入 `experiments/results/{metrics,backtests}/`。旧 pulls、prediction parquet、
 本地分析、label shards 和重报告放 `output/legacy/`。
 
+大规模 analysis / attribution / audit 默认在集群侧读取 PVC 上的 prediction parquet 和 cache，
+只把 summary、group metrics、trace、报告图等 compact artifacts 同步回本地。只有调试单个
+shard 或排查 schema/坏行时，才把 prediction parquet 拉到本地 `output/`。
+
 Run kind 映射见 [experiments/README.md](../experiments/README.md)。TOML 模板见
 [experiments/config_templates/](../experiments/config_templates/)。
 
@@ -365,7 +369,7 @@ Legacy diagnostics entrypoints: `osf-plot-rolling-validation-tradeoff`、
 `target_notional` 是单个 `date x decision_time` group 的目标资金；若策略总资金需要分成
 `N` 个执行切片，应先用总资金除以 `N`，例如 `10 亿 / 20 = 5000 万`。
 
-最小本地命令：
+正式大样本 audit 走第 1 节的集群侧原则；下面的本地命令只用于小样本 debug：
 
 ```bash
 osf-audit-capacity \
@@ -456,7 +460,8 @@ osf-build-exposure-input \
 从 `stock.industry` 拉申万一二三级行业。输出是日频 keyed parquet，可被
 `osf-audit-exposure` 直接 join。
 
-最小本地命令：
+正式大样本 exposure audit / attribution 走第 1 节的集群侧原则；下面的本地命令只用于
+小样本 debug 或复现已同步的 compact 输入：
 
 ```bash
 osf-audit-exposure \
