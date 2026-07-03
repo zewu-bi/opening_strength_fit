@@ -29,6 +29,12 @@ class _TorchMLPModule:
         dropout: float,
         activation: str,
         architecture: str = "mlp",
+        feature_names: tuple[str, ...] = (),
+        group_embedding_dim: int = 48,
+        fusion_dim: int = 256,
+        block_hidden_dim: int = 512,
+        num_blocks: int = 2,
+        transformer_heads: int = 4,
     ):
         _torch, nn, _loader, _dataset = _import_torch()
         activation_name = activation.strip().lower()
@@ -44,6 +50,63 @@ class _TorchMLPModule:
                 "model.activation for torch_mlp must be one of relu, gelu, silu, swish, tanh"
             )
         architecture_name = architecture.strip().lower() or "mlp"
+        grouped_feature_names = feature_names or tuple(f"feature_{index}" for index in range(input_dim))
+        if architecture_name in {
+            "grouped_residual",
+            "grouped_residual_gelu",
+            "grouped_residual_mlp",
+        }:
+            return _GroupedResidualMLP(
+                feature_names=grouped_feature_names,
+                group_embedding_dim=group_embedding_dim,
+                fusion_dim=fusion_dim,
+                block_hidden_dim=block_hidden_dim,
+                num_blocks=num_blocks,
+                dropout=float(dropout),
+                activation=activation_factories[activation_name],
+                torch=_torch,
+                nn=nn,
+            )
+        if architecture_name in {"grouped_gated", "grouped_gated_mlp"}:
+            return _GroupedGatedMLP(
+                feature_names=grouped_feature_names,
+                group_embedding_dim=group_embedding_dim,
+                fusion_dim=fusion_dim,
+                dropout=float(dropout),
+                activation=activation_factories[activation_name],
+                torch=_torch,
+                nn=nn,
+            )
+        if architecture_name in {"grouped_cross", "grouped_cross_mlp"}:
+            return _GroupedCrossMLP(
+                feature_names=grouped_feature_names,
+                group_embedding_dim=group_embedding_dim,
+                fusion_dim=fusion_dim,
+                block_hidden_dim=block_hidden_dim,
+                num_blocks=num_blocks,
+                dropout=float(dropout),
+                activation=activation_factories[activation_name],
+                torch=_torch,
+                nn=nn,
+            )
+        if architecture_name in {
+            "group_token_transformer",
+            "grouped_transformer",
+            "group_transformer",
+        }:
+            return _GroupTokenTransformerMLP(
+                feature_names=grouped_feature_names,
+                group_embedding_dim=group_embedding_dim,
+                fusion_dim=fusion_dim,
+                block_hidden_dim=block_hidden_dim,
+                num_blocks=num_blocks,
+                transformer_heads=transformer_heads,
+                dropout=float(dropout),
+                activation_name=activation_name,
+                activation=activation_factories[activation_name],
+                torch=_torch,
+                nn=nn,
+            )
         if architecture_name == "wide_deep_residual":
             if len(hidden_layers) != 1:
                 raise SystemExit(
@@ -60,7 +123,10 @@ class _TorchMLPModule:
                 nn=nn,
             )
         if architecture_name not in {"mlp", "sequential"}:
-            raise SystemExit("model.architecture for torch_mlp must be mlp or wide_deep_residual")
+            raise SystemExit(
+                "model.architecture for torch_mlp must be mlp, wide_deep_residual, "
+                "grouped_residual, grouped_gated, grouped_cross, or group_token_transformer"
+            )
         layers = []
         current_dim = int(input_dim)
         for width in hidden_layers:
@@ -74,6 +140,353 @@ class _TorchMLPModule:
             current_dim = width
         layers.append(nn.Linear(current_dim, 1))
         return nn.Sequential(*layers)
+
+
+def _positive_int(value: int, name: str) -> int:
+    resolved = int(value)
+    if resolved <= 0:
+        raise SystemExit(f"model.{name} for torch_mlp must be a positive int")
+    return resolved
+
+
+def _feature_group_name(feature: str) -> str:
+    name = feature.lower()
+    if name.startswith(("hist_surprise_", "path_shape_")):
+        return "hist_path"
+    if name.startswith("preopen_") or name in {"exch_time_offset_us", "ask1_to_limit_up_bps"}:
+        return "preopen"
+    if name.startswith(
+        (
+            "volume_diff_",
+            "turnover_diff_",
+            "trade_vwap_",
+            "postopen_v2_trade_turnover_to_depth_notional_",
+            "postopen_v2_trade_volume_to_ask_depth10_",
+            "postopen_v2_trade_volume_to_bid_depth10_",
+        )
+    ) or name == "trade_num":
+        return "activity"
+    if (
+        "spread" in name
+        or "depth" in name
+        or "imbalance" in name
+        or "gap_curve" in name
+        or "gap_max" in name
+        or "queue_replenish" in name
+        or name.startswith(
+            (
+                "ask_volume_",
+                "bid_volume_",
+                "ask_count_",
+                "bid_count_",
+                "ask_gap_",
+                "bid_gap_",
+            )
+        )
+        or name in {"total_ask_volume", "total_bid_volume", "total_ask_count", "total_bid_count"}
+    ):
+        return "liquidity"
+    if (
+        name.startswith(("return_", "postopen_v2_mid_price_from_open_"))
+        or "price" in name
+        or "vwap_vs" in name
+        or name in {"mid_price", "ask_price_1", "bid_price_1", "avg_ask_price", "avg_bid_price"}
+    ):
+        return "price_momentum"
+    return "other"
+
+
+def _feature_group_indices(feature_names: tuple[str, ...]) -> list[tuple[str, list[int]]]:
+    ordered_groups = [
+        "activity",
+        "hist_path",
+        "liquidity",
+        "price_momentum",
+        "preopen",
+        "other",
+    ]
+    groups = {name: [] for name in ordered_groups}
+    for index, feature in enumerate(feature_names):
+        groups.setdefault(_feature_group_name(feature), []).append(index)
+    return [(name, groups[name]) for name in ordered_groups if groups.get(name)]
+
+
+def _group_encoder(
+    *,
+    input_dim: int,
+    group_embedding_dim: int,
+    fusion_dim: int,
+    dropout: float,
+    activation,
+    nn,
+):
+    hidden_dim = max(group_embedding_dim, min(fusion_dim, max(32, input_dim * 2)))
+    return nn.Sequential(
+        nn.Linear(input_dim, hidden_dim),
+        activation(),
+        nn.Dropout(dropout),
+        nn.Linear(hidden_dim, group_embedding_dim),
+        activation(),
+    )
+
+
+def _grouped_encoders(
+    *,
+    feature_names: tuple[str, ...],
+    group_embedding_dim: int,
+    fusion_dim: int,
+    dropout: float,
+    activation,
+    nn,
+):
+    groups = _feature_group_indices(feature_names)
+    if not groups:
+        raise SystemExit("grouped torch_mlp architectures need at least one feature")
+    group_names = tuple(name for name, _indices in groups)
+    group_indices = tuple(tuple(indices) for _name, indices in groups)
+    encoders = nn.ModuleList(
+        [
+            _group_encoder(
+                input_dim=len(indices),
+                group_embedding_dim=group_embedding_dim,
+                fusion_dim=fusion_dim,
+                dropout=dropout,
+                activation=activation,
+                nn=nn,
+            )
+            for _name, indices in groups
+        ]
+    )
+    return group_names, group_indices, encoders
+
+
+def _encode_groups(x, group_indices, encoders):
+    return [encoder(x[:, list(indices)]) for indices, encoder in zip(group_indices, encoders)]
+
+
+def _GroupedResidualMLP(
+    *,
+    feature_names: tuple[str, ...],
+    group_embedding_dim: int,
+    fusion_dim: int,
+    block_hidden_dim: int,
+    num_blocks: int,
+    dropout: float,
+    activation,
+    torch,
+    nn,
+):
+    group_embedding_dim = _positive_int(group_embedding_dim, "group_embedding_dim")
+    fusion_dim = _positive_int(fusion_dim, "fusion_dim")
+    block_hidden_dim = _positive_int(block_hidden_dim, "block_hidden_dim")
+    num_blocks = _positive_int(num_blocks, "num_blocks")
+
+    class GroupedResidualMLP(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.group_names, self.group_indices, self.encoders = _grouped_encoders(
+                feature_names=feature_names,
+                group_embedding_dim=group_embedding_dim,
+                fusion_dim=fusion_dim,
+                dropout=dropout,
+                activation=activation,
+                nn=nn,
+            )
+            total_dim = len(self.group_indices) * group_embedding_dim
+            self.fusion = nn.Sequential(
+                nn.Linear(total_dim, fusion_dim),
+                activation(),
+                nn.Dropout(dropout),
+            )
+            self.blocks = nn.ModuleList(
+                [
+                    nn.Sequential(
+                        nn.LayerNorm(fusion_dim),
+                        nn.Linear(fusion_dim, block_hidden_dim),
+                        activation(),
+                        nn.Dropout(dropout),
+                        nn.Linear(block_hidden_dim, fusion_dim),
+                    )
+                    for _ in range(num_blocks)
+                ]
+            )
+            self.output = nn.Linear(fusion_dim, 1)
+
+        def forward(self, x):
+            embeddings = _encode_groups(x, self.group_indices, self.encoders)
+            z = self.fusion(torch.cat(embeddings, dim=1))
+            for block in self.blocks:
+                z = z + block(z)
+            return self.output(z)
+
+    return GroupedResidualMLP()
+
+
+def _GroupedGatedMLP(
+    *,
+    feature_names: tuple[str, ...],
+    group_embedding_dim: int,
+    fusion_dim: int,
+    dropout: float,
+    activation,
+    torch,
+    nn,
+):
+    group_embedding_dim = _positive_int(group_embedding_dim, "group_embedding_dim")
+    fusion_dim = _positive_int(fusion_dim, "fusion_dim")
+
+    class GroupedGatedMLP(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.group_names, self.group_indices, self.encoders = _grouped_encoders(
+                feature_names=feature_names,
+                group_embedding_dim=group_embedding_dim,
+                fusion_dim=fusion_dim,
+                dropout=dropout,
+                activation=activation,
+                nn=nn,
+            )
+            self.group_count = len(self.group_indices)
+            total_dim = self.group_count * group_embedding_dim
+            self.context = nn.Sequential(nn.Linear(total_dim, fusion_dim), activation())
+            self.gate = nn.Sequential(nn.Linear(fusion_dim, self.group_count), nn.Sigmoid())
+            head_hidden = max(32, fusion_dim // 2)
+            self.head = nn.Sequential(
+                nn.LayerNorm(total_dim),
+                nn.Linear(total_dim, fusion_dim),
+                activation(),
+                nn.Dropout(dropout),
+                nn.Linear(fusion_dim, head_hidden),
+                activation(),
+                nn.Linear(head_hidden, 1),
+            )
+
+        def forward(self, x):
+            embeddings = _encode_groups(x, self.group_indices, self.encoders)
+            stacked = torch.stack(embeddings, dim=1)
+            flat = stacked.flatten(start_dim=1)
+            gates = self.gate(self.context(flat)).unsqueeze(-1)
+            return self.head((stacked * gates).flatten(start_dim=1))
+
+    return GroupedGatedMLP()
+
+
+def _GroupedCrossMLP(
+    *,
+    feature_names: tuple[str, ...],
+    group_embedding_dim: int,
+    fusion_dim: int,
+    block_hidden_dim: int,
+    num_blocks: int,
+    dropout: float,
+    activation,
+    torch,
+    nn,
+):
+    group_embedding_dim = _positive_int(group_embedding_dim, "group_embedding_dim")
+    fusion_dim = _positive_int(fusion_dim, "fusion_dim")
+    block_hidden_dim = _positive_int(block_hidden_dim, "block_hidden_dim")
+    num_blocks = _positive_int(num_blocks, "num_blocks")
+
+    class GroupedCrossMLP(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.group_names, self.group_indices, self.encoders = _grouped_encoders(
+                feature_names=feature_names,
+                group_embedding_dim=group_embedding_dim,
+                fusion_dim=fusion_dim,
+                dropout=dropout,
+                activation=activation,
+                nn=nn,
+            )
+            total_dim = len(self.group_indices) * group_embedding_dim
+            self.cross_layers = nn.ModuleList(
+                [nn.Linear(total_dim, total_dim) for _ in range(num_blocks)]
+            )
+            self.deep = nn.Sequential(
+                nn.Linear(total_dim, fusion_dim),
+                activation(),
+                nn.Dropout(dropout),
+                nn.Linear(fusion_dim, fusion_dim),
+                activation(),
+            )
+            self.output = nn.Sequential(
+                nn.LayerNorm(total_dim + fusion_dim),
+                nn.Linear(total_dim + fusion_dim, block_hidden_dim),
+                activation(),
+                nn.Dropout(dropout),
+                nn.Linear(block_hidden_dim, 1),
+            )
+
+        def forward(self, x):
+            x0 = torch.cat(_encode_groups(x, self.group_indices, self.encoders), dim=1)
+            cross = x0
+            for layer in self.cross_layers:
+                cross = x0 * layer(cross) + cross
+            deep = self.deep(x0)
+            return self.output(torch.cat([cross, deep], dim=1))
+
+    return GroupedCrossMLP()
+
+
+def _GroupTokenTransformerMLP(
+    *,
+    feature_names: tuple[str, ...],
+    group_embedding_dim: int,
+    fusion_dim: int,
+    block_hidden_dim: int,
+    num_blocks: int,
+    transformer_heads: int,
+    dropout: float,
+    activation_name: str,
+    activation,
+    torch,
+    nn,
+):
+    group_embedding_dim = _positive_int(group_embedding_dim, "group_embedding_dim")
+    fusion_dim = _positive_int(fusion_dim, "fusion_dim")
+    block_hidden_dim = _positive_int(block_hidden_dim, "block_hidden_dim")
+    num_blocks = _positive_int(num_blocks, "num_blocks")
+    transformer_heads = _positive_int(transformer_heads, "transformer_heads")
+    if group_embedding_dim % transformer_heads != 0:
+        raise SystemExit("model.group_embedding_dim must be divisible by model.transformer_heads")
+
+    class GroupTokenTransformerMLP(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.group_names, self.group_indices, self.encoders = _grouped_encoders(
+                feature_names=feature_names,
+                group_embedding_dim=group_embedding_dim,
+                fusion_dim=fusion_dim,
+                dropout=dropout,
+                activation=activation,
+                nn=nn,
+            )
+            transformer_activation = "gelu" if activation_name == "gelu" else "relu"
+            encoder_layer = nn.TransformerEncoderLayer(
+                d_model=group_embedding_dim,
+                nhead=transformer_heads,
+                dim_feedforward=block_hidden_dim,
+                dropout=dropout,
+                activation=transformer_activation,
+                batch_first=True,
+                norm_first=True,
+            )
+            self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_blocks)
+            self.head = nn.Sequential(
+                nn.LayerNorm(group_embedding_dim),
+                nn.Linear(group_embedding_dim, fusion_dim),
+                activation(),
+                nn.Dropout(dropout),
+                nn.Linear(fusion_dim, 1),
+            )
+
+        def forward(self, x):
+            tokens = torch.stack(_encode_groups(x, self.group_indices, self.encoders), dim=1)
+            tokens = self.transformer(tokens)
+            return self.head(tokens.mean(dim=1))
+
+    return GroupTokenTransformerMLP()
 
 
 def _WideDeepResidualMLP(
@@ -168,6 +581,11 @@ def fit_torch_mlp_frame(
     feature_filters: dict[str, tuple[str, ...]] | None = None,
     hidden_layers: tuple[int, ...] = (512, 256, 128),
     architecture: str = "mlp",
+    group_embedding_dim: int = 48,
+    fusion_dim: int = 256,
+    block_hidden_dim: int = 512,
+    num_blocks: int = 2,
+    transformer_heads: int = 4,
     dropout: float = 0.1,
     activation: str = "relu",
     batch_size: int = 32768,
@@ -221,6 +639,12 @@ def fit_torch_mlp_frame(
         dropout=float(dropout),
         activation=activation,
         architecture=architecture,
+        feature_names=tuple(features),
+        group_embedding_dim=int(group_embedding_dim),
+        fusion_dim=int(fusion_dim),
+        block_hidden_dim=int(block_hidden_dim),
+        num_blocks=int(num_blocks),
+        transformer_heads=int(transformer_heads),
     ).to(resolved_device)
     optimizer = torch.optim.AdamW(
         module.parameters(),
@@ -365,3 +789,24 @@ def fit_torch_mlp_frame(
         ),
         stats,
     )
+
+
+def _torch_mlp_score(model: TorchMLPPredictionModel, frame: pd.DataFrame) -> np.ndarray:
+    torch, _nn, _loader, _dataset = _import_torch()
+    module = model.module.to(model.device)
+    module.eval()
+    scores = np.empty(len(frame), dtype="float64")
+    batch_size = max(1, int(model.batch_size))
+    with torch.no_grad():
+        for start in range(0, len(frame), batch_size):
+            end = min(start + batch_size, len(frame))
+            x_values, _mean, _scale = _standardized_float_matrix(
+                frame.iloc[start:end],
+                model.features,
+                mean=model.feature_mean,
+                scale=model.feature_scale,
+            )
+            batch_x = torch.from_numpy(x_values).to(model.device, non_blocking=True)
+            batch_scores = module(batch_x).detach().cpu().numpy().reshape(-1)
+            scores[start:end] = batch_scores.astype("float64")
+    return scores

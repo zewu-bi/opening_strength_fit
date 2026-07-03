@@ -15,9 +15,11 @@
   incumbent，`deep_gelu_huber` 仍代表 Rank IC 主线。
 - 当前 NN 对照：第一轮 3 个 `torch_mlp` MLP 变体、第二轮 5 个 NN 结构扫描和 1 个
   NN+LGBM rankblend、第三轮 4 个 MSE neighborhood 变体均已完成并归档；前两轮已与
-  `hist_path_pruned_highdup` / `mlp_base` 做 market-relative alpha 验收图对比。
+  `hist_path_pruned_highdup` / `mlp_base` 做 market-relative alpha 验收图对比。第四轮结构化
+  grouped NN 已提交集群训练。
 - 最新生产化证据：剪枝后 Top100 exposure、size/industry exposure、split20 capacity audits，
-  以及 `lgbm326` / `mlp_base` 的 10亿 capacity acceptance。
+  以及 `lgbm326` / `mlp_base` / `deep_gelu_mse` 的 10亿 capacity acceptance；`deep_gelu_mse`
+  已补 Top100 core exposure 和 size/industry exposure。
 - 最新 hygiene 证据：baseline 276 特征 hard-drop 17 candidates 已归档，不再列为下一步待办。
 - 封存路线：两模型 `alpha_rank - lambda * gap_risk_rank`，只保留为历史证据。
 
@@ -84,6 +86,8 @@
 | 2026-07-02 | mlp_base split20 capacity + 1bn acceptance | 补跑 `lgbm326` 和 `mlp_base` split20 容量 audit：`mlp_base` 为 `9690/9690` 截面全满，平均吃到 top `132`、p95 top `183`、最深 top `326`。容量验收收益不应复用 TopN 等权逻辑，也不应来自 capacity audit daily summary；应由 capacity acceptance 分析按 `capacity_audit_selected.csv` 的 `allocated_notional` 加权 next-close label 后生成。 |
 | 2026-07-03 | NN MSE neighborhood archive | 4 个 MSE 邻域任务训练已在集群完成，并已补 pool-internal analysis、artifact sync 和 audit。`deep_gelu_mse` 的 `pool_L` next excess `12.9610 bps` 为当前 Top100 overlay 最高；`base_plus_mse` 为 `12.7478 bps`；二者均高于 `mlp_base` 的 `12.4320 bps`，但 universe short Rank IC 只有约 `0.151`，不挑战 `deep_gelu_huber` 的排序力冠军地位。 |
 | 2026-07-03 | deep_gelu_mse split20 capacity + 1bn acceptance | 按正式 `10 亿 / 20` 容量口径补 `deep_gelu_mse` capacity-only audit 和 capacity acceptance；`9690/9690` 截面全满，平均 top depth `134.15`，p95 `188`，max `308`。10亿 capacity 图已对比 `lgbm328` / `mlp_base` / `deep_gelu_mse`，capacity cumulative net 分别为 `6009.2 / 7657.0 / 7916.0 bps`。 |
+| 2026-07-03 | deep_gelu_mse exposure + size/industry audit | 已补 `pool_L` Top100 core exposure 和 ClickHouse daily size/industry audit；activity max z / mean z `1.303 / 0.956`，低于 `lgbm328` 的 `1.526 / 1.081`；size max z `0.366`，低于 `lgbm328` 的 `0.544`；行业仍超配电子/电力设备/计算机、低配基础化工/机械设备，但 top5 industry share `0.524`、effective industries `13.24`，略优于 `lgbm328`。 |
+| 2026-07-03 | structured grouped NN jobs submitted | 按 runbook 新增并提交 4 个结构化 NN rolling sharded GPU Job：`grouped_residual_gelu_mse`、`grouped_cross_gelu_mse`、`grouped_gated_gelu_mse`、`group_token_transformer_mse`。四者均保持短期 `target_label` + MSE，不改验收口径；镜像 `20260703-structured-nn-v1` 已 push，Job 已 Running。 |
 
 ## 2026-05-20 小窗结果
 
@@ -3283,6 +3287,117 @@ experiments/results/backtests/optimization_overlay_acceptance_lgbm328_mlp_base_d
 结论：`deep_gelu_mse` 在 capacity-weighted next-close acceptance 上高于 `mlp_base`，但需要吃得略深；
 三组都能在 split20 口径下全额塞满，说明差异主要是收益排序，不是容量可行性。
 
+## 2026-07-03 deep_gelu_mse exposure + size/industry audit
+
+为 `deep_gelu_mse` 补与 LGBM pruned 同口径的 `pool_L` Top100 exposure audit。size/industry audit
+沿用两步链路：先由 ClickHouse 日频市值和申万行业构建 exposure input，再由 exposure audit 消费
+prediction + external exposure input。core audit 首个 Pod 被误删后已重提 Job 并完成；最终归档只看完成结果。
+
+新增 run：
+
+```text
+exposure_input_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_deep_gelu_mse_size_industry_v1
+exposure_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_deep_gelu_mse_core_v1
+exposure_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_deep_gelu_mse_size_industry_v1
+```
+
+本地归档以两个 audit artifact 为准：
+
+```text
+experiments/results/backtests/exposure_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_deep_gelu_mse_core_v1/
+experiments/results/backtests/exposure_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_deep_gelu_mse_size_industry_v1/
+```
+
+Core exposure 对照：
+
+| metric | `deep_gelu_mse` | LGBM pruned | read |
+| --- | ---: | ---: | --- |
+| activity max abs z | 1.303 | 1.526 | 仍是最大暴露，但弱于 LGBM。 |
+| activity mean abs z | 0.956 | 1.081 | turnover/activity heat 没有消失。 |
+| activity top decile share | 0.417 | 0.460 | Top100 更少集中到最高 activity 桶。 |
+| selected repeat rate | 0.460 | 0.474 | 单票重复略低。 |
+| effective symbols | 363.82 | 357.74 | 单票分散略好。 |
+
+`deep_gelu_mse` core exposure 的主要项目仍是 `turnover_diff_10t` / `turnover_diff_30t`
+（z `1.303 / 1.258`）、`volume_diff_10t` / `volume_diff_30t`（z `0.932 / 0.889`）、
+`preopen_turnover`（z `0.807`）；spread 暴露为低 spread 偏好（`spread_bps` z `-0.157`）。
+
+Size / industry exposure：
+
+| metric | `deep_gelu_mse` | LGBM pruned | read |
+| --- | ---: | ---: | --- |
+| size max abs z | 0.366 | 0.544 | 市值偏中大，但弱于 LGBM。 |
+| size mean abs z | 0.254 | 0.385 | size tilt 降低。 |
+| largest industry share | 0.162 | 0.169 | 最大行业占比略低。 |
+| top5 industry share | 0.524 | 0.531 | 前五行业集中略低。 |
+| effective industries | 13.24 | 12.88 | 行业有效分散略高。 |
+
+`deep_gelu_mse` 行业 active-share 最大项：
+
+| industry | active share | read |
+| --- | ---: | --- |
+| 电子 | +0.032 | 主要超配。 |
+| 电力设备 | +0.025 | 主要超配。 |
+| 计算机 | +0.020 | 主要超配。 |
+| 基础化工 | -0.017 | 主要低配。 |
+| 通信 | +0.012 | 次级超配。 |
+| 机械设备 | -0.011 | 次级低配。 |
+
+结论：`deep_gelu_mse` exposure 验收通过候选收敛口径。它不是风格完全中性的模型，
+而是延续 opening activity / turnover heat、中大市值和电子/电力设备/计算机偏好的开盘强势画像；
+但暴露强度和行业集中均不高于 LGBM pruned，因此当前不构成新的不可接受押注。下一步不再是补
+exposure gate，而是决定它是否替代 `mlp_base` 成为 overlay 主候选，或与 `deep_gelu_huber`
+做小规模互补 blend。
+
+## 2026-07-03 structured grouped NN jobs submitted
+
+用户要求把 4 个更细致的 NN 结构按 runbook 挂到集群。为了保持实验问题干净，本批只改网络结构：
+数据、`09:31-09:40` decision point、328 个 `hist_path_pruned_highdup` 特征、`target_label`、
+MSE loss、rolling `36m train -> 6m test` 和 pool-internal analysis 配置均沿用
+`deep_gelu_mse`。
+
+新增 architecture：
+
+| run suffix | architecture | intent |
+| --- | --- | --- |
+| `grouped_residual_gelu_mse` | semantic feature-group encoders + residual fusion blocks | 先组内提炼，再做非线性融合。 |
+| `grouped_cross_gelu_mse` | semantic feature-group encoders + explicit cross layers | 显式学习 activity x liquidity、path x turnover 等交互。 |
+| `grouped_gated_gelu_mse` | semantic feature-group encoders + context gates | 让全局上下文调节各特征组可信度。 |
+| `group_token_transformer_mse` | semantic feature-group tokens + 2-layer Transformer encoder | 只在 group token 层做 attention，不对 328 个 raw feature 做大 attention。 |
+
+新增 run：
+
+```text
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_residual_gelu_mse_v1
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_cross_gelu_mse_v1
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_gelu_mse_v1
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_group_token_transformer_mse_v1
+```
+
+K8s / image trace：
+
+```text
+image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260703-structured-nn-v1
+digest: sha256:fc0fcbfec9175263a5a3e65fe9ca7647d7fb79d360b28a9146e015e22aa3e3dc
+jobs:
+  os-nn-2225-grp-res-gelu-mse
+  os-nn-2225-grp-cross-gelu-mse
+  os-nn-2225-grp-gated-gelu-mse
+  os-nn-2225-grp-token-trf-mse
+```
+
+提交状态：
+
+| check | result |
+| --- | --- |
+| local `py_compile` | pass |
+| `tests/test_torch_mlp.py tests/test_k8s_helpers.py tests/test_project_contracts.py` | `19 passed, 3 skipped`；本地无 torch，torch tests skipped |
+| `osf-audit-experiments` after render | `alignment_ok: yes` |
+| `osf-check-project-contracts` | `contracts_ok: yes` |
+| K8s dry-run | 4/4 created dry-run |
+| K8s apply | 4/4 created |
+| initial cluster status | all 4 Jobs `Running`, first 2 shards per Job `1/1 Running`, `0` restarts |
+
 ## 查找索引与归档口径
 
 下面只做定位用；研究逻辑以上面的时间线为准。
@@ -3498,6 +3613,8 @@ CSV / JSON / SVG 包；`output/legacy/**` 只保留旧本地分析和 debug 产�
 | `experiments/results/backtests/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_deep_gelu_mse_split20_capacityonly_v1/` | `deep_gelu_mse` 的正式 capacity-only split20 audit；`9690/9690` 截面全满，平均 top depth `134.15`，p95 `188`，max `308`。 |
 | `experiments/results/backtests/capacity_acceptance_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_deep_gelu_mse_split20_capacityonly_fee8bps_v1/` | `deep_gelu_mse` 的正式 10 亿 capacity acceptance summary；按 selected allocation 的 `allocated_notional` 加权 next-close label，8bps 扣费后 final cumulative net `7916.02 bps`。 |
 | `experiments/results/backtests/optimization_overlay_acceptance_lgbm328_mlp_base_deep_gelu_mse_1bn_capacity_fee8bps_v1/` | `lgbm328` / `mlp_base` / `deep_gelu_mse` 的正式 10 亿 capacity acceptance 图，累计线来自 capacity acceptance daily summary，不复用 Top100 等权结果。 |
+| `experiments/results/backtests/exposure_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_deep_gelu_mse_core_v1/` | `deep_gelu_mse` 的 `pool_L` Top100 core exposure audit；activity / turnover heat 仍是最大暴露，但强度低于 LGBM pruned，单票分散略好。 |
+| `experiments/results/backtests/exposure_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_deep_gelu_mse_size_industry_v1/` | `deep_gelu_mse` 的 size/industry exposure audit；市值偏中大但弱于 LGBM pruned，行业超配电子/电力设备/计算机且集中度略低于 LGBM pruned。 |
 | `experiments/results/backtests/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_t10_v1/` | split20 capacity sensitivity；把参与率基准换成 `turnover_diff_10t` 后仍全满，但需要吃得更深，p95 top depth `449`。 |
 | `experiments/results/backtests/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_nextclose_v1/` | 旧版 `mlp_base` split20 capacity audit，包含收益诊断，已被 capacity-only audit + capacity acceptance 口径 supersede。 |
 | `experiments/results/backtests/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_capacityonly_v1/` | `mlp_base` 的正式 capacity-only split20 audit；只含 fill / depth / participation / concentration 诊断，不含收益字段。 |

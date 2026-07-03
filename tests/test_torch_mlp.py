@@ -98,6 +98,63 @@ class TorchMLPTest(unittest.TestCase):
         self.assertEqual(stats["features"], 2)
         self.assertTrue(np.isfinite(predictions["prediction"]).all())
 
+    def test_torch_mlp_grouped_architectures(self) -> None:
+        frame = self._toy_frame()
+        frame = frame.rename(
+            columns={
+                "feature_a": "turnover_diff_1t",
+                "feature_b": "hist_surprise_volume_diff_1t_20d_zscore",
+            }
+        )
+        for architecture in [
+            "grouped_residual",
+            "grouped_gated",
+            "grouped_cross",
+            "group_token_transformer",
+        ]:
+            with self.subTest(architecture=architecture):
+                config = {
+                    "features": {
+                        "include_feature_columns": [
+                            "turnover_diff_1t",
+                            "hist_surprise_volume_diff_1t_20d_zscore",
+                        ]
+                    },
+                    "model": {
+                        "name": "torch_mlp",
+                        "target_col": "target_label",
+                        "architecture": architecture,
+                        "hidden_layers": [8, 4],
+                        "group_embedding_dim": 8,
+                        "fusion_dim": 16,
+                        "block_hidden_dim": 32,
+                        "num_blocks": 1,
+                        "transformer_heads": 2,
+                        "dropout": 0.0,
+                        "batch_size": 8,
+                        "predict_batch_size": 8,
+                        "learning_rate": 0.01,
+                        "weight_decay": 0.0,
+                        "max_epochs": 1,
+                        "validation_fraction": 0.25,
+                        "validation_max_rows": 8,
+                        "early_stopping_patience": 1,
+                        "device": "cpu",
+                        "random_state": 7,
+                    },
+                }
+
+                model, stats = fit_prediction_model(
+                    frame,
+                    args=argparse.Namespace(feature_limit=None),
+                    config=config,
+                    alpha=1.0,
+                )
+                predictions = predict_frame(model, frame)
+
+                self.assertEqual(stats["features"], 2)
+                self.assertTrue(np.isfinite(predictions["prediction"]).all())
+
 
 if __name__ == "__main__":
     unittest.main()
