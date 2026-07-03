@@ -83,6 +83,7 @@
 | 2026-07-02 | NN scan + rankblend archive | 6 个新增任务训练、pool-internal analysis、artifact sync 和 market-relative acceptance 图均已完成。`deep_gelu_huber` universe short Rank IC `0.164169`、`pool_L` short/next Rank IC `0.150744 / 0.015041` 为当前最高；`silu_wide_lowdrop` 的 `pool_L` next excess `11.9652 bps` 为本轮最高但仍低于 `mlp_base` 的 `12.4320 bps`；NN+LGBM rankblend 相对 LGBM 328 有增量但不晋级。 |
 | 2026-07-02 | mlp_base split20 capacity + 1bn acceptance | 补跑 `lgbm326` 和 `mlp_base` split20 容量 audit：`mlp_base` 为 `9690/9690` 截面全满，平均吃到 top `132`、p95 top `183`、最深 top `326`。容量验收收益不应复用 TopN 等权逻辑，也不应来自 capacity audit daily summary；应由 capacity acceptance 分析按 `capacity_audit_selected.csv` 的 `allocated_notional` 加权 next-close label 后生成。 |
 | 2026-07-03 | NN MSE neighborhood archive | 4 个 MSE 邻域任务训练已在集群完成，并已补 pool-internal analysis、artifact sync 和 audit。`deep_gelu_mse` 的 `pool_L` next excess `12.9610 bps` 为当前 Top100 overlay 最高；`base_plus_mse` 为 `12.7478 bps`；二者均高于 `mlp_base` 的 `12.4320 bps`，但 universe short Rank IC 只有约 `0.151`，不挑战 `deep_gelu_huber` 的排序力冠军地位。 |
+| 2026-07-03 | deep_gelu_mse split20 capacity + 1bn acceptance | 按正式 `10 亿 / 20` 容量口径补 `deep_gelu_mse` capacity-only audit 和 capacity acceptance；`9690/9690` 截面全满，平均 top depth `134.15`，p95 `188`，max `308`。10亿 capacity 图已对比 `lgbm328` / `mlp_base` / `deep_gelu_mse`，capacity cumulative net 分别为 `6009.2 / 7657.0 / 7916.0 bps`。 |
 
 ## 2026-05-20 小窗结果
 
@@ -3230,6 +3231,58 @@ pool-internal summary 主表：
 - 下一步若继续收敛候选，优先给 `deep_gelu_mse` / `base_plus_mse` 补 market-relative acceptance，
   再决定是否替代已经做过容量验收的 `mlp_base`。
 
+## 2026-07-03 deep_gelu_mse split20 capacity + 1bn acceptance
+
+按项目正式容量链路为 `deep_gelu_mse` 补：
+
+```text
+osf-audit-capacity -> capacity_audit_selected.csv -> osf-analyze-capacity-acceptance -> capacity-mode acceptance figure
+```
+
+新增 run：
+
+```text
+capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_deep_gelu_mse_split20_capacityonly_v1
+capacity_acceptance_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_deep_gelu_mse_split20_capacityonly_fee8bps_v1
+```
+
+配置口径：
+
+```text
+pool: pool_L
+target_notional: 50,000,000 per date x decision_time
+total capital: 1,000,000,000 split into 20 slices
+capacity_notional_col: turnover_diff_30t
+max_participation_rate: 0.10
+max_symbol_weight: 0.01
+fee_bps: 8
+```
+
+Capacity-only audit：
+
+| model | fill groups | fill success | mean top depth | p95 top depth | max top depth |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `lgbm328` | 9690/9690 | 100.0% | 124.08 | 161 | 291 |
+| `mlp_base` | 9690/9690 | 100.0% | 132.09 | 183 | 326 |
+| `deep_gelu_mse` | 9690/9690 | 100.0% | 134.15 | 188 | 308 |
+
+Capacity acceptance summary：
+
+| model | mean selected rows / day | mean next net bps | final cumulative net bps | total net PnL |
+| --- | ---: | ---: | ---: | ---: |
+| `lgbm328` | 1240.76 | 12.4029 | 6009.23 | 600.9m |
+| `mlp_base` | 1320.89 | 15.8039 | 7656.99 | 765.7m |
+| `deep_gelu_mse` | 1341.50 | 16.3385 | 7916.02 | 791.6m |
+
+正式 10亿 capacity acceptance 图：
+
+```text
+experiments/results/backtests/optimization_overlay_acceptance_lgbm328_mlp_base_deep_gelu_mse_1bn_capacity_fee8bps_v1/
+```
+
+结论：`deep_gelu_mse` 在 capacity-weighted next-close acceptance 上高于 `mlp_base`，但需要吃得略深；
+三组都能在 split20 口径下全额塞满，说明差异主要是收益排序，不是容量可行性。
+
 ## 查找索引与归档口径
 
 下面只做定位用；研究逻辑以上面的时间线为准。
@@ -3442,6 +3495,9 @@ CSV / JSON / SVG 包；`output/legacy/**` 只保留旧本地分析和 debug 产�
 | `experiments/results/backtests/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_nextclose_v1/` | 旧版 `lgbm326` split20 capacity audit，包含收益诊断，已被 capacity-only audit + capacity acceptance 口径 supersede。 |
 | `experiments/results/backtests/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_capacityonly_v1/` | `lgbm326` 的正式 capacity-only split20 audit；只含 fill / depth / participation / concentration 诊断，不含收益字段。 |
 | `experiments/results/backtests/capacity_acceptance_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_capacityonly_fee8bps_v1/` | `lgbm326` 的正式 10 亿 capacity acceptance summary；读 capacity-only audit selected，按 `allocated_notional` 加权 next-close label。 |
+| `experiments/results/backtests/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_deep_gelu_mse_split20_capacityonly_v1/` | `deep_gelu_mse` 的正式 capacity-only split20 audit；`9690/9690` 截面全满，平均 top depth `134.15`，p95 `188`，max `308`。 |
+| `experiments/results/backtests/capacity_acceptance_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_deep_gelu_mse_split20_capacityonly_fee8bps_v1/` | `deep_gelu_mse` 的正式 10 亿 capacity acceptance summary；按 selected allocation 的 `allocated_notional` 加权 next-close label，8bps 扣费后 final cumulative net `7916.02 bps`。 |
+| `experiments/results/backtests/optimization_overlay_acceptance_lgbm328_mlp_base_deep_gelu_mse_1bn_capacity_fee8bps_v1/` | `lgbm328` / `mlp_base` / `deep_gelu_mse` 的正式 10 亿 capacity acceptance 图，累计线来自 capacity acceptance daily summary，不复用 Top100 等权结果。 |
 | `experiments/results/backtests/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_t10_v1/` | split20 capacity sensitivity；把参与率基准换成 `turnover_diff_10t` 后仍全满，但需要吃得更深，p95 top depth `449`。 |
 | `experiments/results/backtests/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_nextclose_v1/` | 旧版 `mlp_base` split20 capacity audit，包含收益诊断，已被 capacity-only audit + capacity acceptance 口径 supersede。 |
 | `experiments/results/backtests/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_capacityonly_v1/` | `mlp_base` 的正式 capacity-only split20 audit；只含 fill / depth / participation / concentration 诊断，不含收益字段。 |

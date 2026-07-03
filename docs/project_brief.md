@@ -48,6 +48,7 @@ train_label = short_label + 0.30 * long_label
 - 容量验收不复用 Top100 等权收益；capacity audit 只看 fill/depth，capacity acceptance 才算收益。
 - NN 已完成第一轮、第二轮和 MSE neighborhood 归档，不再处于“是否值得跑”的阶段。
   `deep_gelu_mse` / `base_plus_mse` 的 `pool_L` Top100 next overlay 已超过 `mlp_base`；
+  `deep_gelu_mse` 也已补 10亿 split20 capacity acceptance 并高于 `mlp_base`；
   `deep_gelu_huber` 仍是 short / next Rank IC 最强候选。
 - NN + LGBM 328 rankblend 相对 LGBM 有改善，但没有打过已有 NN 候选；当前不把 LGBM rankblend
   作为主晋级方向。
@@ -109,6 +110,9 @@ NN MSE neighborhood 结论：
   均高于 `mlp_base` 的 `12.4320 bps`，成为新的 Top100 overlay challenger。
 - 四个 MSE 邻域的 universe short Rank IC 约 `0.151`，明显低于 `deep_gelu_huber` 的 `0.164169`；
   排序力主线仍看 `deep_gelu_huber`。
+- `deep_gelu_mse` 已补正式 10亿 split20 capacity acceptance：capacity-only audit 为 `9690/9690`
+  截面全满，平均 top depth `134.15`，p95 `188`，max `308`；8bps capacity cumulative net
+  `7916.02 bps`，高于 `mlp_base` 的 `7656.99 bps`。
 
 Hygiene 事实：
 
@@ -122,8 +126,9 @@ Hygiene 事实：
 
 1. 主候选保留两条证据链：`deep_gelu_mse` / `base_plus_mse` 代表新的 Top100 next overlay challenger，
    `mlp_base` 作为已做容量验收的 overlay incumbent；`deep_gelu_huber` 代表最高 short / next Rank IC。
-2. 先给 `deep_gelu_mse` / `base_plus_mse` 补 market-relative acceptance，再决定是否替代
-   `mlp_base` 进入容量/暴露验收；若还要做模型组合，优先测 overlay challenger + `deep_gelu_huber`
+2. `deep_gelu_mse` 已完成 market-relative / 10亿 capacity 验收并暂时领先 `mlp_base`；下一步优先补
+   `deep_gelu_mse` 的 exposure / size-industry 审计，再决定是否替代 `mlp_base` 进入最终候选。
+   若还要做模型组合，优先测 overlay challenger + `deep_gelu_huber`
    的小规模 score/rank blend；不再优先做
    NN + LGBM rankblend，除非有新的互补性证据。
 3. 对最终 overlay challenger、`mlp_base` 和 `deep_gelu_huber` 复用现有 exposure / size-industry / split20 capacity 口径；

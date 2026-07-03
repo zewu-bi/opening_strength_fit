@@ -2,7 +2,7 @@
 id = "capacity_acceptance_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_capacityonly_fee8bps_v1"
 kind = "capacity_acceptance"
 description = "Capacity-weighted next-close acceptance for mlp_base split20 capacity-only audit. Uses 1bn total capital, 50m per date x decision_time slice, and 8bps all-in fee."
-status = "planned"
+status = "completed"
 
 [capacity_acceptance]
 selected_input = ["/mnt/output/opening_strength_fit/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_capacityonly_v1/capacity_audit_selected.csv"]

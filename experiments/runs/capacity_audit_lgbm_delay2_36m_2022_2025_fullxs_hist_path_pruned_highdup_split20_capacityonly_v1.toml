@@ -2,7 +2,7 @@
 id = "capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_capacityonly_v1"
 kind = "capacity_audit"
 description = "Capacity-only audit for the 2022-2025 hist_path high-duplicate pruning experiment, using pool_L and a 1bn total strategy capital split across 20 slices, so each decision group targets 50m CNY notional. This run writes full selected capacity portfolios and does not compute realized returns."
-status = "planned"
+status = "completed"
 
 [capacity_audit]
 predictions = ["/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1"]
