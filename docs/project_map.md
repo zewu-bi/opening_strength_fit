@@ -1,6 +1,6 @@
 # Project Map
 
-代码、CLI 和项目目录索引。本文件只回答“东西在哪里”。研究判断看
+代码、CLI 和项目目录索引。本文件只回答“东西在哪里”和“入口做什么”。研究判断看
 [project_brief.md](project_brief.md)，实验事实看 [experiment_log.md](experiment_log.md)，运行命令看
 [runbook.md](runbook.md)。
 
@@ -76,12 +76,12 @@ CLI:
 - `osf-train` / `osf-run-experiment`: train/evaluate a configured experiment.
 - `osf-analyze-pool-internal-top100`: join predictions with next-close labels and selection masks to produce Top100 pool-internal validation panels.
 - `osf-analyze-capacity-acceptance`: join capacity audit selected allocations with next-close labels and produce capacity-weighted daily return summaries.
-- `osf-plot-optimization-direction-comparison`: render the fixed overlay acceptance figures for baseline plus 1-3 selected comparison models: universe short Rank IC, `pool_L` next internal excess, and full-market / pool / model cumulative next net returns with full-market-relative alpha. The cumulative figure supports default Top100 mode and 1bn-CNY / 10亿 capacity mode; capacity mode requires `osf-audit-capacity` followed by `osf-analyze-capacity-acceptance` for the baseline and each comparison model.
+- `osf-plot-optimization-direction-comparison`: render the fixed overlay acceptance figures for baseline plus 1-3 comparison models; cumulative mode supports Top100 and capacity acceptance inputs.
 - `osf-plot-weekly-pool-internal`: render optional trading-day-equal weekly / 4w rolling pool-internal stability diagnostics from `pool_internal_group_metrics.csv`.
 - `osf-plot-weekly-pool-internal-cumulative`: render cumulative short/next pool-internal excess from pre-aggregated daily or weekly summary rows.
 - `osf-audit-capacity`: build target-notional capacity portfolios from prediction scores and visible liquidity/depth constraints; outputs fill, depth, participation, and concentration diagnostics.
 - `osf-build-exposure-input`: build daily `date,symbol` market-cap and industry exposure inputs from ClickHouse for use by exposure/capacity audits.
-- `osf-audit-exposure`: audit selected TopN or supplied portfolio exposure versus the candidate pool; outputs price/liquidity/activity/momentum/size/volatility exposure summaries plus symbol concentration, industry concentration, and industry active-share diagnostics.
+- `osf-audit-exposure`: audit selected TopN or supplied-portfolio exposure versus the candidate pool.
 - `osf-summarize-opening-results`: summarize metrics CSVs.
 - `osf-compare-opening-results`: compare archived model metrics.
 
@@ -120,7 +120,7 @@ CLI:
 - `experiments/jobs/*.yaml`: rendered K8s jobs.
 - `experiments/config_templates/`: reusable TOML snippets for run configs.
 - `experiments/results/metrics/`: local compact metrics CSV evidence produced by artifact sync; ignored by Git unless explicitly force-added.
-- `experiments/results/backtests/`: local replay, horizon-decay, sweep, hygiene, and rolling archives. Multi-file pool-internal archives use `backtests/<record_prefix>/`; this tree is ignored by Git and indexed through `docs/experiment_log.md`.
+- `experiments/results/backtests/`: local replay, sweep, hygiene, rolling, and acceptance archives. Multi-file archives use `backtests/<record_prefix>/`; this tree is ignored by Git and indexed through `docs/experiment_log.md`.
 - `*_sharded_job.yaml`: monthly/yearly sharded K8s jobs.
 
 ## Ignored Outputs

@@ -114,16 +114,15 @@ universe 打分并额外写出 `stock_pool_member` 和 stock-pool score buckets�
 
 集群命令统一使用 `hfcli kubectl --cluster research ...`，namespace 是 `bizewu`。
 
-先判断镜像路径：
+镜像决策：
 
 ```text
-没有可复用镜像，或改了 src / pyproject / Dockerfile / 依赖 -> 全量 build/push
-只有 experiments/runs/*.toml 变化，且旧镜像已有所需代码和依赖 -> 必须基于旧镜像做 config overlay
+改了 src / pyproject / Dockerfile / 依赖，或旧镜像缺少所需入口 -> full build/push
+只改 experiments/runs/*.toml，且旧镜像已有代码和依赖 -> config overlay
 ```
 
-不要为了只新增或修改 TOML 重新 full build/push。full build 会重新上传应用层，registry 上会多出
-一套不必要的 manifest/layer；config overlay 只在旧代码和依赖层上替换 `experiments/runs/`，
-可以最大化复用 registry 已有空间。
+TOML-only 变更不要 full build。config overlay 只替换 `experiments/runs/`，复用旧代码和依赖层，
+减少 registry manifest/layer 占用。
 
 通用变量：
 
@@ -141,8 +140,7 @@ VERSION=$(date +%Y%m%d)-${PURPOSE}-v1
 | GPU NN training：`torch_mlp` + `device = "cuda"` + GPU request | `20260702-nn-neighborhood-v1` | 优先用 9G GPU base 做 TOML overlay。 |
 | Dockerfile upstream base | `python:3.12-slim` | 只作为 build base，不直接用于 K8s Job。 |
 
-GPU 镜像能在 CPU 环境启动，但 CPU-only Job 不应该引用 9G GPU 镜像；它会让节点拉取 CUDA
-torch layer，成本高且没有收益。NN training 和 analysis 分开渲染时，同一批 TOML 可以分别做
+CPU-only Job 不引用 GPU 镜像。NN training 和 analysis 分开渲染时，同一批 TOML 可以分别做
 GPU overlay 给 training、CPU overlay 给 pool-internal analysis / audit。
 
 没有可复用镜像时做全量 build。CPU / LightGBM 镜像：
@@ -166,12 +164,7 @@ docker build \
 docker push ${IMAGE_REPO}:${VERSION}
 ```
 
-如果只是新增或修改 TOML，且已有可用的旧 CPU / GPU 镜像，用 config overlay。先按 Job 类型选
-base：CPU-only 用 CPU base，GPU NN training 用 GPU base。overlay 会把当前 repo 的
-`experiments/runs/` 同步进新镜像，日常效果就是在旧镜像代码和依赖层上加入新实验配置，
-同时去掉当前 repo 已经删除的旧配置，避免为每组新实验重新上传大 layer。
-只有在旧镜像缺少所需代码/入口/依赖，或 `docker pull ${BASE_IMAGE}` 失败时，才回到全量
-build 路径：
+TOML-only overlay：
 
 ```bash
 BASE_VERSION=20260702-capacity-acceptance-v2   # CPU-only overlay
@@ -200,7 +193,8 @@ DOCKERFILE
 docker push ${OVERLAY_IMAGE}
 ```
 
-后续 `osf-render-k8s-job --image` 使用刚 push 的 `${IMAGE_REPO}:${VERSION}` 或 `${OVERLAY_IMAGE}`。
+后续 `osf-render-k8s-job --image` 使用刚 push 的 `${IMAGE_REPO}:${VERSION}` 或
+`${OVERLAY_IMAGE}`。push 后列 registry tag，删除被替代的临时 CPU tag。
 GPU TOML 模板见 [experiments/config_templates/gpu_lightgbm.toml](../experiments/config_templates/gpu_lightgbm.toml)。
 
 ## 4. 训练 Job
@@ -404,71 +398,37 @@ short rank IC和next pool_L 超额: optimization_directions_overlay_acceptance.s
 Top100 或 10亿容量隔夜收益累和: optimization_directions_net_alpha_cumulative.svg
 ```
 
-第一张图是主验收：上 panel 用 `universe short Rank IC` 检查开盘短期模型本身；下 panel 用
-`pool_L next internal excess` 检查叠加 mentor 股池后的 overnight overlay 效果。Top100 模式下
-这里是 `pool_L Top100 next internal excess`；10亿容量模式下这里是容量组合相对 `pool_L`
-的 next internal excess。
-默认图上画 baseline、hist_surprise 和 path_shape，也可以通过重复 `--direction key=label=run_id`
-选择 1-3 个新的 comparison models；baseline 始终由 `--baseline-run-id` 提供，不需要作为
-`--direction` 传入。柱顶标数值。
-不再主看 short excess、`pool_L` short IC、universe next excess 或 next IC。
+主验收图：
 
-第二张 cumulative 图只画 next，支持两种模式：
+- 上 panel：`universe short Rank IC`，看短期模型本身。
+- 下 panel：`pool_L next internal excess`，看叠加 mentor 股池后的 overnight overlay。
+- baseline 由 `--baseline-run-id` 指定；comparison models 用 `--direction key=label=run_id`，最多 3 个。
+- 不主看 short excess、`pool_L` short IC、universe next excess 或 next IC。
+
+Cumulative 图只画 next，支持两种模式：
 
 ```text
 --cumulative-mode top100    # 默认。baseline / comparison 使用 pool-internal Top100 summary。
 --cumulative-mode capacity  # 10亿容量。baseline / comparison 使用 capacity acceptance daily summary。
 ```
 
-Top100 模式下，上 panel 是全 A 股市场平均、扣费后的 `pool_L` background、baseline Top100
-和 comparison models Top100 的累计收益；下 panel 是扣费后的 `pool_L` background、baseline
-和 comparison models 相对全 A 股市场平均的累计 alpha。底层来自 daily pool-internal summary，
-图上保留日频累计点。
+两种模式都保留 market 和扣费后的 `pool_L` background。capacity 模式只替换模型组合线：
+模型线来自 `capacity_acceptance_daily_summary.csv`，不使用 Top100 等权 selected-return summary。
+画完后检查 trace 和 SVG 标题；capacity 图标题不应包含 `Top100`。
 
-10亿容量模式下，上 panel 是全 A 股市场平均、扣费后的 `pool_L` background、baseline 容量组合
-和 comparison models 容量组合的累计收益；下 panel 是这些容量组合相对全 A 股市场平均的累计
-alpha。容量模式只把模型组合线换成 `capacity_acceptance_daily_summary.csv`，market 和 `pool_L`
-background 仍从 pool-internal next-close realized source 读取，因此 `pool_L` 线应和 Top100
-验收图里的 background 形状一致。容量模式不使用 Top100 等权 selected-return summary。
+默认扣费 `8 bps`；旧 stress 口径用 `--realized-fee-bps 5`。
 
-默认扣费口径为 A 股 all-in round-trip 估计 `8 bps`；如需 stress 旧口径可传
-`--realized-fee-bps 5`。capacity audit 本身不计算收益也不扣费；容量模式的模型收益由
-`osf-analyze-capacity-acceptance` 按 `capacity_audit_selected.csv` 里的
-`allocated_notional` 加权，并在该 acceptance 分析里扣费。
-
-选择新模型的例子：
+Top100 例子：
 
 ```bash
 osf-plot-optimization-direction-comparison \
   --output-dir experiments/results/backtests/<comparison_dir> \
+  --baseline-run-id <baseline_model_run_id> \
+  --baseline-label <baseline_label> \
   --direction scale_norm=scale_norm=<scale_norm_run_id>
 ```
 
-10亿容量验收图必须先对 baseline 和每个 comparison model 分别完成 capacity audit，再运行
-capacity acceptance 分析，把 `capacity_acceptance_daily_summary.csv` 同步到
-`experiments/results/backtests/<capacity_acceptance_run_id>/`。正式 split20 口径是：
-
-```text
-capacity_total_notional: 1,000,000,000
-capacity_slices: 20
-target_notional: 50,000,000 per date x decision_time
-```
-
-capacity audit 的核心是买入时容量检查：按 score 和约束构出每个 `date x decision_time`
-的目标组合，判断 `5000 万/切片` 能不能塞满。capacity audit 只关注 fill、参与率、深度和集中度；
-`capacity_audit_daily_summary.csv` 不包含收益字段。验收图里的隔夜收益口径固定是 next-close，
-并由 acceptance 分析读取 audit 的逐票 allocation 后另算：
-
-```toml
-[capacity_acceptance]
-selected_input = ["/mnt/output/opening_strength_fit/<capacity_audit_run>/capacity_audit_selected.csv"]
-label_input = ["/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1"]
-label_col = "alpha_return_next_close"
-fee_bps = 8
-capacity_total_notional = 1000000000
-```
-
-容量验收图命令模板：
+10亿容量图先完成第 8 节的 capacity audit + capacity acceptance，再画图：
 
 ```bash
 osf-plot-optimization-direction-comparison \
@@ -502,9 +462,15 @@ osf-plot-weekly-pool-internal \
 Legacy diagnostics entrypoints: `osf-plot-rolling-validation-tradeoff`、
 `osf-audit-feature-dependence`、`osf-run-alpha-horizon-decay`。
 
-## 8. Capacity Audit
+## 8. Capacity Audit / Acceptance
 
-生产化容量验收使用 `osf-audit-capacity`。它按每个 `date x decision_time`
+容量链路分两步：
+
+```text
+osf-audit-capacity -> capacity_audit_selected.csv -> osf-analyze-capacity-acceptance
+```
+
+`osf-audit-capacity` 只诊断买入时容量，不读 label、不算收益。它按每个 `date x decision_time`
 在候选池内按 score 由高到低分配目标资金，显式限制单票权重、可见成交额参与率、盘口深度参与率、
 行业权重，并报告未填满资金而不是强行满仓。
 `target_notional` 是单个 `date x decision_time` group 的目标资金；若策略总资金需要分成
@@ -575,9 +541,31 @@ ask_depth_levels: 0
 看需要沿 score 排名往后拿多深。若 Top100 覆盖不足但较深排名可以塞满，结论应写成
 “容量组合可行但不能硬卡固定 Top100”。
 
-如果 next-close label 不在 prediction parquet 中，可用 `label_input` 传 keyed label frame，
-并设置 `label_col`。若 ADV、市值、行业或额外容量列不在 prediction parquet 中，可用
-`capacity_input` 传 `date,symbol,decision_target_timestamp` 对齐的 keyed frame。
+若 ADV、市值、行业或额外容量列不在 prediction parquet 中，可用 `capacity_input` 传
+`date,symbol,decision_target_timestamp` 对齐的 keyed frame。
+
+`osf-analyze-capacity-acceptance` 负责收益验收：读取 audit 逐票 allocation，连接 next-close
+label，按 `allocated_notional` 加权并扣费。
+
+```toml
+[run]
+kind = "capacity_acceptance"
+
+[capacity_acceptance]
+selected_input = ["/mnt/output/opening_strength_fit/<capacity_audit_run>/capacity_audit_selected.csv"]
+label_input = ["/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1"]
+label_col = "alpha_return_next_close"
+fee_bps = 8
+capacity_total_notional = 1000000000
+```
+
+常用输出：
+
+```text
+capacity_acceptance_daily_summary.csv  # capacity 模式累计图的数据源
+capacity_acceptance_summary.csv        # pool 级收益摘要
+capacity_acceptance_trace.json
+```
 
 ## 9. Exposure Audit
 

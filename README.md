@@ -11,9 +11,8 @@ Current snapshot:
 slice: 09:31:00-09:40:00 decision points
 label: mixed short + next-close, w_long = 0.30
 baseline: soft_core_reg_light
-current candidate family: hist_path_pruned_highdup + NN MLP on pruned 328 features
-next objective: mlp_base vs deep_gelu_huber candidate convergence; optional NN+NN blend
-acceptance: universe short Rank IC + pool_L Top100 next excess + market-relative alpha + exposure/capacity
+current candidates: deep_gelu_mse/base_plus_mse overlay; mlp_base capacity incumbent; deep_gelu_huber Rank IC
+acceptance: universe short Rank IC; pool_L next overlay; market-relative alpha; exposure; capacity
 ```
 
 ## 文档职责
@@ -27,6 +26,7 @@ acceptance: universe short Rank IC + pool_L Top100 next excess + market-relative
 | [experiments/README.md](experiments/README.md) | 实验目录和 run kind 入口。 |
 
 更新文档时按职责放置：当前判断写 brief，实验事实写 log，命令写 runbook，代码索引写 map。
+不要在多个文档重复同一段操作规则或实验结论。
 
 ## 常用命令
 

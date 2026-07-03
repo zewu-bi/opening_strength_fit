@@ -9,7 +9,7 @@ It does not record experiment results or research decisions; those live in
 | `runs/*.toml` | Run configs. `run.id` matches the filename. |
 | `jobs/*.yaml` | Rendered K8s Job manifests. |
 | `config_templates/` | Reusable TOML snippets for run configs. |
-| `results/` | Lightweight tracked evidence. |
+| `results/` | Local compact evidence archive; normally ignored and indexed from `docs/experiment_log.md`. |
 
 Run kind entrypoints:
 
@@ -17,6 +17,7 @@ Run kind entrypoints:
 | --- | --- |
 | standard training / exploration | `osf-train` |
 | capacity audit | `osf-audit-capacity` |
+| capacity acceptance | `osf-analyze-capacity-acceptance` |
 | exposure input | `osf-build-exposure-input` |
 | exposure audit | `osf-audit-exposure` |
 | feature audit | `osf-audit-feature-dependence` |

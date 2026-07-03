@@ -1,7 +1,7 @@
 # Project Brief
 
-本文件只回答当前研究怎么走：目标、固定口径、验收 gate 和下一步。完整实验流水、
-run id、数字和归档路径见 [experiment_log.md](experiment_log.md)；命令见
+本文件只回答当前研究怎么走：目标、固定口径、验收 gate 和下一步。不放命令、run 索引或完整
+结果表。完整实验流水、run id、数字和归档路径见 [experiment_log.md](experiment_log.md)；命令见
 [runbook.md](runbook.md)；代码索引见 [project_map.md](project_map.md)。
 
 ## 当前目标
@@ -29,11 +29,11 @@ train_label = short_label + 0.30 * long_label
 | label | mixed label, `w_long = 0.30` |
 | current baseline | archived `soft_core_reg_light` |
 | selection masks | universe / `pool_S` / `pool_M` / `pool_L` only at TopN selection |
-| primary gates | universe short Rank IC; `pool_L` Top100 next internal excess; market-relative next alpha |
-| acceptance figures | `optimization_overlay_acceptance_2022_2025/`; `optimization_overlay_acceptance_nn_base_vs_lgbm328/`; `optimization_overlay_acceptance_nn_3way_vs_lgbm328/`; `optimization_overlay_acceptance_nn_scan_top3_vs_lgbm328/`; `optimization_overlay_acceptance_nn_scan_vs_mlp_base/` |
+| primary gates | universe short Rank IC; `pool_L` next internal excess; market-relative next alpha |
+| acceptance surfaces | Top100 equal-weight diagnostics; 10亿 capacity acceptance; exposure audit |
 
 `pool_S ⊂ pool_M ⊂ pool_L`，来自 `lml.bzw@ssd/data/pool_{S,M,L}.parquet`。Top100 仍是
-研发诊断口径；生产化验收要看容量约束组合。
+研发诊断口径；10亿容量收益由 capacity acceptance 按 `allocated_notional` 加权 next-close label 计算。
 
 ## 当前判断
 
@@ -45,13 +45,15 @@ train_label = short_label + 0.30 * long_label
   都高于 baseline。
 - `hist_path_pruned_highdup` 是当前更干净的生产化候选：删除 26 个高重复 hist/path 特征后，
   信号基本保留，并已补 Top100 exposure、size/industry exposure 和 split20 capacity first-pass。
-- NN 已完成第一轮和第二轮 2022-2025 扫参/ensemble 归档，不再处于“是否值得跑”的阶段。
-  `mlp_base` 仍是 `pool_L` next overlay 收益冠军，`deep_gelu_huber` 取代 `mlp_wide_huber`
-  成为 short / next Rank IC 最强候选。
+- 容量验收不复用 Top100 等权收益；capacity audit 只看 fill/depth，capacity acceptance 才算收益。
+- NN 已完成第一轮、第二轮和 MSE neighborhood 归档，不再处于“是否值得跑”的阶段。
+  `deep_gelu_mse` / `base_plus_mse` 的 `pool_L` Top100 next overlay 已超过 `mlp_base`；
+  `deep_gelu_huber` 仍是 short / next Rank IC 最强候选。
 - NN + LGBM 328 rankblend 相对 LGBM 有改善，但没有打过已有 NN 候选；当前不把 LGBM rankblend
   作为主晋级方向。
-- 当前决策点转为候选收敛：在 `mlp_base` 的 next overlay、`deep_gelu_huber` 的排序力，以及
-  `silu_wide_lowdrop` 作为接近 overlay challenger 的备选之间做 tradeoff，并补最终候选的暴露/容量验收。
+- 当前决策点转为候选收敛：在 `deep_gelu_mse` / `base_plus_mse` 的 Top100 next overlay、
+  已做容量验收的 `mlp_base` incumbent、以及 `deep_gelu_huber` 的排序力之间做 tradeoff，并补最终候选的
+  market-relative / 暴露 / 容量验收。
 
 ## 验收 Gate
 
@@ -99,6 +101,15 @@ NN 第二轮扫参 / ensemble 结论：
 - `compact_huber` 被 `deep_gelu_huber` / `mlp_wide_huber` 支配；`wide_deep_h64` 排序力弱；
   `wide_deep_h128_huber` 的 `pool_L` next excess 低于 LGBM 328，直接淘汰。
 
+NN MSE neighborhood 结论：
+
+- 4 个任务（base low-reg MSE、base plus MSE、deep GELU MSE、SiLU mid MSE）已完成训练、
+  pool-internal analysis、artifact sync 和 audit。
+- `deep_gelu_mse` / `base_plus_mse` 的 `pool_L` next excess 为 `12.9610 / 12.7478 bps`，
+  均高于 `mlp_base` 的 `12.4320 bps`，成为新的 Top100 overlay challenger。
+- 四个 MSE 邻域的 universe short Rank IC 约 `0.151`，明显低于 `deep_gelu_huber` 的 `0.164169`；
+  排序力主线仍看 `deep_gelu_huber`。
+
 Hygiene 事实：
 
 - baseline 276 特征 hygiene / correlation audit 已归档，主口径给出 17 个 hard-drop candidates；
@@ -109,11 +120,13 @@ Hygiene 事实：
 
 下一阶段是候选收敛，而不是继续宽扫网络结构。
 
-1. 主候选保留两条：`mlp_base` 代表最高 next overlay，`deep_gelu_huber` 代表最高 short / next
-   Rank IC；`silu_wide_lowdrop` 只作为 overlay 备选，不单独挑战排序力主线。
-2. 若还要做模型组合，优先测 `mlp_base` + `deep_gelu_huber` 的小规模 score/rank blend；不再优先做
+1. 主候选保留两条证据链：`deep_gelu_mse` / `base_plus_mse` 代表新的 Top100 next overlay challenger，
+   `mlp_base` 作为已做容量验收的 overlay incumbent；`deep_gelu_huber` 代表最高 short / next Rank IC。
+2. 先给 `deep_gelu_mse` / `base_plus_mse` 补 market-relative acceptance，再决定是否替代
+   `mlp_base` 进入容量/暴露验收；若还要做模型组合，优先测 overlay challenger + `deep_gelu_huber`
+   的小规模 score/rank blend；不再优先做
    NN + LGBM rankblend，除非有新的互补性证据。
-3. 对 `mlp_base` 和 `deep_gelu_huber` 复用现有 exposure / size-industry / split20 capacity 口径；
+3. 对最终 overlay challenger、`mlp_base` 和 `deep_gelu_huber` 复用现有 exposure / size-industry / split20 capacity 口径；
    最终候选必须同时解释收益、风格/行业暴露和容量。
 4. `compact_huber`、`wide_deep_h64`、`wide_deep_h128_huber` 不阻塞候选选择；只有
    后续出现明确超过 `mlp_base` / `deep_gelu_huber` 的证据才重新打开结构扫参。

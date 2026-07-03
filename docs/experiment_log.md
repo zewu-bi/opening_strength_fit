@@ -1,22 +1,23 @@
 # Experiment Log
 
-本文件是实验事实源：run id、数字、K8s 状态、归档路径和配置索引。当前判断只放在
-[project_brief.md](project_brief.md)；命令只放在 [runbook.md](runbook.md)。这里按日期、run id
-或关键词查；正文按时间线顺读，索引和归档口径统一放在文末。
+本文件是实验事实源：run id、数字、K8s 状态、归档路径和配置索引。当前判断放
+[project_brief.md](project_brief.md)，命令放 [runbook.md](runbook.md)。正文按时间线保留历史；
+最新入口看快速索引，归档路径看文末索引。
 
 ## 快速索引
 
 - 当前 brief：`09:31-09:40`、mixed label `w_long=0.30`、baseline `soft_core_reg_light`。
-- 主验收图：`experiments/results/backtests/optimization_overlay_acceptance_2022_2025/`；
-  NN 对照补充看 `optimization_overlay_acceptance_nn_base_vs_lgbm328/` 和
-  `optimization_overlay_acceptance_nn_3way_vs_lgbm328/`。
+- 主验收图：Top100 诊断、10亿 capacity acceptance、NN 对照图都在
+  `experiments/results/backtests/optimization_overlay_acceptance*/`。
 - 2022-2025 baseline：`experiments/results/backtests/baseline_2022_2025_cluster/`。
-- 当前信号候选：`hist_path_pruned_highdup` 是 LGBM 干净候选；NN 侧重点看 `mlp_base`
-  和 `deep_gelu_huber`，分别代表 next overlay 和 Rank IC 两条主候选。
+- 当前信号候选：`hist_path_pruned_highdup` 是 LGBM 干净候选；NN 侧 `deep_gelu_mse` /
+  `base_plus_mse` 是新的 Top100 next overlay challenger，`mlp_base` 是已做容量验收的 overlay
+  incumbent，`deep_gelu_huber` 仍代表 Rank IC 主线。
 - 当前 NN 对照：第一轮 3 个 `torch_mlp` MLP 变体、第二轮 5 个 NN 结构扫描和 1 个
-  NN+LGBM rankblend 均已完成并归档，且已与 `hist_path_pruned_highdup` / `mlp_base`
-  做 pool-internal 和 market-relative alpha 验收图对比。
-- 最新生产化证据：剪枝后 Top100 exposure、size/industry exposure、split20 capacity audits。
+  NN+LGBM rankblend、第三轮 4 个 MSE neighborhood 变体均已完成并归档；前两轮已与
+  `hist_path_pruned_highdup` / `mlp_base` 做 market-relative alpha 验收图对比。
+- 最新生产化证据：剪枝后 Top100 exposure、size/industry exposure、split20 capacity audits，
+  以及 `lgbm326` / `mlp_base` 的 10亿 capacity acceptance。
 - 最新 hygiene 证据：baseline 276 特征 hard-drop 17 candidates 已归档，不再列为下一步待办。
 - 封存路线：两模型 `alpha_rank - lambda * gap_risk_rank`，只保留为历史证据。
 
@@ -35,6 +36,7 @@
 | hist_path high-dup prune | -0.055 vs hist_path | +0.016 vs hist_path | 删除 26 个高重复 hist/path 特征后信号基本保留，作为 hygiene simplification 通过。 |
 | NN MLP vs `hist_path_pruned_highdup` | +0.956 best delta | +3.568 best delta | `mlp_base` 的 `pool_L` next excess 最高；`mlp_wide_huber` 的 short / next Rank IC 最好；触发第二轮 NN 扫参和 rankblend 对照。 |
 | NN scan + rankblend | +0.990 best delta | +3.101 best delta | 第二轮 6 个任务已归档；`deep_gelu_huber` 的 short / next Rank IC 最好，`silu_wide_lowdrop` 是本轮最接近 `mlp_base` 的 overlay challenger，NN+LGBM rankblend 未打过已有 NN 候选。 |
+| NN MSE neighborhood | +1.196 best delta | +4.097 best delta | 4 个 MSE 邻域任务已补 pool-internal analysis；`deep_gelu_mse` / `base_plus_mse` 的 Top100 next overlay 超过 `mlp_base`，但 Rank IC 仍明显低于 `deep_gelu_huber`。 |
 
 ## 实验时间线
 
@@ -80,6 +82,7 @@
 | 2026-06-26 | NN single-model first archive | 新增 PyTorch `torch_mlp` 训练入口和 GPU K8s 渲染；`mlp_base` / `mlp_shallow_fast` / `mlp_wide_huber` 已有 2022-2025 pool-internal 归档。 |
 | 2026-07-02 | NN scan + rankblend archive | 6 个新增任务训练、pool-internal analysis、artifact sync 和 market-relative acceptance 图均已完成。`deep_gelu_huber` universe short Rank IC `0.164169`、`pool_L` short/next Rank IC `0.150744 / 0.015041` 为当前最高；`silu_wide_lowdrop` 的 `pool_L` next excess `11.9652 bps` 为本轮最高但仍低于 `mlp_base` 的 `12.4320 bps`；NN+LGBM rankblend 相对 LGBM 328 有增量但不晋级。 |
 | 2026-07-02 | mlp_base split20 capacity + 1bn acceptance | 补跑 `lgbm326` 和 `mlp_base` split20 容量 audit：`mlp_base` 为 `9690/9690` 截面全满，平均吃到 top `132`、p95 top `183`、最深 top `326`。容量验收收益不应复用 TopN 等权逻辑，也不应来自 capacity audit daily summary；应由 capacity acceptance 分析按 `capacity_audit_selected.csv` 的 `allocated_notional` 加权 next-close label 后生成。 |
+| 2026-07-03 | NN MSE neighborhood archive | 4 个 MSE 邻域任务训练已在集群完成，并已补 pool-internal analysis、artifact sync 和 audit。`deep_gelu_mse` 的 `pool_L` next excess `12.9610 bps` 为当前 Top100 overlay 最高；`base_plus_mse` 为 `12.7478 bps`；二者均高于 `mlp_base` 的 `12.4320 bps`，但 universe short Rank IC 只有约 `0.151`，不挑战 `deep_gelu_huber` 的排序力冠军地位。 |
 
 ## 2026-05-20 小窗结果
 
@@ -3179,6 +3182,54 @@ experiments/results/backtests/optimization_overlay_acceptance_nn_scan_vs_mlp_bas
 而不是继续扩大 NN+LGBM rankblend。最终候选需要复用现有 exposure、size/industry exposure 和
 split20 capacity audit 口径。
 
+## 2026-07-03 NN MSE neighborhood archive
+
+用户要求按 runbook 对最近跑好的 4 组实验补 cluster-side pool-internal analysis。集群训练 Job
+已是 `Complete 8/8`；PVC 为 `bizewu-private-data`，输出在
+`/mnt/output/opening_strength_fit/nn/<run_id>/`，analysis 写回
+`/mnt/output/opening_strength_fit/nn/<run_id>/analysis/pool_internal_top100/`。runbook 中
+`20260625-capacity-audit-v6` 和历史 `20260626-nn-scan-v1` tag 已被 registry 清理，实际提交使用
+已验证可拉取的 `registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260702-capacity-acceptance-v2`。
+
+本轮 completed 任务：
+
+```text
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_lowreg_mse_v1
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_plus_mse_v1
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_deep_gelu_mse_v1
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_silu_mid_mse_v1
+```
+
+四个 run 的 `experiments/runs/*.toml` 均已标为 `status = "completed"`，本地 compact artifacts 已归档到：
+
+```text
+experiments/results/metrics/<run_id>_metrics_by_year.csv
+experiments/results/metrics/<run_id>_metrics_by_month.csv
+experiments/results/backtests/<run_id>/pool_internal_summary.csv
+experiments/results/backtests/<run_id>/daily_pool_internal_summary.csv
+experiments/results/backtests/<run_id>/{short,next}_excess_rank_ic_plot_data.csv
+```
+
+pool-internal summary 主表：
+
+| model | universe short Rank IC | `pool_L` short excess bps | `pool_L` next excess bps | `pool_L` short Rank IC | `pool_L` next Rank IC | `pool_L` next positive months |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `deep_gelu_mse` | 0.151013 | +10.4043 | +12.9610 | 0.138165 | 0.006126 | 38/48 |
+| `base_plus_mse` | 0.151465 | +10.2334 | +12.7478 | 0.138641 | 0.006025 | 38/48 |
+| `silu_mid_mse` | 0.151175 | +9.9559 | +12.2911 | 0.138888 | 0.006192 | 37/48 |
+| `base_lowreg_mse` | 0.151571 | +10.1854 | +11.6816 | 0.138916 | 0.006323 | 36/48 |
+
+结论：
+
+- `deep_gelu_mse` 和 `base_plus_mse` 的 `pool_L` Top100 next excess 分别为 `+12.9610` /
+  `+12.7478 bps`，超过此前 `mlp_base` 的 `+12.4320 bps`，overlay 分支需要重新纳入候选。
+- 四个 MSE 邻域模型的 universe short Rank IC 只在 `0.151` 左右，显著低于 `deep_gelu_huber`
+  的 `0.164169`；Rank IC 主线仍由 `deep_gelu_huber` 代表。
+- `base_lowreg_mse` 没有带来 overlay 增量；`silu_mid_mse` 也没有打过 `deep_gelu_mse` /
+  `base_plus_mse`，暂不作为主晋级候选。
+- 下一步若继续收敛候选，优先给 `deep_gelu_mse` / `base_plus_mse` 补 market-relative acceptance，
+  再决定是否替代已经做过容量验收的 `mlp_base`。
+
 ## 查找索引与归档口径
 
 下面只做定位用；研究逻辑以上面的时间线为准。
@@ -3376,7 +3427,7 @@ CSV / JSON / SVG 包；`output/legacy/**` 只保留旧本地分析和 debug 产�
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_corr09_v1/` | 同一抽样的 0.90 相关阈值 sensitivity hygiene 审计，用于人工复核更宽相关簇。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1/` | baseline + hist_surprise + path_shape 精确并集的 0.90 相关阈值 hygiene sensitivity；50k rows，354 features，19 个 drop candidates。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/` | `hist_path` 删除 26 个高重复 hist/path 特征后的 pool-internal closeout；328 features，信号基本保留，`hist_path_pruned_vs_before_summary.csv` 为剪枝前后 compact 对比。 |
-| `experiments/results/backtests/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_*_v1/` | 剪枝后 328 特征上的 PyTorch MLP 单模型对照；`base` 的 `pool_L` next excess 最高，第二轮 `deep_gelu_huber` 的 short / next Rank IC 最好，`silu_wide_lowdrop` 是本轮最接近 `base` 的 overlay challenger。 |
+| `experiments/results/backtests/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_*_v1/` | 剪枝后 328 特征上的 PyTorch MLP 单模型对照；第三轮 `deep_gelu_mse` / `base_plus_mse` 的 `pool_L` Top100 next excess 最高，第二轮 `deep_gelu_huber` 的 short / next Rank IC 最好。 |
 | `experiments/results/backtests/nn_lgbm328_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_base_rankblend_v1/` | `mlp_base` 与 LGBM 328 的 rank-centered ensemble；相对 LGBM 328 改善，但没有超过 `mlp_base`、`silu_wide_lowdrop` 或 `deep_gelu_huber`。 |
 | `experiments/results/backtests/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_*_v1/` | wide-deep h64 / h128 Huber 结构扫描归档；h64 overlay 有改善但 Rank IC 弱，h128 next overlay 低于 LGBM 328，均不晋级。 |
 | `experiments/results/backtests/optimization_overlay_acceptance_nn_scan_top3_vs_lgbm328/` | 第二轮 NN scan top3 和 NN+LGBM rankblend 对 LGBM 328 的 market-relative acceptance 图与 plot data。 |
