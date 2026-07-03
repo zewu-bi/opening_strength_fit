@@ -2,7 +2,7 @@
 id = "nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_plus_mse_v1"
 kind = "exploration"
 description = "GPU PyTorch MLP base-neighborhood plus-capacity MSE configuration over 2022-2025 on 328 hist_path_pruned_highdup features; lightly widens mlp_base while preserving ReLU/MSE tail sensitivity."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"
