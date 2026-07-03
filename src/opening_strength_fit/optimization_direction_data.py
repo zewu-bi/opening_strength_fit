@@ -261,6 +261,8 @@ def load_capacity_cumulative_plot_data(
     capacity_directions: tuple[DirectionSpec, ...],
     pool: str,
     capacity_total_notional: float | None = None,
+    summary_filename: str = "capacity_acceptance_daily_summary.csv",
+    source_label: str = "capacity",
 ) -> pd.DataFrame:
     required = {
         "pool",
@@ -274,10 +276,10 @@ def load_capacity_cumulative_plot_data(
     }
     frames = []
     for direction in capacity_directions:
-        path = backtests_root / direction.run_id / "capacity_acceptance_daily_summary.csv"
+        path = backtests_root / direction.run_id / summary_filename
         if not path.exists():
             raise ValueError(
-                "capacity cumulative mode requires capacity_acceptance_daily_summary.csv "
+                f"{source_label} cumulative mode requires {summary_filename} "
                 f"for {direction.key!r}; missing {path}"
             )
         frame = pd.read_csv(path)

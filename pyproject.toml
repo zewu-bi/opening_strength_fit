@@ -31,6 +31,7 @@ dev = [
 [project.scripts]
 osf-analyze-capacity-acceptance = "opening_strength_fit.cli.analyze_capacity_acceptance:main"
 osf-analyze-pool-internal-top100 = "opening_strength_fit.cli.analyze_pool_internal_top100:main"
+osf-analyze-realistic-acceptance = "opening_strength_fit.cli.analyze_realistic_acceptance:main"
 osf-audit-capacity = "opening_strength_fit.cli.audit_capacity:main"
 osf-audit-experiments = "opening_strength_fit.cli.audit_experiments:main"
 osf-audit-exposure = "opening_strength_fit.cli.audit_exposure:main"

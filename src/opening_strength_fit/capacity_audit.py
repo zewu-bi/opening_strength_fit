@@ -85,6 +85,10 @@ def add_capacity_limits(frame: pd.DataFrame, constraints: CapacityConstraints) -
 
     out = frame.copy()
     out[constraints.score_col] = finite_numeric(out[constraints.score_col])
+    if constraints.capacity_price_col and constraints.capacity_price_col in out.columns:
+        out["_capacity_price"] = finite_numeric(out[constraints.capacity_price_col])
+    else:
+        out["_capacity_price"] = np.nan
 
     limit_parts: list[pd.Series] = []
     if constraints.max_symbol_weight > 0:
@@ -206,6 +210,9 @@ def _selected_record(
         "rank": rank,
         "symbol": row["symbol"],
         "score": float(row[constraints.score_col]),
+        "capacity_price": float(row["_capacity_price"])
+        if pd.notna(row["_capacity_price"])
+        else float("nan"),
         "target_notional": target,
         "allocated_notional": allocated,
         "target_weight": allocated / target,
@@ -267,6 +274,7 @@ def _fast_selected_rows(
     ).dt.strftime("%H:%M")
     selected["pool"] = pool
     selected["score"] = finite_numeric(selected[constraints.score_col])
+    selected["capacity_price"] = finite_numeric(selected["_capacity_price"])
     selected["capacity_participation_rate"] = selected["allocated_notional"] / finite_numeric(
         selected["_capacity_notional"]
     )
@@ -284,6 +292,7 @@ def _fast_selected_rows(
             "rank",
             "symbol",
             "score",
+            "capacity_price",
             "target_notional",
             "allocated_notional",
             "target_weight",

@@ -156,6 +156,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Capacity acceptance run for a comparison model, as key=run_id. Repeat as needed.",
     )
     parser.add_argument(
+        "--realistic-baseline-run-id",
+        default="",
+        help="Realistic acceptance backtest directory for the baseline model in realistic mode.",
+    )
+    parser.add_argument(
+        "--realistic-direction",
+        action="append",
+        type=parse_key_run_id,
+        help="Realistic acceptance run for a comparison model, as key=run_id. Repeat as needed.",
+    )
+    parser.add_argument(
         "--include-baseline-universe-cumulative",
         action="store_true",
         help=(
@@ -210,6 +221,8 @@ def main(argv: list[str] | None = None) -> None:
         capacity_decision_notional=capacity_decision_notional,
         capacity_baseline_run_id=args.capacity_baseline_run_id or None,
         capacity_run_ids=dict(args.capacity_direction or []),
+        realistic_baseline_run_id=args.realistic_baseline_run_id or None,
+        realistic_run_ids=dict(args.realistic_direction or []),
         title_prefix=args.title_prefix,
         top_n=args.top_n,
     )

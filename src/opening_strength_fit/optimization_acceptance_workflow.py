@@ -8,6 +8,7 @@ from opening_strength_fit.analysis import write_json
 from opening_strength_fit.optimization_acceptance_plots import (
     CUMULATIVE_MARKET_ALPHA_PANEL_TITLE,
     CUMULATIVE_MODE_CAPACITY,
+    CUMULATIVE_MODE_REALISTIC,
     CUMULATIVE_MODE_TOP100,
     CUMULATIVE_MODES,
     CUMULATIVE_NET_RETURN_PANEL_TITLE,
@@ -25,6 +26,7 @@ from opening_strength_fit.optimization_acceptance_plots import (
     combine_overlay_acceptance_data,
     default_plot_directions,
     ensure_plot_colors,
+    realistic_label,
     validate_plot_directions,
 )
 from opening_strength_fit.optimization_direction_data import (
@@ -65,6 +67,8 @@ def write_optimization_direction_plots(
     capacity_decision_notional: float | None = None,
     capacity_baseline_run_id: str | None = None,
     capacity_run_ids: dict[str, str] | None = None,
+    realistic_baseline_run_id: str | None = None,
+    realistic_run_ids: dict[str, str] | None = None,
     title_prefix: str = "2022-2025",
     top_n: int = 100,
 ) -> dict[str, str]:
@@ -106,28 +110,36 @@ def write_optimization_direction_plots(
             horizon="next",
         )
     )
-    if cumulative_mode == CUMULATIVE_MODE_CAPACITY:
+    if cumulative_mode in {CUMULATIVE_MODE_CAPACITY, CUMULATIVE_MODE_REALISTIC}:
         if capacity_total_notional is None or capacity_total_notional <= 0:
-            raise ValueError("capacity cumulative mode requires capacity_total_notional")
-        if not capacity_baseline_run_id:
-            raise ValueError("capacity cumulative mode requires capacity_baseline_run_id")
-        capacity_run_ids = capacity_run_ids or {}
+            raise ValueError(f"{cumulative_mode} cumulative mode requires capacity_total_notional")
+        summary_filename = "capacity_acceptance_daily_summary.csv"
+        source_label = "capacity"
+        mode_baseline_run_id = capacity_baseline_run_id
+        mode_run_ids = capacity_run_ids or {}
+        if cumulative_mode == CUMULATIVE_MODE_REALISTIC:
+            summary_filename = "realistic_acceptance_daily_summary.csv"
+            source_label = "realistic"
+            mode_baseline_run_id = realistic_baseline_run_id
+            mode_run_ids = realistic_run_ids or {}
+        if not mode_baseline_run_id:
+            raise ValueError(f"{cumulative_mode} cumulative mode requires baseline run id")
         missing_capacity = sorted(
-            direction.key for direction in plot_directions if direction.key not in capacity_run_ids
+            direction.key for direction in plot_directions if direction.key not in mode_run_ids
         )
         if missing_capacity:
-            raise ValueError(f"missing capacity run ids for directions: {missing_capacity}")
+            raise ValueError(f"missing {cumulative_mode} run ids for directions: {missing_capacity}")
         capacity_directions = (
             DirectionSpec(
                 key="baseline_pool_l",
                 label=baseline_label,
-                run_id=capacity_baseline_run_id,
+                run_id=mode_baseline_run_id,
             ),
             *(
                 DirectionSpec(
                     key=direction.key,
                     label=direction.label,
-                    run_id=capacity_run_ids[direction.key],
+                    run_id=mode_run_ids[direction.key],
                 )
                 for direction in plot_directions
             ),
@@ -137,6 +149,8 @@ def write_optimization_direction_plots(
             capacity_directions=capacity_directions,
             pool=pool,
             capacity_total_notional=capacity_total_notional,
+            summary_filename=summary_filename,
+            source_label=source_label,
         )
         realized_source = load_realized_cumulative_plot_data(
             backtests_root=backtests_root,
@@ -225,35 +239,55 @@ def write_optimization_direction_plots(
     top_n_label = f"Top{top_n}"
     next_excess_panel_title = (
         f"next {pool} excess"
-        if cumulative_mode == CUMULATIVE_MODE_CAPACITY
+        if cumulative_mode in {CUMULATIVE_MODE_CAPACITY, CUMULATIVE_MODE_REALISTIC}
         else f"next {pool} {top_n_label} excess"
     )
-    cumulative_capacity_definition = (
-        "In capacity mode, model lines are read from capacity_acceptance_daily_summary.csv. "
-        "That summary is produced by joining capacity_audit_selected.csv allocations with "
-        "next-close labels and weighting each stock by allocated_notional. Capacity audit "
-        "daily summaries remain pure fill/depth diagnostics and do not carry returns."
-    )
-    cumulative_absolute_definition = (
-        "top panel plots market, pool background, baseline capacity portfolio, "
-        "and comparison capacity portfolio cumulative next-close returns. "
-        "Pool/model lines subtract their realized fee before applying the daily "
-        "capital fraction and cumulative summation; market uses universe "
-        "pool_next_mean_bps without a trading fee. Figure axis displays "
-        "cumulative bps divided by 100 as percent"
-        if cumulative_mode == CUMULATIVE_MODE_CAPACITY
-        else (
+    if cumulative_mode == CUMULATIVE_MODE_CAPACITY:
+        cumulative_capacity_definition = (
+            "In capacity mode, model lines are read from capacity_acceptance_daily_summary.csv. "
+            "That summary is produced by joining capacity_audit_selected.csv allocations with "
+            "next-close labels and weighting each stock by allocated_notional. Capacity audit "
+            "daily summaries remain pure fill/depth diagnostics and do not carry returns."
+        )
+        cumulative_absolute_definition = (
+            "top panel plots market, pool background, baseline capacity portfolio, "
+            "and comparison capacity portfolio cumulative next-close returns. "
+            "Pool/model lines subtract their realized fee before applying the daily "
+            "capital fraction and cumulative summation; market uses universe "
+            "pool_next_mean_bps without a trading fee. Figure axis displays "
+            "cumulative bps divided by 100 as percent"
+        )
+    elif cumulative_mode == CUMULATIVE_MODE_REALISTIC:
+        cumulative_capacity_definition = (
+            "In realistic mode, model lines are read from realistic_acceptance_daily_summary.csv. "
+            "That summary replays capacity-selected child orders with practical constraints "
+            "such as non-duplicated rolling turnover, daily symbol caps, optional fill haircuts, "
+            "and cash drag for unfilled notional."
+        )
+        cumulative_absolute_definition = (
+            "top panel plots market, pool background, baseline realistic-constrained portfolio, "
+            "and comparison realistic-constrained portfolio cumulative next-close returns. "
+            "Pool/model lines subtract their realized fee before applying the daily "
+            "capital fraction and cumulative summation; market uses universe "
+            "pool_next_mean_bps without a trading fee. Figure axis displays "
+            "cumulative bps divided by 100 as percent"
+        )
+    else:
+        cumulative_capacity_definition = (
+            "In TopN mode, model lines use selected TopN pool-internal summaries."
+        )
+        cumulative_absolute_definition = (
             "top panel plots market, pool background, baseline selected TopN, and "
             "comparison selected TopN cumulative next-close returns. Pool/model lines "
             "subtract their realized fee before dividing by next_close_capital_divisor "
             "and cumulative summation; market uses universe pool_next_mean_bps without "
             "a trading fee. Figure axis displays cumulative bps divided by 100 as percent"
         )
-    )
     capacity_title_label = capacity_label(
         capacity_total_notional=capacity_total_notional,
         capacity_decision_notional=capacity_decision_notional,
     )
+    realistic_title_label = realistic_label(capacity_total_notional=capacity_total_notional)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     overlay_acceptance_data.to_csv(overlay_acceptance_csv, index=False, float_format="%.6f")
@@ -302,9 +336,11 @@ def write_optimization_direction_plots(
     )
     if cumulative_mode == CUMULATIVE_MODE_CAPACITY:
         cumulative_subject = f"{capacity_title_label or '容量'}隔夜净收益累和"
+    elif cumulative_mode == CUMULATIVE_MODE_REALISTIC:
+        cumulative_subject = f"{realistic_title_label}隔夜净收益累和"
     else:
         cumulative_subject = f"池内{top_n_label}隔夜净收益累和"
-    if capacity_title_label and cumulative_mode != CUMULATIVE_MODE_CAPACITY:
+    if capacity_title_label and cumulative_mode == CUMULATIVE_MODE_TOP100:
         cumulative_subject = f"{cumulative_subject} ({capacity_title_label})"
     cumulative_title = f"{title_prefix} fee {realized_fee_bps:g}bps {cumulative_subject}"
     cumulative_net_values = _panel_values(
@@ -361,6 +397,8 @@ def write_optimization_direction_plots(
         "capacity_decision_notional": capacity_decision_notional,
         "capacity_baseline_run_id": capacity_baseline_run_id,
         "capacity_run_ids": capacity_run_ids or {},
+        "realistic_baseline_run_id": realistic_baseline_run_id,
+        "realistic_run_ids": realistic_run_ids or {},
         "pool_turnover_path": str(pool_turnover_path) if pool_turnover_path else None,
         "pool_fee_mode": pool_fee_mode,
         "daily_cumulative_semantics": (

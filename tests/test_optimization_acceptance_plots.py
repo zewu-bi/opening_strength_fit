@@ -237,6 +237,46 @@ def test_capacity_cumulative_uses_capacity_weighted_acceptance_summary(
     )
 
 
+def test_realistic_cumulative_loader_can_read_realistic_summary_filename(
+    tmp_path: Path,
+) -> None:
+    run_dir = tmp_path / "realistic_run"
+    run_dir.mkdir()
+    pd.DataFrame(
+        {
+            "pool": ["pool_L"],
+            "date": ["2024-01-02"],
+            "week_start": ["2024-01-02"],
+            "capacity_decision_groups": [2],
+            "selected_rows": [3],
+            "selected_allocated_notional": [120.0],
+            "target_notional": [200.0],
+            "capacity_total_notional": [1000.0],
+            "capacity_daily_capital_fraction": [0.2],
+            "gross_next_return_bps": [60.0],
+            "fee_bps": [0.0],
+            "next_net_return_bps": [60.0],
+            "next_capital_net_return_bps": [12.0],
+            "next_net_pnl": [1.2],
+        }
+    ).to_csv(run_dir / "realistic_acceptance_daily_summary.csv", index=False)
+
+    realized = load_capacity_cumulative_plot_data(
+        backtests_root=tmp_path,
+        capacity_directions=(
+            DirectionSpec(key="baseline_pool_l", label="lgbm328", run_id="realistic_run"),
+        ),
+        pool="pool_L",
+        capacity_total_notional=1_000.0,
+        summary_filename="realistic_acceptance_daily_summary.csv",
+        source_label="realistic",
+    )
+
+    assert realized["pool_label"].tolist() == ["lgbm328"]
+    assert realized["selected_next_mean_bps"].tolist() == pytest.approx([60.0])
+    assert realized["next_cumulative_net_return_bps"].tolist() == pytest.approx([12.0])
+
+
 def test_baseline_relative_curve_uses_capital_adjusted_cumulative_difference() -> None:
     data = pd.DataFrame(
         {

@@ -1,0 +1,208 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-asklvl-t10p20-v1
+  namespace: bizewu
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      volumes:
+        - name: opening-strength-output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+      containers:
+        - name: opening-strength-fit
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260703-cap-t10p20-v1
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: xy-fit-ceph-credentials
+          workingDir: /app/opening_strength_fit
+          command:
+            - /bin/bash
+            - -lc
+            - |
+              set -euo pipefail
+              echo "ask_level_attribution: started at $(date -u)"
+              python -u - <<'PY'
+              from pathlib import Path
+
+              import numpy as np
+              import pandas as pd
+              import pyarrow.parquet as pq
+
+              KEYS = ["date", "symbol", "decision_target_timestamp"]
+              LEVELS = range(1, 11)
+
+              def normalize_keys(frame: pd.DataFrame) -> pd.DataFrame:
+                  out = frame.copy()
+                  out["date"] = pd.to_datetime(out["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+                  out["symbol"] = out["symbol"].astype(str)
+                  out["decision_target_timestamp"] = pd.to_datetime(
+                      out["decision_target_timestamp"],
+                      errors="coerce",
+                  )
+                  return out.dropna(subset=KEYS)
+
+              def numeric(series: pd.Series) -> pd.Series:
+                  return pd.to_numeric(series, errors="coerce").replace([np.inf, -np.inf], np.nan)
+
+              def prediction_files(root: Path) -> list[Path]:
+                  files = sorted(root.glob("month_*/predictions.parquet"))
+                  if not files and root.is_file():
+                      files = [root]
+                  if not files:
+                      raise SystemExit(f"no prediction files under {root}")
+                  return files
+
+              def load_selected(path: str, *, name: str) -> pd.DataFrame:
+                  print(f"{name}: loading selected from {path}", flush=True)
+                  chunks = []
+                  usecols = KEYS + ["allocated_notional"]
+                  for idx, chunk in enumerate(pd.read_csv(path, usecols=usecols, chunksize=500_000), 1):
+                      chunk = normalize_keys(chunk)
+                      chunk["allocated_notional"] = numeric(chunk["allocated_notional"]).fillna(0.0)
+                      chunks.append(chunk)
+                      print(f"{name}: selected chunk {idx} rows={len(chunk)}", flush=True)
+                  selected = pd.concat(chunks, ignore_index=True) if chunks else pd.DataFrame(columns=usecols)
+                  print(f"{name}: selected rows={len(selected)}", flush=True)
+                  return selected
+
+              def read_book(file: Path, selected_keys: pd.DataFrame) -> pd.DataFrame:
+                  cols = pq.ParquetFile(file).schema.names
+                  cols_set = set(cols)
+                  read_cols = [column for column in KEYS if column in cols_set]
+                  if len(read_cols) != len(KEYS):
+                      raise SystemExit(f"{file} missing key columns")
+                  level_cols = []
+                  for level in LEVELS:
+                      for prefix in ("ask_price", "ask_volume"):
+                          column = f"{prefix}_{level}"
+                          if column in cols_set:
+                              level_cols.append(column)
+                  if not level_cols:
+                      raise SystemExit(f"{file} has no ask_price_i/ask_volume_i columns")
+                  frame = pd.read_parquet(file, columns=read_cols + level_cols)
+                  frame = normalize_keys(frame)
+                  return frame.merge(selected_keys, on=KEYS, how="inner")
+
+              def level_stats(frame: pd.DataFrame) -> dict[str, float]:
+                  allocated = numeric(frame["allocated_notional"]).fillna(0.0).clip(lower=0.0)
+                  remaining = allocated.copy()
+                  out: dict[str, float] = {
+                      "rows": float(len(frame)),
+                      "allocated_notional": float(allocated.sum()),
+                  }
+                  cumulative_fill = pd.Series(0.0, index=frame.index)
+                  for level in LEVELS:
+                      price_col = f"ask_price_{level}"
+                      volume_col = f"ask_volume_{level}"
+                      if price_col not in frame.columns or volume_col not in frame.columns:
+                          level_notional = pd.Series(0.0, index=frame.index)
+                      else:
+                          level_notional = (
+                              numeric(frame[price_col]).fillna(0.0).clip(lower=0.0)
+                              * numeric(frame[volume_col]).fillna(0.0).clip(lower=0.0)
+                          )
+                      fill = np.minimum(remaining, level_notional)
+                      fill = pd.Series(fill, index=frame.index).clip(lower=0.0)
+                      remaining = (remaining - fill).clip(lower=0.0)
+                      cumulative_fill = cumulative_fill + fill
+                      out[f"ask{level}_notional"] = float(level_notional.sum())
+                      out[f"fill_ask{level}"] = float(fill.sum())
+                      out[f"full_within_ask{level}_rows"] = float((cumulative_fill >= allocated - 1e-9).sum())
+                  out["beyond_ask10"] = float(remaining.sum())
+                  return out
+
+              def combine_stats(parts: list[dict[str, float]]) -> pd.DataFrame:
+                  if not parts:
+                      return pd.DataFrame()
+                  totals: dict[str, float] = {}
+                  for part in parts:
+                      for key, value in part.items():
+                          totals[key] = totals.get(key, 0.0) + float(value)
+                  allocated = totals.get("allocated_notional", 0.0)
+                  rows = totals.get("rows", 0.0)
+                  records = []
+                  cumulative_fill = 0.0
+                  for level in LEVELS:
+                      fill = totals.get(f"fill_ask{level}", 0.0)
+                      cumulative_fill += fill
+                      records.append(
+                          {
+                              "bucket": f"ask{level}",
+                              "filled_notional": fill,
+                              "filled_share": fill / allocated if allocated > 0 else np.nan,
+                              "cumulative_filled_share": cumulative_fill / allocated
+                              if allocated > 0
+                              else np.nan,
+                              "full_within_rows": totals.get(f"full_within_ask{level}_rows", 0.0),
+                              "full_within_row_share": totals.get(f"full_within_ask{level}_rows", 0.0) / rows
+                              if rows > 0
+                              else np.nan,
+                              "displayed_level_notional": totals.get(f"ask{level}_notional", 0.0),
+                          }
+                      )
+                  records.append(
+                      {
+                          "bucket": "beyond_ask10",
+                          "filled_notional": totals.get("beyond_ask10", 0.0),
+                          "filled_share": totals.get("beyond_ask10", 0.0) / allocated
+                          if allocated > 0
+                          else np.nan,
+                          "cumulative_filled_share": 1.0,
+                          "full_within_rows": np.nan,
+                          "full_within_row_share": np.nan,
+                          "displayed_level_notional": np.nan,
+                      }
+                  )
+                  return pd.DataFrame(records)
+
+              def extract(name: str, selected_path: str, prediction_root: str, output_dir: str) -> None:
+                  selected = load_selected(selected_path, name=name)
+                  selected_keys = selected[KEYS].drop_duplicates(KEYS)
+                  parts = []
+                  for file in prediction_files(Path(prediction_root)):
+                      print(f"{name}: reading {file}", flush=True)
+                      book = read_book(file, selected_keys)
+                      if book.empty:
+                          print(f"{name}: matched rows=0", flush=True)
+                          continue
+                      book = book.merge(selected, on=KEYS, how="inner", validate="one_to_one")
+                      print(f"{name}: matched rows={len(book)}", flush=True)
+                      parts.append(level_stats(book))
+                  summary = combine_stats(parts)
+                  output = Path(output_dir)
+                  output.mkdir(parents=True, exist_ok=True)
+                  summary.to_csv(output / "ask_level_attribution_summary.csv", index=False)
+                  print(summary.to_string(index=False), flush=True)
+                  print(f"{name}: wrote {output / 'ask_level_attribution_summary.csv'}", flush=True)
+
+              extract(
+                  "lgbm328",
+                  "/mnt/output/opening_strength_fit/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_t10p20_capacityonly_v1/capacity_audit_selected.csv",
+                  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1",
+                  "/mnt/output/opening_strength_fit/ask_level_attribution_lgbm328_t10p20_v1",
+              )
+              extract(
+                  "mlp_base",
+                  "/mnt/output/opening_strength_fit/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_t10p20_capacityonly_v1/capacity_audit_selected.csv",
+                  "/mnt/output/opening_strength_fit/nn/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_v1",
+                  "/mnt/output/opening_strength_fit/ask_level_attribution_mlp_base_t10p20_v1",
+              )
+              PY
+          volumeMounts:
+            - name: opening-strength-output
+              mountPath: /mnt/output
+          resources:
+            requests:
+              cpu: "8"
+              memory: 128Gi
+            limits:
+              cpu: "16"
+              memory: 256Gi

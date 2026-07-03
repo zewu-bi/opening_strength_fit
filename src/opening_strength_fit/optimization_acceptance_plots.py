@@ -59,7 +59,8 @@ CUMULATIVE_NET_RETURN_PANEL_TITLE = "扣除手续费累和收益"
 CUMULATIVE_MARKET_ALPHA_PANEL_TITLE = "对比全A股市场平均alpha"
 CUMULATIVE_MODE_TOP100 = "top100"
 CUMULATIVE_MODE_CAPACITY = "capacity"
-CUMULATIVE_MODES = (CUMULATIVE_MODE_TOP100, CUMULATIVE_MODE_CAPACITY)
+CUMULATIVE_MODE_REALISTIC = "realistic"
+CUMULATIVE_MODES = (CUMULATIVE_MODE_TOP100, CUMULATIVE_MODE_CAPACITY, CUMULATIVE_MODE_REALISTIC)
 
 
 def default_plot_directions(
@@ -484,6 +485,16 @@ def capacity_label(
         return ""
     total_yi = float(capacity_total_notional) / 100_000_000.0
     return f"{total_yi:g}亿容量"
+
+
+def realistic_label(
+    *,
+    capacity_total_notional: float | None,
+) -> str:
+    if not capacity_total_notional:
+        return "真实约束"
+    total_yi = float(capacity_total_notional) / 100_000_000.0
+    return f"{total_yi:g}亿真实约束"
 
 
 def _attach_capacity_fraction_to_market_source(
