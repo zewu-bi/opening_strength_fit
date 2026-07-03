@@ -118,8 +118,12 @@ universe 打分并额外写出 `stock_pool_member` 和 stock-pool score buckets�
 
 ```text
 没有可复用镜像，或改了 src / pyproject / Dockerfile / 依赖 -> 全量 build/push
-只有 experiments/runs/*.toml 变化，且旧镜像已有所需代码和依赖 -> 基于旧镜像做 config overlay
+只有 experiments/runs/*.toml 变化，且旧镜像已有所需代码和依赖 -> 必须基于旧镜像做 config overlay
 ```
+
+不要为了只新增或修改 TOML 重新 full build/push。full build 会重新上传应用层，registry 上会多出
+一套不必要的 manifest/layer；config overlay 只在旧代码和依赖层上替换 `experiments/runs/`，
+可以最大化复用 registry 已有空间。
 
 通用变量：
 
@@ -129,19 +133,17 @@ PURPOSE=lgbm-cpu
 VERSION=$(date +%Y%m%d)-${PURPOSE}-v1
 ```
 
-当前已验证 base tag（2026-07-02；有更新镜像后替换这里）：
+当前已验证 base tag（2026-07-03；有更新镜像后替换这里）：
 
 | use case | base tag | rule |
 | --- | --- | --- |
-| CPU-only：LightGBM、pool-internal analysis、capacity / exposure audit | `20260625-capacity-audit-v6` | 优先用 1G CPU base 做 TOML overlay。 |
+| CPU-only：LightGBM、pool-internal analysis、capacity / exposure audit / capacity acceptance | `20260702-capacity-acceptance-v2` | 优先用 1G CPU base 做 TOML overlay。 |
 | GPU NN training：`torch_mlp` + `device = "cuda"` + GPU request | `20260702-nn-neighborhood-v1` | 优先用 9G GPU base 做 TOML overlay。 |
 | Dockerfile upstream base | `python:3.12-slim` | 只作为 build base，不直接用于 K8s Job。 |
 
 GPU 镜像能在 CPU 环境启动，但 CPU-only Job 不应该引用 9G GPU 镜像；它会让节点拉取 CUDA
 torch layer，成本高且没有收益。NN training 和 analysis 分开渲染时，同一批 TOML 可以分别做
-GPU overlay 给 training、CPU overlay 给 pool-internal analysis / audit。当前 1G CPU base 不含
-`osf-build-exposure-input`；复跑 exposure input 时应先 full build 一个新的 CPU 镜像，或临时用
-当前 9G GPU 镜像承载这个 CPU 命令。
+GPU overlay 给 training、CPU overlay 给 pool-internal analysis / audit。
 
 没有可复用镜像时做全量 build。CPU / LightGBM 镜像：
 
@@ -168,10 +170,11 @@ docker push ${IMAGE_REPO}:${VERSION}
 base：CPU-only 用 CPU base，GPU NN training 用 GPU base。overlay 会把当前 repo 的
 `experiments/runs/` 同步进新镜像，日常效果就是在旧镜像代码和依赖层上加入新实验配置，
 同时去掉当前 repo 已经删除的旧配置，避免为每组新实验重新上传大 layer。
-如果 `docker pull ${BASE_IMAGE}` 失败，回到全量 build 路径：
+只有在旧镜像缺少所需代码/入口/依赖，或 `docker pull ${BASE_IMAGE}` 失败时，才回到全量
+build 路径：
 
 ```bash
-BASE_VERSION=20260625-capacity-audit-v6   # CPU-only overlay
+BASE_VERSION=20260702-capacity-acceptance-v2   # CPU-only overlay
 # BASE_VERSION=20260702-nn-neighborhood-v1  # GPU NN training overlay
 PURPOSE=cpu-config
 # PURPOSE=nn-config
