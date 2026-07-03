@@ -30,7 +30,7 @@ spec:
                     - node21
       containers:
         - name: opening-strength-fit
-          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260702-nn-neighborhood-v1
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260702-capacity-acceptance-v2
           imagePullPolicy: Always
           envFrom:
             - secretRef:
