@@ -90,4 +90,3 @@ def read_prediction_frames(
     if not frames:
         raise SystemExit("no prediction files supplied")
     return normalize_keys(pd.concat(frames, ignore_index=True))
-

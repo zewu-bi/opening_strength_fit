@@ -299,7 +299,9 @@ def apply_target_transform_from_config(frame: pd.DataFrame, config: dict) -> pd.
     if "valid_label" in out.columns:
         valid &= out["valid_label"].fillna(False).astype(bool)
     grouped = values.where(valid).groupby([out[column] for column in group_cols], sort=False)
-    rank_pct = grouped.rank(method=config_str(config, "target_transform", "rank_method", "average"), pct=True)
+    rank_pct = grouped.rank(
+        method=config_str(config, "target_transform", "rank_method", "average"), pct=True
+    )
     if mode == "rank_pct":
         target = rank_pct
     else:
@@ -369,9 +371,7 @@ def apply_sample_weight_from_config(
         return out
 
     if mode not in {"candidate_mask", "guard", "rank_mask"}:
-        raise SystemExit(
-            "sample_weight.mode must be candidate_mask/rank_mask/guard or date_linear"
-        )
+        raise SystemExit("sample_weight.mode must be candidate_mask/rank_mask/guard or date_linear")
     pass_weight = config_float(config, "sample_weight", "pass_weight", 1.0)
     fail_weight = config_float(config, "sample_weight", "fail_weight", 0.25)
     mask = opening_candidate_mask(

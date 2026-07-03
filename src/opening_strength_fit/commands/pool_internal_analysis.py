@@ -554,7 +554,9 @@ def main() -> None:
 
         if args.report_dir:
             plot_prefix = args.plot_prefix or slug_label(args.variant or args.run_id)
-            plot_variant_label = args.plot_variant_label or args.variant or args.run_id or plot_prefix
+            plot_variant_label = (
+                args.plot_variant_label or args.variant or args.run_id or plot_prefix
+            )
             plot_summary = quarterly if args.plot_period == "quarter" else month_summary
             plot_summary_path = (
                 quarter_summary_path if args.plot_period == "quarter" else month_summary_path
@@ -594,12 +596,16 @@ def main() -> None:
             )
 
     if run_company:
-        company_output_dir = Path(args.company_output_dir) if args.company_output_dir else (
-            output_dir / "company_backtest_api"
+        company_output_dir = (
+            Path(args.company_output_dir)
+            if args.company_output_dir
+            else (output_dir / "company_backtest_api")
         )
         default_plot_dir = Path(args.report_dir) if args.report_dir else output_dir
-        company_plot_dir = Path(args.company_plot_dir) if args.company_plot_dir else (
-            default_plot_dir / "company_backtest_api"
+        company_plot_dir = (
+            Path(args.company_plot_dir)
+            if args.company_plot_dir
+            else (default_plot_dir / "company_backtest_api")
         )
         company_trace = run_company_backtest_analysis(
             predictions,

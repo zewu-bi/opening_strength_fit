@@ -202,7 +202,9 @@ def create_company_backtest_payload(
     return_eod: bool,
 ) -> bytes:
     packed_score: dict[str, Any] | dict[str, dict[str, Any]]
-    packed_score = pack_company_score_frame(score) if daily else {api_time: pack_company_score_frame(score)}
+    packed_score = (
+        pack_company_score_frame(score) if daily else {api_time: pack_company_score_frame(score)}
+    )
     payload: dict[str, Any] = {"score": packed_score, "tar": tar}
     if cap is not None:
         payload["cap"] = cap
@@ -384,25 +386,29 @@ def company_backtest_neutral_comparison_plot_data(
     model_item["pool"] = model_key
     model_item["pool_label"] = model_label
     model_item["incremental_cumulative_bps"] = pd.NA
-    model_item = model_item[[
-        "pool",
-        "pool_label",
-        "week_start",
-        "profit_cumulative_bps",
-        "incremental_cumulative_bps",
-    ]]
+    model_item = model_item[
+        [
+            "pool",
+            "pool_label",
+            "week_start",
+            "profit_cumulative_bps",
+            "incremental_cumulative_bps",
+        ]
+    ]
 
     neutral_item = neutral.copy()
     neutral_item["pool"] = neutral_key
     neutral_item["pool_label"] = neutral_label
     neutral_item["incremental_cumulative_bps"] = pd.NA
-    neutral_item = neutral_item[[
-        "pool",
-        "pool_label",
-        "week_start",
-        "profit_cumulative_bps",
-        "incremental_cumulative_bps",
-    ]]
+    neutral_item = neutral_item[
+        [
+            "pool",
+            "pool_label",
+            "week_start",
+            "profit_cumulative_bps",
+            "incremental_cumulative_bps",
+        ]
+    ]
 
     delta = company_backtest_relative_plot_data(
         model,
@@ -412,13 +418,15 @@ def company_backtest_neutral_comparison_plot_data(
     )
     delta["profit_cumulative_bps"] = pd.NA
     delta = delta.rename(columns={"alpha_cumulative_bps": "incremental_cumulative_bps"})
-    delta = delta[[
-        "pool",
-        "pool_label",
-        "week_start",
-        "profit_cumulative_bps",
-        "incremental_cumulative_bps",
-    ]]
+    delta = delta[
+        [
+            "pool",
+            "pool_label",
+            "week_start",
+            "profit_cumulative_bps",
+            "incremental_cumulative_bps",
+        ]
+    ]
     return pd.concat([model_item, neutral_item, delta], ignore_index=True)
 
 
@@ -526,7 +534,9 @@ def run_company_backtest_analysis(
         top_n=company_top_n,
     )
     series_key = args.company_series_key or slug_label(args.variant or args.run_id or "company")
-    series_label = args.company_series_label or args.plot_variant_label or args.variant or series_key
+    series_label = (
+        args.company_series_label or args.plot_variant_label or args.variant or series_key
+    )
     model_job = run_company_score_backtest(
         score,
         score_long,
@@ -613,11 +623,11 @@ def run_company_backtest_analysis(
         "neutral_delta_plot_paths": neutral_delta_plot_paths,
         "plot_paths": {
             **model_job["plot_paths"],
-            **{f"neutral_{key}": value for key, value in neutral_trace.get("plot_paths", {}).items()},
             **{
-                f"neutral_delta_{key}": value
-                for key, value in neutral_delta_plot_paths.items()
+                f"neutral_{key}": value
+                for key, value in neutral_trace.get("plot_paths", {}).items()
             },
+            **{f"neutral_delta_{key}": value for key, value in neutral_delta_plot_paths.items()},
         },
     }
     write_json(output_dir / "company_backtest_trace.json", trace, ensure_ascii=True)

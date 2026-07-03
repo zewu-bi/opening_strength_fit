@@ -56,5 +56,6 @@ class DelayFreshnessTest(unittest.TestCase):
         self.assertTrue(pd.isna(first["entry_delay_seconds"]))
         self.assertTrue(pd.isna(first["entry_max_tick_gap_seconds"]))
 
+
 if __name__ == "__main__":
     unittest.main()

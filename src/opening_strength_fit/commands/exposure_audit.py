@@ -57,9 +57,7 @@ OUTPUT_FILES = (
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=(
-            "Audit TopN or supplied-portfolio exposure versus its candidate pool."
-        )
+        description=("Audit TopN or supplied-portfolio exposure versus its candidate pool.")
     )
     parser.add_argument("--config", default="")
     parser.add_argument("--predictions", action="append")
@@ -101,7 +99,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _arg_list(args: argparse.Namespace, config: dict, name: str, default: Iterable[str]) -> list[str]:
+def _arg_list(
+    args: argparse.Namespace, config: dict, name: str, default: Iterable[str]
+) -> list[str]:
     value = getattr(args, name)
     if value:
         return list(value)
@@ -110,11 +110,15 @@ def _arg_list(args: argparse.Namespace, config: dict, name: str, default: Iterab
 
 def _arg_str(args: argparse.Namespace, config: dict, name: str, default: str = "") -> str:
     value = getattr(args, name)
-    return str(value) if value not in (None, "") else config_str(
-        config,
-        "exposure_audit",
-        name,
-        default,
+    return (
+        str(value)
+        if value not in (None, "")
+        else config_str(
+            config,
+            "exposure_audit",
+            name,
+            default,
+        )
     )
 
 
@@ -192,9 +196,7 @@ def _merge_support_frame(
     if support.empty:
         return frame
     keyed = support.drop_duplicates(keys, keep="last")
-    overlap = [
-        column for column in keyed.columns if column not in keys and column in frame.columns
-    ]
+    overlap = [column for column in keyed.columns if column not in keys and column in frame.columns]
     merged = frame.merge(
         keyed,
         on=keys,
@@ -313,7 +315,11 @@ def _load_audit_frame(
     for column in prediction_derived_source_columns:
         if column not in prediction_columns:
             prediction_columns.append(column)
-    if industry_col and industry_col in prediction_available and industry_col not in exposure_available:
+    if (
+        industry_col
+        and industry_col in prediction_available
+        and industry_col not in exposure_available
+    ):
         prediction_columns.append(industry_col)
 
     predictions = normalize_audit_frame(
@@ -445,11 +451,15 @@ def main() -> None:
     selection_col = _arg_str(args, config, "selection_col", "")
     weight_col = _arg_str(args, config, "weight_col", "")
     industry_col = _arg_str(args, config, "industry_col", "")
-    top_n = args.top_n if args.top_n is not None else config_int(
-        config,
-        "exposure_audit",
-        "top_n",
-        100,
+    top_n = (
+        args.top_n
+        if args.top_n is not None
+        else config_int(
+            config,
+            "exposure_audit",
+            "top_n",
+            100,
+        )
     )
     pool_date_lag_sessions = (
         args.pool_date_lag_sessions
@@ -528,9 +538,7 @@ def main() -> None:
             )
         )
 
-    group_metrics = (
-        pd.concat(group_frames, ignore_index=True) if group_frames else pd.DataFrame()
-    )
+    group_metrics = pd.concat(group_frames, ignore_index=True) if group_frames else pd.DataFrame()
     month_summary = summarize_exposure_groups(
         group_metrics,
         ["pool", "test_month", "category", "exposure"],
@@ -618,11 +626,7 @@ def main() -> None:
             "active_share",
             "abs_active_share",
         ]
-        print(
-            industry_summary[industry_display_cols]
-            .head(30)
-            .to_string(index=False)
-        )
+        print(industry_summary[industry_display_cols].head(30).to_string(index=False))
     if record_paths:
         print("\nrecorded_exposure_audit_outputs:")
         for path in record_paths:

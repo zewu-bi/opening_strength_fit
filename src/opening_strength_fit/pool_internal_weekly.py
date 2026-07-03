@@ -315,4 +315,3 @@ def _date_text(value: object) -> str:
     if pd.isna(timestamp):
         return ""
     return timestamp.strftime("%Y-%m-%d")
-

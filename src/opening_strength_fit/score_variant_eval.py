@@ -169,4 +169,3 @@ def summarize_group_metrics(group_metrics: pd.DataFrame) -> tuple[pd.DataFrame, 
         .sort_values(["next_top_excess_bps", "short_top_excess_bps"], ascending=[False, False])
     )
     return month_summary, summary
-

@@ -373,9 +373,7 @@ def pull_feature_hygiene_artifacts(
         FEATURE_HYGIENE_ARTIFACTS,
     )
     if not pulled:
-        raise SystemExit(
-            f"{spec.run_id}: no feature-hygiene artifacts found under {spec.pvc_dir}"
-        )
+        raise SystemExit(f"{spec.run_id}: no feature-hygiene artifacts found under {spec.pvc_dir}")
     record_artifact_fetch(spec, output_dir, pulled, missing)
     return pulled
 

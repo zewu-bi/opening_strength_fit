@@ -346,9 +346,7 @@ def _cross_sectional_relative_source_columns(config: dict, available: set[str]) 
             prefixes=tuple(
                 config_list(config, "features", "cross_sectional_relative_prefixes", [])
             ),
-            patterns=tuple(
-                config_list(config, "features", "cross_sectional_relative_regexes", [])
-            ),
+            patterns=tuple(config_list(config, "features", "cross_sectional_relative_regexes", [])),
         )
     )
     return source

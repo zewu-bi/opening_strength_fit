@@ -227,13 +227,14 @@ def test_capacity_cumulative_uses_capacity_weighted_acceptance_summary(
     assert realized["next_capital_net_return_bps"].tolist() == pytest.approx([66.0, 96.0])
     assert realized["next_cumulative_net_return_bps"].tolist() == pytest.approx([66.0, 162.0])
     assert realized["next_net_pnl"].tolist() == pytest.approx([660_000.0, 960_000.0])
-    assert realized["next_cumulative_net_pnl"].tolist() == pytest.approx(
-        [660_000.0, 1_620_000.0]
+    assert realized["next_cumulative_net_pnl"].tolist() == pytest.approx([660_000.0, 1_620_000.0])
+    assert (
+        capacity_label(
+            capacity_total_notional=1_000_000_000.0,
+            capacity_decision_notional=50_000_000.0,
+        )
+        == "10亿容量"
     )
-    assert capacity_label(
-        capacity_total_notional=1_000_000_000.0,
-        capacity_decision_notional=50_000_000.0,
-    ) == "10亿容量"
 
 
 def test_baseline_relative_curve_uses_capital_adjusted_cumulative_difference() -> None:

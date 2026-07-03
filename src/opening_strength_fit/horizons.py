@@ -68,4 +68,3 @@ def horizon_specs(values: Iterable[str]) -> list[HorizonSpec]:
         label = name.replace("_", " ")
         specs.append(HorizonSpec(name=name, label=label, seconds=seconds))
     return specs
-

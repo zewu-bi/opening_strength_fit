@@ -44,6 +44,7 @@ OUTPUT_FILES = (
     "capacity_audit_trace.json",
 )
 
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(

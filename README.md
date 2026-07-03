@@ -22,11 +22,12 @@ acceptance: universe short Rank IC; pool_L next overlay; market-relative alpha; 
 | [docs/project_brief.md](docs/project_brief.md) | 当前判断、固定口径、验收 gate 和下一步目标。 |
 | [docs/experiment_log.md](docs/experiment_log.md) | 实验事实源：run id、数字、状态、归档路径。 |
 | [docs/runbook.md](docs/runbook.md) | 可执行流程和命令。 |
+| [docs/promotion_checklist.md](docs/promotion_checklist.md) | 候选模型晋级 final candidate 的最小证据包。 |
 | [docs/project_map.md](docs/project_map.md) | 代码、CLI、目录索引。 |
 | [experiments/README.md](experiments/README.md) | 实验目录和 run kind 入口。 |
 
-更新文档时按职责放置：当前判断写 brief，实验事实写 log，命令写 runbook，代码索引写 map。
-不要在多个文档重复同一段操作规则或实验结论。
+更新文档时按职责放置：当前判断写 brief，实验事实写 log，命令写 runbook，晋级标准写
+promotion checklist，代码索引写 map。不要在多个文档重复同一段操作规则或实验结论。
 
 ## 常用命令
 

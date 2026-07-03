@@ -14,9 +14,9 @@ RUN apt-get update \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md requirements.lock ./
 COPY src ./src
-RUN python -m pip install .
+RUN python -m pip install -c requirements.lock .
 
 ARG INSTALL_TORCH_CUDA=0
 ARG TORCH_CUDA_INDEX_URL=https://download.pytorch.org/whl/cu124

@@ -10,9 +10,7 @@ from opening_strength_fit.io import frame_columns, read_frame
 RETURN_BPS_DENOMINATOR = 10_000.0
 DEFAULT_CAPACITY_TOTAL_NOTIONAL = 1_000_000_000.0
 DEFAULT_CAPACITY_SLICES = 20.0
-DEFAULT_CAPACITY_DECISION_NOTIONAL = (
-    DEFAULT_CAPACITY_TOTAL_NOTIONAL / DEFAULT_CAPACITY_SLICES
-)
+DEFAULT_CAPACITY_DECISION_NOTIONAL = DEFAULT_CAPACITY_TOTAL_NOTIONAL / DEFAULT_CAPACITY_SLICES
 DEFAULT_CAPACITY_LABEL_COL = NEXT_CLOSE_LABEL_COL
 
 SELECTED_REQUIRED_COLUMNS = (
@@ -104,9 +102,7 @@ def summarize_capacity_acceptance(
         raise ValueError(f"capacity selected rows missing {label_col}: {missing_label_rows}")
 
     merged["_gross_pnl"] = merged["allocated_notional"] * merged[label_col]
-    merged["_fee_pnl"] = (
-        merged["allocated_notional"] * float(fee_bps) / RETURN_BPS_DENOMINATOR
-    )
+    merged["_fee_pnl"] = merged["allocated_notional"] * float(fee_bps) / RETURN_BPS_DENOMINATOR
     merged["_net_pnl"] = merged["_gross_pnl"] - merged["_fee_pnl"]
     group_targets = (
         merged.groupby(["pool", "date", "decision_target_timestamp"], sort=False)
@@ -127,8 +123,8 @@ def summarize_capacity_acceptance(
     daily = daily.join(daily_targets, how="left").reset_index()
     daily["week_start"] = pd.to_datetime(daily["date"], errors="coerce").dt.strftime("%Y-%m-%d")
     daily["capacity_total_notional"] = float(capacity_total_notional)
-    daily["capacity_daily_capital_fraction"] = (
-        daily["target_notional"] / float(capacity_total_notional)
+    daily["capacity_daily_capital_fraction"] = daily["target_notional"] / float(
+        capacity_total_notional
     )
     daily["gross_next_return_bps"] = (
         daily["gross_pnl"] / daily["target_notional"] * RETURN_BPS_DENOMINATOR

@@ -344,9 +344,7 @@ def test_write_company_backtest_neutral_comparison_plot(tmp_path) -> None:
     for path in paths.values():
         assert Path(path).exists()
 
-    figure_text = Path(paths["company_neutral_comparison_figure"]).read_text(
-        encoding="utf-8"
-    )
+    figure_text = Path(paths["company_neutral_comparison_figure"]).read_text(encoding="utf-8")
     assert "model - neutral 公司API neutral baseline" in figure_text
     assert "收益累和" in figure_text
     assert "相对 neutral_pool 增量" in figure_text

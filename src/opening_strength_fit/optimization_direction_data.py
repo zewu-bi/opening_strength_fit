@@ -72,7 +72,9 @@ def load_horizon_plot_data(
         item["pool"] = direction.key
         item["pool_label"] = direction.label
         item["variant"] = direction.label
-        frames.append(item[["test_month", "variant", "pool", "pool_label", *value_columns[horizon]]])
+        frames.append(
+            item[["test_month", "variant", "pool", "pool_label", *value_columns[horizon]]]
+        )
     combined = pd.concat(frames, ignore_index=True)
     return sort_month_major(combined)
 
@@ -228,31 +230,26 @@ def load_realized_cumulative_plot_data(
         next_capital_values = next_values * capital_fraction
         pool_next_capital_values = pool_next_values * capital_fraction
         next_internal_excess_values = (
-            pd.to_numeric(item["next_internal_excess_bps"], errors="coerce")
-            * capital_fraction
+            pd.to_numeric(item["next_internal_excess_bps"], errors="coerce") * capital_fraction
         )
         combined.loc[item.index, "capacity_decision_groups"] = decision_groups.to_numpy()
-        combined.loc[item.index, "capacity_daily_capital_fraction"] = (
-            capital_fraction.to_numpy()
-        )
+        combined.loc[item.index, "capacity_daily_capital_fraction"] = capital_fraction.to_numpy()
         combined.loc[item.index, "capacity_total_notional"] = pd.NA
         combined.loc[item.index, "capacity_decision_notional"] = pd.NA
         combined.loc[item.index, "next_capital_net_return_bps"] = next_capital_values
         combined.loc[item.index, "pool_next_capital_net_return_bps"] = pool_next_capital_values
-        combined.loc[item.index, "next_capital_internal_excess_bps"] = (
-            next_internal_excess_values
-        )
+        combined.loc[item.index, "next_capital_internal_excess_bps"] = next_internal_excess_values
         combined.loc[item.index, "short_cumulative_net_return_bps"] = cumulative_sum_bps(
             short_values
         )
-        combined.loc[item.index, "next_cumulative_net_return_bps"] = (
-            cumulative_sum_bps(next_capital_values)
+        combined.loc[item.index, "next_cumulative_net_return_bps"] = cumulative_sum_bps(
+            next_capital_values
         )
-        combined.loc[item.index, "pool_next_cumulative_net_return_bps"] = (
-            cumulative_sum_bps(pool_next_capital_values)
+        combined.loc[item.index, "pool_next_cumulative_net_return_bps"] = cumulative_sum_bps(
+            pool_next_capital_values
         )
-        combined.loc[item.index, "next_cumulative_internal_excess_return_bps"] = (
-            cumulative_sum_bps(next_internal_excess_values)
+        combined.loc[item.index, "next_cumulative_internal_excess_return_bps"] = cumulative_sum_bps(
+            next_internal_excess_values
         )
     combined["week_start"] = combined["week_start"].dt.strftime("%Y-%m-%d")
     return combined
@@ -316,10 +313,9 @@ def load_capacity_cumulative_plot_data(
             item["capacity_total_notional"],
             errors="coerce",
         )
-        item["capacity_decision_notional"] = (
-            pd.to_numeric(item["target_notional"], errors="coerce")
-            / pd.to_numeric(item["capacity_decision_groups"], errors="coerce").replace(0, pd.NA)
-        )
+        item["capacity_decision_notional"] = pd.to_numeric(
+            item["target_notional"], errors="coerce"
+        ) / pd.to_numeric(item["capacity_decision_groups"], errors="coerce").replace(0, pd.NA)
         missing_fraction = item["capacity_daily_capital_fraction"].isna()
         if missing_fraction.any():
             item.loc[missing_fraction, "capacity_daily_capital_fraction"] = (
@@ -496,9 +492,7 @@ def _load_one_realized_plot_data(
         date_key = item["week_start"].dt.strftime("%Y-%m-%d")
         realized_pool_turnover = date_key.map(pool_turnover_by_date)
         item["pool_turnover"] = realized_pool_turnover.fillna(estimated_pool_turnover)
-        item.loc[realized_pool_turnover.notna(), "pool_turnover_source"] = (
-            "stock_pool_membership"
-        )
+        item.loc[realized_pool_turnover.notna(), "pool_turnover_source"] = "stock_pool_membership"
     else:
         item["pool_turnover_source"] = "selected_rows_over_candidate_rows"
         item["pool_turnover"] = estimated_pool_turnover
@@ -700,7 +694,9 @@ def sort_month_major(frame: pd.DataFrame) -> pd.DataFrame:
     return data.reset_index(drop=True)
 
 
-def source_files(backtests_root: Path, directions: tuple[DirectionSpec, ...]) -> dict[str, dict[str, str]]:
+def source_files(
+    backtests_root: Path, directions: tuple[DirectionSpec, ...]
+) -> dict[str, dict[str, str]]:
     return {
         direction.key: {
             "short": str(backtests_root / direction.run_id / "short_excess_rank_ic_plot_data.csv"),

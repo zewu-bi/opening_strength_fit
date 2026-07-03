@@ -91,11 +91,7 @@ def _arg_str(args: argparse.Namespace, config: dict, name: str, default: str = "
 
 def _arg_int(args: argparse.Namespace, config: dict, name: str, default: int) -> int:
     value = getattr(args, name)
-    return (
-        int(value)
-        if value is not None
-        else config_int(config, "exposure_input", name, default)
-    )
+    return int(value) if value is not None else config_int(config, "exposure_input", name, default)
 
 
 def _arg_bool(args_value: bool, config: dict, name: str, default: bool = False) -> bool:

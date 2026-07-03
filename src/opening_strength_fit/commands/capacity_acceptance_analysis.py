@@ -101,7 +101,9 @@ def record_capacity_acceptance_outputs(
 def main() -> None:
     args = parse_args()
     config = load_toml(args.config) if args.config else {}
-    run_name = args.run_id or (run_id(config, args.config) if args.config else "capacity_acceptance")
+    run_name = args.run_id or (
+        run_id(config, args.config) if args.config else "capacity_acceptance"
+    )
     selected_inputs = _arg_list(args, config, "selected_input")
     label_inputs = _arg_list(args, config, "label_input")
     if not selected_inputs:

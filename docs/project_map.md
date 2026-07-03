@@ -2,11 +2,12 @@
 
 代码、CLI 和项目目录索引。本文件只回答“东西在哪里”和“入口做什么”。研究判断看
 [project_brief.md](project_brief.md)，实验事实看 [experiment_log.md](experiment_log.md)，运行命令看
-[runbook.md](runbook.md)。
+[runbook.md](runbook.md)，候选晋级标准看 [promotion_checklist.md](promotion_checklist.md)。
 
 ## Root
 
 - `README.md`: project entrypoint and current spine.
+- `docs/promotion_checklist.md`: minimum evidence package before a candidate replaces an incumbent.
 - `Dockerfile`: CPU training image; default command is `osf-train --help`.
 - `pyproject.toml`: package metadata, runtime/dev dependencies, CLI entrypoints, pytest, coverage, and ruff settings.
 - `requirements.lock`: frozen Python environment versions used as a reproducibility baseline.
@@ -46,7 +47,12 @@ Library:
 
 - `src/opening_strength_fit/universe.py`: A-share symbol filtering and symbol-list loading.
 - `src/opening_strength_fit/stock_pool.py`: Ceph/local `date x symbol` bool stock-pool loading, masks, and summaries.
-- `src/opening_strength_fit/features.py`: preopen/auction summaries, orderbook, `postopen_*` trajectory/response features, trade-flow, and momentum features.
+- `src/opening_strength_fit/features.py`: compatibility export surface for feature engineering.
+- `src/opening_strength_fit/features_base.py`: orderbook, trade-flow, momentum, preopen summaries, and the raw tick feature frame.
+- `src/opening_strength_fit/features_postopen.py`: `postopen_*` decision-row trajectory, queue response, and depth-state features.
+- `src/opening_strength_fit/features_history.py`: historical same-minute surprise and path-shape confirmation features.
+- `src/opening_strength_fit/features_relative.py`: cross-sectional relative and price-scale features.
+- `src/opening_strength_fit/feature_utils.py`: shared numeric feature helpers.
 - `src/opening_strength_fit/feature_config.py`: feature include/drop filter and feature-limit config helpers.
 - `src/opening_strength_fit/candidates.py`: visible-information opening candidate filters.
 - `src/opening_strength_fit/targets.py`: cross-sectional demean/zscore/rank, heat-neutral, guard-shrunk, and risk-shrunk transforms.
@@ -57,7 +63,13 @@ Library:
 
 - `src/opening_strength_fit/config.py`: TOML loading, typed config lookup, run id, and slug helpers.
 - `src/opening_strength_fit/analysis.py`: shared research-script helpers for clock/month ranges, next-close labels, finite TopN summaries, and JSON artifact traces.
-- `src/opening_strength_fit/model.py`: Ridge, sklearn GBM, LightGBM, prediction, feature filtering, and IC helpers.
+- `src/opening_strength_fit/model.py`: compatibility export surface for modeling helpers.
+- `src/opening_strength_fit/model_types.py`: prediction model dataclasses and prediction context columns.
+- `src/opening_strength_fit/model_features.py`: numeric feature filtering and target cleaning.
+- `src/opening_strength_fit/model_sklearn.py`: Ridge, sklearn GBM, and LightGBM fitters.
+- `src/opening_strength_fit/model_torch.py`: Torch MLP module construction, training loop, and scoring.
+- `src/opening_strength_fit/model_prediction.py`: prediction dispatch for single, ensemble, and clock-segment models.
+- `src/opening_strength_fit/model_metrics.py`: IC, Rank IC, and grouped evaluation metrics.
 - `src/opening_strength_fit/training.py`: unified training pipeline, configured feature transforms/filters, and output writer.
 - `src/opening_strength_fit/evaluation.py`: score buckets and top-score summaries.
 - `src/opening_strength_fit/capacity_audit.py`: capacity-constrained score portfolio allocation, fill diagnostics, participation limits, and concentration summaries.
@@ -66,6 +78,7 @@ Library:
 - `src/opening_strength_fit/reports.py`: compact dataset summaries, metrics reporting, and yearly aggregation.
 - `src/opening_strength_fit/pool_internal_plots.py` / `pool_internal_plot_svg.py`: pool-internal plot specs and SVG rendering.
 - `src/opening_strength_fit/optimization_acceptance_plots.py`: shared data preparation and rendering for the fixed two-figure overlay acceptance workflow.
+- `src/opening_strength_fit/optimization_acceptance_workflow.py`: orchestration for loading acceptance data, writing figures, and recording trace metadata.
 - `src/opening_strength_fit/rolling.py`: chronological, annual, and monthly split helpers.
 - `src/opening_strength_fit/rules.py`: non-ML baseline scores.
 - `src/opening_strength_fit/alpha_conditioning.py`: alpha-conditioned risk target, section-scoped LightGBM fit, scoring, and group-rank helpers.
