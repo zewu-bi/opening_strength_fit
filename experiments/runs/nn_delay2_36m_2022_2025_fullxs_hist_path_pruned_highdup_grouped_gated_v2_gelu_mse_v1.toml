@@ -1,8 +1,8 @@
 [run]
-id = "nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_gelu_mse_v1"
+id = "nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_gelu_mse_v1"
 kind = "exploration"
-description = "GPU PyTorch grouped gated GELU MSE NN over 2022-2025 on 328 hist_path_pruned_highdup features; learns context gates over semantic feature-group embeddings."
-status = "completed"
+description = "GPU PyTorch grouped gated v2 GELU MSE NN over 2022-2025 on 328 hist_path_pruned_highdup features; uses mechanism-based feature groups, per-group embedding dimensions, and gate diagnostics for pool_L Top100 overlay selection."
+status = "running"
 
 [data]
 source = "labeled_pvc"
@@ -99,9 +99,9 @@ test_end_month = "2025-12"
 [model]
 name = "torch_mlp"
 target_col = "target_label"
-architecture = "grouped_gated"
+architecture = "grouped_gated_v2"
 hidden_layers = [768, 512, 256, 128]
-group_embedding_dim = 48
+group_embedding_dim = 32
 fusion_dim = 256
 block_hidden_dim = 512
 num_blocks = 2
@@ -120,6 +120,21 @@ loss = "mse"
 device = "cuda"
 random_state = 31
 num_workers = 0
+gate_diagnostics_max_rows = 200000
+
+[model.group_embedding_dims]
+preopen_auction = 16
+limit_price_state = 16
+book_depth_level = 48
+book_shape_spread_gap = 48
+book_imbalance_pressure = 32
+trade_activity = 32
+trade_price_impact = 32
+postopen_price_path = 48
+postopen_liquidity_change = 32
+historical_surprise = 48
+path_shape_confirmation = 48
+other = 24
 
 [evaluation]
 score_bins = 10
@@ -129,17 +144,17 @@ ic_mode = "cross_section"
 top_n = 100
 
 [output]
-local_dir = "output/artifacts/nn/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_gelu_mse_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/nn/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_gelu_mse_v1"
+local_dir = "output/artifacts/nn/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_gelu_mse_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/nn/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_gelu_mse_v1"
 
 [k8s]
 namespace = "bizewu"
-job_name = "os-nn-2225-grp-gated-gelu-mse"
+job_name = "os-nn-2225-grp-gated-v2-mse"
 image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
-helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260703-structured-nn-v2"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260707-nn-gated-v2-v1"
 avoid_nodes = ["node7", "node8", "node16", "node20", "node21"]
 wait_for_paths = ["/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2019_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2020_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2021_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2022_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2023_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2024_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2025_delay2_mixed_w030_labeled_v1.parquet"]
 wait_for_path_timeout_seconds = 43200
@@ -159,10 +174,10 @@ gpu_limit = 1
 
 [analysis.pool_internal]
 enabled = true
-job_name = "os-analyze-nn-grp-gated-gelu-mse"
-variant = "nn_grouped_gated_gelu_mse"
-plot_prefix = "nn_grouped_gated_gelu_mse"
-plot_variant_label = "2022-2025 NN grouped gated GELU MSE"
+job_name = "os-analyze-nn-grp-gated-v2-mse"
+variant = "nn_grouped_gated_v2_gelu_mse"
+plot_prefix = "nn_grouped_gated_v2_gelu_mse"
+plot_variant_label = "2022-2025 NN grouped gated v2 GELU MSE"
 plot_period = "quarter"
 pools = ["universe", "L"]
 top_n = 100

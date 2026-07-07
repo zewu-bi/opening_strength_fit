@@ -31,6 +31,7 @@ class _TorchMLPModule:
         architecture: str = "mlp",
         feature_names: tuple[str, ...] = (),
         group_embedding_dim: int = 48,
+        group_embedding_dims: dict[str, int] | None = None,
         fusion_dim: int = 256,
         block_hidden_dim: int = 512,
         num_blocks: int = 2,
@@ -50,7 +51,9 @@ class _TorchMLPModule:
                 "model.activation for torch_mlp must be one of relu, gelu, silu, swish, tanh"
             )
         architecture_name = architecture.strip().lower() or "mlp"
-        grouped_feature_names = feature_names or tuple(f"feature_{index}" for index in range(input_dim))
+        grouped_feature_names = feature_names or tuple(
+            f"feature_{index}" for index in range(input_dim)
+        )
         if architecture_name in {
             "grouped_residual",
             "grouped_residual_gelu",
@@ -71,6 +74,17 @@ class _TorchMLPModule:
             return _GroupedGatedMLP(
                 feature_names=grouped_feature_names,
                 group_embedding_dim=group_embedding_dim,
+                fusion_dim=fusion_dim,
+                dropout=float(dropout),
+                activation=activation_factories[activation_name],
+                torch=_torch,
+                nn=nn,
+            )
+        if architecture_name in {"grouped_gated_v2", "mechanism_grouped_gated"}:
+            return _GroupedGatedV2MLP(
+                feature_names=grouped_feature_names,
+                group_embedding_dim=group_embedding_dim,
+                group_embedding_dims=group_embedding_dims or {},
                 fusion_dim=fusion_dim,
                 dropout=float(dropout),
                 activation=activation_factories[activation_name],
@@ -125,7 +139,8 @@ class _TorchMLPModule:
         if architecture_name not in {"mlp", "sequential"}:
             raise SystemExit(
                 "model.architecture for torch_mlp must be mlp, wide_deep_residual, "
-                "grouped_residual, grouped_gated, grouped_cross, or group_token_transformer"
+                "grouped_residual, grouped_gated, grouped_gated_v2, grouped_cross, "
+                "or group_token_transformer"
             )
         layers = []
         current_dim = int(input_dim)
@@ -155,16 +170,19 @@ def _feature_group_name(feature: str) -> str:
         return "hist_path"
     if name.startswith("preopen_") or name in {"exch_time_offset_us", "ask1_to_limit_up_bps"}:
         return "preopen"
-    if name.startswith(
-        (
-            "volume_diff_",
-            "turnover_diff_",
-            "trade_vwap_",
-            "postopen_v2_trade_turnover_to_depth_notional_",
-            "postopen_v2_trade_volume_to_ask_depth10_",
-            "postopen_v2_trade_volume_to_bid_depth10_",
+    if (
+        name.startswith(
+            (
+                "volume_diff_",
+                "turnover_diff_",
+                "trade_vwap_",
+                "postopen_v2_trade_turnover_to_depth_notional_",
+                "postopen_v2_trade_volume_to_ask_depth10_",
+                "postopen_v2_trade_volume_to_bid_depth10_",
+            )
         )
-    ) or name == "trade_num":
+        or name == "trade_num"
+    ):
         return "activity"
     if (
         "spread" in name
@@ -196,6 +214,84 @@ def _feature_group_name(feature: str) -> str:
     return "other"
 
 
+def _feature_group_name_v2(feature: str) -> str:
+    name = feature.lower()
+    if name.startswith("hist_surprise_"):
+        return "historical_surprise"
+    if name.startswith("path_shape_"):
+        return "path_shape_confirmation"
+    if name.startswith("preopen_") or name == "exch_time_offset_us":
+        return "preopen_auction"
+    if name in {
+        "ask1_to_limit_up_bps",
+        "ask_price_1",
+        "bid_price_1",
+        "mid_price",
+        "avg_ask_price",
+        "avg_bid_price",
+    }:
+        return "limit_price_state"
+    if (
+        name.startswith(("trade_vwap_", "postopen_v2_trade_vwap_vs_"))
+        or name.startswith("postopen_v2_trade_turnover_to_depth_notional_")
+        or name.startswith("postopen_v2_trade_volume_to_ask_depth10_")
+        or name.startswith("postopen_v2_trade_volume_to_bid_depth10_")
+    ):
+        return "trade_price_impact"
+    if (
+        name.startswith(("volume_diff_", "turnover_diff_", "postopen_volume_"))
+        or name == "trade_num"
+    ):
+        return "trade_activity"
+    if (
+        name.startswith(("return_", "postopen_mid_price_"))
+        or name.startswith("postopen_ask_price_")
+        or name.startswith("postopen_bid_price_")
+        or name.startswith("postopen_v2_mid_price_from_open_")
+        or name.startswith("postopen_v2_ask_price_1_from_open_")
+        or name.startswith("postopen_v2_bid_price_1_from_open_")
+        or name in {"return_vs_open", "return_vs_prev_close"}
+    ):
+        return "postopen_price_path"
+    if (
+        name.startswith("depth_imbalance_")
+        or name.startswith("postopen_v2_depth_imbalance_")
+        or "queue_replenish" in name
+    ):
+        return "book_imbalance_pressure"
+    if (
+        "spread" in name
+        or name.startswith(("ask_gap_", "bid_gap_"))
+        or "gap_curve" in name
+        or "gap_max" in name
+        or "depth_concentration" in name
+        or "ask1_share_depth" in name
+        or "bid1_share_depth" in name
+    ):
+        return "book_shape_spread_gap"
+    if (
+        name.startswith(("postopen_ask_volume_", "postopen_bid_volume_"))
+        or name.startswith("postopen_v2_ask_depth_")
+        or name.startswith("postopen_v2_bid_depth_")
+    ):
+        return "postopen_liquidity_change"
+    if (
+        name.startswith(
+            (
+                "ask_volume_",
+                "bid_volume_",
+                "ask_count_",
+                "bid_count_",
+                "ask_depth_",
+                "bid_depth_",
+            )
+        )
+        or name in {"total_ask_volume", "total_bid_volume", "total_ask_count", "total_bid_count"}
+    ):
+        return "book_depth_level"
+    return "other"
+
+
 def _feature_group_indices(feature_names: tuple[str, ...]) -> list[tuple[str, list[int]]]:
     ordered_groups = [
         "activity",
@@ -208,6 +304,27 @@ def _feature_group_indices(feature_names: tuple[str, ...]) -> list[tuple[str, li
     groups = {name: [] for name in ordered_groups}
     for index, feature in enumerate(feature_names):
         groups.setdefault(_feature_group_name(feature), []).append(index)
+    return [(name, groups[name]) for name in ordered_groups if groups.get(name)]
+
+
+def _feature_group_indices_v2(feature_names: tuple[str, ...]) -> list[tuple[str, list[int]]]:
+    ordered_groups = [
+        "preopen_auction",
+        "limit_price_state",
+        "book_depth_level",
+        "book_shape_spread_gap",
+        "book_imbalance_pressure",
+        "trade_activity",
+        "trade_price_impact",
+        "postopen_price_path",
+        "postopen_liquidity_change",
+        "historical_surprise",
+        "path_shape_confirmation",
+        "other",
+    ]
+    groups = {name: [] for name in ordered_groups}
+    for index, feature in enumerate(feature_names):
+        groups.setdefault(_feature_group_name_v2(feature), []).append(index)
     return [(name, groups[name]) for name in ordered_groups if groups.get(name)]
 
 
@@ -234,34 +351,47 @@ def _grouped_encoders(
     *,
     feature_names: tuple[str, ...],
     group_embedding_dim: int,
+    group_embedding_dims: dict[str, int] | None = None,
     fusion_dim: int,
     dropout: float,
     activation,
     nn,
+    v2_groups: bool = False,
 ):
-    groups = _feature_group_indices(feature_names)
+    groups = _feature_group_indices_v2(feature_names) if v2_groups else _feature_group_indices(
+        feature_names
+    )
     if not groups:
         raise SystemExit("grouped torch_mlp architectures need at least one feature")
     group_names = tuple(name for name, _indices in groups)
     group_indices = tuple(tuple(indices) for _name, indices in groups)
+    dims = tuple(
+        int((group_embedding_dims or {}).get(name, group_embedding_dim))
+        for name in group_names
+    )
+    if any(dim <= 0 for dim in dims):
+        raise SystemExit("model.group_embedding_dims values must be positive ints")
     encoders = nn.ModuleList(
         [
             _group_encoder(
                 input_dim=len(indices),
-                group_embedding_dim=group_embedding_dim,
+                group_embedding_dim=dim,
                 fusion_dim=fusion_dim,
                 dropout=dropout,
                 activation=activation,
                 nn=nn,
             )
-            for _name, indices in groups
+            for (_name, indices), dim in zip(groups, dims, strict=True)
         ]
     )
-    return group_names, group_indices, encoders
+    return group_names, group_indices, dims, encoders
 
 
 def _encode_groups(x, group_indices, encoders):
-    return [encoder(x[:, list(indices)]) for indices, encoder in zip(group_indices, encoders)]
+    return [
+        encoder(x[:, list(indices)])
+        for indices, encoder in zip(group_indices, encoders, strict=True)
+    ]
 
 
 def _GroupedResidualMLP(
@@ -284,15 +414,17 @@ def _GroupedResidualMLP(
     class GroupedResidualMLP(nn.Module):
         def __init__(self) -> None:
             super().__init__()
-            self.group_names, self.group_indices, self.encoders = _grouped_encoders(
-                feature_names=feature_names,
-                group_embedding_dim=group_embedding_dim,
-                fusion_dim=fusion_dim,
-                dropout=dropout,
-                activation=activation,
-                nn=nn,
+            self.group_names, self.group_indices, self.group_dims, self.encoders = (
+                _grouped_encoders(
+                    feature_names=feature_names,
+                    group_embedding_dim=group_embedding_dim,
+                    fusion_dim=fusion_dim,
+                    dropout=dropout,
+                    activation=activation,
+                    nn=nn,
+                )
             )
-            total_dim = len(self.group_indices) * group_embedding_dim
+            total_dim = sum(self.group_dims)
             self.fusion = nn.Sequential(
                 nn.Linear(total_dim, fusion_dim),
                 activation(),
@@ -338,18 +470,21 @@ def _GroupedGatedMLP(
     class GroupedGatedMLP(nn.Module):
         def __init__(self) -> None:
             super().__init__()
-            self.group_names, self.group_indices, self.encoders = _grouped_encoders(
-                feature_names=feature_names,
-                group_embedding_dim=group_embedding_dim,
-                fusion_dim=fusion_dim,
-                dropout=dropout,
-                activation=activation,
-                nn=nn,
+            self.group_names, self.group_indices, self.group_dims, self.encoders = (
+                _grouped_encoders(
+                    feature_names=feature_names,
+                    group_embedding_dim=group_embedding_dim,
+                    fusion_dim=fusion_dim,
+                    dropout=dropout,
+                    activation=activation,
+                    nn=nn,
+                )
             )
             self.group_count = len(self.group_indices)
-            total_dim = self.group_count * group_embedding_dim
+            total_dim = sum(self.group_dims)
             self.context = nn.Sequential(nn.Linear(total_dim, fusion_dim), activation())
             self.gate = nn.Sequential(nn.Linear(fusion_dim, self.group_count), nn.Sigmoid())
+            self.group_feature_counts = tuple(len(indices) for indices in self.group_indices)
             head_hidden = max(32, fusion_dim // 2)
             self.head = nn.Sequential(
                 nn.LayerNorm(total_dim),
@@ -368,7 +503,77 @@ def _GroupedGatedMLP(
             gates = self.gate(self.context(flat)).unsqueeze(-1)
             return self.head((stacked * gates).flatten(start_dim=1))
 
+        def gate_values(self, x):
+            embeddings = _encode_groups(x, self.group_indices, self.encoders)
+            flat = torch.stack(embeddings, dim=1).flatten(start_dim=1)
+            return self.gate(self.context(flat))
+
     return GroupedGatedMLP()
+
+
+def _GroupedGatedV2MLP(
+    *,
+    feature_names: tuple[str, ...],
+    group_embedding_dim: int,
+    group_embedding_dims: dict[str, int],
+    fusion_dim: int,
+    dropout: float,
+    activation,
+    torch,
+    nn,
+):
+    group_embedding_dim = _positive_int(group_embedding_dim, "group_embedding_dim")
+    fusion_dim = _positive_int(fusion_dim, "fusion_dim")
+
+    class GroupedGatedV2MLP(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.group_names, self.group_indices, self.group_dims, self.encoders = (
+                _grouped_encoders(
+                    feature_names=feature_names,
+                    group_embedding_dim=group_embedding_dim,
+                    group_embedding_dims=group_embedding_dims,
+                    fusion_dim=fusion_dim,
+                    dropout=dropout,
+                    activation=activation,
+                    nn=nn,
+                    v2_groups=True,
+                )
+            )
+            self.group_count = len(self.group_indices)
+            self.group_feature_counts = tuple(len(indices) for indices in self.group_indices)
+            total_dim = sum(self.group_dims)
+            self.context = nn.Sequential(nn.Linear(total_dim, fusion_dim), activation())
+            self.gate = nn.Sequential(nn.Linear(fusion_dim, self.group_count), nn.Sigmoid())
+            head_hidden = max(32, fusion_dim // 2)
+            self.head = nn.Sequential(
+                nn.LayerNorm(total_dim),
+                nn.Linear(total_dim, fusion_dim),
+                activation(),
+                nn.Dropout(dropout),
+                nn.Linear(fusion_dim, head_hidden),
+                activation(),
+                nn.Linear(head_hidden, 1),
+            )
+
+        def _embeddings_and_flat(self, x):
+            embeddings = _encode_groups(x, self.group_indices, self.encoders)
+            return embeddings, torch.cat(embeddings, dim=1)
+
+        def gate_values(self, x):
+            _embeddings, flat = self._embeddings_and_flat(x)
+            return self.gate(self.context(flat))
+
+        def forward(self, x):
+            embeddings, flat = self._embeddings_and_flat(x)
+            gates = self.gate(self.context(flat))
+            weighted = [
+                embedding * gates[:, index : index + 1]
+                for index, embedding in enumerate(embeddings)
+            ]
+            return self.head(torch.cat(weighted, dim=1))
+
+    return GroupedGatedV2MLP()
 
 
 def _GroupedCrossMLP(
@@ -391,15 +596,17 @@ def _GroupedCrossMLP(
     class GroupedCrossMLP(nn.Module):
         def __init__(self) -> None:
             super().__init__()
-            self.group_names, self.group_indices, self.encoders = _grouped_encoders(
-                feature_names=feature_names,
-                group_embedding_dim=group_embedding_dim,
-                fusion_dim=fusion_dim,
-                dropout=dropout,
-                activation=activation,
-                nn=nn,
+            self.group_names, self.group_indices, self.group_dims, self.encoders = (
+                _grouped_encoders(
+                    feature_names=feature_names,
+                    group_embedding_dim=group_embedding_dim,
+                    fusion_dim=fusion_dim,
+                    dropout=dropout,
+                    activation=activation,
+                    nn=nn,
+                )
             )
-            total_dim = len(self.group_indices) * group_embedding_dim
+            total_dim = sum(self.group_dims)
             self.cross_layers = nn.ModuleList(
                 [nn.Linear(total_dim, total_dim) for _ in range(num_blocks)]
             )
@@ -454,13 +661,15 @@ def _GroupTokenTransformerMLP(
     class GroupTokenTransformerMLP(nn.Module):
         def __init__(self) -> None:
             super().__init__()
-            self.group_names, self.group_indices, self.encoders = _grouped_encoders(
-                feature_names=feature_names,
-                group_embedding_dim=group_embedding_dim,
-                fusion_dim=fusion_dim,
-                dropout=dropout,
-                activation=activation,
-                nn=nn,
+            self.group_names, self.group_indices, self.group_dims, self.encoders = (
+                _grouped_encoders(
+                    feature_names=feature_names,
+                    group_embedding_dim=group_embedding_dim,
+                    fusion_dim=fusion_dim,
+                    dropout=dropout,
+                    activation=activation,
+                    nn=nn,
+                )
             )
             transformer_activation = "gelu" if activation_name == "gelu" else "relu"
             encoder_layer = nn.TransformerEncoderLayer(
@@ -543,6 +752,78 @@ def _torch_loss(loss: str, torch, reduction: str = "none"):
     raise SystemExit("model.loss for torch_mlp must be mse or huber")
 
 
+def _torch_gate_diagnostics(
+    module,
+    x_values: np.ndarray,
+    *,
+    device: str,
+    torch,
+    rng: np.random.Generator,
+    max_rows: int,
+    batch_size: int,
+) -> dict[str, object]:
+    if not hasattr(module, "gate_values"):
+        return {}
+    max_rows = max(0, int(max_rows))
+    if max_rows <= 0 or len(x_values) == 0:
+        return {}
+    if len(x_values) > max_rows:
+        selected = rng.choice(len(x_values), size=max_rows, replace=False)
+        selected.sort()
+        values = x_values[selected]
+    else:
+        values = x_values
+
+    group_names = tuple(str(name) for name in getattr(module, "group_names", ()))
+    group_dims = tuple(int(dim) for dim in getattr(module, "group_dims", ()))
+    group_feature_counts = tuple(
+        int(count) for count in getattr(module, "group_feature_counts", ())
+    )
+    if not group_names:
+        return {}
+
+    count = 0
+    sums = np.zeros(len(group_names), dtype="float64")
+    sums_sq = np.zeros(len(group_names), dtype="float64")
+    mins = np.full(len(group_names), np.inf, dtype="float64")
+    maxs = np.full(len(group_names), -np.inf, dtype="float64")
+    module.eval()
+    gate_batch_size = max(1, int(batch_size))
+    with torch.no_grad():
+        for start in range(0, len(values), gate_batch_size):
+            end = min(start + gate_batch_size, len(values))
+            batch_x = torch.from_numpy(values[start:end]).to(device, non_blocking=True)
+            gates = module.gate_values(batch_x).detach().cpu().numpy().astype("float64")
+            count += len(gates)
+            sums += gates.sum(axis=0)
+            sums_sq += np.square(gates).sum(axis=0)
+            mins = np.minimum(mins, gates.min(axis=0))
+            maxs = np.maximum(maxs, gates.max(axis=0))
+
+    means = sums / float(count)
+    variances = np.maximum(sums_sq / float(count) - np.square(means), 0.0)
+    stds = np.sqrt(variances)
+    groups = []
+    for index, name in enumerate(group_names):
+        groups.append(
+            {
+                "name": name,
+                "features": (
+                    group_feature_counts[index] if index < len(group_feature_counts) else None
+                ),
+                "embedding_dim": group_dims[index] if index < len(group_dims) else None,
+                "gate_mean": float(means[index]),
+                "gate_std": float(stds[index]),
+                "gate_min": float(mins[index]),
+                "gate_max": float(maxs[index]),
+            }
+        )
+    return {
+        "gate_diagnostics_rows": int(count),
+        "gate_groups": groups,
+    }
+
+
 def _standardized_float_matrix(
     frame: pd.DataFrame,
     features: list[str],
@@ -582,6 +863,7 @@ def fit_torch_mlp_frame(
     hidden_layers: tuple[int, ...] = (512, 256, 128),
     architecture: str = "mlp",
     group_embedding_dim: int = 48,
+    group_embedding_dims: dict[str, int] | None = None,
     fusion_dim: int = 256,
     block_hidden_dim: int = 512,
     num_blocks: int = 2,
@@ -600,7 +882,8 @@ def fit_torch_mlp_frame(
     device: str = "auto",
     random_state: int = 7,
     num_workers: int = 0,
-) -> tuple[TorchMLPPredictionModel, dict[str, int | float | str | bool]]:
+    gate_diagnostics_max_rows: int = 200_000,
+) -> tuple[TorchMLPPredictionModel, dict[str, object]]:
     torch, _nn, DataLoader, TensorDataset = _import_torch()
     features = feature_columns(train, feature_limit, **(feature_filters or {}))
     if sample_weight_col:
@@ -641,6 +924,7 @@ def fit_torch_mlp_frame(
         architecture=architecture,
         feature_names=tuple(features),
         group_embedding_dim=int(group_embedding_dim),
+        group_embedding_dims=group_embedding_dims or {},
         fusion_dim=int(fusion_dim),
         block_hidden_dim=int(block_hidden_dim),
         num_blocks=int(num_blocks),
@@ -760,7 +1044,7 @@ def fit_torch_mlp_frame(
     device_name = ""
     if str(resolved_device).startswith("cuda") and torch.cuda.is_available():
         device_name = torch.cuda.get_device_name(torch.device(resolved_device))
-    stats: dict[str, int | float | str | bool] = {
+    stats: dict[str, object] = {
         "rows": len(x_values),
         "dates": int(train.loc[x_frame.index, "date"].nunique()),
         "symbols": int(train.loc[x_frame.index, "symbol"].nunique()),
@@ -777,6 +1061,16 @@ def fit_torch_mlp_frame(
     if sample_weight is not None:
         stats["sample_weight_mean"] = float(sample_weight.mean())
         stats["sample_weight_zero_rate"] = float((sample_weight <= 0.0).mean())
+    diagnostics = _torch_gate_diagnostics(
+        module,
+        x_values,
+        device=resolved_device,
+        torch=torch,
+        rng=rng,
+        max_rows=int(gate_diagnostics_max_rows),
+        batch_size=min(int(predict_batch_size or batch_size), 32768),
+    )
+    stats.update(diagnostics)
     return (
         TorchMLPPredictionModel(
             features=features,
@@ -785,6 +1079,7 @@ def fit_torch_mlp_frame(
             feature_scale=feature_scale,
             device=resolved_device,
             batch_size=int(predict_batch_size or batch_size),
+            diagnostics=diagnostics or None,
             target_col=target_col,
         ),
         stats,

@@ -7,7 +7,7 @@ spec:
   backoffLimit: 0
   completionMode: Indexed
   completions: 8
-  parallelism: 2
+  parallelism: 4
   ttlSecondsAfterFinished: 86400
   template:
     spec:
@@ -41,7 +41,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: opening-strength-fit
-          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260703-structured-nn-v1
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260703-structured-nn-v2
           imagePullPolicy: Always
           envFrom:
             - secretRef:
@@ -59,6 +59,9 @@ spec:
               set -euo pipefail
               mkdir -p /etc/OpenCL/vendors
               echo libnvidia-opencl.so.1 > /etc/OpenCL/vendors/nvidia.icd
+              CONFIG=/tmp/nn_group_token_transformer_mse_retry.toml
+              sed -e 's/^predict_batch_size = .*/predict_batch_size = 8192/' \
+                experiments/runs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_group_token_transformer_mse_v1.toml > "${CONFIG}"
               WAIT_PATH_TIMEOUT_SECONDS=43200
               WAIT_PATH_INTERVAL_SECONDS=120
               WAIT_PATH_STARTED=${SECONDS}
@@ -101,7 +104,7 @@ spec:
               echo "output_dir=${OUT}"
 
               osf-train \
-                --config experiments/runs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_group_token_transformer_mse_v1.toml \
+                --config "${CONFIG}" \
                 --rolling-monthly \
                 --train-months 36 \
                 --test-months 6 \

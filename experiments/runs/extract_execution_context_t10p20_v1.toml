@@ -1,0 +1,42 @@
+[run]
+id = "extract_execution_context_t10p20_v1"
+kind = "execution_context"
+description = "Extract t10p20 split20 execution context for capacity-selected LGBM 328 and NN MLP base rows."
+status = "queued"
+
+[[execution_context.inputs]]
+name = "lgbm328"
+selected_path = "/mnt/output/opening_strength_fit/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_t10p20_capacityonly_v1/capacity_audit_selected.csv"
+prediction_root = "/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1"
+output_dir = "/mnt/output/opening_strength_fit/execution_context_lgbm328_t10p20_v1"
+
+[[execution_context.inputs]]
+name = "mlp_base"
+selected_path = "/mnt/output/opening_strength_fit/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_t10p20_capacityonly_v1/capacity_audit_selected.csv"
+prediction_root = "/mnt/output/opening_strength_fit/nn/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_v1"
+output_dir = "/mnt/output/opening_strength_fit/execution_context_mlp_base_t10p20_v1"
+
+[output]
+local_dir = "output/artifacts/extract_execution_context_t10p20_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/extract_execution_context_t10p20_v1"
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-execctx-t10p20-v1"
+image_pull_secret = "highfort"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260703-cap-t10p20-v1"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+env_secrets = ["xy-fit-ceph-credentials"]
+wait_for_paths = [
+  "/mnt/output/opening_strength_fit/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_t10p20_capacityonly_v1/capacity_audit_selected.csv",
+  "/mnt/output/opening_strength_fit/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_t10p20_capacityonly_v1/capacity_audit_selected.csv",
+]
+wait_for_path_timeout_seconds = 21600
+wait_for_path_interval_seconds = 120
+
+[k8s.resources]
+cpu_request = "8"
+cpu_limit = "16"
+memory_request = "128Gi"
+memory_limit = "256Gi"

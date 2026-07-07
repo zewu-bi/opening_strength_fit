@@ -16,7 +16,8 @@
 - 当前 NN 对照：第一轮 3 个 `torch_mlp` MLP 变体、第二轮 5 个 NN 结构扫描和 1 个
   NN+LGBM rankblend、第三轮 4 个 MSE neighborhood 变体均已完成并归档；前两轮已与
   `hist_path_pruned_highdup` / `mlp_base` 做 market-relative alpha 验收图对比。第四轮结构化
-  grouped NN 已提交集群训练。
+  grouped NN 中 residual / cross / gated 已完成训练、pool-internal analysis 和归档；token-transformer
+  已按历史 YAML 重挂集群训练。
 - 最新生产化证据：剪枝后 Top100 exposure、size/industry exposure、split20 capacity audits，
   以及 `lgbm326` / `mlp_base` / `deep_gelu_mse` 的 10亿 capacity acceptance；`deep_gelu_mse`
   已补 Top100 core exposure 和 size/industry exposure。
@@ -88,6 +89,8 @@
 | 2026-07-03 | deep_gelu_mse split20 capacity + 1bn acceptance | 按正式 `10 亿 / 20` 容量口径补 `deep_gelu_mse` capacity-only audit 和 capacity acceptance；`9690/9690` 截面全满，平均 top depth `134.15`，p95 `188`，max `308`。10亿 capacity 图已对比 `lgbm328` / `mlp_base` / `deep_gelu_mse`，capacity cumulative net 分别为 `6009.2 / 7657.0 / 7916.0 bps`。 |
 | 2026-07-03 | deep_gelu_mse exposure + size/industry audit | 已补 `pool_L` Top100 core exposure 和 ClickHouse daily size/industry audit；activity max z / mean z `1.303 / 0.956`，低于 `lgbm328` 的 `1.526 / 1.081`；size max z `0.366`，低于 `lgbm328` 的 `0.544`；行业仍超配电子/电力设备/计算机、低配基础化工/机械设备，但 top5 industry share `0.524`、effective industries `13.24`，略优于 `lgbm328`。 |
 | 2026-07-03 | structured grouped NN jobs submitted | 按 runbook 新增并提交 4 个结构化 NN rolling sharded GPU Job：`grouped_residual_gelu_mse`、`grouped_cross_gelu_mse`、`grouped_gated_gelu_mse`、`group_token_transformer_mse`。四者均保持短期 `target_label` + MSE，不改验收口径；镜像 `20260703-structured-nn-v1` 已 push，Job 已 Running。 |
+| 2026-07-07 | structured grouped NN first archive | `grouped_residual_gelu_mse` / `grouped_cross_gelu_mse` / `grouped_gated_gelu_mse` 已完成 8/8 training shard、cluster-side pool-internal analysis、artifact sync、audit 和 Top100 累和验收；三者 `pool_L` next excess 均高于 `mlp_base` 与 `lgbm328`，其中 gated 最高。`group_token_transformer_mse` 此前只有空 shard 目录，已按本地历史 YAML 重新提交 indexed GPU Job。 |
+| 2026-07-07 | grouped gated v2 design | 明确 NN 主任务是 `pool_L` Top100 overlay selector，而不是 universe next 模型；新增 `grouped_gated_v2_gelu_mse` 设计：机制分组、per-group embedding dim 和 gate diagnostics，其余训练与验收口径保持 grouped gated v1 不变。 |
 
 ## 2026-05-20 小窗结果
 
@@ -3397,6 +3400,157 @@ jobs:
 | K8s dry-run | 4/4 created dry-run |
 | K8s apply | 4/4 created |
 | initial cluster status | all 4 Jobs `Running`, first 2 shards per Job `1/1 Running`, `0` restarts |
+
+## 2026-07-07 structured grouped NN first archive
+
+按 runbook 对前三个已完整落盘的 structured NN 补 cluster-side pool-internal analysis 和 artifact sync。
+第四个 `group_token_transformer_mse` 实查 PVC 只有 `month_2022-01` / `month_2022-07` 空目录，
+没有 `_SUCCESS` / metrics / predictions；已按本地历史 YAML 重新提交：
+
+```text
+job: os-nn-2225-grp-token-trf-mse
+image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260703-structured-nn-v2
+```
+
+前三个 run 的 pool-internal analysis Job 均完成：
+
+```text
+os-analyze-nn-grp-res-gelu-mse
+os-analyze-nn-grp-cross-gelu-mse
+os-analyze-nn-grp-gated-gelu-mse
+```
+
+`pool_L` Top100 summary：
+
+| run | short excess bps | next excess bps | short Rank IC | next Rank IC | next positive months | next positive clocks |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `lgbm328` | 9.2080 | 8.8643 | 0.140789 | 0.002830 | 33 | 10 |
+| `mlp_base` | 10.1642 | 12.4320 | 0.137205 | 0.004981 | 37 | 10 |
+| `grouped_residual_gelu_mse` | 10.6147 | 13.4939 | 0.141112 | 0.007112 | 36 | 10 |
+| `grouped_cross_gelu_mse` | 10.8844 | 13.3557 | 0.141929 | 0.006952 | 38 | 10 |
+| `grouped_gated_gelu_mse` | 10.8974 | 13.8491 | 0.142392 | 0.006333 | 36 | 10 |
+
+三组 grouped NN 的 `pool_L` next overlay 均高于 `mlp_base` 和 `lgbm328`；`grouped_gated_gelu_mse`
+的 Top100 next excess 和累计 next internal excess 最高。五线累和曲线归档到：
+
+```text
+experiments/results/backtests/structured_grouped_nn_vs_baselines_2022_2025/pool_l_next_internal_excess_cumulative_5way.svg
+experiments/results/backtests/structured_grouped_nn_vs_baselines_2022_2025/pool_l_next_internal_excess_cumulative_5way.png
+```
+
+官方 acceptance 图另按两个 baseline 归档：
+
+```text
+experiments/results/backtests/optimization_overlay_acceptance_structured_grouped_nn_2022_2025/
+experiments/results/backtests/optimization_overlay_acceptance_structured_grouped_vs_lgbm328_2022_2025/
+```
+
+## 2026-07-07 NN parameter scan synthesis
+
+本节汇总截至 structured grouped NN 前三组归档后的所有 NN 扫描结果；`group_token_transformer_mse`
+仍在重挂训练中，不纳入 completed 排名。
+
+综合表归档到：
+
+```text
+experiments/results/backtests/nn_parameter_scan_synthesis_2022_2025/nn_scan_pool_l_summary.csv
+```
+
+参数 / 结构上表现较好的方向：
+
+- `MSE` 比 `Huber` 更适合当前 Top100 next overlay。Huber / wide Huber 明显提高 Rank IC，
+  但 `pool_L` next excess 通常低于 MSE；`deep_gelu_huber` 是排序力冠军，
+  `deep_gelu_mse` 才是 overlay 收益更强的一侧。
+- 中等深度的 plain MLP 已足够有效。`mlp_base`（512/256/128 ReLU MLP, MSE）是第一轮
+  overlay incumbent；`base_plus_mse` / `deep_gelu_mse` 说明在 MSE 下稍加容量和 GELU
+  能继续提高 next overlay。
+- 语义 feature group encoder 有明确增量。`grouped_residual` / `grouped_cross` /
+  `grouped_gated` 的 `pool_L` next excess 均超过 `deep_gelu_mse`，其中 gated 最高
+  `13.8491 bps`。这说明先按 activity / liquidity / path / turnover 等语义组内编码，
+  再做小型融合，比继续把 328 个 raw feature 直接堆进更宽 MLP 更有效。
+- grouped 模型的 Rank IC 也有温和改善：universe short Rank IC 约 `0.154-0.156`，
+  高于 MSE plain MLP 的约 `0.151`，但仍低于 `deep_gelu_huber` 的 `0.164169`。
+
+表现较差或边际收益弱的方向：
+
+- 继续加宽 / wide-deep 不稳定。`wide_deep_h64` 的 next overlay 有改善但排序力弱；
+  `wide_deep_h128_huber` 的 `pool_L` next excess 低于 LGBM 328，直接淘汰。
+- 低正则并未带来收益。`base_lowreg_mse` 的 next overlay 低于 `mlp_base` 和
+  `deep_gelu_mse`，说明当前更像需要结构归纳偏置，而不是单纯放松正则。
+- Huber 适合拿 Rank IC，不适合作为 overlay 主收益候选。`mlp_wide_huber` /
+  `deep_gelu_huber` / `compact_huber` 的 next Rank IC 强，但 Top100 next excess 不如
+  `mlp_base` / MSE / grouped MSE。
+- NN + LGBM rankblend 相对 LGBM 有改善，但没有打过已有 NN 候选；短期不再把
+  NN + LGBM 作为主探索方向。
+
+下一步建议的 targeted NN 结构和参数：
+
+1. 以 `grouped_gated_gelu_mse` 为 overlay 主候选，先补 market-relative、split20 10亿 capacity、
+   Top100 core exposure 和 size/industry exposure；只有通过这些 gate 后才考虑替代
+   `deep_gelu_mse` / `mlp_base`。
+2. 以 `grouped_gated` 和 `grouped_residual` 做小网格，不再宽扫：`group_embedding_dim`
+   `32/48/64`，`fusion_dim` `192/256`，`block_hidden_dim` `384/512`，`num_blocks`
+   `1/2`，`dropout` `0.05/0.10`，学习率维持 `2.5e-4` 附近。
+3. 为兼顾排序力，做一组 grouped gated 的 loss 对照：纯 MSE、轻 Huber、以及
+   `MSE + small rank/IC auxiliary` 或 score/rank blend 到 `deep_gelu_huber`。目标是保住
+   grouped MSE 的 next overlay，同时向 `deep_gelu_huber` 的 Rank IC 靠近。
+4. 观察正在重跑的 `group_token_transformer_mse`。若它没有超过 grouped gated / residual，
+   不继续扩大 Transformer；若有增量，只在 group token 层小范围试 heads/layers，
+   不做 raw-feature attention。
+5. 暂停 plain MLP 加宽、wide-deep h128、低正则和 NN+LGBM rankblend，除非新证据显示它们能同时改善
+   overlay、Rank IC 和容量 / 暴露画像。
+
+## 2026-07-07 grouped gated v2 design
+
+本次讨论后明确：NN 当前主职责是 `pool_L` Top100 overlay selector。模型仍在 full universe
+训练和打分，但主要验收是 `pool_L` 内 Top100 的 next internal excess、acceptance、capacity
+和 exposure；universe next 只作为辅助诊断，不作为否定 overlay selector 的主 gate。
+
+旧 `grouped_gated` 的方向有效，但分组过粗。按当前 328 特征和旧规则复算，大致为：
+
+| group | features | issue |
+| --- | ---: | --- |
+| `liquidity` | 173 | 过大，混合深度、spread/gap、imbalance、queue 等机制。 |
+| `hist_path` | 52 | 混合跨日 historical surprise 与当日 path shape。 |
+| `price_momentum` | 41 | 混合价格锚点与开盘后路径。 |
+| `other` | 30 | 含不少 postopen 成交 / 盘口变化，语义不干净。 |
+| `activity` | 25 | 合理但可与 trade impact 拆分。 |
+| `preopen` | 7 | 小组固定 48 维偏肥。 |
+
+新增 `grouped_gated_v2_gelu_mse`，只改结构归纳偏置，不改 label、loss、训练窗口或验收口径：
+
+```text
+run_id:
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_gelu_mse_v1
+
+architecture:
+grouped_gated_v2
+```
+
+v2 分组和 per-group dim：
+
+| group | dim | intent |
+| --- | ---: | --- |
+| `preopen_auction` | 16 | 集合竞价量价和开盘前状态。 |
+| `limit_price_state` | 16 | 价格锚点、涨停距离和基础价位状态。 |
+| `book_depth_level` | 48 | 盘口绝对深度、挂单量和队列数量。 |
+| `book_shape_spread_gap` | 48 | spread、gap、深度集中度和盘口形态。 |
+| `book_imbalance_pressure` | 32 | 买卖盘偏斜和 queue replenish 压力。 |
+| `trade_activity` | 32 | 成交活跃度、成交量和成交额变化。 |
+| `trade_price_impact` | 32 | VWAP、成交相对 ask1 和 turnover/depth 冲击。 |
+| `postopen_price_path` | 48 | 开盘后价格路径、return 和 from-open 价格确认。 |
+| `postopen_liquidity_change` | 32 | 开盘后盘口量 / 深度变化。 |
+| `historical_surprise` | 48 | 同股票同分钟历史异常。 |
+| `path_shape_confirmation` | 48 | 当日 path shape、确认、支撑 / fade。 |
+| `other` | 24 | 暂未归类残余特征，保留但降容量。 |
+
+实现细节：v2 先按上述机制组各自编码，再用未加权的拼接 embedding 生成 group-level gates；
+每个 gate 标量乘回对应组 embedding，得到 gated representation 后进入 head。gate diagnostics
+不改变训练/预测，只在每个 shard 的 `metrics.json` train stats 中写出各组 gate 的
+mean/std/min/max 和使用样本数，用于判断 gate 是否学到稳定的状态调权。
+
+首轮 v2 不同时扫 loss / dropout / lr / seed，避免把分组改动与其他超参混在一起；如果 v2
+超过 grouped gated v1，再补 seed、capacity、exposure 和 market-relative acceptance。
 
 ## 查找索引与归档口径
 

@@ -15,6 +15,7 @@ spec:
         - name: opening-strength-output
           persistentVolumeClaim:
             claimName: bizewu-private-data
+
       containers:
         - name: opening-strength-fit
           image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260703-cap-t10p20-v1
@@ -28,150 +29,24 @@ spec:
             - -lc
             - |
               set -euo pipefail
-              echo "extract_execution_context: started at $(date -u)"
-              python -u - <<'PY'
-              from pathlib import Path
-
-              import numpy as np
-              import pandas as pd
-              import pyarrow.parquet as pq
-
-              KEYS = ["date", "symbol", "decision_target_timestamp"]
-              CONTEXT_OUTPUT_COLUMNS = [
-                  "capacity_price",
-                  "ask_price_1",
-                  "bid_price_1",
-                  "mid_price",
-                  "spread_bps",
-                  "ask1_to_limit_up_bps",
-                  "ask_depth_notional",
-                  "status",
-              ]
-
-              def normalize_keys(frame: pd.DataFrame) -> pd.DataFrame:
-                  out = frame.copy()
-                  out["date"] = pd.to_datetime(out["date"], errors="coerce").dt.strftime("%Y-%m-%d")
-                  out["symbol"] = out["symbol"].astype(str)
-                  out["decision_target_timestamp"] = pd.to_datetime(
-                      out["decision_target_timestamp"],
-                      errors="coerce",
-                  )
-                  return out.dropna(subset=KEYS)
-
-              def numeric(series: pd.Series) -> pd.Series:
-                  return pd.to_numeric(series, errors="coerce").replace([np.inf, -np.inf], np.nan)
-
-              def prediction_files(root: Path) -> list[Path]:
-                  files = sorted(root.glob("month_*/predictions.parquet"))
-                  if not files and root.is_file():
-                      files = [root]
-                  if not files:
-                      raise SystemExit(f"no prediction files under {root}")
-                  return files
-
-              def load_selected_keys(path: str, *, name: str) -> pd.DataFrame:
-                  print(f"{name}: loading selected keys from {path}", flush=True)
-                  chunks = []
-                  for idx, chunk in enumerate(pd.read_csv(path, usecols=KEYS, chunksize=500_000), 1):
-                      chunk = normalize_keys(chunk)
-                      chunks.append(chunk)
-                      print(f"{name}: selected chunk {idx} rows={len(chunk)}", flush=True)
-                  if not chunks:
-                      return pd.DataFrame(columns=KEYS)
-                  selected = pd.concat(chunks, ignore_index=True).drop_duplicates(KEYS)
-                  print(f"{name}: selected unique keys={len(selected)}", flush=True)
-                  return selected
-
-              def read_prediction_context(file: Path, selected_keys: pd.DataFrame) -> pd.DataFrame:
-                  cols = pq.ParquetFile(file).schema.names
-                  cols_set = set(cols)
-                  read_cols = [column for column in KEYS if column in cols_set]
-                  if len(read_cols) != len(KEYS):
-                      raise SystemExit(f"{file} missing key columns")
-                  desired = {
-                      "ask_price_1",
-                      "bid_price_1",
-                      "mid_price",
-                      "spread_bps",
-                      "ask1_to_limit_up_bps",
-                      "ask_depth_10",
-                      "status",
-                      "limit_up_price",
-                  }
-                  desired |= {f"ask_volume_{idx}" for idx in range(1, 11)}
-                  desired |= {f"ask_price_{idx}" for idx in range(1, 11)}
-                  read_cols.extend(column for column in cols if column in desired)
-                  frame = pd.read_parquet(file, columns=read_cols)
-                  frame = normalize_keys(frame)
-                  frame = frame.merge(selected_keys, on=KEYS, how="inner")
-                  if frame.empty:
-                      return frame
-
-                  if "ask_price_1" in frame:
-                      frame["capacity_price"] = numeric(frame["ask_price_1"])
-                  if "spread_bps" not in frame and {"ask_price_1", "bid_price_1"} <= set(frame.columns):
-                      ask = numeric(frame["ask_price_1"])
-                      bid = numeric(frame["bid_price_1"])
-                      mid = (ask + bid) / 2.0
-                      frame["spread_bps"] = np.where(mid > 0, (ask - bid) / mid * 10_000.0, np.nan)
-                  if (
-                      "ask1_to_limit_up_bps" not in frame
-                      and {"limit_up_price", "ask_price_1"} <= set(frame.columns)
-                  ):
-                      limit_up = numeric(frame["limit_up_price"])
-                      ask = numeric(frame["ask_price_1"])
-                      frame["ask1_to_limit_up_bps"] = np.where(
-                          ask > 0,
-                          (limit_up - ask) / ask * 10_000.0,
-                          np.nan,
-                      )
-                  if "ask_depth_10" in frame and "ask_price_1" in frame:
-                      frame["ask_depth_notional"] = numeric(frame["ask_depth_10"]) * numeric(
-                          frame["ask_price_1"]
-                      )
-                  else:
-                      depth = None
-                      for idx in range(1, 11):
-                          volume_col = f"ask_volume_{idx}"
-                          price_col = f"ask_price_{idx}"
-                          if volume_col in frame and price_col in frame:
-                              part = numeric(frame[volume_col]) * numeric(frame[price_col])
-                              depth = part if depth is None else depth.add(part, fill_value=0.0)
-                      if depth is not None:
-                          frame["ask_depth_notional"] = depth
-
-                  keep = KEYS + [column for column in CONTEXT_OUTPUT_COLUMNS if column in frame.columns]
-                  return frame[keep]
-
-              def extract(name: str, selected_path: str, prediction_root: str, output_dir: str) -> None:
-                  selected = load_selected_keys(selected_path, name=name)
-                  frames = []
-                  for file in prediction_files(Path(prediction_root)):
-                      print(f"{name}: reading {file}", flush=True)
-                      part = read_prediction_context(file, selected)
-                      print(f"{name}: matched rows={len(part)}", flush=True)
-                      if not part.empty:
-                          frames.append(part)
-                  out = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=KEYS)
-                  out = out.drop_duplicates(KEYS, keep="last")
-                  output = Path(output_dir)
-                  output.mkdir(parents=True, exist_ok=True)
-                  out.to_parquet(output / "execution_context.parquet", index=False)
-                  print(f"{name}: wrote rows={len(out)} to {output / 'execution_context.parquet'}")
-
-              extract(
-                  "lgbm328",
-                  "/mnt/output/opening_strength_fit/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_t10p20_capacityonly_v1/capacity_audit_selected.csv",
-                  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1",
-                  "/mnt/output/opening_strength_fit/execution_context_lgbm328_t10p20_v1",
-              )
-              extract(
-                  "mlp_base",
-                  "/mnt/output/opening_strength_fit/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_t10p20_capacityonly_v1/capacity_audit_selected.csv",
-                  "/mnt/output/opening_strength_fit/nn/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_v1",
-                  "/mnt/output/opening_strength_fit/execution_context_mlp_base_t10p20_v1",
-              )
-              PY
+              WAIT_PATH_TIMEOUT_SECONDS=21600
+              WAIT_PATH_INTERVAL_SECONDS=120
+              WAIT_PATH_STARTED=${SECONDS}
+              WAIT_PATHS=("/mnt/output/opening_strength_fit/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_t10p20_capacityonly_v1/capacity_audit_selected.csv" "/mnt/output/opening_strength_fit/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_t10p20_capacityonly_v1/capacity_audit_selected.csv")
+              for WAIT_PATH in "${WAIT_PATHS[@]}"; do
+                until [ -f "${WAIT_PATH}" ]; do
+                  if [ $((SECONDS - WAIT_PATH_STARTED)) -ge "${WAIT_PATH_TIMEOUT_SECONDS}" ]; then
+                    echo "timed out waiting for dependency file: ${WAIT_PATH}" >&2
+                    exit 1
+                  fi
+                  echo "waiting for dependency file: ${WAIT_PATH}"
+                  sleep "${WAIT_PATH_INTERVAL_SECONDS}"
+                done
+                echo "dependency file is ready: ${WAIT_PATH}"
+              done
+              exec osf-extract-execution-context \
+                --config experiments/runs/extract_execution_context_t10p20_v1.toml \
+                --output-dir /mnt/output/opening_strength_fit/extract_execution_context_t10p20_v1
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output
@@ -179,6 +54,7 @@ spec:
             requests:
               cpu: "8"
               memory: 128Gi
+
             limits:
               cpu: "16"
               memory: 256Gi

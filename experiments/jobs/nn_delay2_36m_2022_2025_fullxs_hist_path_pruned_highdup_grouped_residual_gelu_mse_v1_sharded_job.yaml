@@ -41,7 +41,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: opening-strength-fit
-          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260703-structured-nn-v1
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260703-structured-nn-v2
           imagePullPolicy: Always
           envFrom:
             - secretRef:

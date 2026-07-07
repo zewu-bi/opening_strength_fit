@@ -102,6 +102,8 @@ def is_artifact_run(record: RunRecord) -> bool:
         "target_cache",
         "score_risk_sweep",
         "alpha_conditioned_rolling_validation",
+        "ask_level_attribution",
+        "execution_context",
         "gap_risk_attribution",
         "pool_internal_analysis",
     }

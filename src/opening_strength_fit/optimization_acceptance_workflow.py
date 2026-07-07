@@ -128,7 +128,9 @@ def write_optimization_direction_plots(
             direction.key for direction in plot_directions if direction.key not in mode_run_ids
         )
         if missing_capacity:
-            raise ValueError(f"missing {cumulative_mode} run ids for directions: {missing_capacity}")
+            raise ValueError(
+                f"missing {cumulative_mode} run ids for directions: {missing_capacity}"
+            )
         capacity_directions = (
             DirectionSpec(
                 key="baseline_pool_l",

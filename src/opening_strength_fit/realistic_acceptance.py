@@ -200,7 +200,10 @@ def load_realistic_execution_context(
         missing_keys = sorted(required_set - available)
         if missing_keys:
             raise ValueError(f"{path} missing context key columns: {missing_keys}")
-        read_columns = [*KEY_COLUMNS, *(column for column in context_columns if column in available)]
+        read_columns = [
+            *KEY_COLUMNS,
+            *(column for column in context_columns if column in available),
+        ]
         frames.append(read_frame(path, columns=read_columns))
     context = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     if context.empty:
@@ -264,10 +267,7 @@ def _tradable_mask(frame: pd.DataFrame, constraints: RealisticExecutionConstrain
     if constraints.max_spread_bps > 0 and constraints.spread_bps_col in frame.columns:
         spread = _finite_numeric(frame[constraints.spread_bps_col])
         mask &= spread.notna() & spread.le(float(constraints.max_spread_bps))
-    if (
-        constraints.min_limit_up_room_bps > 0
-        and constraints.limit_up_room_bps_col in frame.columns
-    ):
+    if constraints.min_limit_up_room_bps > 0 and constraints.limit_up_room_bps_col in frame.columns:
         room = _finite_numeric(frame[constraints.limit_up_room_bps_col])
         mask &= room.notna() & room.ge(float(constraints.min_limit_up_room_bps))
     return mask
@@ -278,7 +278,9 @@ def _row_depth_limit(row: pd.Series, constraints: RealisticExecutionConstraints)
         return np.inf
     if not constraints.ask_depth_notional_col:
         return np.inf
-    if constraints.ask_depth_notional_col not in row or pd.isna(row[constraints.ask_depth_notional_col]):
+    if constraints.ask_depth_notional_col not in row or pd.isna(
+        row[constraints.ask_depth_notional_col]
+    ):
         return np.inf
     depth = float(row[constraints.ask_depth_notional_col])
     if depth <= 0:
@@ -298,9 +300,7 @@ def apply_realistic_execution_constraints(
         errors="coerce",
     )
     work["rank"] = _finite_numeric(work.get("rank", pd.Series(index=work.index))).fillna(1e12)
-    work["score"] = _finite_numeric(work.get("score", pd.Series(index=work.index))).fillna(
-        -np.inf
-    )
+    work["score"] = _finite_numeric(work.get("score", pd.Series(index=work.index))).fillna(-np.inf)
     work = work.dropna(subset=["date", "symbol", "decision_target_timestamp"]).copy()
     work = work.sort_values(
         ["pool", "date", "decision_target_timestamp", "rank", "score", "symbol"],
@@ -360,9 +360,8 @@ def apply_realistic_execution_constraints(
                 continue
             if constraints.max_symbol_decision_count > 0:
                 used_decisions = symbol_decisions.setdefault(symbol, set())
-                if (
-                    decision_time not in used_decisions
-                    and len(used_decisions) >= int(constraints.max_symbol_decision_count)
+                if decision_time not in used_decisions and len(used_decisions) >= int(
+                    constraints.max_symbol_decision_count
                 ):
                     continue
             allowed = min(
@@ -466,9 +465,9 @@ def summarize_realistic_acceptance(
         constraints.capacity_total_notional
     )
     daily["fill_ratio"] = daily["selected_allocated_notional"] / daily["target_notional"]
-    daily["cash_notional"] = (
-        daily["target_notional"] - daily["selected_allocated_notional"]
-    ).clip(lower=0.0)
+    daily["cash_notional"] = (daily["target_notional"] - daily["selected_allocated_notional"]).clip(
+        lower=0.0
+    )
     daily["gross_next_return_bps"] = (
         daily["gross_pnl"] / daily["target_notional"] * RETURN_BPS_DENOMINATOR
     )

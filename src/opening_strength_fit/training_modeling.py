@@ -13,6 +13,7 @@ from opening_strength_fit.config import (
     config_list,
     config_optional_int,
     config_str,
+    config_value,
 )
 from opening_strength_fit.evaluation import (
     score_bucket_returns,
@@ -60,6 +61,15 @@ def prediction_r2(predictions: pd.DataFrame, *, target_col: str = "label") -> fl
         return float("nan")
     residual = float(np.square(y - y_hat).sum())
     return 1.0 - residual / total
+
+
+def _model_group_embedding_dims(config: dict) -> dict[str, int]:
+    value = config_value(config, "model", "group_embedding_dims", {})
+    if value in (None, ""):
+        return {}
+    if not isinstance(value, dict):
+        raise SystemExit("[model].group_embedding_dims must be a table of group = dim")
+    return {str(group): int(dim) for group, dim in value.items() if dim not in (None, "")}
 
 
 def metrics_row(
@@ -218,6 +228,7 @@ def fit_single_prediction_model(
             hidden_layers=hidden_layers,
             architecture=config_str(config, "model", "architecture", "mlp"),
             group_embedding_dim=config_int(config, "model", "group_embedding_dim", 48),
+            group_embedding_dims=_model_group_embedding_dims(config),
             fusion_dim=config_int(config, "model", "fusion_dim", 256),
             block_hidden_dim=config_int(config, "model", "block_hidden_dim", 512),
             num_blocks=config_int(config, "model", "num_blocks", 2),
@@ -236,6 +247,12 @@ def fit_single_prediction_model(
             device=config_str(config, "model", "device", "auto"),
             random_state=config_int(config, "model", "random_state", 7),
             num_workers=config_int(config, "model", "num_workers", 0),
+            gate_diagnostics_max_rows=config_int(
+                config,
+                "model",
+                "gate_diagnostics_max_rows",
+                200_000,
+            ),
         )
     raise SystemExit(
         f"unsupported model.name={model_name!r}; "
@@ -491,6 +508,7 @@ def model_config_payload(config: dict, alpha: float) -> dict[str, object]:
             ),
             "architecture": config_str(config, "model", "architecture", "mlp"),
             "group_embedding_dim": config_int(config, "model", "group_embedding_dim", 48),
+            "group_embedding_dims": _model_group_embedding_dims(config),
             "fusion_dim": config_int(config, "model", "fusion_dim", 256),
             "block_hidden_dim": config_int(config, "model", "block_hidden_dim", 512),
             "num_blocks": config_int(config, "model", "num_blocks", 2),
@@ -515,6 +533,12 @@ def model_config_payload(config: dict, alpha: float) -> dict[str, object]:
             "random_state": config_int(config, "model", "random_state", 7),
             "num_workers": config_int(config, "model", "num_workers", 0),
             "sample_weight_col": config_str(config, "model", "sample_weight_col", ""),
+            "gate_diagnostics_max_rows": config_int(
+                config,
+                "model",
+                "gate_diagnostics_max_rows",
+                200_000,
+            ),
         }
     if model_name == "ensemble":
         model_section = config.get("model", {})

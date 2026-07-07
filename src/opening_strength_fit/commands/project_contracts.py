@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[3]
 MAX_COMMAND_MODULE_LINES = 800
 K8S_JOB_ENTRYPOINTS = (
     "osf-analyze-capacity-acceptance",
+    "osf-ask-level-attribution",
     "osf-audit-capacity",
     "osf-audit-exposure",
     "osf-audit-feature-dependence",
@@ -19,6 +20,7 @@ K8S_JOB_ENTRYPOINTS = (
     "osf-build-labeled-cache",
     "osf-build-next-close-labels",
     "osf-build-target-label-cache",
+    "osf-extract-execution-context",
     "osf-run-alpha-conditioned-rolling-validation",
     "osf-run-gap-risk-attribution",
     "osf-run-learned-risk-layer",

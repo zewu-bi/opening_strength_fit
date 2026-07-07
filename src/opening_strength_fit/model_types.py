@@ -140,5 +140,6 @@ class TorchMLPPredictionModel:
     feature_scale: np.ndarray
     device: str
     batch_size: int
+    diagnostics: dict[str, Any] | None = None
     model_name: str = "torch_mlp"
     target_col: str = "label"

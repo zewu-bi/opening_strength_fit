@@ -18,6 +18,8 @@ Run kind entrypoints:
 | standard training / exploration | `osf-train` |
 | capacity audit | `osf-audit-capacity` |
 | capacity acceptance | `osf-analyze-capacity-acceptance` |
+| ask-level attribution | `osf-ask-level-attribution` |
+| execution context extraction | `osf-extract-execution-context` |
 | exposure input | `osf-build-exposure-input` |
 | exposure audit | `osf-audit-exposure` |
 | feature audit | `osf-audit-feature-dependence` |

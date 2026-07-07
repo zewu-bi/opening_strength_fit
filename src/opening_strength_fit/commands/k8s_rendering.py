@@ -36,6 +36,10 @@ def training_command(config: dict) -> str:
         return "osf-analyze-capacity-acceptance"
     if run_kind == "capacity_audit":
         return "osf-audit-capacity"
+    if run_kind == "ask_level_attribution":
+        return "osf-ask-level-attribution"
+    if run_kind == "execution_context":
+        return "osf-extract-execution-context"
     if run_kind == "exposure_input":
         return "osf-build-exposure-input"
     if run_kind == "exposure_audit":
@@ -86,6 +90,10 @@ def _rolling_completion_files(config: dict, command: str) -> list[str]:
         return ["capacity_acceptance_trace.json", "capacity_acceptance_daily_summary.csv"]
     if run_kind == "capacity_audit":
         return ["capacity_audit_trace.json", "capacity_audit_summary.csv"]
+    if run_kind == "ask_level_attribution":
+        return ["ask_level_attribution_trace.json", "_SUCCESS"]
+    if run_kind == "execution_context":
+        return ["execution_context_trace.json", "_SUCCESS"]
     if run_kind == "exposure_input":
         return ["exposure_input_trace.json", "exposure_input.parquet"]
     if run_kind == "exposure_audit":
@@ -622,7 +630,7 @@ def main() -> None:
     if args.analysis:
         analysis_path = output_dir / f"{run_id_value}_pool_internal_analysis_job.yaml"
         analysis_path.write_text(
-            render_pool_internal_analysis_job(config_path, config, args.image),
+            render_pool_internal_analysis_job(config_path, config, args.image).rstrip() + "\n",
             encoding="utf-8",
         )
         print("rendered_k8s_jobs:")
@@ -633,12 +641,12 @@ def main() -> None:
     training_path = output_dir / f"{run_id_value}{suffix}_job.yaml"
     if args.sharded:
         training_path.write_text(
-            render_sharded_training_job(config_path, config, args.image),
+            render_sharded_training_job(config_path, config, args.image).rstrip() + "\n",
             encoding="utf-8",
         )
     else:
         training_path.write_text(
-            render_training_job(config_path, config, args.image),
+            render_training_job(config_path, config, args.image).rstrip() + "\n",
             encoding="utf-8",
         )
 
