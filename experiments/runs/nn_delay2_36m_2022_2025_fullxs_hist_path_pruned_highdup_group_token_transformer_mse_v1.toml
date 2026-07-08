@@ -2,7 +2,7 @@
 id = "nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_group_token_transformer_mse_v1"
 kind = "exploration"
 description = "GPU PyTorch group-token Transformer MSE NN over 2022-2025 on 328 hist_path_pruned_highdup features; attends over semantic feature-group tokens rather than raw features."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"

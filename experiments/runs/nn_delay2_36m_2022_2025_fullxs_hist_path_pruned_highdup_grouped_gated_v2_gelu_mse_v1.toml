@@ -2,7 +2,7 @@
 id = "nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_gelu_mse_v1"
 kind = "exploration"
 description = "GPU PyTorch grouped gated v2 GELU MSE NN over 2022-2025 on 328 hist_path_pruned_highdup features; uses mechanism-based feature groups, per-group embedding dimensions, and gate diagnostics for pool_L Top100 overlay selection."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"

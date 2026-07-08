@@ -91,6 +91,7 @@
 | 2026-07-03 | structured grouped NN jobs submitted | 按 runbook 新增并提交 4 个结构化 NN rolling sharded GPU Job：`grouped_residual_gelu_mse`、`grouped_cross_gelu_mse`、`grouped_gated_gelu_mse`、`group_token_transformer_mse`。四者均保持短期 `target_label` + MSE，不改验收口径；镜像 `20260703-structured-nn-v1` 已 push，Job 已 Running。 |
 | 2026-07-07 | structured grouped NN first archive | `grouped_residual_gelu_mse` / `grouped_cross_gelu_mse` / `grouped_gated_gelu_mse` 已完成 8/8 training shard、cluster-side pool-internal analysis、artifact sync、audit 和 Top100 累和验收；三者 `pool_L` next excess 均高于 `mlp_base` 与 `lgbm328`，其中 gated 最高。`group_token_transformer_mse` 此前只有空 shard 目录，已按本地历史 YAML 重新提交 indexed GPU Job。 |
 | 2026-07-07 | grouped gated v2 design | 明确 NN 主任务是 `pool_L` Top100 overlay selector，而不是 universe next 模型；新增 `grouped_gated_v2_gelu_mse` 设计：机制分组、per-group embedding dim 和 gate diagnostics，其余训练与验收口径保持 grouped gated v1 不变。 |
+| 2026-07-08 | token transformer + grouped gated v2 archive | `group_token_transformer_mse` / `grouped_gated_v2_gelu_mse` 已完成 8/8 training shard、cluster-side pool-internal analysis、artifact sync、audit 和 Top100 累和验收。两者均高于 `lgbm328` 和 `mlp_base`，但未超过老 `grouped_gated_gelu_mse`；`pool_L` next excess 分别为 `13.6479 / 13.2768 bps`，老 gated 为 `13.8491 bps`。 |
 
 ## 2026-05-20 小窗结果
 
@@ -3445,10 +3446,42 @@ experiments/results/backtests/optimization_overlay_acceptance_structured_grouped
 experiments/results/backtests/optimization_overlay_acceptance_structured_grouped_vs_lgbm328_2022_2025/
 ```
 
+## 2026-07-08 token transformer + grouped gated v2 archive
+
+按 runbook 对 `group_token_transformer_mse` 和 `grouped_gated_v2_gelu_mse` 补齐
+cluster-side pool-internal analysis、artifact sync、experiment audit 和 project contracts check。
+两个 run 的 config 状态已从 `running` 收尾为 `completed`；`osf-audit-experiments`
+输出 `alignment_ok: yes`，`osf-check-project-contracts` 输出 `contracts_ok: yes`。
+
+`pool_L` Top100 summary：
+
+| run | short excess bps | next excess bps | short Rank IC | next Rank IC | next cumulative bps | next positive months |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `lgbm328` | 9.2080 | 8.8643 | 0.140789 | 0.002830 | 8589.5 | 33 |
+| `mlp_base` | 10.1642 | 12.4320 | 0.137205 | 0.004981 | 12046.6 | 37 |
+| `grouped_gated_gelu_mse` | 10.8974 | 13.8491 | 0.142392 | 0.006333 | 13419.8 | 36 |
+| `group_token_transformer_mse` | 10.4829 | 13.6479 | 0.139915 | 0.007441 | 13224.8 | 36 |
+| `grouped_gated_v2_gelu_mse` | 11.0144 | 13.2768 | 0.144034 | 0.007275 | 12865.2 | 39 |
+
+结论：两个新实验仍明显高于 `lgbm328` 和 `mlp_base`。`group_token_transformer_mse`
+最接近老 gated，`pool_L` next excess 低 `0.2012 bps`、累计低 `195.0 bps`；
+`grouped_gated_v2_gelu_mse` 的 next 侧低老 gated `0.5723 bps`，但 short excess、
+short Rank IC 和 next 正月份数更好。
+
+图表和比较表归档到：
+
+```text
+experiments/results/backtests/nn_structured_completed_experiments_comparison_top100_pool_l_v1/two_new_experiments_next_cumulative.svg
+experiments/results/backtests/nn_structured_completed_experiments_comparison_top100_pool_l_v1/two_new_experiments_short_next_cumulative.svg
+experiments/results/backtests/nn_structured_completed_experiments_comparison_top100_pool_l_v1/five_model_next_cumulative.svg
+experiments/results/backtests/nn_structured_completed_experiments_comparison_top100_pool_l_v1/pool_l_top100_comparison.csv
+```
+
 ## 2026-07-07 NN parameter scan synthesis
 
-本节汇总截至 structured grouped NN 前三组归档后的所有 NN 扫描结果；`group_token_transformer_mse`
-仍在重挂训练中，不纳入 completed 排名。
+本节汇总 2026-07-07 截至 structured grouped NN 前三组归档后的 NN 扫描结果；
+`group_token_transformer_mse` 当时仍在重挂训练中，未纳入本节 completed 排名。2026-07-08
+补齐的 token transformer 和 grouped gated v2 结果见上一节。
 
 综合表归档到：
 
