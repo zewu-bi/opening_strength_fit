@@ -92,6 +92,7 @@
 | 2026-07-07 | structured grouped NN first archive | `grouped_residual_gelu_mse` / `grouped_cross_gelu_mse` / `grouped_gated_gelu_mse` 已完成 8/8 training shard、cluster-side pool-internal analysis、artifact sync、audit 和 Top100 累和验收；三者 `pool_L` next excess 均高于 `mlp_base` 与 `lgbm328`，其中 gated 最高。`group_token_transformer_mse` 此前只有空 shard 目录，已按本地历史 YAML 重新提交 indexed GPU Job。 |
 | 2026-07-07 | grouped gated v2 design | 明确 NN 主任务是 `pool_L` Top100 overlay selector，而不是 universe next 模型；新增 `grouped_gated_v2_gelu_mse` 设计：机制分组、per-group embedding dim 和 gate diagnostics，其余训练与验收口径保持 grouped gated v1 不变。 |
 | 2026-07-08 | token transformer + grouped gated v2 archive | `group_token_transformer_mse` / `grouped_gated_v2_gelu_mse` 已完成 8/8 training shard、cluster-side pool-internal analysis、artifact sync、audit 和 Top100 累和验收。两者均高于 `lgbm328` 和 `mlp_base`，但未超过老 `grouped_gated_gelu_mse`；`pool_L` next excess 分别为 `13.6479 / 13.2768 bps`，老 gated 为 `13.8491 bps`。考虑半年尺度振荡和长回撤风险，`grouped_gated_v2_gelu_mse` 的 `next_positive_months=39/48`、更高 short/next Rank IC 和 short excess 使其升为高优先级稳定性候选。 |
+| 2026-07-08 | grouped gated v2 exposure audit | 已对 `grouped_gated_v2_gelu_mse` 补 `pool_L` Top100 core exposure 和 size/industry exposure，不补容量。activity max/mean z `1.251 / 0.947`，低于 `deep_gelu_mse` 和 `lgbm328`；size max/mean z `0.318 / 0.213`，行业 top5 share `0.519`、effective industries `13.44`，均不高于既有候选。 |
 
 ## 2026-05-20 小窗结果
 
@@ -3480,6 +3481,71 @@ experiments/results/backtests/nn_structured_completed_experiments_comparison_top
 experiments/results/backtests/nn_structured_completed_experiments_comparison_top100_pool_l_v1/five_model_next_cumulative.svg
 experiments/results/backtests/nn_structured_completed_experiments_comparison_top100_pool_l_v1/pool_l_top100_comparison.csv
 ```
+
+## 2026-07-08 grouped gated v2 exposure audit
+
+按 `deep_gelu_mse` 的生产化暴露口径，为 `grouped_gated_v2_gelu_mse` 补 `pool_L`
+Top100 core exposure 和 ClickHouse daily size/industry exposure。容量诊断本轮不补，
+因为模型排序相近且容量差异预期不大；后续若进入最终候选再统一补 split20 capacity acceptance。
+
+新增 run：
+
+```text
+exposure_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_core_v1
+exposure_input_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_size_industry_v1
+exposure_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_size_industry_v1
+```
+
+本地归档：
+
+```text
+experiments/results/backtests/exposure_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_core_v1/
+experiments/results/backtests/exposure_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_size_industry_v1/
+```
+
+Core exposure 对照：
+
+| metric | `grouped_gated_v2` | `deep_gelu_mse` | LGBM pruned | read |
+| --- | ---: | ---: | ---: | --- |
+| activity max abs z | 1.251 | 1.303 | 1.526 | activity/turnover 仍是最大暴露，但弱于两个参照。 |
+| activity mean abs z | 0.947 | 0.956 | 1.081 | 活跃度偏好略低于 `deep_gelu_mse`。 |
+| activity top decile share | 0.410 | 0.417 | 0.460 | 更少集中在最高 activity 桶。 |
+| spread z | -0.154 | -0.157 | -0.212 | 仍偏低 spread，但弱于 LGBM。 |
+| selected repeat rate | 0.459 | 0.460 | 0.474 | 单票重复略低。 |
+| effective symbols | 364.54 | 363.82 | 357.74 | 单票分散略好。 |
+
+`grouped_gated_v2` core exposure 的主要项目仍是 `turnover_diff_10t` / `turnover_diff_30t`
+（z `1.251 / 1.225`）、`volume_diff_10t` / `volume_diff_30t`
+（z `0.912 / 0.885`）、`preopen_turnover`（z `0.828`）；`spread_bps`
+为低 spread 偏好（z `-0.154`）。这说明 v2 没有变成新的风格模型，仍是 opening activity /
+turnover heat 画像，但强度略低。
+
+Size / industry exposure：
+
+| metric | `grouped_gated_v2` | `deep_gelu_mse` | LGBM pruned | read |
+| --- | ---: | ---: | ---: | --- |
+| size max abs z | 0.318 | 0.366 | 0.544 | 市值偏中大，但弱于两个参照。 |
+| size mean abs z | 0.213 | 0.254 | 0.385 | size tilt 进一步降低。 |
+| largest industry share | 0.159 | 0.162 | 0.169 | 最大行业占比略低。 |
+| top5 industry share | 0.519 | 0.524 | 0.531 | 前五行业集中略低。 |
+| effective industries | 13.44 | 13.24 | 12.88 | 行业有效分散略高。 |
+
+`grouped_gated_v2` 行业 active-share 最大项：
+
+| industry | active share | read |
+| --- | ---: | --- |
+| 电子 | +0.030 | 主要超配。 |
+| 电力设备 | +0.022 | 主要超配。 |
+| 计算机 | +0.021 | 主要超配。 |
+| 基础化工 | -0.015 | 主要低配。 |
+| 通信 | +0.012 | 次级超配。 |
+| 环保 | -0.011 | 次级低配。 |
+
+结论：`grouped_gated_v2_gelu_mse` 的暴露画像通过候选收敛口径。它延续 opening activity /
+turnover heat、中大市值和电子/电力设备/计算机偏好的强势股画像，但 activity、size、行业集中、
+单票重复均不高于 `deep_gelu_mse` 和 LGBM pruned。结合它的 `next_positive_months=39/48`
+和较好的 Rank IC，v2 的稳定性优势不是来自更高集中度或更强风格押注；后续应继续和老 gated
+并列做 rolling drawdown / stability 验收。
 
 ## 2026-07-08 NN parameter scan synthesis
 
