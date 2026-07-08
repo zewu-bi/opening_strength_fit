@@ -91,7 +91,7 @@
 | 2026-07-03 | structured grouped NN jobs submitted | 按 runbook 新增并提交 4 个结构化 NN rolling sharded GPU Job：`grouped_residual_gelu_mse`、`grouped_cross_gelu_mse`、`grouped_gated_gelu_mse`、`group_token_transformer_mse`。四者均保持短期 `target_label` + MSE，不改验收口径；镜像 `20260703-structured-nn-v1` 已 push，Job 已 Running。 |
 | 2026-07-07 | structured grouped NN first archive | `grouped_residual_gelu_mse` / `grouped_cross_gelu_mse` / `grouped_gated_gelu_mse` 已完成 8/8 training shard、cluster-side pool-internal analysis、artifact sync、audit 和 Top100 累和验收；三者 `pool_L` next excess 均高于 `mlp_base` 与 `lgbm328`，其中 gated 最高。`group_token_transformer_mse` 此前只有空 shard 目录，已按本地历史 YAML 重新提交 indexed GPU Job。 |
 | 2026-07-07 | grouped gated v2 design | 明确 NN 主任务是 `pool_L` Top100 overlay selector，而不是 universe next 模型；新增 `grouped_gated_v2_gelu_mse` 设计：机制分组、per-group embedding dim 和 gate diagnostics，其余训练与验收口径保持 grouped gated v1 不变。 |
-| 2026-07-08 | token transformer + grouped gated v2 archive | `group_token_transformer_mse` / `grouped_gated_v2_gelu_mse` 已完成 8/8 training shard、cluster-side pool-internal analysis、artifact sync、audit 和 Top100 累和验收。两者均高于 `lgbm328` 和 `mlp_base`，但未超过老 `grouped_gated_gelu_mse`；`pool_L` next excess 分别为 `13.6479 / 13.2768 bps`，老 gated 为 `13.8491 bps`。 |
+| 2026-07-08 | token transformer + grouped gated v2 archive | `group_token_transformer_mse` / `grouped_gated_v2_gelu_mse` 已完成 8/8 training shard、cluster-side pool-internal analysis、artifact sync、audit 和 Top100 累和验收。两者均高于 `lgbm328` 和 `mlp_base`，但未超过老 `grouped_gated_gelu_mse`；`pool_L` next excess 分别为 `13.6479 / 13.2768 bps`，老 gated 为 `13.8491 bps`。考虑半年尺度振荡和长回撤风险，`grouped_gated_v2_gelu_mse` 的 `next_positive_months=39/48`、更高 short/next Rank IC 和 short excess 使其升为高优先级稳定性候选。 |
 
 ## 2026-05-20 小窗结果
 
@@ -3466,7 +3466,11 @@ cluster-side pool-internal analysis、artifact sync、experiment audit 和 proje
 结论：两个新实验仍明显高于 `lgbm328` 和 `mlp_base`。`group_token_transformer_mse`
 最接近老 gated，`pool_L` next excess 低 `0.2012 bps`、累计低 `195.0 bps`；
 `grouped_gated_v2_gelu_mse` 的 next 侧低老 gated `0.5723 bps`，但 short excess、
-short Rank IC 和 next 正月份数更好。
+short Rank IC 和 next 正月份数更好。考虑 mentor 提到的半年尺度振荡和长时间回撤风险，
+`next_positive_months` 不应只作为辅助读数，而应作为稳定性 gate：v2 的 `39/48`
+正月份高于老 gated 的 `36/48` 和 `mlp_base` 的 `37/48`，因此从收益次优模型上调为
+高优先级稳定性候选。后续选择主候选时，应并行比较老 gated 的收益高度和 v2 的月度稳定性、
+rolling 3m/6m 回撤、capacity / exposure 画像，而不是只按最终累计收益排序。
 
 图表和比较表归档到：
 
@@ -3500,10 +3504,12 @@ experiments/results/backtests/nn_structured_completed_experiments_comparison_top
 - 语义 feature group encoder 有明确增量。`grouped_residual` / `grouped_cross` /
   `grouped_gated` 的 `pool_L` next excess 均超过 `deep_gelu_mse`，其中老 gated 最高
   `13.8491 bps`。`group_token_transformer_mse` 为 `13.6479 bps`，接近但未超过老 gated；
-  `grouped_gated_v2_gelu_mse` 为 `13.2768 bps`，高于 baseline 但低于老 gated。这说明先按
-  activity / liquidity / path / turnover 等语义组内编码，再做小型融合，比继续把 328 个
-  raw feature 直接堆进更宽 MLP 更有效；更复杂的 group-token attention 或更细 v2 分组暂未带来
-  next overlay 的净提升。
+  `grouped_gated_v2_gelu_mse` 为 `13.2768 bps`，高于 baseline 但低于老 gated。不过 v2 的
+  `next_positive_months=39/48`、next Rank IC `0.007275`、short excess `11.0144 bps`
+  均优于老 gated，说明它可能牺牲少量 top-tail next 收益，换取更均匀的月度稳定性。
+  这说明先按 activity / liquidity / path / turnover 等语义组内编码，再做小型融合，比继续
+  把 328 个 raw feature 直接堆进更宽 MLP 更有效；更复杂的 group-token attention 暂不扩大，
+  v2 则保留为高优先级稳定性候选。
 - grouped 模型的 Rank IC 也有温和改善：universe short Rank IC 约 `0.154-0.156`，
   高于 MSE plain MLP 的约 `0.151`，但仍低于 `deep_gelu_huber` 的 `0.164169`。
 
@@ -3518,17 +3524,21 @@ experiments/results/backtests/nn_structured_completed_experiments_comparison_top
   `mlp_base` / MSE / grouped MSE。
 - NN + LGBM rankblend 相对 LGBM 有改善，但没有打过已有 NN 候选；短期不再把
   NN + LGBM 作为主探索方向。
-- `group_token_transformer_mse` 和 `grouped_gated_v2_gelu_mse` 都没有替代老 gated。
-  Transformer 的 next excess 只低 `0.2012 bps`，但复杂度和预测 batch 成本更高；
-  v2 的 short excess、short Rank IC 和 next 正月份更好，但 next excess 低老 gated
-  `0.5723 bps`，更像稳定性候选而不是 overlay 主候选。
+- `group_token_transformer_mse` 没有替代老 gated。Transformer 的 next excess 只低
+  `0.2012 bps`，但复杂度和预测 batch 成本更高。
+- `grouped_gated_v2_gelu_mse` 虽然 next excess 低老 gated `0.5723 bps`，但 short excess、
+  short/next Rank IC 和 next 正月份更好。若当前累和曲线存在半年左右振荡周期，导致潜在长时间
+  回撤，那么 v2 的稳定性指标有实际组合价值，应作为与老 gated 并列评估的稳定性候选，而不是
+  简单降级。
 
 下一步建议的 targeted NN 结构和参数：
 
-1. 以 `grouped_gated_gelu_mse` 为 overlay 主候选，先补 market-relative、split20 10亿 capacity、
-   Top100 core exposure 和 size/industry exposure；只有通过这些 gate 后才考虑替代
-   `deep_gelu_mse` / `mlp_base`。
-2. 以 `grouped_gated` 和 `grouped_residual` 做小网格，不再宽扫：`group_embedding_dim`
+1. 双主线推进：`grouped_gated_gelu_mse` 仍是收益高度候选，`grouped_gated_v2_gelu_mse`
+   升为高优先级稳定性候选。两者都应补 market-relative、split20 10亿 capacity、Top100 core
+   exposure、size/industry exposure，以及 rolling 3m/6m、max drawdown、连续负月份等稳定性诊断；
+   最终不只按 cumulative next 排序。
+2. 以 `grouped_gated` / `grouped_gated_v2` 和 `grouped_residual` 做小网格，不再宽扫：
+   `group_embedding_dim`
    `32/48/64`，`fusion_dim` `192/256`，`block_hidden_dim` `384/512`，`num_blocks`
    `1/2`，`dropout` `0.05/0.10`，学习率维持 `2.5e-4` 附近。
 3. 为兼顾排序力，做一组 grouped gated 的 loss 对照：纯 MSE、轻 Huber、以及
