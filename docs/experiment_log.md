@@ -3477,16 +3477,16 @@ experiments/results/backtests/nn_structured_completed_experiments_comparison_top
 experiments/results/backtests/nn_structured_completed_experiments_comparison_top100_pool_l_v1/pool_l_top100_comparison.csv
 ```
 
-## 2026-07-07 NN parameter scan synthesis
+## 2026-07-08 NN parameter scan synthesis
 
-本节汇总 2026-07-07 截至 structured grouped NN 前三组归档后的 NN 扫描结果；
-`group_token_transformer_mse` 当时仍在重挂训练中，未纳入本节 completed 排名。2026-07-08
-补齐的 token transformer 和 grouped gated v2 结果见上一节。
+本节汇总截至 2026-07-08 已完成归档的 NN 扫描结果，包括 plain MLP、MSE neighborhood、
+structured grouped NN、`group_token_transformer_mse` 和 `grouped_gated_v2_gelu_mse`。
 
 综合表归档到：
 
 ```text
 experiments/results/backtests/nn_parameter_scan_synthesis_2022_2025/nn_scan_pool_l_summary.csv
+experiments/results/backtests/nn_structured_completed_experiments_comparison_top100_pool_l_v1/pool_l_top100_comparison.csv
 ```
 
 参数 / 结构上表现较好的方向：
@@ -3498,9 +3498,12 @@ experiments/results/backtests/nn_parameter_scan_synthesis_2022_2025/nn_scan_pool
   overlay incumbent；`base_plus_mse` / `deep_gelu_mse` 说明在 MSE 下稍加容量和 GELU
   能继续提高 next overlay。
 - 语义 feature group encoder 有明确增量。`grouped_residual` / `grouped_cross` /
-  `grouped_gated` 的 `pool_L` next excess 均超过 `deep_gelu_mse`，其中 gated 最高
-  `13.8491 bps`。这说明先按 activity / liquidity / path / turnover 等语义组内编码，
-  再做小型融合，比继续把 328 个 raw feature 直接堆进更宽 MLP 更有效。
+  `grouped_gated` 的 `pool_L` next excess 均超过 `deep_gelu_mse`，其中老 gated 最高
+  `13.8491 bps`。`group_token_transformer_mse` 为 `13.6479 bps`，接近但未超过老 gated；
+  `grouped_gated_v2_gelu_mse` 为 `13.2768 bps`，高于 baseline 但低于老 gated。这说明先按
+  activity / liquidity / path / turnover 等语义组内编码，再做小型融合，比继续把 328 个
+  raw feature 直接堆进更宽 MLP 更有效；更复杂的 group-token attention 或更细 v2 分组暂未带来
+  next overlay 的净提升。
 - grouped 模型的 Rank IC 也有温和改善：universe short Rank IC 约 `0.154-0.156`，
   高于 MSE plain MLP 的约 `0.151`，但仍低于 `deep_gelu_huber` 的 `0.164169`。
 
@@ -3515,6 +3518,10 @@ experiments/results/backtests/nn_parameter_scan_synthesis_2022_2025/nn_scan_pool
   `mlp_base` / MSE / grouped MSE。
 - NN + LGBM rankblend 相对 LGBM 有改善，但没有打过已有 NN 候选；短期不再把
   NN + LGBM 作为主探索方向。
+- `group_token_transformer_mse` 和 `grouped_gated_v2_gelu_mse` 都没有替代老 gated。
+  Transformer 的 next excess 只低 `0.2012 bps`，但复杂度和预测 batch 成本更高；
+  v2 的 short excess、short Rank IC 和 next 正月份更好，但 next excess 低老 gated
+  `0.5723 bps`，更像稳定性候选而不是 overlay 主候选。
 
 下一步建议的 targeted NN 结构和参数：
 
@@ -3527,9 +3534,8 @@ experiments/results/backtests/nn_parameter_scan_synthesis_2022_2025/nn_scan_pool
 3. 为兼顾排序力，做一组 grouped gated 的 loss 对照：纯 MSE、轻 Huber、以及
    `MSE + small rank/IC auxiliary` 或 score/rank blend 到 `deep_gelu_huber`。目标是保住
    grouped MSE 的 next overlay，同时向 `deep_gelu_huber` 的 Rank IC 靠近。
-4. 观察正在重跑的 `group_token_transformer_mse`。若它没有超过 grouped gated / residual，
-   不继续扩大 Transformer；若有增量，只在 group token 层小范围试 heads/layers，
-   不做 raw-feature attention。
+4. `group_token_transformer_mse` 已补齐归档但未超过老 gated；暂不继续扩大 Transformer。
+   若后续要复查，只在 group token 层小范围试 heads/layers，不做 raw-feature attention。
 5. 暂停 plain MLP 加宽、wide-deep h128、低正则和 NN+LGBM rankblend，除非新证据显示它们能同时改善
    overlay、Rank IC 和容量 / 暴露画像。
 
