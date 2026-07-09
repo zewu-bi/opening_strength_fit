@@ -7,6 +7,11 @@ Scope: this diagnostic uses the old NN overlay set only: `nn_mlp_base`,
 `pool_L`, with next-close pool-internal excess as the label. It should not be
 read as a `grouped_gated` / `grouped_gated_v2` result.
 
+Headline return numbers use decision-group equal weighting: each
+`date x decision_target_timestamp` TopK / bucket portfolio gets one equal
+weight. Month-level files are stability checks only, not the headline return
+source.
+
 Artifacts:
 
 ```text
@@ -16,11 +21,13 @@ experiments/results/backtests/old_nn_multiscale_bucket_diag_v1/
 ```
 
 Conclusion: the alpha has a reasonable coarse Top1000 bucket shape, but weak
-fine ranking inside buckets. The averaged 10-bucket Top1000 mean excess is
-roughly `13.03, 6.20, 4.10, 2.88, 2.34, 1.73, 1.61, 1.55, 1.35, 1.31 bps`,
-so score buckets are ordered in the right direction. However, bucket medians are
-negative and the positive rate is only about `44%`, which means the positive
-mean is pulled by right-tail winners rather than the typical stock.
+fine ranking inside buckets. The old-three-model mean Top1000 bucket excess is
+`12.71, 6.18, 4.08, 2.98, 2.36, 1.76, 1.58, 1.56, 1.37, 1.31 bps`, so score
+buckets are ordered in the right direction. However, bucket medians are negative
+and the positive rate is only about `44%`, which means the positive mean is
+pulled by right-tail winners rather than the typical stock. The earlier
+`13.03, 6.20, ...` table is the same sample under 48-month equal weighting; it
+is not the headline convention.
 
 The bucket-level signal is much clearer than pointwise IC: Top1000 bucket group
 IC is about `0.038-0.045`, while TopK internal next IC is negative, around
@@ -35,8 +42,7 @@ shape. The old-three-model mean TopK next-close pool-internal excess is
 `15.50, 12.71, 10.82, 9.45, 5.66, 3.59 bps` for Top50/100/150/200/500/1000.
 The 100-name and 200-name Top1000 buckets are monotone by mean excess; the
 50-name buckets are strongly ordered in the head and only become noisy after the
-first few hundred names. The 100-name bucket means are
-`12.71, 6.18, 4.08, 2.98, 2.36, 1.76, 1.58, 1.56, 1.37, 1.31 bps`.
+first few hundred names.
 
 The IC diagnostics still say the same thing: Top50/100/150/200 internal Spearman
 IC is about `-0.029, -0.029, -0.028, -0.026`. Sliding local IC is most negative
