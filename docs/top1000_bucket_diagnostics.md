@@ -12,6 +12,13 @@ Headline return numbers use decision-group equal weighting: each
 weight. Month-level files are stability checks only, not the headline return
 source.
 
+Acceptance-figure reconciliation must use per-variant rows, not `old3_mean`.
+For example, `bucket_width=100, bucket=1` matches the pool-internal Top100 next
+acceptance value for the same run: `nn_mlp_base=12.4320 bps`,
+`nn_mlp_base_plus_mse=12.7478 bps`, and `nn_deep_gelu_mse=12.9610 bps`.
+`old3_mean=12.7136 bps` is only the diagnostic average of those three rows; it
+does not correspond to a separate acceptance-figure line.
+
 Artifacts:
 
 ```text
@@ -32,11 +39,11 @@ Use these files as the canonical readout:
   return convention.
 
 Conclusion: the alpha has a reasonable coarse Top1000 bucket shape, but weak
-fine ranking inside buckets. The old-three-model mean Top1000 bucket excess is
-`12.71, 6.18, 4.08, 2.98, 2.36, 1.76, 1.58, 1.56, 1.37, 1.31 bps`, so score
-buckets are ordered in the right direction. However, bucket medians are negative
-and the positive rate is only about `44%`, which means the positive mean is
-pulled by right-tail winners rather than the typical stock. The earlier
+fine ranking inside buckets. The old-three-model diagnostic mean Top1000 bucket
+excess is `12.71, 6.18, 4.08, 2.98, 2.36, 1.76, 1.58, 1.56, 1.37, 1.31 bps`,
+so score buckets are ordered in the right direction. However, bucket medians are
+negative and the positive rate is only about `44%`, which means the positive
+mean is pulled by right-tail winners rather than the typical stock. The earlier
 `13.03, 6.20, ...` table is the same sample under 48-month equal weighting; it
 is not the headline convention.
 
