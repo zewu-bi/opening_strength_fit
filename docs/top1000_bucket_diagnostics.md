@@ -12,6 +12,7 @@ Artifacts:
 ```text
 experiments/results/backtests/local_ic_topk_nn_overlay_pool_l_v1/
 experiments/results/backtests/ic_bucket_diagnostics_nn_overlay_pool_l_v1/
+experiments/results/backtests/old_nn_multiscale_bucket_diag_v1/
 ```
 
 Conclusion: the alpha has a reasonable coarse Top1000 bucket shape, but weak
@@ -28,3 +29,18 @@ is also negative, around `-0.028`. This supports the read that the old NN overla
 works more like a bucket / head-region selector than a stable single-stock fine
 ranker, which explains why pointwise next IC is low despite a visible bucket
 gradient.
+
+Multiscale follow-up on the same old three-model sample confirms the head-region
+shape. The old-three-model mean TopK next-close pool-internal excess is
+`15.50, 12.71, 10.82, 9.45, 5.66, 3.59 bps` for Top50/100/150/200/500/1000.
+The 100-name and 200-name Top1000 buckets are monotone by mean excess; the
+50-name buckets are strongly ordered in the head and only become noisy after the
+first few hundred names. The 100-name bucket means are
+`12.71, 6.18, 4.08, 2.98, 2.36, 1.76, 1.58, 1.56, 1.37, 1.31 bps`.
+
+The IC diagnostics still say the same thing: Top50/100/150/200 internal Spearman
+IC is about `-0.029, -0.029, -0.028, -0.026`. Sliding local IC is most negative
+at the very head (`1-100` about `-0.029`) and fades toward zero after the first
+few hundred ranks. This is not a contradiction with the bucket gradient; it
+means the score is useful for detecting a high-score state / region, while the
+fine ordering inside that region is weak or mildly reversed.
