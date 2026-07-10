@@ -7,7 +7,7 @@
 ## 快速索引
 
 - 当前 brief：`09:31-09:40`、mixed label `w_long=0.30`、baseline `soft_core_reg_light`。
-- 主验收图：Top100 诊断、10亿 capacity acceptance、NN 对照图都在
+- 当前 overlay 诊断图：Top100 曲线、10亿 capacity acceptance、NN 对照图都在
   `experiments/results/backtests/optimization_overlay_acceptance*/`。
 - 2022-2025 baseline：`experiments/results/backtests/baseline_2022_2025_cluster/`。
 - 当前信号候选：`hist_path_pruned_highdup` 是 LGBM 干净候选；NN 侧
@@ -15,17 +15,20 @@
   `grouped_gated_v2_xs_rank_inplace_gelu_mse` 是 short IC 领先的同特征无量纲化对照，
   `grouped_gated_gelu_mse` / `grouped_gated_v2_gelu_mse` 作为结构化 NN 高度与稳定性锚点，
   `deep_gelu_huber` 仍代表 Rank IC 主线；`mlp_base` / `deep_gelu_mse` 作为已做容量验收的锚点保留。
-- 下一阶段：从 Top100 overlay 诊断转向独立因果交易策略，扩大研究时间区间，并把 label 沉淀成
-  分钟频 outcome path / 时序特征，供训练 target 派生和策略回测直接使用。
+- 当前研究目标不是脱离 pool 的独立策略，而是在 pool 内做 overlay 超额。下一阶段从 Top100
+  overlay 诊断转向真实 pool-overlay 回测，纳入容量、交易冲击、成交约束、成本和持仓路径。
+- 样本扩展方向：从 `09:31-09:40` 开盘 10 分钟扩到全天上百个 decision points，并把 label
+  沉淀成分钟频 outcome path / 时序特征，供训练 target 派生和策略回测直接使用。
 - 当前 NN 对照：第一轮 3 个 `torch_mlp` MLP 变体、第二轮 5 个 NN 结构扫描和 1 个
   NN+LGBM rankblend、第三轮 4 个 MSE neighborhood 变体均已完成并归档；第四轮结构化
   grouped NN 中 residual / cross / gated / token-transformer / gated v2 / gated v2 symbol-zscore
   均已完成训练、pool-internal analysis、artifact sync 和 audit。symbol-zscore 版不晋级；
   `xs_rank_inplace`、`mech328_xs_rank` 和 `mech328_v2_robust_zscore` 三个同 328 特征
   归一化实验均已完成；当前 overlay 读 mech328 v2，short IC 读 xs-rank，mech328 v1 为负面对照。
-- 最新生产化证据：剪枝后 Top100 exposure、size/industry exposure、split20 capacity audits，
+- 最新可选诊断证据：剪枝后 Top100 exposure、size/industry exposure、split20 capacity audits，
   以及 `lgbm326` / `mlp_base` / `deep_gelu_mse` 的 10亿 capacity acceptance；`deep_gelu_mse`
-  已补 Top100 core exposure 和 size/industry exposure。
+  已补 Top100 core exposure 和 size/industry exposure。这些用于解释容量和暴露，不是当前候选
+  晋级的必选项。
 - 最新 hygiene 证据：baseline 276 特征 hard-drop 17 candidates 已归档，不再列为下一步待办。
 - 封存路线：两模型 `alpha_rank - lambda * gap_risk_rank`，只保留为历史证据。
 
@@ -103,7 +106,9 @@
 | 2026-07-10 | old NN Top1000 bucket curve archive | 旧 3 NN 模型均值的 Top1000 10/20/50 桶折线图已归档到 `experiments/results/backtests/old_nn_multiscale_bucket_diag_v1/top1000_bucket_multiscale_old3_mean.svg`，plot data 为同目录 `top1000_bucket_multiscale_old3_mean_plot_data.csv`。图使用 `pool_L` next internal excess 和 `date x decision_time` 机会等权；验收图对齐仍看 per-variant 的 `bucket_width=100, bucket=1`。折线显示粗分桶头部递减清楚，但不改变 Top1000 pointwise IC 和 10-bucket 桶内 IC 为负的解释：信号有 head-region 选择力，桶内 fine ranking 弱或轻微反向。 |
 | 2026-07-10 | grouped gated v2 dimensionless acceptance archive | `xs_rank_inplace` 和 `mech328_v2_robust_zscore` 已完成 training、cluster-side pool-internal analysis、artifact sync、audit 和两张验收图。相对 gated v2，xs-rank 的 universe short Rank IC 更高 `0.161260 vs 0.157623`；mech328 v2 的 `pool_L` next excess 更高 `14.3174 vs 13.2768 bps`，Top100 8bps next net cumulative 更高 `8508.0 vs 8003.8 bps`。当前 overlay 结论优先 mech328 v2，short 排序力结论优先 xs-rank。 |
 | 2026-07-10 | grouped gated v2 mech328 v1 archive | `mech328_xs_rank` 已完成 training、cluster-side pool-internal analysis、artifact sync、audit，并生成 gated v2 / mech328 v1 / mech328 v2 三线验收图。v1 提升 short IC：universe short Rank IC `0.160371`，但主 overlay 退化：`pool_L` next excess `11.7491 bps`，低于 gated v2 `13.2768 bps` 和 mech328 v2 `14.3174 bps`；Top100 8bps next net cumulative `7263.6 bps`，比 gated v2 低 `740.2 bps`。 |
-| 2026-07-10 | overlay final candidate and next scope | 决策更新：`mech328_v2_robust_zscore` 升级为当前 overlay final candidate；`xs_rank_inplace` / `deep_gelu_huber` 保留为排序力对照。下一阶段不继续宽扫 NN，而是做更真实的独立交易策略、扩大研究时间区间，并把 label 做成分钟频时序 outcome path。 |
+| 2026-07-10 | overlay final candidate and next scope | 决策更新：`mech328_v2_robust_zscore` 升级为当前 overlay final candidate；`xs_rank_inplace` / `deep_gelu_huber` 保留为排序力对照。下一阶段不继续宽扫 NN，而是做真实 pool-overlay 回测、扩大研究时间区间，并把 label 做成分钟频时序 outcome path。 |
+| 2026-07-10 | scope correction: pool overlay only | 口径修正：当前模型本来就是和 pool 配合的 overlay，不以脱离 pool 的独立 universe 策略为目标；优势主要看 `pool_L` 内部重排和 pool 内超额。capacity acceptance / exposure audit 改为选做诊断，主目标改为真实回测、容量与交易冲击建模，以及从开盘 10 分钟扩展到全天上百个 decision points 的日内序列信号。 |
+| 2026-07-10 | grouped gated v2 mech328 v3 histavg activity submission | 新增 `mechanismized_v3_dimensionless_328`：同 328 特征名原地替换，特征层做严格 ratio-style 无量纲化、不做截面 zscore，NN 入口仍按训练集做全局 zscore。当前 cache 无市值/股本列，因此 v3 fallback 先用 prior-date 60d 历史日均开盘窗口成交股数 / 成交额作 volume/depth 与 turnover 分母；training Job `os-nn-2225-gated-v2-mech328v3-mse` 已提交并 Running，completionMode Indexed，`8` shards，parallelism `4`，镜像 `20260710-nn-mech328-v3-histavg-v1`。 |
 | 2026-07-09 | grouped gated v2 symbol-zscore archive | `grouped_gated_v2_symbol_zscore_gelu_mse` 已完成 8/8 training shard、cluster-side pool-internal analysis、artifact sync、audit 和 Top100 验收图。`pool_L` next excess `11.6661 bps`，低于 gated v2 `13.2768 bps`、老 gated `13.8491 bps` 和 `mlp_base` `12.4320 bps`；不晋级。 |
 | 2026-07-09 | grouped gated v2 in-place XS rank submission | 新增 `features.feature_value_transform = "cross_sectional_rank_centered"`，模型仍使用同一批 328 特征名，不追加 `xs_rel_` / `norm_` 列；初版曾落到 RTX5090 / sm_120 节点报 PyTorch CUDA kernel incompatible，后续用 `20260709-nn-mech328-v3` 和兼容 GPU avoid-list 重提并完成。 |
 | 2026-07-09 | grouped gated v2 mech328 XS rank submission | 新增 `features.feature_value_transform = "mechanismized_cross_sectional_rank_centered"`，同一批 328 特征名原地替换：价格类转 bps/tick，部分股数类转 notional pressure，金额/计数类做单调压缩，再做 rank-centered；初版 pod 因落到 Blackwell/RTX5000 GPU 报 `no kernel image is available for execution on the device`，后续用镜像 `20260709-nn-mech328-v3`、兼容 GPU avoid-list 重提并完成。 |
@@ -3675,6 +3680,62 @@ mech328 v1 analysis: Complete
 artifact sync: Complete
 audit: alignment_ok=yes, contracts_ok=yes
 git diff --check: ok
+```
+
+## 2026-07-10 grouped gated v2 mech328 v3 histavg activity submission
+
+新增同 328 特征、同 grouped gated v2 架构的机制化 v3 无量纲实验。目标是把“特征层无量纲化”
+和“NN 输入 zscore”分清：v3 在特征值进入 NN 之前做严格 ratio-style 变换；训练阶段仍保留
+NN 默认的 train-set global zscore。
+
+当前 PVC labeled cache 没有 `market_cap` / `total_shares` 等市值或股本列。为了先复用当前 cache，
+v3 增加 prior-date 历史 activity fallback：按 `symbol,date` 在 cache 可见的开盘决策窗口内取
+`volume` / `turnover` 日内最大值，再对历史日期做 60d rolling mean，作为
+`hist_avg_daily_volume_60d` / `hist_avg_daily_turnover_60d`。该 rolling 先 shift 一天，因此当前日
+不会进入自己的分母。
+
+Run id：
+
+```text
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_histavg_activity_gelu_mse_v1
+```
+
+核心配置：
+
+```toml
+[features]
+include_historical_daily_activity_references = true
+historical_daily_activity_windows = [60]
+historical_daily_activity_min_periods = 10
+feature_value_transform = "mechanismized_v3_dimensionless_328"
+feature_value_transform_group_cols = ["date", "decision_target_timestamp"]
+feature_value_transform_tick_size = 0.01
+```
+
+实现语义：
+
+- 真实 `total_shares` / `market_cap` 存在时优先用真实股本和市值。
+- 当前 cache 没有这些列时，`volume` / book depth 用 `hist_avg_daily_volume_60d` 作分母；
+  `turnover` 用 `hist_avg_daily_turnover_60d` 作分母。
+- 价格类仍转成 bps / tick 语义，level queue 仍转成同侧 depth share，计数类转成同侧/双侧 count share。
+- v3 不做 `log` / `log1p`，`mechanismized_v3_dimensionless_328` 也不做截面 zscore；如需显式截面
+  robust zscore，配置名是 `mechanismized_v3_robust_zscore`。
+
+验证和提交：
+
+```text
+.venv/bin/pytest -q tests/test_feature_value_transform.py tests/test_fullxs_feature_engineering.py tests/test_labeled_pvc_source.py tests/test_torch_mlp.py tests/test_torch_standardization.py tests/test_feature_filters.py
+# 33 passed, 3 skipped
+python -m compileall -q src/opening_strength_fit
+git diff --check
+.venv/bin/osf-check-project-contracts  # contracts_ok: yes
+
+image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260710-nn-mech328-v3-histavg-v1
+training job: os-nn-2225-gated-v2-mech328v3-mse
+completionMode: Indexed
+completions: 8
+parallelism: 4
+initial status: 4/4 active pods Running on node16/node18/node23
 ```
 
 ## 2026-07-09 grouped gated v2 mech328 v2 robust-zscore submission

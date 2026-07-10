@@ -250,3 +250,80 @@ def add_historical_same_minute_surprise_features(
     features = features.sort_values("_hist_orig_order").drop(columns="_hist_orig_order")
     features.index = out.index
     return pd.concat([out.copy(), features], axis=1)
+
+
+def add_historical_daily_activity_reference_features(
+    frame: pd.DataFrame,
+    *,
+    volume_col: str = "volume",
+    turnover_col: str = "turnover",
+    windows: tuple[int, ...] = (60,),
+    min_periods: int = 10,
+    prefix: str = "hist_avg_daily_",
+) -> pd.DataFrame:
+    """Add prior-date rolling daily activity averages for dimensionless denominators.
+
+    The daily activity available in the labeled cache is the max value observed
+    within the cached decision rows for a symbol-date. Rolling averages are
+    shifted by one date, so the current date never enters its own denominator.
+    """
+
+    out = ensure_timestamp_columns(frame)
+    if "symbol" not in out.columns or "date" not in out.columns:
+        raise ValueError("historical daily activity references require date and symbol columns")
+
+    source_columns = [
+        column
+        for column in (volume_col, turnover_col)
+        if column in out.columns and pd.api.types.is_numeric_dtype(out[column])
+    ]
+    if not source_columns:
+        return out.copy()
+
+    min_periods = max(1, int(min_periods))
+    windows = tuple(int(window) for window in windows if int(window) >= 2)
+    if not windows:
+        return out.copy()
+
+    work = out[["symbol", "date", *source_columns]].copy()
+    work["_hist_date"] = pd.to_datetime(work["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    work["_hist_orig_order"] = np.arange(len(work))
+
+    references = work[["symbol", "_hist_date", "_hist_orig_order"]].copy()
+    for column in source_columns:
+        daily = (
+            work[["symbol", "_hist_date", column]]
+            .dropna(subset=["symbol", "_hist_date"])
+            .assign(**{column: pd.to_numeric(work[column], errors="coerce")})
+            .groupby(["symbol", "_hist_date"], sort=False, as_index=False)[column]
+            .max()
+            .sort_values(["symbol", "_hist_date"])
+            .reset_index(drop=True)
+        )
+        if daily.empty:
+            continue
+        past = daily.groupby("symbol", sort=False)[column].shift(1)
+        for window in windows:
+            averaged = (
+                past.groupby(daily["symbol"], sort=False)
+                .rolling(window=window, min_periods=min_periods)
+                .mean()
+                .reset_index(level=0, drop=True)
+            )
+            ref_col = f"{prefix}{column}_{window}d"
+            daily_refs = daily[["symbol", "_hist_date"]].copy()
+            daily_refs[ref_col] = averaged.to_numpy()
+            references = references.merge(
+                daily_refs,
+                on=["symbol", "_hist_date"],
+                how="left",
+                validate="many_to_one",
+            )
+
+    new_columns = references.sort_values("_hist_orig_order").drop(
+        columns=["symbol", "_hist_date", "_hist_orig_order"]
+    )
+    if new_columns.empty:
+        return out.copy()
+    new_columns.index = out.index
+    return pd.concat([out.copy(), new_columns.astype("float32")], axis=1)

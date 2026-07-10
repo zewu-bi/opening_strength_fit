@@ -218,6 +218,24 @@ def mechanismized_feature_value_reference_columns() -> tuple[str, ...]:
         "prev_close",
         "open_price",
         "preopen_last_price",
+        "market_cap",
+        "float_market_cap",
+        "total_market_cap",
+        "mkt_cap",
+        "total_mkt_cap",
+        "total_shares",
+        "float_shares",
+        "shares_outstanding",
+        "total_share",
+        "share_capital",
+        "circulating_shares",
+        "free_float_shares",
+        "hist_avg_daily_volume_20d",
+        "hist_avg_daily_volume_60d",
+        "hist_avg_daily_volume_120d",
+        "hist_avg_daily_turnover_20d",
+        "hist_avg_daily_turnover_60d",
+        "hist_avg_daily_turnover_120d",
     )
     historical_ratio_bases = (
         "volume_diff_1t",
@@ -302,6 +320,85 @@ def _historical_ratio(frame: pd.DataFrame, column: str) -> pd.Series | None:
         if ratio.notna().any():
             return _log_positive_ratio(ratio)
     return None
+
+
+def _reference_market_cap(frame: pd.DataFrame) -> pd.Series:
+    for column in (
+        "market_cap",
+        "total_market_cap",
+        "mkt_cap",
+        "total_mkt_cap",
+        "float_market_cap",
+    ):
+        values = _positive(_clean_values(frame, column))
+        if values.notna().any():
+            return values
+
+    historical_turnover = _historical_daily_activity_reference(frame, "turnover")
+    if historical_turnover.notna().any():
+        return historical_turnover
+
+    shares = _reference_shares(frame)
+    price = _reference_price(frame)
+    fallback = shares * price
+    return _positive(fallback)
+
+
+def _reference_shares(frame: pd.DataFrame) -> pd.Series:
+    for column in (
+        "total_shares",
+        "shares_outstanding",
+        "total_share",
+        "share_capital",
+        "float_shares",
+        "circulating_shares",
+        "free_float_shares",
+    ):
+        values = _positive(_clean_values(frame, column))
+        if values.notna().any():
+            return values
+
+    market_cap = pd.Series(np.nan, index=frame.index, dtype="float64")
+    for column in (
+        "market_cap",
+        "total_market_cap",
+        "mkt_cap",
+        "total_mkt_cap",
+        "float_market_cap",
+    ):
+        values = _positive(_clean_values(frame, column))
+        if values.notna().any():
+            market_cap = values
+            break
+    price = _reference_price(frame)
+    market_cap_shares = _positive(pd.Series(safe_divide(market_cap, price), index=frame.index))
+    if market_cap_shares.notna().any():
+        return market_cap_shares
+
+    return _historical_daily_activity_reference(frame, "volume")
+
+
+def _historical_daily_activity_reference(frame: pd.DataFrame, kind: str) -> pd.Series:
+    for window in (60, 20, 120):
+        column = f"hist_avg_daily_{kind}_{window}d"
+        values = _positive(_clean_values(frame, column))
+        if values.notna().any():
+            return values
+    return pd.Series(np.nan, index=frame.index, dtype="float64")
+
+
+def _same_side_count(frame: pd.DataFrame, column: str) -> pd.Series:
+    if column.startswith(("ask_", "postopen_ask_", "postopen_v2_ask_", "total_ask_")):
+        return _positive(_clean_values(frame, "total_ask_count"))
+    if column.startswith(("bid_", "postopen_bid_", "postopen_v2_bid_", "total_bid_")):
+        return _positive(_clean_values(frame, "total_bid_count"))
+    total = _clean_values(frame, "total_ask_count") + _clean_values(frame, "total_bid_count")
+    return _positive(total)
+
+
+def _total_book_count(frame: pd.DataFrame) -> pd.Series:
+    total = _clean_values(frame, "total_ask_count") + _clean_values(frame, "total_bid_count")
+    return _positive(total)
 
 
 def _is_historical_ratio_name(name: str) -> bool:
@@ -518,6 +615,70 @@ def _mechanismized_v2_feature_series(
     return values
 
 
+def _mechanismized_v3_feature_series(
+    frame: pd.DataFrame,
+    column: str,
+    *,
+    tick_size: float,
+) -> pd.Series:
+    name = str(column).lower()
+    values = _clean_values(frame, column)
+    mid = _reference_mid(frame)
+    price = _reference_price(frame)
+    shares = _reference_shares(frame)
+    market_cap = _reference_market_cap(frame)
+
+    if name == "exch_time_offset_us":
+        open_offset_us = (9 * 60 * 60 + 30 * 60) * 1_000_000.0
+        ten_minutes_us = 10 * 60 * 1_000_000.0
+        return (values - open_offset_us) / ten_minutes_us
+
+    if name == "postopen_minutes_since_0930":
+        return values / 10.0
+
+    if _is_dimensionless_name(name) or _is_historical_ratio_name(name):
+        return values
+
+    if name == "spread_abs":
+        return pd.Series(safe_divide(values, float(tick_size)), index=frame.index)
+
+    if _is_raw_price_name(name):
+        if name == "mid_price":
+            return pd.Series(safe_divide(float(tick_size), _positive(values)) * 10_000.0)
+        if name == "ask_price_1":
+            return pd.Series(safe_divide(values - mid, mid) * 10_000.0, index=frame.index)
+        if name == "bid_price_1":
+            return pd.Series(safe_divide(mid - values, mid) * 10_000.0, index=frame.index)
+        if name.startswith("trade_vwap_"):
+            return pd.Series(safe_divide(values - price, price) * 10_000.0, index=frame.index)
+        if _is_price_diff_name(name):
+            return pd.Series(safe_divide(values, price) * 10_000.0, index=frame.index)
+        return pd.Series(safe_divide(values - mid, mid) * 10_000.0, index=frame.index)
+
+    if _is_book_level_share_name(name):
+        return pd.Series(safe_divide(values, _side_depth(frame, name)), index=frame.index)
+
+    if _is_book_depth_name(name):
+        by_shares = pd.Series(safe_divide(values, shares), index=frame.index)
+        by_market_cap = pd.Series(safe_divide(values * price, market_cap), index=frame.index)
+        return by_shares.where(by_shares.notna(), by_market_cap)
+
+    if _is_trade_share_volume_name(name) or _is_share_volume_name(name):
+        return pd.Series(safe_divide(values, shares), index=frame.index)
+
+    if _is_notional_name(name):
+        return pd.Series(safe_divide(values, market_cap), index=frame.index)
+
+    if _is_count_name(name):
+        if name in {"total_ask_count", "total_bid_count"}:
+            return pd.Series(safe_divide(values, _total_book_count(frame)), index=frame.index)
+        if name == "trade_num":
+            return pd.Series(safe_divide(values, _total_book_count(frame)), index=frame.index)
+        return pd.Series(safe_divide(values, _same_side_count(frame, name)), index=frame.index)
+
+    return values
+
+
 def transform_mechanismized_feature_values(
     frame: pd.DataFrame,
     *,
@@ -582,7 +743,7 @@ def transform_mechanismized_v2_feature_values(
     group_cols: tuple[str, ...] = ("date", "decision_target_timestamp"),
     rank_method: str = "average",
     tick_size: float = 0.01,
-    cross_sectional_mode: str = "robust_zscore",
+    cross_sectional_mode: str = "none",
 ) -> pd.DataFrame:
     """Replace values with semantic-preserving dimensionless values.
 
@@ -618,7 +779,64 @@ def transform_mechanismized_v2_feature_values(
             .astype("float32")
         )
 
-    normalized_cross_sectional_mode = str(cross_sectional_mode or "robust_zscore").strip().lower()
+    normalized_cross_sectional_mode = str(cross_sectional_mode or "none").strip().lower()
+    normalized_cross_sectional_mode = normalized_cross_sectional_mode.replace("-", "_")
+    if normalized_cross_sectional_mode in {"", "none", "identity", "raw", "off", "false"}:
+        return out
+    return transform_cross_sectional_feature_values(
+        out,
+        columns=tuple(source_columns),
+        group_cols=group_cols,
+        mode=normalized_cross_sectional_mode,
+        rank_method=rank_method,
+    )
+
+
+def transform_mechanismized_v3_feature_values(
+    frame: pd.DataFrame,
+    *,
+    columns: tuple[str, ...],
+    group_cols: tuple[str, ...] = ("date", "decision_target_timestamp"),
+    rank_method: str = "average",
+    tick_size: float = 0.01,
+    cross_sectional_mode: str = "none",
+) -> pd.DataFrame:
+    """Replace values with strict ratio-style dimensionless values.
+
+    V3 avoids log/log1p transforms. Price fields become bps/tick ratios,
+    queue fields become same-side depth shares, share-volume/depth fields use
+    total-share, market-cap-implied share, or historical daily activity
+    denominators, and turnover fields use market-cap or historical daily
+    turnover denominators before any explicit cross-sectional transform.
+    """
+
+    source_columns = [
+        column
+        for column in dict.fromkeys(str(column) for column in columns)
+        if column in frame.columns
+    ]
+    source_columns = [
+        column
+        for column in source_columns
+        if pd.api.types.is_numeric_dtype(frame[column]) or pd.api.types.is_bool_dtype(frame[column])
+    ]
+    if not source_columns:
+        return frame.copy()
+
+    out = frame.copy()
+    for column in source_columns:
+        transformed = _mechanismized_v3_feature_series(
+            frame,
+            column,
+            tick_size=float(tick_size),
+        )
+        out[column] = (
+            pd.to_numeric(transformed, errors="coerce")
+            .replace([np.inf, -np.inf], np.nan)
+            .astype("float32")
+        )
+
+    normalized_cross_sectional_mode = str(cross_sectional_mode or "none").strip().lower()
     normalized_cross_sectional_mode = normalized_cross_sectional_mode.replace("-", "_")
     if normalized_cross_sectional_mode in {"", "none", "identity", "raw", "off", "false"}:
         return out

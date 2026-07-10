@@ -8,6 +8,7 @@ from opening_strength_fit.features import (
     transform_cross_sectional_feature_values,
     transform_mechanismized_feature_values,
     transform_mechanismized_v2_feature_values,
+    transform_mechanismized_v3_feature_values,
 )
 from opening_strength_fit.model_features import _clean_xy, feature_columns
 from opening_strength_fit.model_types import TorchMLPPredictionModel
@@ -835,6 +836,23 @@ _MECHANISMIZED_V2_FEATURE_VALUE_TRANSFORMS = {
     "mechanism_aware_v2_dimensionless": "robust_zscore",
     "mechanism_aware_v2_only": "none",
 }
+_MECHANISMIZED_V3_FEATURE_VALUE_TRANSFORMS = {
+    "mechanismized_v3_cross_sectional_robust_zscore": "robust_zscore",
+    "mechanismized_v3_xs_robust_zscore": "robust_zscore",
+    "mechanismized_v3_robust_zscore": "robust_zscore",
+    "mechanismized_v3_dimensionless": "none",
+    "mechanismized_v3_dimensionless_328": "none",
+    "mechanismized_v3_cross_sectional_zscore": "zscore",
+    "mechanismized_v3_xs_zscore": "zscore",
+    "mechanismized_v3_zscore": "zscore",
+    "mechanismized_v3_cross_sectional_rank_centered": "rank_centered",
+    "mechanismized_v3_xs_rank_centered": "rank_centered",
+    "mechanismized_v3_rank_centered": "rank_centered",
+    "mechanismized_v3_only": "none",
+    "mechanism_aware_v3_cross_sectional_robust_zscore": "robust_zscore",
+    "mechanism_aware_v3_dimensionless": "none",
+    "mechanism_aware_v3_only": "none",
+}
 
 
 def _normalize_feature_value_transform(value: str) -> str:
@@ -843,6 +861,8 @@ def _normalize_feature_value_transform(value: str) -> str:
         return "none"
     if mode in _CROSS_SECTIONAL_FEATURE_VALUE_TRANSFORMS:
         return f"cross_sectional_{_CROSS_SECTIONAL_FEATURE_VALUE_TRANSFORMS[mode]}"
+    if mode in _MECHANISMIZED_V3_FEATURE_VALUE_TRANSFORMS:
+        return f"mechanismized_v3_{_MECHANISMIZED_V3_FEATURE_VALUE_TRANSFORMS[mode]}"
     if mode in _MECHANISMIZED_V2_FEATURE_VALUE_TRANSFORMS:
         return f"mechanismized_v2_{_MECHANISMIZED_V2_FEATURE_VALUE_TRANSFORMS[mode]}"
     if mode in _MECHANISMIZED_FEATURE_VALUE_TRANSFORMS:
@@ -851,7 +871,8 @@ def _normalize_feature_value_transform(value: str) -> str:
         "features.feature_value_transform must be none, cross_sectional_demean, "
         "cross_sectional_zscore, cross_sectional_robust_zscore, cross_sectional_rank_pct, "
         "cross_sectional_rank, cross_sectional_rank_centered, "
-        "mechanismized_cross_sectional_rank_centered, or mechanismized_v2_dimensionless_328"
+        "mechanismized_cross_sectional_rank_centered, mechanismized_v2_dimensionless_328, "
+        "or mechanismized_v3_dimensionless_328"
     )
 
 
@@ -887,6 +908,15 @@ def _torch_feature_value_frame(
     model_frame = frame.loc[:, available].copy()
     if mode == "none":
         return model_frame
+    if mode.startswith("mechanismized_v3_"):
+        return transform_mechanismized_v3_feature_values(
+            model_frame,
+            columns=tuple(features),
+            group_cols=group_cols,
+            rank_method=rank_method,
+            tick_size=float(tick_size),
+            cross_sectional_mode=mode.removeprefix("mechanismized_v3_"),
+        )
     if mode.startswith("mechanismized_v2_"):
         return transform_mechanismized_v2_feature_values(
             model_frame,

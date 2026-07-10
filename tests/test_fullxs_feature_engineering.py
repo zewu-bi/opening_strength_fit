@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from opening_strength_fit.features import (
+    add_historical_daily_activity_reference_features,
     add_historical_same_minute_surprise_features,
     add_path_shape_confirmation_features,
 )
@@ -58,6 +59,40 @@ def test_historical_same_minute_surprise_uses_prior_dates_only():
         (14.0 - 11.0) / np.std([10.0, 12.0], ddof=1),
     )
     assert np.isclose(out["hist_surprise_volume_diff_1t_2d_ratio"].iloc[2], 14.0 / 11.0)
+
+
+def test_historical_daily_activity_references_use_prior_dates_only():
+    rows = []
+    for date, volume, turnover in (
+        ("2024-01-01", 1000.0, 10_000.0),
+        ("2024-01-02", 1200.0, 12_000.0),
+        ("2024-01-03", 2000.0, 20_000.0),
+    ):
+        for minute, scale in enumerate((0.8, 1.0)):
+            rows.append(
+                {
+                    "date": date,
+                    "symbol": "000001.SZ",
+                    "timestamp": pd.Timestamp(date) + pd.Timedelta(hours=9, minutes=31 + minute),
+                    "decision_target_timestamp": pd.Timestamp(date)
+                    + pd.Timedelta(hours=9, minutes=31 + minute),
+                    "volume": volume * scale,
+                    "turnover": turnover * scale,
+                }
+            )
+    frame = pd.DataFrame(rows)
+
+    out = add_historical_daily_activity_reference_features(
+        frame,
+        windows=(2,),
+        min_periods=2,
+    )
+
+    first_two_dates = out["date"].isin(["2024-01-01", "2024-01-02"])
+    assert out.loc[first_two_dates, "hist_avg_daily_volume_2d"].isna().all()
+    third = out["date"].eq("2024-01-03")
+    assert np.allclose(out.loc[third, "hist_avg_daily_volume_2d"], 1100.0)
+    assert np.allclose(out.loc[third, "hist_avg_daily_turnover_2d"], 11_000.0)
 
 
 def test_path_shape_confirmation_keeps_series_semantics():

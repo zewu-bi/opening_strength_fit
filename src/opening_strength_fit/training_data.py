@@ -43,6 +43,7 @@ from opening_strength_fit.config import (
 )
 from opening_strength_fit.dataset import load_ticks
 from opening_strength_fit.feature_config import feature_filters_from_config
+from opening_strength_fit.features import mechanismized_feature_value_reference_columns
 from opening_strength_fit.io import frame_columns, read_frame, write_frame
 from opening_strength_fit.model import PREDICTION_CONTEXT_COLUMNS
 from opening_strength_fit.reports import dataset_summary, print_mapping
@@ -469,6 +470,27 @@ def _labeled_pvc_read_columns(path: Path, config: dict) -> list[str] | None:
     selected.extend(_price_scale_source_columns(config))
     selected.extend(_cross_sectional_relative_source_columns(config, available))
     selected.extend(_historical_surprise_source_columns(config, available))
+    value_transform = config_str(config, "features", "feature_value_transform", "")
+    value_transform = value_transform.strip().lower().replace("-", "_")
+    if value_transform.startswith(("mechanismized_v3", "mechanism_aware_v3")) or config_bool(
+        config,
+        "features",
+        "include_historical_daily_activity_references",
+        False,
+    ):
+        selected.extend(
+            [
+                config_str(config, "features", "historical_daily_activity_volume_col", "volume"),
+                config_str(
+                    config,
+                    "features",
+                    "historical_daily_activity_turnover_col",
+                    "turnover",
+                ),
+            ]
+        )
+    if value_transform.startswith(("mechanismized", "mechanism_aware")):
+        selected.extend(mechanismized_feature_value_reference_columns())
     selected.extend(
         _matching_existing_columns(
             available,

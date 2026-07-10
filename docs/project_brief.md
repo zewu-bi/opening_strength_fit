@@ -8,11 +8,13 @@
 
 当前 `09:31-09:40` 开盘短期 overlay 阶段收束：`grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse`
 升级为当前 overlay final candidate。它仍按 decision point 当时及以前可见信息训练和打分，
-并以 `pool_L` Top100 next overlay、market-relative alpha、exposure 和 capacity 作为本阶段验收。
+主验收是 `pool_L` 内部重排后的 next internal excess 和 market-relative alpha。该模型不是脱离
+pool 的独立选股策略；full universe 训练和打分只是为了给池内 overlay 提供可比 score。
 
-下一阶段转向更真实的独立交易策略，而不是继续做单纯 Top100 overlay 追高。策略研究需要保持分钟级
-因果口径：每个分钟点只使用当时及以前信息，显式建模入场、持仓、退出、换手、成本、容量和暴露；
-同时扩大训练/验证时间区间，用跨年份和跨市场状态的 OOS 结果判断稳健性。
+下一阶段转向更真实的 pool overlay 回测，而不是继续做单纯 Top100 overlay 追高。策略研究需要保持
+分钟级因果口径：每个分钟点只使用当时及以前信息，在 pool 内显式建模入场、持仓、退出、换手、
+成本、容量和交易冲击；同时把研究区间从开盘 10 分钟扩展到全天上百个决策点，形成对应的日内
+特征序列和信号序列。
 
 当前 overlay final candidate 仍沿用单模型 mixed label：
 
@@ -22,9 +24,10 @@ long_label  = xs_norm(同一买入价到次日收盘收益 | date, decision_time
 train_label = short_label + 0.30 * long_label
 ```
 
-后续 label 不再只是一两个标量 target，而要沉淀成分钟频时序 label/path features：例如入场后
-1/3/5/10 分钟收益、最大顺/逆向 excursion、可成交退出价、next-close 路径和成本后收益。模型训练
-可以继续读 scalar target，但策略层必须能看到完整、因果对齐的分钟级 outcome path。
+后续 label 不再只是一两个标量 target，而要沉淀成分钟频时序 label/path features。每个
+`date x symbol x decision_time` 都应保存入场后 1/3/5/10 分钟收益、最大顺/逆向 excursion、
+可成交退出价、next-close 路径和成本后收益。模型训练可以继续读 scalar target，但策略层必须能看到
+完整、因果对齐的分钟级 outcome path。
 
 ## 固定口径
 
@@ -35,16 +38,17 @@ train_label = short_label + 0.30 * long_label
 | training universe | A 股 `00/30.SZ`、`60/68.SH`、full universe |
 | label | mixed label, `w_long = 0.30` |
 | current baseline | archived `soft_core_reg_light` |
-| selection masks | universe / `pool_S` / `pool_M` / `pool_L` only at TopN selection |
-| primary gates | universe short Rank IC; `pool_L` next internal excess; market-relative next alpha |
-| acceptance surfaces | Top100 equal-weight diagnostics; 10亿 capacity acceptance; exposure audit |
+| selection masks | primary evaluation inside `pool_L`; universe / `pool_S` / `pool_M` only as diagnostics |
+| primary gates | `pool_L` next internal excess; market-relative next alpha; pool-internal ranking stability |
+| diagnostics | Top100 equal-weight curves; universe short Rank IC; optional capacity / exposure audits |
 
 `pool_S ⊂ pool_M ⊂ pool_L`，来自 `lml.bzw@ssd/data/pool_{S,M,L}.parquet`。Top100 仍是
-研发诊断口径；10亿容量收益由 capacity acceptance 按 `allocated_notional` 加权 next-close label 计算。
+研发诊断口径；最终研究对象是 pool 内 overlay 的可交易超额。已有 capacity acceptance 和 exposure
+audit 是有用诊断，但不是当前候选晋级的必选项。
 
-下一阶段固定口径会扩展为独立策略口径：更长历史区间、分钟频 outcome path、真实交易成本、
-入场/退出可成交性、持仓重叠、资金复用和组合约束。现有 Top100 overlay gate 保留为诊断和
-候选解释，不再作为唯一晋级标准。
+下一阶段固定口径会扩展为真实 pool-overlay 回测口径：更长历史区间、全天分钟频 outcome path、
+真实交易成本、容量、交易冲击、入场/退出可成交性、持仓重叠、资金复用和组合约束。现有
+Top100 overlay gate 保留为信号诊断和候选解释，不再作为唯一晋级标准。
 
 ## 当前判断
 
@@ -62,12 +66,12 @@ train_label = short_label + 0.30 * long_label
   高度候选；`grouped_gated_v2_gelu_mse` 的 next excess 略低但稳定性和 Rank IC 更好；
   `deep_gelu_huber` 仍是 short / next Rank IC 最强候选。
 - NN overlay 的主任务是 `pool_L` Top100 selector：模型先在 full universe 上训练和打分，
-  但核心验收是池内 Top100 排序后的 next internal excess / acceptance / capacity / exposure；
+  但核心验收是池内 Top100 排序后的 next internal excess 和 market-relative alpha；
   universe next 只作辅助诊断，不作为否定 overlay selector 的主 gate。
 - `deep_gelu_mse` 已补 10亿 split20 capacity acceptance、Top100 core exposure 和
   size/industry exposure，暴露画像仍是 activity / turnover heat + 中大市值 +
-  电子/电力设备/计算机，但强度低于 LGBM pruned，不构成新的不可接受押注；新的 grouped
-  overlay challenger 需要复用同一组 capacity / exposure gate。
+  电子/电力设备/计算机，但强度低于 LGBM pruned，不构成新的不可接受押注；后续 grouped
+  overlay challenger 可按需要复用同一组 capacity / exposure diagnostics。
 - NN + LGBM 328 rankblend 相对 LGBM 有改善，但没有打过已有 NN 候选；当前不把 LGBM rankblend
   作为主晋级方向。
 - 本阶段候选收敛结论：`grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse`
@@ -98,25 +102,25 @@ train_label = short_label + 0.30 * long_label
 - 本阶段判断更新：`grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse` 升级为当前 overlay
   final candidate；`xs_rank_inplace` 和 `deep_gelu_huber` 保留为排序力/短线对照，不替代它的
   overlay final candidate 位置。
-- 下一阶段不再以继续增加 NN 变体为主。更关键的问题是：该信号脱离 `pool_L` Top100 诊断后，
-  能否变成因果、可成交、可控暴露和可装入资金的独立交易策略；以及在更长时间区间和更多市场状态下，
-  分钟级 label path 是否支持稳定的入场/退出规则。
+- 下一阶段不再以继续增加 NN 变体为主。更关键的问题是：该信号在 `pool_L` 内能否通过真实回测
+  转化成因果、可成交、可装入资金的 overlay 超额；以及从开盘 10 分钟扩展到全天上百个决策点后，
+  分钟级特征序列和 label path 是否支持稳定的入场/退出规则。
 
 ## 验收 Gate
 
 | gate | 通过含义 |
 | --- | --- |
-| universe short Rank IC | 短期模型本身更强。 |
-| `pool_L` Top100 next internal excess | 叠加 mentor 股池后，隔夜 overlay 更强。 |
+| `pool_L` Top100 next internal excess | 叠加 mentor 股池后，池内 overlay 更强。 |
 | cumulative next net / market-relative alpha | 改善不是少数点造成，且相对 full-market / pool baseline 可解释。 |
-| exposure audit | 收益画像可解释，未退化为不可接受的风格、行业或流动性押注。 |
-| capacity portfolio | 给定资金规模下，能在参与率、单票权重和集中度约束内装入。 |
+| pool-internal stability | 分年、半年和月份上不依赖单一行情段。 |
+| universe short Rank IC | 辅助判断短期排序力，不作为 pool overlay 的否决项。 |
+| optional capacity / exposure diagnostics | 需要时解释收益画像、容量和交易约束，不作为当前候选的硬性晋级条件。 |
 
 不再把 `pool_L` short excess、universe next excess 或 next Rank IC 作为主 gate。short 端不能直接
 变成 A 股 T+1 交易收益；next 端由 mentor 股池负责基础收益，短期模型只负责池内 overlay。
 
-下一阶段独立策略 gate 会前移到可交易结果：分钟级因果 PnL、成本后收益、换手、成交容量、
-持仓重叠、资金利用率、回撤、暴露和行业/风格约束。Top100 overlay 指标保留为信号解释和回归测试，
+下一阶段真实回测 gate 会前移到 pool 内可交易结果：分钟级因果 PnL、成本后收益、换手、成交容量、
+交易冲击、持仓重叠、资金利用率和回撤。Top100 overlay 指标保留为信号解释和回归测试，
 但不再单独决定策略是否晋级。
 
 候选模型或 score blend 从 active challenger 晋级 final candidate 前，需要补齐同一证据包：
@@ -128,7 +132,7 @@ train_label = short_label + 0.30 * long_label
 | data/cache | 写明 labeled cache、next-close cache、pool 版本和日期范围。 |
 | decision slice / label | 与本 brief 固定口径一致，写明 short/long/mixed 口径和 `w_long`。 |
 | artifact roots | 写明 PVC 输出和本地 compact artifact 归档位置。 |
-| gate evidence | 至少覆盖 Rank IC、`pool_L` Top100 next、market-relative、exposure、capacity 五项。 |
+| gate evidence | 至少覆盖 `pool_L` Top100 next、market-relative 和稳定性；capacity / exposure 为选做诊断。 |
 
 晋级记录模板：
 
@@ -236,26 +240,28 @@ Hygiene 事实：
 
 ## 下一步目标
 
-下一阶段从候选收敛转向策略化和样本扩展，而不是继续宽扫网络结构。
+下一阶段从候选收敛转向真实 pool-overlay 回测和全天样本扩展，而不是继续宽扫网络结构。
 
 1. 冻结 `grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse` 为当前 overlay final candidate；
    `xs_rank_inplace`、`deep_gelu_huber`、`grouped_gated_gelu_mse` / `grouped_gated_v2_gelu_mse`
    和 `mlp_base` / `deep_gelu_mse` 只作为排序力、结构和容量锚点保留。
-2. 设计更真实的独立交易策略：分钟级打分、可成交入场、持仓窗口、退出规则、换手和费用、
-   资金容量、单票/行业/风格约束、持仓重叠和资金复用都要在策略层显式建模。
-3. 扩大研究时间区间：优先复用现有年度 cache，把 2022-2025 验收扩展到更长训练/验证窗，
-   并按牛熊、流动性、波动和年份切分 OOS，避免只在近期样本上确认。
+2. 构建真实 pool-overlay 回测：只在 pool 内做 overlay 排序/调仓，显式建模容量、交易冲击、
+   成交量约束、停牌/涨跌停、成本、换手、持仓重叠和资金复用。
+3. 扩大研究时间区间和日内决策面：优先从 `09:31-09:40` 扩展到全天上百个 decision points，
+   为每个点生成对应的因果特征序列、score 序列和回测输入。
 4. 把 label 做成分钟频时序特征：为每个 `date x symbol x decision_time` 保存后续分钟 return path、
    excursion、可成交退出价、next-close path 和成本后收益。训练 target 可以从 path 派生，
    策略回测必须直接读 path，避免用 full-window mean score 或事后汇总引入未来信息。
-5. 不继续推进 `grouped_gated_v2_symbol_zscore_gelu_mse`。它的 next Rank IC 略高，
+5. 扩大跨年份和跨市场状态验证：在更长训练/验证窗上按牛熊、流动性、波动和年份切分 OOS，
+   但仍以 pool 内超额为核心目标。
+6. 不继续推进 `grouped_gated_v2_symbol_zscore_gelu_mse`。它的 next Rank IC 略高，
    但主 gate 的 Top100 next excess、short Rank IC 和累计收益均退化；如果要降暴露，优先放到
-   exposure / capacity 约束和组合层处理。
-6. 对同 328 特征归一化的当前判断：纯 xs-rank 是 short Rank IC 最强方向；mech328 v2 是
+   可选 exposure / capacity diagnostics 或真实回测的组合层处理。
+7. 对同 328 特征归一化的当前判断：纯 xs-rank 是 short Rank IC 最强方向；mech328 v2 是
    `pool_L` Top100 next overlay 最强方向。后续若继续做 feature value normalization，优先采用
    “价格 tick/bps、成交量历史比例、turnover 金额、盘口 notional depth 和 queue share，再做截面
    robust z-score”的语义保留方案；mech v1 只作为机制化后再 rank 的负面对照。
-7. 后续 NN 结构只做必要的 targeted variants 或策略层 score blend；避免继续扩大 plain MLP、
+8. 后续 NN 结构只做必要的 targeted variants 或策略层 score blend；避免继续扩大 plain MLP、
    wide-deep h128、低正则或统一 symbol z-score 扫参。
 
 ## 非目标
@@ -263,3 +269,4 @@ Hygiene 事实：
 - 不重启两模型 `alpha_rank - lambda * gap_risk_rank` 路线；它已作为历史证据封存。
 - 不用完整 `09:31-09:40` mean score 压成日频分数做正式验收；那会引入未来信息。
 - 不把公司 API 回测当作当前高频策略的天然验收器；若需要，另建分钟级因果 score adapter。
+- 不把脱离 pool 的独立 universe 策略作为当前目标；当前研究目标是 pool 内 overlay 超额。

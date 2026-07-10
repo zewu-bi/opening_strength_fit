@@ -23,6 +23,7 @@ from opening_strength_fit.config import (
 from opening_strength_fit.dataset import build_labeled_feature_frame
 from opening_strength_fit.features import (
     add_cross_sectional_relative_features,
+    add_historical_daily_activity_reference_features,
     add_historical_same_minute_surprise_features,
     add_path_shape_confirmation_features,
     add_postopen_decision_features,
@@ -225,6 +226,48 @@ def _apply_post_sample_feature_transforms_from_config(
     labeled: pd.DataFrame,
     config: dict,
 ) -> pd.DataFrame:
+    value_transform = config_str(config, "features", "feature_value_transform", "")
+    value_transform = value_transform.strip().lower().replace("-", "_")
+    include_activity_refs = config_bool(
+        config,
+        "features",
+        "include_historical_daily_activity_references",
+        value_transform.startswith(("mechanismized_v3", "mechanism_aware_v3")),
+    )
+    if include_activity_refs:
+        labeled = add_historical_daily_activity_reference_features(
+            labeled,
+            volume_col=config_str(
+                config,
+                "features",
+                "historical_daily_activity_volume_col",
+                "volume",
+            ),
+            turnover_col=config_str(
+                config,
+                "features",
+                "historical_daily_activity_turnover_col",
+                "turnover",
+            ),
+            windows=config_int_tuple(
+                config,
+                "features",
+                "historical_daily_activity_windows",
+                (60,),
+            ),
+            min_periods=config_int(
+                config,
+                "features",
+                "historical_daily_activity_min_periods",
+                10,
+            ),
+            prefix=config_str(
+                config,
+                "features",
+                "historical_daily_activity_prefix",
+                "hist_avg_daily_",
+            ),
+        )
     if config_bool(config, "features", "include_historical_same_minute_surprise", False):
         columns = _historical_surprise_columns_from_config(labeled, config)
         if not columns:

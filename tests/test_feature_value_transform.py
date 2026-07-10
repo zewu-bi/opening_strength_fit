@@ -8,6 +8,7 @@ from opening_strength_fit.features import (
     transform_cross_sectional_feature_values,
     transform_mechanismized_feature_values,
     transform_mechanismized_v2_feature_values,
+    transform_mechanismized_v3_feature_values,
 )
 from opening_strength_fit.model_torch import _torch_feature_value_frame
 
@@ -213,6 +214,163 @@ class FeatureValueTransformTest(unittest.TestCase):
         self.assertLess(out["volume_diff_1t"].iloc[0], 0.0)
         self.assertGreater(out["volume_diff_1t"].iloc[1], 0.0)
         self.assertEqual(frame["volume_diff_1t"].tolist(), [1000.0, 200.0])
+
+    def test_mechanismized_v3_uses_ratio_denominators_without_logs(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "date": ["2022-01-04", "2022-01-04"],
+                "decision_target_timestamp": [
+                    pd.Timestamp("2022-01-04 09:31:00"),
+                    pd.Timestamp("2022-01-04 09:31:00"),
+                ],
+                "symbol": ["000001.SZ", "000002.SZ"],
+                "ask_price_1": [10.01, 10.02],
+                "bid_price_1": [9.99, 9.98],
+                "mid_price": [10.00, 10.00],
+                "total_shares": [10_000_000.0, 20_000_000.0],
+                "market_cap": [100_000_000.0, 200_000_000.0],
+                "volume_diff_1t": [1_000.0, 2_000.0],
+                "turnover_diff_1t": [1_000_000.0, 4_000_000.0],
+                "ask_depth_10": [10_000.0, 20_000.0],
+                "ask_volume_1": [1_000.0, 1_000.0],
+                "total_ask_count": [100.0, 200.0],
+                "total_bid_count": [300.0, 200.0],
+                "ask_count_1": [10.0, 50.0],
+                "trade_num": [40.0, 80.0],
+                "hist_surprise_volume_diff_1t_20d_ratio": [2.0, 3.0],
+            }
+        )
+
+        out = transform_mechanismized_v3_feature_values(
+            frame,
+            columns=(
+                "mid_price",
+                "volume_diff_1t",
+                "turnover_diff_1t",
+                "ask_depth_10",
+                "ask_volume_1",
+                "total_ask_count",
+                "ask_count_1",
+                "trade_num",
+                "hist_surprise_volume_diff_1t_20d_ratio",
+            ),
+            group_cols=("date", "decision_target_timestamp"),
+            cross_sectional_mode="none",
+        )
+
+        self.assertEqual(out.columns.tolist(), frame.columns.tolist())
+        self.assertAlmostEqual(out["mid_price"].iloc[0], 10.0, places=6)
+        self.assertAlmostEqual(out["volume_diff_1t"].iloc[0], 0.0001, places=8)
+        self.assertAlmostEqual(out["volume_diff_1t"].iloc[1], 0.0001, places=8)
+        self.assertAlmostEqual(out["turnover_diff_1t"].iloc[0], 0.01, places=8)
+        self.assertAlmostEqual(out["turnover_diff_1t"].iloc[1], 0.02, places=8)
+        self.assertAlmostEqual(out["ask_depth_10"].iloc[0], 0.001, places=8)
+        self.assertAlmostEqual(out["ask_depth_10"].iloc[1], 0.001, places=8)
+        self.assertAlmostEqual(out["ask_volume_1"].iloc[0], 0.10, places=8)
+        self.assertAlmostEqual(out["ask_volume_1"].iloc[1], 0.05, places=8)
+        self.assertAlmostEqual(out["total_ask_count"].iloc[0], 0.25, places=8)
+        self.assertAlmostEqual(out["total_ask_count"].iloc[1], 0.50, places=8)
+        self.assertAlmostEqual(out["ask_count_1"].iloc[0], 0.10, places=8)
+        self.assertAlmostEqual(out["ask_count_1"].iloc[1], 0.25, places=8)
+        self.assertAlmostEqual(out["trade_num"].iloc[0], 0.10, places=8)
+        self.assertAlmostEqual(out["trade_num"].iloc[1], 0.20, places=8)
+        self.assertEqual(out["hist_surprise_volume_diff_1t_20d_ratio"].tolist(), [2.0, 3.0])
+
+    def test_torch_mechanismized_v3_dimensionless_transform_skips_cross_sectional_zscore(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "date": ["2022-01-04", "2022-01-04"],
+                "decision_target_timestamp": [
+                    pd.Timestamp("2022-01-04 09:31:00"),
+                    pd.Timestamp("2022-01-04 09:31:00"),
+                ],
+                "symbol": ["000001.SZ", "000002.SZ"],
+                "ask_price_1": [10.0, 10.0],
+                "mid_price": [10.0, 10.0],
+                "market_cap": [100_000_000.0, 200_000_000.0],
+                "turnover_diff_1t": [1_000_000.0, 4_000_000.0],
+                "target_label": [0.1, 0.2],
+                "valid_label": [True, True],
+            }
+        )
+
+        out = _torch_feature_value_frame(
+            frame,
+            ["turnover_diff_1t"],
+            feature_value_transform="mechanismized_v3_dimensionless_328",
+            group_cols=("date", "decision_target_timestamp"),
+            rank_method="average",
+            extra_columns=("target_label", "valid_label", "symbol"),
+        )
+
+        self.assertIn("turnover_diff_1t", out.columns)
+        self.assertAlmostEqual(out["turnover_diff_1t"].iloc[0], 0.01, places=8)
+        self.assertAlmostEqual(out["turnover_diff_1t"].iloc[1], 0.02, places=8)
+        self.assertEqual(frame["turnover_diff_1t"].tolist(), [1_000_000.0, 4_000_000.0])
+
+    def test_mechanismized_v3_uses_historical_activity_fallbacks(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "date": ["2022-01-04", "2022-01-04"],
+                "decision_target_timestamp": [
+                    pd.Timestamp("2022-01-04 09:31:00"),
+                    pd.Timestamp("2022-01-04 09:31:00"),
+                ],
+                "symbol": ["000001.SZ", "000002.SZ"],
+                "ask_price_1": [10.0, 20.0],
+                "mid_price": [10.0, 20.0],
+                "volume_diff_1t": [1_000.0, 2_000.0],
+                "turnover_diff_1t": [100_000.0, 400_000.0],
+                "ask_depth_10": [10_000.0, 20_000.0],
+                "hist_avg_daily_volume_60d": [1_000_000.0, 2_000_000.0],
+                "hist_avg_daily_turnover_60d": [100_000_000.0, 200_000_000.0],
+            }
+        )
+
+        out = transform_mechanismized_v3_feature_values(
+            frame,
+            columns=("volume_diff_1t", "turnover_diff_1t", "ask_depth_10"),
+            group_cols=("date", "decision_target_timestamp"),
+        )
+
+        self.assertAlmostEqual(out["volume_diff_1t"].iloc[0], 0.001, places=8)
+        self.assertAlmostEqual(out["volume_diff_1t"].iloc[1], 0.001, places=8)
+        self.assertAlmostEqual(out["turnover_diff_1t"].iloc[0], 0.001, places=8)
+        self.assertAlmostEqual(out["turnover_diff_1t"].iloc[1], 0.002, places=8)
+        self.assertAlmostEqual(out["ask_depth_10"].iloc[0], 0.010, places=8)
+        self.assertAlmostEqual(out["ask_depth_10"].iloc[1], 0.010, places=8)
+
+    def test_torch_mechanismized_v3_robust_zscore_transform_is_explicit(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "date": ["2022-01-04", "2022-01-04"],
+                "decision_target_timestamp": [
+                    pd.Timestamp("2022-01-04 09:31:00"),
+                    pd.Timestamp("2022-01-04 09:31:00"),
+                ],
+                "symbol": ["000001.SZ", "000002.SZ"],
+                "ask_price_1": [10.0, 10.0],
+                "mid_price": [10.0, 10.0],
+                "market_cap": [100_000_000.0, 200_000_000.0],
+                "turnover_diff_1t": [1_000_000.0, 4_000_000.0],
+                "target_label": [0.1, 0.2],
+                "valid_label": [True, True],
+            }
+        )
+
+        out = _torch_feature_value_frame(
+            frame,
+            ["turnover_diff_1t"],
+            feature_value_transform="mechanismized_v3_robust_zscore",
+            group_cols=("date", "decision_target_timestamp"),
+            rank_method="average",
+            extra_columns=("target_label", "valid_label", "symbol"),
+        )
+
+        self.assertIn("turnover_diff_1t", out.columns)
+        self.assertLess(out["turnover_diff_1t"].iloc[0], 0.0)
+        self.assertGreater(out["turnover_diff_1t"].iloc[1], 0.0)
+        self.assertEqual(frame["turnover_diff_1t"].tolist(), [1_000_000.0, 4_000_000.0])
 
 
 if __name__ == "__main__":

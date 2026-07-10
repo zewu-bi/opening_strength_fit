@@ -7,7 +7,11 @@ from pathlib import Path
 
 import pandas as pd
 
-from opening_strength_fit.training_data import load_labeled_pvc_frame, resolve_data_source
+from opening_strength_fit.training_data import (
+    _labeled_pvc_read_columns,
+    load_labeled_pvc_frame,
+    resolve_data_source,
+)
 
 
 class LabeledPvcSourceTest(unittest.TestCase):
@@ -37,6 +41,43 @@ class LabeledPvcSourceTest(unittest.TestCase):
         self.assertEqual(len(labeled), 1)
         self.assertIn("label", labeled.columns)
         self.assertEqual(str(labeled.loc[0, "symbol"]), "000001.SZ")
+
+    def test_labeled_pvc_mechanismized_transform_reads_reference_columns(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "labeled.parquet"
+            pd.DataFrame(
+                [
+                    {
+                        "date": "2022-01-04",
+                        "symbol": "000001.SZ",
+                        "timestamp": pd.Timestamp("2022-01-04 09:30:00"),
+                        "ask_price_1": 10.01,
+                        "volume": 1000.0,
+                        "turnover": 10_000.0,
+                        "market_cap": 100_000_000.0,
+                        "total_shares": 10_000_000.0,
+                        "label": 0.01,
+                        "valid_label": True,
+                    }
+                ]
+            ).to_parquet(path, index=False)
+            config = {
+                "data": {"source": "labeled_pvc", "labeled_path": str(path)},
+                "features": {
+                    "include_feature_columns": ["ask_price_1"],
+                    "feature_value_transform": "mechanismized_v3_dimensionless_328",
+                },
+            }
+
+            columns = _labeled_pvc_read_columns(path, config)
+
+        self.assertIsNotNone(columns)
+        assert columns is not None
+        self.assertIn("ask_price_1", columns)
+        self.assertIn("volume", columns)
+        self.assertIn("turnover", columns)
+        self.assertIn("market_cap", columns)
+        self.assertIn("total_shares", columns)
 
     def test_labeled_pvc_source_filters_configured_decision_times(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
