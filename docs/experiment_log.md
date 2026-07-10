@@ -93,6 +93,7 @@
 | 2026-07-07 | grouped gated v2 design | 明确 NN 主任务是 `pool_L` Top100 overlay selector，而不是 universe next 模型；新增 `grouped_gated_v2_gelu_mse` 设计：机制分组、per-group embedding dim 和 gate diagnostics，其余训练与验收口径保持 grouped gated v1 不变。 |
 | 2026-07-08 | token transformer + grouped gated v2 archive | `group_token_transformer_mse` / `grouped_gated_v2_gelu_mse` 已完成 8/8 training shard、cluster-side pool-internal analysis、artifact sync、audit 和 Top100 累和验收。两者均高于 `lgbm328` 和 `mlp_base`，但未超过老 `grouped_gated_gelu_mse`；`pool_L` next excess 分别为 `13.6479 / 13.2768 bps`，老 gated 为 `13.8491 bps`。考虑半年尺度振荡和长回撤风险，`grouped_gated_v2_gelu_mse` 的 `next_positive_months=39/48`、更高 short/next Rank IC 和 short excess 使其升为高优先级稳定性候选。 |
 | 2026-07-08 | grouped gated v2 exposure audit | 已对 `grouped_gated_v2_gelu_mse` 补 `pool_L` Top100 core exposure 和 size/industry exposure，不补容量。activity max/mean z `1.251 / 0.947`，低于 `deep_gelu_mse` 和 `lgbm328`；size max/mean z `0.318 / 0.213`，行业 top5 share `0.519`、effective industries `13.44`，均不高于既有候选。 |
+| 2026-07-10 | old NN Top1000 bucket curve archive | 旧 3 NN 模型均值的 Top1000 10/20/50 桶折线图已归档到 `experiments/results/backtests/old_nn_multiscale_bucket_diag_v1/top1000_bucket_multiscale_old3_mean.svg`，plot data 为同目录 `top1000_bucket_multiscale_old3_mean_plot_data.csv`。图使用 `pool_L` next internal excess 和 `date x decision_time` 机会等权；验收图对齐仍看 per-variant 的 `bucket_width=100, bucket=1`。折线显示粗分桶头部递减清楚，但不改变 Top1000 pointwise IC 和 10-bucket 桶内 IC 为负的解释：信号有 head-region 选择力，桶内 fine ranking 弱或轻微反向。 |
 
 ## 2026-05-20 小窗结果
 
