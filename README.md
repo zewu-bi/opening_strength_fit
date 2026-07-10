@@ -11,8 +11,9 @@ Current snapshot:
 slice: 09:31:00-09:40:00 decision points
 label: mixed short + next-close, w_long = 0.30
 baseline: soft_core_reg_light
-current candidates: mech328 v2 dimensionless overlay; xs_rank_inplace short IC; grouped_gated/gated_v2 structure anchors; deep_gelu_huber Rank IC; mlp_base/deep_gelu_mse capacity anchors
-acceptance: universe short Rank IC; pool_L next overlay; market-relative alpha; exposure; capacity
+overlay final candidate: mech328 v2 dimensionless robust-zscore
+next scope: independent causal strategy; longer time range; minute-frequency label path features
+acceptance: strategy PnL/capacity/exposure first; overlay gates retained as diagnostics
 ```
 
 ## 文档职责
