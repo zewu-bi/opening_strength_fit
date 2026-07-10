@@ -46,11 +46,10 @@ train_label = short_label + 0.30 * long_label
 - `hist_path_pruned_highdup` 是当前更干净的生产化候选：删除 26 个高重复 hist/path 特征后，
   信号基本保留，并已补 Top100 exposure、size/industry exposure 和 split20 capacity first-pass。
 - 容量验收不复用 Top100 等权收益；capacity audit 只看 fill/depth，capacity acceptance 才算收益。
-- NN 已完成第一轮、第二轮、MSE neighborhood 和结构化 grouped NN 的前三个归档，不再处于
-  “是否值得跑”的阶段。`grouped_gated_gelu_mse` / `grouped_residual_gelu_mse` /
-  `grouped_cross_gelu_mse` 的 `pool_L` Top100 next overlay 均超过 `mlp_base` 和
-  `deep_gelu_mse`，其中 `grouped_gated_gelu_mse` 最高；`deep_gelu_huber` 仍是 short / next
-  Rank IC 最强候选。
+- NN 已完成第一轮、第二轮、MSE neighborhood 和结构化 grouped NN 归档，不再处于
+  “是否值得跑”的阶段。`grouped_gated_gelu_mse` 是当前 `pool_L` Top100 next overlay
+  高度候选；`grouped_gated_v2_gelu_mse` 的 next excess 略低但稳定性和 Rank IC 更好；
+  `deep_gelu_huber` 仍是 short / next Rank IC 最强候选。
 - NN overlay 的主任务是 `pool_L` Top100 selector：模型先在 full universe 上训练和打分，
   但核心验收是池内 Top100 排序后的 next internal excess / acceptance / capacity / exposure；
   universe next 只作辅助诊断，不作为否定 overlay selector 的主 gate。
@@ -60,9 +59,31 @@ train_label = short_label + 0.30 * long_label
   overlay challenger 需要复用同一组 capacity / exposure gate。
 - NN + LGBM 328 rankblend 相对 LGBM 有改善，但没有打过已有 NN 候选；当前不把 LGBM rankblend
   作为主晋级方向。
-- 当前决策点转为候选收敛：在 `deep_gelu_mse` / `base_plus_mse` 的 Top100 next overlay、
-  已做容量验收的 `mlp_base` incumbent、以及 `deep_gelu_huber` 的排序力之间做 tradeoff；
-  `deep_gelu_mse` 已补 market-relative / 暴露 / 容量验收，下一步是最终候选取舍或小规模互补 blend。
+- 当前决策点转为候选收敛：`grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse`
+  是当前 `pool_L` Top100 next overlay 领先候选；`grouped_gated_v2_xs_rank_inplace_gelu_mse`
+  是同 328 特征无量纲化里的 short IC 领先对照；`grouped_gated_gelu_mse` /
+  `grouped_gated_v2_gelu_mse` 作为结构化 NN 收益高度和稳定性锚点保留；
+  `deep_gelu_huber` 继续作为排序力锚点。`grouped_gated_v2_symbol_zscore_gelu_mse`
+  已完成但不晋级。
+- `grouped_gated_v2_xs_rank_inplace_gelu_mse` 已完成：同一批 328 特征名、同 gated v2 架构、
+  不追加 `xs_rel_` / `norm_` 列；它把 universe short Rank IC 从 gated v2 的 `0.157623`
+  提到 `0.161260`，但 `pool_L` next excess 只从 `13.2768` 提到 `13.7351 bps`，说明纯 rank
+  对短期排序更干净，但会压掉一部分可用于 next overlay 的状态幅度。
+- `grouped_gated_v2_mech328_xs_rank_gelu_mse` 机制化 v1 已完成：价格类转 bps/tick，
+  股数类部分乘价格转 notional pressure，金额/计数做单调压缩，最后做截面 rank。它提高 short
+  排序力，universe short Rank IC `0.160371`、`pool_L` short Rank IC `0.149266`，但主
+  overlay gate 退化，`pool_L` next excess 只有 `11.7491 bps`，低于 gated v2 的
+  `13.2768 bps` 和 mech328 v2 的 `14.3174 bps`。该版保留为负面对照，因为它混淆“股数压力”
+  和“资金压力”，且最终 rank 压掉了幅度状态。
+- `grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse` 已完成，是当前更合理的机制化无量纲
+  328 实验：
+  同 328 特征名、同 gated v2 架构；价格转 tick/bps，成交量优先转历史同分钟比例或 share 尺度，
+  turnover 保持资金金额语义，盘口总深度保留 notional depth，盘口 level queue 转 side-depth share，
+  最后在同一 `date x decision_time` 截面做 robust z-score。它的目标是去掉物理单位，但保留高低成交额、
+  深浅盘口、相对活跃度这些本应可见的状态。结果上 `pool_L` next excess 达 `14.3174 bps`、
+  Top100 8bps next net cumulative 达 `8508.0 bps`，均高于原 gated v2 和 xs-rank；但
+  universe short Rank IC `0.154160` 低于 gated v2 / xs-rank，因此它是 overlay 收益候选，不是
+  short 排序力候选。
 
 ## 验收 Gate
 
@@ -76,6 +97,45 @@ train_label = short_label + 0.30 * long_label
 
 不再把 `pool_L` short excess、universe next excess 或 next Rank IC 作为主 gate。short 端不能直接
 变成 A 股 T+1 交易收益；next 端由 mentor 股池负责基础收益，短期模型只负责池内 overlay。
+
+候选模型或 score blend 从 active challenger 晋级 final candidate 前，需要补齐同一证据包：
+
+| item | requirement |
+| --- | --- |
+| candidate id | 对应 `experiments/runs/<run_id>.toml`，且 `run.id` 与文件名一致。 |
+| baseline/incumbent | 明确比较对象，例如 `soft_core_reg_light`、`mlp_base` 或当前 final candidate。 |
+| data/cache | 写明 labeled cache、next-close cache、pool 版本和日期范围。 |
+| decision slice / label | 与本 brief 固定口径一致，写明 short/long/mixed 口径和 `w_long`。 |
+| artifact roots | 写明 PVC 输出和本地 compact artifact 归档位置。 |
+| gate evidence | 至少覆盖 Rank IC、`pool_L` Top100 next、market-relative、exposure、capacity 五项。 |
+
+晋级记录模板：
+
+```text
+candidate:
+baseline_or_incumbent:
+decision:
+  status: promote | keep_challenger | reject | needs_more_evidence
+  date:
+evidence:
+  universe_short_rank_ic:
+  pool_L_top100_next_excess:
+  market_relative_next_alpha:
+  exposure:
+  capacity:
+artifacts:
+  metrics:
+  pool_internal:
+  market_relative:
+  exposure:
+  capacity:
+notes:
+```
+
+宽扫、smoke、debug run 不需要填完整证据包；但如果结论要写入本 brief，就应补齐上述信息。
+如果候选只在一个 gate 上领先，默认保持 challenger，不直接替代 incumbent。最终候选至少要有
+一条清楚的失败解释路径：如果后续 live / replay 退化，能定位到排序力、股池 overlay、暴露或容量
+中的哪一项。
 
 ## 已知生产化事实
 
@@ -121,9 +181,9 @@ NN MSE / structured neighborhood 结论：
 - 结构化 grouped NN 前三组已归档：`grouped_residual`、`grouped_cross`、`grouped_gated`
   的 `pool_L` next excess 分别为 `13.4939 / 13.3557 / 13.8491 bps`，进一步超过
   `deep_gelu_mse`；说明语义特征组 encoder + 小型融合层比单纯加宽 MLP 更有效。
-- 当前 grouped 分组的主要不足是过粗：328 特征按旧规则约分成 `liquidity 173`、
+- 旧 grouped 分组的主要不足是过粗：328 特征按旧规则约分成 `liquidity 173`、
   `hist_path 52`、`price_momentum 41`、`other 30`、`activity 25`、`preopen 7`。
-  下一版 `grouped_gated_v2` 改为机制分组 + per-group embedding dim，并写出 gate diagnostics：
+  `grouped_gated_v2` 已改为机制分组 + per-group embedding dim，并写出 gate diagnostics：
   `preopen_auction`、`limit_price_state`、`book_depth_level`、`book_shape_spread_gap`、
   `book_imbalance_pressure`、`trade_activity`、`trade_price_impact`、`postopen_price_path`、
   `postopen_liquidity_change`、`historical_surprise`、`path_shape_confirmation`、`other`。
@@ -134,6 +194,18 @@ NN MSE / structured neighborhood 结论：
   `1.303 / 0.956`，低于 LGBM pruned 的 `1.526 / 1.081`；size max z 为 `0.366`，
   低于 LGBM pruned 的 `0.544`；行业仍超配电子/电力设备/计算机，但 top5 industry share
   `0.524`、effective industries `13.24`，略优于 LGBM pruned 的 `0.531 / 12.88`。
+- `grouped_gated_v2_symbol_zscore_gelu_mse` 已完成训练、pool-internal analysis 和 Top100
+  acceptance；`pool_L` next excess `11.6661 bps`，低于 `grouped_gated_v2_gelu_mse`
+  的 `13.2768 bps`、老 `grouped_gated_gelu_mse` 的 `13.8491 bps` 和 `mlp_base`
+  的 `12.4320 bps`，且 short Rank IC 降到 `0.117035`。per-symbol train-window
+  z-score 不作为候选推进。
+- `grouped_gated_v2_xs_rank_inplace_gelu_mse` 已完成。它修复了 symbol-zscore 的 short IC
+  退化，说明“无量纲化”本身不是错；问题在于按 symbol 历史 z-score 会洗掉横截面状态。
+- `grouped_gated_v2_mech328_xs_rank_gelu_mse` 已完成。结论是“机制化后再纯 rank”没有成为
+  overlay 候选：short IC 提升，但 `pool_L` next excess 和 Top100 8bps cumulative 均低于 gated v2。
+- `grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse` 已完成，并在主 overlay gate 上优于
+  gated v2 / xs-rank。当前结论是：若目标是 `pool_L` Top100 next overlay，优先机制化 v2；
+  若目标是纯 short Rank IC，xs-rank 更强。
 
 Hygiene 事实：
 
@@ -145,18 +217,27 @@ Hygiene 事实：
 
 下一阶段是候选收敛和 targeted NN 结构验证，而不是继续宽扫网络结构。
 
-1. 主候选保留两条证据链：`grouped_gated_gelu_mse` / `grouped_residual_gelu_mse` 代表新的
-   Top100 next overlay challenger；`deep_gelu_huber` 代表最高 short / next Rank IC。
-   `mlp_base` 和 `deep_gelu_mse` 作为已有容量 / exposure 验收锚点保留。
-2. 优先跑 `grouped_gated_v2_gelu_mse`：只改机制分组、per-group dim 和 gate diagnostics，
-   保持 MSE、GELU、dropout、learning rate、rolling window、label 和验收口径不变；用它验证
-   当前 grouped gated 的增量是否来自更合理的特征组容量分配。
-3. 先给 `grouped_gated_gelu_mse` / `grouped_gated_v2_gelu_mse` 补 market-relative / 10亿 capacity / exposure /
-   size-industry 验收；如果容量和暴露不过度退化，它将替代 `deep_gelu_mse` 成为 overlay 主候选。
-4. 若继续做模型组合，优先测 `grouped_gated_gelu_mse` 或 v2 + `deep_gelu_huber` 的小规模 score/rank blend，
-   确认 overlay 收益和排序力是否互补；不再优先做 NN + LGBM rankblend，除非有新的互补性证据。
-5. 后续 NN 结构只做 targeted variants：v2 分组的 gated/residual fusion、少量 seed 和 loss 对照。
-   避免继续扩大 plain MLP、wide-deep h128 或低正则扫参。
+1. 主候选保留三条证据链：`grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse`
+   代表当前 Top100 next overlay 领先方案；`grouped_gated_v2_xs_rank_inplace_gelu_mse`
+   代表同 328 特征无量纲化后的 short IC 领先对照；`deep_gelu_huber` 继续作为纯排序力锚点。
+   `grouped_gated_gelu_mse` / `grouped_gated_v2_gelu_mse` 和 `mlp_base` / `deep_gelu_mse`
+   作为结构与容量验收锚点保留。
+2. 不继续推进 `grouped_gated_v2_symbol_zscore_gelu_mse`。它的 next Rank IC 略高，
+   但主 gate 的 Top100 next excess、short Rank IC 和累计收益均退化；如果要降暴露，优先放到
+   exposure / capacity 约束和组合层处理。
+3. 对同 328 特征归一化的当前判断：纯 xs-rank 是 short Rank IC 最强方向；mech328 v2 是
+   `pool_L` Top100 next overlay 最强方向。后续若继续做 feature value normalization，优先采用
+   “价格 tick/bps、成交量历史比例、turnover 金额、盘口 notional depth 和 queue share，再做截面
+   robust z-score”的语义保留方案；mech v1 只作为机制化后再 rank 的负面对照。
+4. 给 `grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse` 优先补齐同口径
+   market-relative、split20 10亿 capacity、Top100 core exposure、size/industry exposure，
+   并与 `grouped_gated_gelu_mse` / `grouped_gated_v2_gelu_mse` 一起做 rolling drawdown /
+   连续负月份等稳定性诊断；最终不只按 cumulative next 排序。
+5. 若继续做模型组合，优先测 gated 或 v2 + `deep_gelu_huber` 的小规模 score/rank blend，
+   确认 overlay 收益和排序力是否互补；不再优先做 NN + LGBM rankblend。
+6. 后续 NN 结构只做 targeted variants：gated / gated v2 / residual fusion、少量 seed、
+   loss 对照和轻量 rank auxiliary。避免继续扩大 plain MLP、wide-deep h128、低正则或
+   统一 symbol z-score 扫参。
 
 ## 非目标
 

@@ -11,6 +11,30 @@ It does not record experiment results or research decisions; those live in
 | `config_templates/` | Reusable TOML snippets for run configs. |
 | `results/` | Local compact evidence archive; normally ignored and indexed from `docs/experiment_log.md`. |
 
+Config templates:
+
+| file | use |
+| --- | --- |
+| `config_templates/stock_pool_selection.toml` | S/M/L pool as TopN selection mask. |
+| `config_templates/postopen_v2_features.toml` | post-open decision / v2 feature switches. |
+| `config_templates/gpu_lightgbm.toml` | LightGBM GPU resource switches. |
+
+`results/` can hold large API responses, parquet caches, plot data, and SVGs, so
+it is ignored by default and should not be bulk-added to Git. Commit durable
+experiment context in `runs/`, `jobs/`, and the docs. When compact result files
+are genuinely review evidence, add only those small files or directories
+explicitly with `git add -f`, and prefer SVG/CSV/JSON summaries over raw
+pickle/parquet dumps.
+
+Avoid committing these generated payloads unless there is a specific audit need:
+
+```text
+results/backtests/**/company_backtest_api*/backtest_result.pkl
+results/backtests/**/company_backtest_api*/score_*.parquet
+results/backtests/**/company_backtest_api*/w_eod.parquet
+results/backtests/**/next_close_labels/
+```
+
 Run kind entrypoints:
 
 | run kind | entrypoint |

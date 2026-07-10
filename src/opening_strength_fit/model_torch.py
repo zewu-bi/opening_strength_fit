@@ -3,6 +3,12 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from opening_strength_fit.features import (
+    mechanismized_feature_value_reference_columns,
+    transform_cross_sectional_feature_values,
+    transform_mechanismized_feature_values,
+    transform_mechanismized_v2_feature_values,
+)
 from opening_strength_fit.model_features import _clean_xy, feature_columns
 from opening_strength_fit.model_types import TorchMLPPredictionModel
 
@@ -752,6 +758,162 @@ def _torch_loss(loss: str, torch, reduction: str = "none"):
     raise SystemExit("model.loss for torch_mlp must be mse or huber")
 
 
+_GLOBAL_STANDARDIZATION_MODES = {
+    "",
+    "global",
+    "global_zscore",
+    "train",
+    "train_zscore",
+    "feature_zscore",
+}
+_SYMBOL_TRAIN_STANDARDIZATION_MODES = {
+    "symbol_train_zscore",
+    "per_symbol_train_zscore",
+    "symbol_zscore",
+    "symbol_history_zscore",
+    "self_history_zscore",
+}
+
+
+def _normalize_feature_standardization(value: str) -> str:
+    mode = str(value or "global_zscore").strip().lower().replace("-", "_")
+    if mode in _GLOBAL_STANDARDIZATION_MODES:
+        return "global_zscore"
+    if mode in _SYMBOL_TRAIN_STANDARDIZATION_MODES:
+        return "symbol_train_zscore"
+    raise SystemExit(
+        "model.feature_standardization must be one of global_zscore or symbol_train_zscore"
+    )
+
+
+_NO_FEATURE_VALUE_TRANSFORMS = {"", "none", "identity", "raw", "off", "false"}
+_CROSS_SECTIONAL_FEATURE_VALUE_TRANSFORMS = {
+    "cross_sectional_demean": "demean",
+    "xs_demean": "demean",
+    "cross_sectional_zscore": "zscore",
+    "xs_zscore": "zscore",
+    "cross_sectional_robust_zscore": "robust_zscore",
+    "xs_robust_zscore": "robust_zscore",
+    "cross_sectional_rank_pct": "rank_pct",
+    "xs_rank_pct": "rank_pct",
+    "cross_sectional_rank": "rank",
+    "xs_rank": "rank",
+    "cross_sectional_rank_centered": "rank_centered",
+    "cross_sectional_rank_centered_inplace": "rank_centered",
+    "xs_rank_centered": "rank_centered",
+    "rank_centered": "rank_centered",
+}
+_MECHANISMIZED_FEATURE_VALUE_TRANSFORMS = {
+    "mechanismized_cross_sectional_rank_centered": "rank_centered",
+    "mechanismized_xs_rank_centered": "rank_centered",
+    "mechanismized_rank_centered": "rank_centered",
+    "mechanismized_dimensionless": "rank_centered",
+    "mechanismized_dimensionless_328": "rank_centered",
+    "mechanism_aware_cross_sectional_rank_centered": "rank_centered",
+    "mechanism_aware_xs_rank_centered": "rank_centered",
+    "mechanism_aware_rank_centered": "rank_centered",
+    "mechanismized_cross_sectional_zscore": "zscore",
+    "mechanismized_xs_zscore": "zscore",
+    "mechanismized_zscore": "zscore",
+    "mechanismized_only": "none",
+    "mechanism_aware_only": "none",
+}
+_MECHANISMIZED_V2_FEATURE_VALUE_TRANSFORMS = {
+    "mechanismized_v2_cross_sectional_robust_zscore": "robust_zscore",
+    "mechanismized_v2_xs_robust_zscore": "robust_zscore",
+    "mechanismized_v2_robust_zscore": "robust_zscore",
+    "mechanismized_v2_dimensionless": "robust_zscore",
+    "mechanismized_v2_dimensionless_328": "robust_zscore",
+    "mechanismized_v2_cross_sectional_zscore": "zscore",
+    "mechanismized_v2_xs_zscore": "zscore",
+    "mechanismized_v2_zscore": "zscore",
+    "mechanismized_v2_cross_sectional_rank_centered": "rank_centered",
+    "mechanismized_v2_xs_rank_centered": "rank_centered",
+    "mechanismized_v2_rank_centered": "rank_centered",
+    "mechanismized_v2_only": "none",
+    "mechanism_aware_v2_cross_sectional_robust_zscore": "robust_zscore",
+    "mechanism_aware_v2_dimensionless": "robust_zscore",
+    "mechanism_aware_v2_only": "none",
+}
+
+
+def _normalize_feature_value_transform(value: str) -> str:
+    mode = str(value or "none").strip().lower().replace("-", "_")
+    if mode in _NO_FEATURE_VALUE_TRANSFORMS:
+        return "none"
+    if mode in _CROSS_SECTIONAL_FEATURE_VALUE_TRANSFORMS:
+        return f"cross_sectional_{_CROSS_SECTIONAL_FEATURE_VALUE_TRANSFORMS[mode]}"
+    if mode in _MECHANISMIZED_V2_FEATURE_VALUE_TRANSFORMS:
+        return f"mechanismized_v2_{_MECHANISMIZED_V2_FEATURE_VALUE_TRANSFORMS[mode]}"
+    if mode in _MECHANISMIZED_FEATURE_VALUE_TRANSFORMS:
+        return f"mechanismized_{_MECHANISMIZED_FEATURE_VALUE_TRANSFORMS[mode]}"
+    raise SystemExit(
+        "features.feature_value_transform must be none, cross_sectional_demean, "
+        "cross_sectional_zscore, cross_sectional_robust_zscore, cross_sectional_rank_pct, "
+        "cross_sectional_rank, cross_sectional_rank_centered, "
+        "mechanismized_cross_sectional_rank_centered, or mechanismized_v2_dimensionless_328"
+    )
+
+
+def _feature_value_transform_mode(normalized: str) -> str:
+    return normalized.removeprefix("cross_sectional_")
+
+
+def _torch_feature_value_frame(
+    frame: pd.DataFrame,
+    features: list[str],
+    *,
+    feature_value_transform: str,
+    group_cols: tuple[str, ...],
+    rank_method: str,
+    tick_size: float = 0.01,
+    extra_columns: tuple[str, ...] = (),
+) -> pd.DataFrame:
+    mode = _normalize_feature_value_transform(feature_value_transform)
+    support_columns = (
+        mechanismized_feature_value_reference_columns()
+        if mode.startswith("mechanismized_")
+        else ()
+    )
+    required = list(dict.fromkeys([*extra_columns, *group_cols, *features, *support_columns]))
+    transform_required = [*group_cols, *features] if mode != "none" else features
+    missing = [column for column in transform_required if column and column not in frame.columns]
+    if missing and mode != "none":
+        raise SystemExit(
+            "features.feature_value_transform requires columns: "
+            f"{missing[:5]}"
+        )
+    available = [column for column in required if column and column in frame.columns]
+    model_frame = frame.loc[:, available].copy()
+    if mode == "none":
+        return model_frame
+    if mode.startswith("mechanismized_v2_"):
+        return transform_mechanismized_v2_feature_values(
+            model_frame,
+            columns=tuple(features),
+            group_cols=group_cols,
+            rank_method=rank_method,
+            tick_size=float(tick_size),
+            cross_sectional_mode=mode.removeprefix("mechanismized_v2_"),
+        )
+    if mode.startswith("mechanismized_"):
+        return transform_mechanismized_feature_values(
+            model_frame,
+            columns=tuple(features),
+            group_cols=group_cols,
+            rank_method=rank_method,
+            tick_size=float(tick_size),
+            cross_sectional_mode=mode.removeprefix("mechanismized_"),
+        )
+    return transform_cross_sectional_feature_values(
+        model_frame,
+        columns=tuple(features),
+        group_cols=group_cols,
+        mode=_feature_value_transform_mode(mode),
+        rank_method=rank_method,
+    )
+
+
 def _torch_gate_diagnostics(
     module,
     x_values: np.ndarray,
@@ -830,6 +992,10 @@ def _standardized_float_matrix(
     *,
     mean: np.ndarray | None = None,
     scale: np.ndarray | None = None,
+    group_col: str = "symbol",
+    group_keys: np.ndarray | None = None,
+    group_mean: np.ndarray | None = None,
+    group_scale: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     values = (
         frame[features]
@@ -847,10 +1013,63 @@ def _standardized_float_matrix(
         with np.errstate(invalid="ignore"):
             scale = np.nanstd(values, axis=0).astype("float32")
         scale = np.where(np.isfinite(scale) & (scale > 0.0), scale, 1.0).astype("float32")
-    values -= mean
-    values /= scale
+    if group_keys is None or group_mean is None or group_scale is None:
+        values -= mean
+        values /= scale
+    else:
+        if group_col not in frame.columns:
+            raise SystemExit(
+                f"model.feature_standardization='symbol_train_zscore' requires {group_col!r}"
+            )
+        key_to_index = {str(key): index for index, key in enumerate(group_keys)}
+        grouped_indices = frame.groupby(frame[group_col].astype(str), sort=False).indices
+        for key, row_positions in grouped_indices.items():
+            group_index = key_to_index.get(str(key))
+            if group_index is None:
+                center = mean
+                denominator = scale
+            else:
+                center = group_mean[group_index]
+                denominator = group_scale[group_index]
+            values[row_positions] -= center
+            values[row_positions] /= denominator
     np.nan_to_num(values, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
     return values, mean.astype("float32"), scale.astype("float32")
+
+
+def _fit_symbol_train_standardization(
+    frame: pd.DataFrame,
+    features: list[str],
+    *,
+    group_col: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    if group_col not in frame.columns:
+        raise SystemExit(
+            f"model.feature_standardization='symbol_train_zscore' requires {group_col!r}"
+        )
+    values = frame[features].replace([np.inf, -np.inf], np.nan)
+    global_mean = values.mean(axis=0, skipna=True).to_numpy(dtype="float32", copy=True)
+    global_scale = values.std(axis=0, skipna=True, ddof=0).to_numpy(dtype="float32", copy=True)
+    global_mean = np.where(np.isfinite(global_mean), global_mean, 0.0).astype("float32")
+    global_scale = np.where(
+        np.isfinite(global_scale) & (global_scale > 0.0),
+        global_scale,
+        1.0,
+    ).astype("float32")
+
+    grouped = values.groupby(frame[group_col].astype(str), sort=True)
+    group_mean_frame = grouped.mean()
+    group_scale_frame = grouped.std(ddof=0).reindex(group_mean_frame.index)
+    group_keys = group_mean_frame.index.astype(str).to_numpy()
+    group_mean = group_mean_frame.to_numpy(dtype="float32", copy=True)
+    group_scale = group_scale_frame.to_numpy(dtype="float32", copy=True)
+    group_mean = np.where(np.isfinite(group_mean), group_mean, global_mean).astype("float32")
+    group_scale = np.where(
+        np.isfinite(group_scale) & (group_scale > 0.0),
+        group_scale,
+        global_scale,
+    ).astype("float32")
+    return global_mean, global_scale, group_keys, group_mean, group_scale
 
 
 def fit_torch_mlp_frame(
@@ -883,6 +1102,12 @@ def fit_torch_mlp_frame(
     random_state: int = 7,
     num_workers: int = 0,
     gate_diagnostics_max_rows: int = 200_000,
+    feature_standardization: str = "global_zscore",
+    feature_standardization_group_col: str = "symbol",
+    feature_value_transform: str = "none",
+    feature_value_transform_group_cols: tuple[str, ...] = ("date", "decision_target_timestamp"),
+    feature_value_transform_rank_method: str = "average",
+    feature_value_transform_tick_size: float = 0.01,
 ) -> tuple[TorchMLPPredictionModel, dict[str, object]]:
     torch, _nn, DataLoader, TensorDataset = _import_torch()
     features = feature_columns(train, feature_limit, **(feature_filters or {}))
@@ -891,8 +1116,62 @@ def fit_torch_mlp_frame(
     if not features:
         raise SystemExit("no numeric feature columns found")
 
-    x_frame, y_series = _clean_xy(train, features, target_col=target_col)
-    x_values, feature_mean, feature_scale = _standardized_float_matrix(x_frame, features)
+    standardization_mode = _normalize_feature_standardization(feature_standardization)
+    standardization_group_col = str(feature_standardization_group_col or "symbol")
+    value_transform_mode = _normalize_feature_value_transform(feature_value_transform)
+    value_transform_group_cols = tuple(
+        str(column)
+        for column in (feature_value_transform_group_cols or ("date", "decision_target_timestamp"))
+        if str(column).strip()
+    )
+    value_transform_rank_method = str(feature_value_transform_rank_method or "average")
+    value_transform_tick_size = float(feature_value_transform_tick_size)
+    model_input = _torch_feature_value_frame(
+        train,
+        features,
+        feature_value_transform=value_transform_mode,
+        group_cols=value_transform_group_cols,
+        rank_method=value_transform_rank_method,
+        tick_size=value_transform_tick_size,
+        extra_columns=(target_col, "valid_label", standardization_group_col),
+    )
+    x_frame, y_series = _clean_xy(model_input, features, target_col=target_col)
+    standardization_group_keys = None
+    standardization_group_mean = None
+    standardization_group_scale = None
+    if standardization_mode == "symbol_train_zscore":
+        if standardization_group_col not in model_input.columns:
+            raise SystemExit(
+                "model.feature_standardization='symbol_train_zscore' requires "
+                f"{standardization_group_col!r}"
+            )
+        standardization_frame = model_input.loc[
+            x_frame.index,
+            [standardization_group_col, *features],
+        ]
+        (
+            feature_mean,
+            feature_scale,
+            standardization_group_keys,
+            standardization_group_mean,
+            standardization_group_scale,
+        ) = _fit_symbol_train_standardization(
+            standardization_frame,
+            features,
+            group_col=standardization_group_col,
+        )
+        x_values, feature_mean, feature_scale = _standardized_float_matrix(
+            standardization_frame,
+            features,
+            mean=feature_mean,
+            scale=feature_scale,
+            group_col=standardization_group_col,
+            group_keys=standardization_group_keys,
+            group_mean=standardization_group_mean,
+            group_scale=standardization_group_scale,
+        )
+    else:
+        x_values, feature_mean, feature_scale = _standardized_float_matrix(x_frame, features)
     y_values = y_series.to_numpy(dtype=np.float32, copy=True).reshape(-1, 1)
 
     sample_weight = None
@@ -1057,6 +1336,23 @@ def fit_torch_mlp_frame(
         "train_loss": float(final_train_loss),
         "validation_loss": float(best_validation),
         "validation_rows": int(validation_rows),
+        "feature_standardization": standardization_mode,
+        "standardization_group_col": standardization_group_col
+        if standardization_mode == "symbol_train_zscore"
+        else "",
+        "standardization_groups": int(len(standardization_group_keys))
+        if standardization_group_keys is not None
+        else 0,
+        "feature_value_transform": value_transform_mode,
+        "feature_value_transform_group_cols": list(value_transform_group_cols)
+        if value_transform_mode != "none"
+        else [],
+        "feature_value_transform_rank_method": value_transform_rank_method
+        if value_transform_mode != "none"
+        else "",
+        "feature_value_transform_tick_size": value_transform_tick_size
+        if value_transform_mode.startswith("mechanismized_")
+        else "",
     }
     if sample_weight is not None:
         stats["sample_weight_mean"] = float(sample_weight.mean())
@@ -1077,6 +1373,15 @@ def fit_torch_mlp_frame(
             module=module,
             feature_mean=feature_mean,
             feature_scale=feature_scale,
+            feature_standardization=standardization_mode,
+            standardization_group_col=standardization_group_col,
+            standardization_group_keys=standardization_group_keys,
+            standardization_group_mean=standardization_group_mean,
+            standardization_group_scale=standardization_group_scale,
+            feature_value_transform=value_transform_mode,
+            feature_value_transform_group_cols=value_transform_group_cols,
+            feature_value_transform_rank_method=value_transform_rank_method,
+            feature_value_transform_tick_size=value_transform_tick_size,
             device=resolved_device,
             batch_size=int(predict_batch_size or batch_size),
             diagnostics=diagnostics or None,
@@ -1092,14 +1397,33 @@ def _torch_mlp_score(model: TorchMLPPredictionModel, frame: pd.DataFrame) -> np.
     module.eval()
     scores = np.empty(len(frame), dtype="float64")
     batch_size = max(1, int(model.batch_size))
+    score_frame = _torch_feature_value_frame(
+        frame,
+        model.features,
+        feature_value_transform=model.feature_value_transform,
+        group_cols=model.feature_value_transform_group_cols,
+        rank_method=model.feature_value_transform_rank_method,
+        tick_size=model.feature_value_transform_tick_size,
+        extra_columns=(model.standardization_group_col,),
+    )
     with torch.no_grad():
         for start in range(0, len(frame), batch_size):
             end = min(start + batch_size, len(frame))
             x_values, _mean, _scale = _standardized_float_matrix(
-                frame.iloc[start:end],
+                score_frame.iloc[start:end],
                 model.features,
                 mean=model.feature_mean,
                 scale=model.feature_scale,
+                group_col=model.standardization_group_col,
+                group_keys=model.standardization_group_keys
+                if model.feature_standardization == "symbol_train_zscore"
+                else None,
+                group_mean=model.standardization_group_mean
+                if model.feature_standardization == "symbol_train_zscore"
+                else None,
+                group_scale=model.standardization_group_scale
+                if model.feature_standardization == "symbol_train_zscore"
+                else None,
             )
             batch_x = torch.from_numpy(x_values).to(model.device, non_blocking=True)
             batch_scores = module(batch_x).detach().cpu().numpy().reshape(-1)

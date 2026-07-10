@@ -10,14 +10,17 @@
 - 主验收图：Top100 诊断、10亿 capacity acceptance、NN 对照图都在
   `experiments/results/backtests/optimization_overlay_acceptance*/`。
 - 2022-2025 baseline：`experiments/results/backtests/baseline_2022_2025_cluster/`。
-- 当前信号候选：`hist_path_pruned_highdup` 是 LGBM 干净候选；NN 侧 `deep_gelu_mse` /
-  `base_plus_mse` 是新的 Top100 next overlay challenger，`mlp_base` 是已做容量验收的 overlay
-  incumbent，`deep_gelu_huber` 仍代表 Rank IC 主线。
+- 当前信号候选：`hist_path_pruned_highdup` 是 LGBM 干净候选；NN 侧
+  `grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse` 是当前 Top100 next overlay 领先候选，
+  `grouped_gated_v2_xs_rank_inplace_gelu_mse` 是 short IC 领先的同特征无量纲化对照，
+  `grouped_gated_gelu_mse` / `grouped_gated_v2_gelu_mse` 作为结构化 NN 高度与稳定性锚点，
+  `deep_gelu_huber` 仍代表 Rank IC 主线；`mlp_base` / `deep_gelu_mse` 作为已做容量验收的锚点保留。
 - 当前 NN 对照：第一轮 3 个 `torch_mlp` MLP 变体、第二轮 5 个 NN 结构扫描和 1 个
-  NN+LGBM rankblend、第三轮 4 个 MSE neighborhood 变体均已完成并归档；前两轮已与
-  `hist_path_pruned_highdup` / `mlp_base` 做 market-relative alpha 验收图对比。第四轮结构化
-  grouped NN 中 residual / cross / gated 已完成训练、pool-internal analysis 和归档；token-transformer
-  已按历史 YAML 重挂集群训练。
+  NN+LGBM rankblend、第三轮 4 个 MSE neighborhood 变体均已完成并归档；第四轮结构化
+  grouped NN 中 residual / cross / gated / token-transformer / gated v2 / gated v2 symbol-zscore
+  均已完成训练、pool-internal analysis、artifact sync 和 audit。symbol-zscore 版不晋级；
+  `xs_rank_inplace`、`mech328_xs_rank` 和 `mech328_v2_robust_zscore` 三个同 328 特征
+  归一化实验均已完成；当前 overlay 读 mech328 v2，short IC 读 xs-rank，mech328 v1 为负面对照。
 - 最新生产化证据：剪枝后 Top100 exposure、size/industry exposure、split20 capacity audits，
   以及 `lgbm326` / `mlp_base` / `deep_gelu_mse` 的 10亿 capacity acceptance；`deep_gelu_mse`
   已补 Top100 core exposure 和 size/industry exposure。
@@ -40,6 +43,8 @@
 | NN MLP vs `hist_path_pruned_highdup` | +0.956 best delta | +3.568 best delta | `mlp_base` 的 `pool_L` next excess 最高；`mlp_wide_huber` 的 short / next Rank IC 最好；触发第二轮 NN 扫参和 rankblend 对照。 |
 | NN scan + rankblend | +0.990 best delta | +3.101 best delta | 第二轮 6 个任务已归档；`deep_gelu_huber` 的 short / next Rank IC 最好，`silu_wide_lowdrop` 是本轮最接近 `mlp_base` 的 overlay challenger，NN+LGBM rankblend 未打过已有 NN 候选。 |
 | NN MSE neighborhood | +1.196 best delta | +4.097 best delta | 4 个 MSE 邻域任务已补 pool-internal analysis；`deep_gelu_mse` / `base_plus_mse` 的 Top100 next overlay 超过 `mlp_base`，但 Rank IC 仍明显低于 `deep_gelu_huber`。 |
+| structured grouped NN | +1.170 best delta vs `mlp_base` | +1.417 best delta vs `mlp_base` | 老 `grouped_gated_gelu_mse` 仍是 next overlay 高度候选；v2 稳定性更好；symbol-zscore 版 next excess `11.6661 bps`，低于 `mlp_base` / `deep_gelu_mse` / gated v2，不晋级。 |
+| gated v2 feature value normalization | +0.003637 short Rank IC vs gated v2 | +1.0407 next excess vs gated v2 | `xs_rank_inplace` 最高 short IC；`mech328_v2_robust_zscore` 最高 `pool_L` next overlay；`mech328_xs_rank` 为负面对照。 |
 
 ## 实验时间线
 
@@ -85,7 +90,7 @@
 | 2026-06-26 | NN single-model first archive | 新增 PyTorch `torch_mlp` 训练入口和 GPU K8s 渲染；`mlp_base` / `mlp_shallow_fast` / `mlp_wide_huber` 已有 2022-2025 pool-internal 归档。 |
 | 2026-07-02 | NN scan + rankblend archive | 6 个新增任务训练、pool-internal analysis、artifact sync 和 market-relative acceptance 图均已完成。`deep_gelu_huber` universe short Rank IC `0.164169`、`pool_L` short/next Rank IC `0.150744 / 0.015041` 为当前最高；`silu_wide_lowdrop` 的 `pool_L` next excess `11.9652 bps` 为本轮最高但仍低于 `mlp_base` 的 `12.4320 bps`；NN+LGBM rankblend 相对 LGBM 328 有增量但不晋级。 |
 | 2026-07-02 | mlp_base split20 capacity + 1bn acceptance | 补跑 `lgbm326` 和 `mlp_base` split20 容量 audit：`mlp_base` 为 `9690/9690` 截面全满，平均吃到 top `132`、p95 top `183`、最深 top `326`。容量验收收益不应复用 TopN 等权逻辑，也不应来自 capacity audit daily summary；应由 capacity acceptance 分析按 `capacity_audit_selected.csv` 的 `allocated_notional` 加权 next-close label 后生成。 |
-| 2026-07-03 | NN MSE neighborhood archive | 4 个 MSE 邻域任务训练已在集群完成，并已补 pool-internal analysis、artifact sync 和 audit。`deep_gelu_mse` 的 `pool_L` next excess `12.9610 bps` 为当前 Top100 overlay 最高；`base_plus_mse` 为 `12.7478 bps`；二者均高于 `mlp_base` 的 `12.4320 bps`，但 universe short Rank IC 只有约 `0.151`，不挑战 `deep_gelu_huber` 的排序力冠军地位。 |
+| 2026-07-03 | NN MSE neighborhood archive | 4 个 MSE 邻域任务训练已在集群完成，并已补 pool-internal analysis、artifact sync 和 audit。`deep_gelu_mse` 的 `pool_L` next excess `12.9610 bps` 为当时 Top100 overlay 最高；`base_plus_mse` 为 `12.7478 bps`；二者均高于 `mlp_base` 的 `12.4320 bps`，但 universe short Rank IC 只有约 `0.151`，不挑战 `deep_gelu_huber` 的排序力冠军地位。 |
 | 2026-07-03 | deep_gelu_mse split20 capacity + 1bn acceptance | 按正式 `10 亿 / 20` 容量口径补 `deep_gelu_mse` capacity-only audit 和 capacity acceptance；`9690/9690` 截面全满，平均 top depth `134.15`，p95 `188`，max `308`。10亿 capacity 图已对比 `lgbm328` / `mlp_base` / `deep_gelu_mse`，capacity cumulative net 分别为 `6009.2 / 7657.0 / 7916.0 bps`。 |
 | 2026-07-03 | deep_gelu_mse exposure + size/industry audit | 已补 `pool_L` Top100 core exposure 和 ClickHouse daily size/industry audit；activity max z / mean z `1.303 / 0.956`，低于 `lgbm328` 的 `1.526 / 1.081`；size max z `0.366`，低于 `lgbm328` 的 `0.544`；行业仍超配电子/电力设备/计算机、低配基础化工/机械设备，但 top5 industry share `0.524`、effective industries `13.24`，略优于 `lgbm328`。 |
 | 2026-07-03 | structured grouped NN jobs submitted | 按 runbook 新增并提交 4 个结构化 NN rolling sharded GPU Job：`grouped_residual_gelu_mse`、`grouped_cross_gelu_mse`、`grouped_gated_gelu_mse`、`group_token_transformer_mse`。四者均保持短期 `target_label` + MSE，不改验收口径；镜像 `20260703-structured-nn-v1` 已 push，Job 已 Running。 |
@@ -94,6 +99,12 @@
 | 2026-07-08 | token transformer + grouped gated v2 archive | `group_token_transformer_mse` / `grouped_gated_v2_gelu_mse` 已完成 8/8 training shard、cluster-side pool-internal analysis、artifact sync、audit 和 Top100 累和验收。两者均高于 `lgbm328` 和 `mlp_base`，但未超过老 `grouped_gated_gelu_mse`；`pool_L` next excess 分别为 `13.6479 / 13.2768 bps`，老 gated 为 `13.8491 bps`。考虑半年尺度振荡和长回撤风险，`grouped_gated_v2_gelu_mse` 的 `next_positive_months=39/48`、更高 short/next Rank IC 和 short excess 使其升为高优先级稳定性候选。 |
 | 2026-07-08 | grouped gated v2 exposure audit | 已对 `grouped_gated_v2_gelu_mse` 补 `pool_L` Top100 core exposure 和 size/industry exposure，不补容量。activity max/mean z `1.251 / 0.947`，低于 `deep_gelu_mse` 和 `lgbm328`；size max/mean z `0.318 / 0.213`，行业 top5 share `0.519`、effective industries `13.44`，均不高于既有候选。 |
 | 2026-07-10 | old NN Top1000 bucket curve archive | 旧 3 NN 模型均值的 Top1000 10/20/50 桶折线图已归档到 `experiments/results/backtests/old_nn_multiscale_bucket_diag_v1/top1000_bucket_multiscale_old3_mean.svg`，plot data 为同目录 `top1000_bucket_multiscale_old3_mean_plot_data.csv`。图使用 `pool_L` next internal excess 和 `date x decision_time` 机会等权；验收图对齐仍看 per-variant 的 `bucket_width=100, bucket=1`。折线显示粗分桶头部递减清楚，但不改变 Top1000 pointwise IC 和 10-bucket 桶内 IC 为负的解释：信号有 head-region 选择力，桶内 fine ranking 弱或轻微反向。 |
+| 2026-07-10 | grouped gated v2 dimensionless acceptance archive | `xs_rank_inplace` 和 `mech328_v2_robust_zscore` 已完成 training、cluster-side pool-internal analysis、artifact sync、audit 和两张验收图。相对 gated v2，xs-rank 的 universe short Rank IC 更高 `0.161260 vs 0.157623`；mech328 v2 的 `pool_L` next excess 更高 `14.3174 vs 13.2768 bps`，Top100 8bps next net cumulative 更高 `8508.0 vs 8003.8 bps`。当前 overlay 结论优先 mech328 v2，short 排序力结论优先 xs-rank。 |
+| 2026-07-10 | grouped gated v2 mech328 v1 archive | `mech328_xs_rank` 已完成 training、cluster-side pool-internal analysis、artifact sync、audit，并生成 gated v2 / mech328 v1 / mech328 v2 三线验收图。v1 提升 short IC：universe short Rank IC `0.160371`，但主 overlay 退化：`pool_L` next excess `11.7491 bps`，低于 gated v2 `13.2768 bps` 和 mech328 v2 `14.3174 bps`；Top100 8bps next net cumulative `7263.6 bps`，比 gated v2 低 `740.2 bps`。 |
+| 2026-07-09 | grouped gated v2 symbol-zscore archive | `grouped_gated_v2_symbol_zscore_gelu_mse` 已完成 8/8 training shard、cluster-side pool-internal analysis、artifact sync、audit 和 Top100 验收图。`pool_L` next excess `11.6661 bps`，低于 gated v2 `13.2768 bps`、老 gated `13.8491 bps` 和 `mlp_base` `12.4320 bps`；不晋级。 |
+| 2026-07-09 | grouped gated v2 in-place XS rank submission | 新增 `features.feature_value_transform = "cross_sectional_rank_centered"`，模型仍使用同一批 328 特征名，不追加 `xs_rel_` / `norm_` 列；初版曾落到 RTX5090 / sm_120 节点报 PyTorch CUDA kernel incompatible，后续用 `20260709-nn-mech328-v3` 和兼容 GPU avoid-list 重提并完成。 |
+| 2026-07-09 | grouped gated v2 mech328 XS rank submission | 新增 `features.feature_value_transform = "mechanismized_cross_sectional_rank_centered"`，同一批 328 特征名原地替换：价格类转 bps/tick，部分股数类转 notional pressure，金额/计数类做单调压缩，再做 rank-centered；初版 pod 因落到 Blackwell/RTX5000 GPU 报 `no kernel image is available for execution on the device`，后续用镜像 `20260709-nn-mech328-v3`、兼容 GPU avoid-list 重提并完成。 |
+| 2026-07-09 | grouped gated v2 mech328 v2 robust-zscore submission | 新增 `features.feature_value_transform = "mechanismized_v2_dimensionless_328"`，同一批 328 特征名原地替换：价格转 tick/bps，成交量转历史同分钟比例或 share 尺度，turnover 保持资金金额语义，盘口总深度保留 notional depth，盘口 level queue 转 side-depth share，最后做 `date x decision_time` robust z-score；training Job `os-nn-2225-gated-v2-mech328v2-mse` 已完成。 |
 
 ## 2026-05-20 小窗结果
 
@@ -3188,7 +3199,7 @@ experiments/results/backtests/optimization_overlay_acceptance_nn_scan_vs_mlp_bas
 - `compact_huber` 被 `deep_gelu_huber` / `mlp_wide_huber` 支配；`wide_deep_h64` 的 next
   overlay 有改善但排序力弱；`wide_deep_h128_huber` 的 next overlay 低于 LGBM 328，直接淘汰。
 
-下一步从“结构扫参”转为“候选收敛”：主候选保留 `mlp_base` 和 `deep_gelu_huber` 两条；
+当时下一步从“结构扫参”转为“候选收敛”：主候选保留 `mlp_base` 和 `deep_gelu_huber` 两条；
 若继续做组合，优先做 `mlp_base` + `deep_gelu_huber` 的小规模 rank / score blend grid，
 而不是继续扩大 NN+LGBM rankblend。最终候选需要复用现有 exposure、size/industry exposure 和
 split20 capacity audit 口径。
@@ -3447,6 +3458,463 @@ experiments/results/backtests/structured_grouped_nn_vs_baselines_2022_2025/pool_
 experiments/results/backtests/optimization_overlay_acceptance_structured_grouped_nn_2022_2025/
 experiments/results/backtests/optimization_overlay_acceptance_structured_grouped_vs_lgbm328_2022_2025/
 ```
+
+## 2026-07-10 old NN Top1000 bucket diagnostics archive
+
+Scope: this diagnostic uses the old NN overlay set only: `nn_mlp_base`,
+`nn_mlp_base_plus_mse`, and `nn_deep_gelu_mse`. The sample is 2022-2025
+`pool_L`, with next-close pool-internal excess as the label. It should not be
+read as a `grouped_gated` / `grouped_gated_v2` result.
+
+Headline return numbers use decision-group equal weighting: each
+`date x decision_target_timestamp` TopK / bucket portfolio gets one equal
+weight. Month-level files are stability checks only, not the headline return
+source.
+
+Acceptance-figure reconciliation must use per-variant rows, not `old3_mean`.
+For example, `bucket_width=100, bucket=1` matches the pool-internal Top100 next
+acceptance value for the same run: `nn_mlp_base=12.4320 bps`,
+`nn_mlp_base_plus_mse=12.7478 bps`, and `nn_deep_gelu_mse=12.9610 bps`.
+`old3_mean=12.7136 bps` is only the diagnostic average of those three rows; it
+does not correspond to a separate acceptance-figure line.
+
+Artifacts:
+
+```text
+experiments/results/backtests/local_ic_topk_nn_overlay_pool_l_v1/
+experiments/results/backtests/ic_bucket_diagnostics_nn_overlay_pool_l_v1/
+experiments/results/backtests/old_nn_multiscale_bucket_diag_v1/
+```
+
+Use these files as the canonical readout:
+
+- `old_nn_multiscale_bucket_diag_v1/topk_shape_summary.csv`: Top50/100/150/200
+  head-shape acceptance.
+- `old_nn_multiscale_bucket_diag_v1/bucket_width_distribution_summary.csv`:
+  headline Top1000 bucket returns and right-tail hit rates.
+- `old_nn_multiscale_bucket_diag_v1/topk_internal_ic_summary.csv` and
+  `bucket_width_within_ic_summary.csv`: pointwise / within-bucket IC checks.
+- `*_month_summary.csv` files: month stability only. They are not the headline
+  return convention.
+
+Conclusion: the alpha has a reasonable coarse Top1000 bucket shape, but weak
+fine ranking inside buckets. The old-three-model diagnostic mean Top1000 bucket
+excess is `12.71, 6.18, 4.08, 2.98, 2.36, 1.76, 1.58, 1.56, 1.37, 1.31 bps`,
+so score buckets are ordered in the right direction. However, bucket medians are
+negative and the positive rate is only about `44%`, which means the positive
+mean is pulled by right-tail winners rather than the typical stock. The earlier
+`13.03, 6.20, ...` table is the same sample under 48-month equal weighting; it
+is not the headline convention.
+
+The bucket-level signal is much clearer than pointwise IC: Top1000 bucket group
+IC is about `0.038-0.045`, while TopK internal next IC is negative, around
+`-0.025` at Top200 and `-0.018` at Top1000. The Top100 within-bucket Spearman IC
+is also negative, around `-0.028`. This supports the read that the old NN overlay
+works more like a bucket / head-region selector than a stable single-stock fine
+ranker, which explains why pointwise next IC is low despite a visible bucket
+gradient.
+
+Multiscale follow-up on the same old three-model sample confirms the head-region
+shape. The old-three-model mean TopK next-close pool-internal excess is
+`15.50, 12.71, 10.82, 9.45, 5.66, 3.59 bps` for Top50/100/150/200/500/1000.
+The 100-name and 200-name Top1000 buckets are monotone by mean excess; the
+50-name buckets are strongly ordered in the head and only become noisy after the
+first few hundred names.
+
+The right-tail diagnosis is also ordered. In the 100-name Top1000 buckets,
+realized pool top-10% hit rate falls from `18.12%` in ranks `1-100` to `9.52%`
+in ranks `901-1000`; `>=300 bps` winner rate falls from `18.48%` to `9.97%`.
+This is why bucket means can be positive while bucket medians stay negative: the
+signal increases the frequency and size of large positive outcomes, not the
+median stock's next-close return.
+
+The IC diagnostics still say the same thing: Top50/100/150/200 internal Spearman
+IC is about `-0.029, -0.029, -0.028, -0.026`. Sliding local IC is most negative
+at the very head (`1-100` about `-0.029`) and fades toward zero after the first
+few hundred ranks. This is not a contradiction with the bucket gradient; it
+means the score is useful for detecting a high-score state / region, while the
+fine ordering inside that region is weak or mildly reversed.
+
+One-line interpretation: bucket IC / bucket returns measure the coarse location
+of the score region, while within-bucket IC measures the local slope inside that
+region, so a globally ordered head region can coexist with weak or negative
+fine ranking inside each rank slice.
+
+Decision: for this old-NN overlay sample, the bucket-diagnostic question is
+settled. Additional validation should move to the current model family or to
+trading checks such as costs, turnover, capacity, and weighting; it should not
+repeat more Top1000 / TopK IC variants on the old three models unless the pool,
+label, or weighting convention changes.
+
+## 2026-07-10 grouped gated v2 dimensionless acceptance archive
+
+按 runbook 对两个已完成的同 328 特征原地归一化实验补齐 cluster-side pool-internal analysis、
+artifact sync、experiment audit、project contracts check，并生成与原 `grouped_gated_v2_gelu_mse`
+的三线验收图。
+
+对比对象：
+
+```text
+baseline:
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_gelu_mse_v1
+
+comparisons:
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_xs_rank_inplace_gelu_mse_v1
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse_v1
+```
+
+两张验收图：
+
+```text
+experiments/results/backtests/optimization_overlay_acceptance_gated_v2_dimensionless_2022_2025/optimization_directions_overlay_acceptance.svg
+experiments/results/backtests/optimization_overlay_acceptance_gated_v2_dimensionless_2022_2025/optimization_directions_net_alpha_cumulative.svg
+```
+
+主 summary：
+
+| run | universe short Rank IC | `pool_L` short Rank IC | `pool_L` next Rank IC | `pool_L` short excess bps | `pool_L` next excess bps | next positive months | Top100 8bps next net cumulative bps | market-relative alpha bps |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| gated v2 | 0.157623 | 0.144034 | 0.007275 | 11.0144 | 13.2768 | 39/48 | 8003.8 | 6828.8 |
+| XS rank | 0.161260 | 0.150080 | 0.007627 | 11.1952 | 13.7351 | 37/48 | 8225.9 | 7050.9 |
+| mech328 v2 | 0.154160 | 0.142022 | 0.008054 | 10.4377 | 14.3174 | 39/48 | 8508.0 | 7333.0 |
+
+半年度 `pool_L` next excess bps：
+
+| run | 2022H1 | 2022H2 | 2023H1 | 2023H2 | 2024H1 | 2024H2 | 2025H1 | 2025H2 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| gated v2 | 26.5 | 9.8 | 23.4 | 6.8 | 14.2 | 6.2 | 11.3 | 11.2 |
+| XS rank | 25.2 | 11.6 | 20.9 | 6.5 | 23.9 | 5.3 | 7.9 | 12.4 |
+| mech328 v2 | 23.1 | 12.4 | 23.0 | 9.8 | 13.8 | 8.3 | 10.4 | 15.0 |
+
+结论：
+
+- 纯 xs-rank 把 universe short Rank IC 从 gated v2 的 `0.157623` 提到 `0.161260`，
+  `pool_L` short Rank IC 也从 `0.144034` 提到 `0.150080`；它证明“无量纲化”方向本身不是
+  symbol-zscore 变差的原因。
+- mech328 v2 在主 overlay gate 上最好：`pool_L` next excess `14.3174 bps`，高于 gated v2
+  `1.0407 bps`、高于 xs-rank `0.5823 bps`；Top100 8bps next net cumulative `8508.0 bps`，
+  高于 gated v2 `504.2 bps`。
+- mech328 v2 的 short 排序力略降：universe short Rank IC `0.154160` 低于 gated v2 / xs-rank。
+  因此当前应把它定位为 `pool_L` next overlay 候选，而不是 short Rank IC 候选。
+- 机制解释：纯 rank 去掉单位后也去掉幅度间距；mech328 v2 保留成交额、盘口深度和相对活跃度这些
+  无量纲后仍应可见的状态，因此 next overlay 更强。
+
+状态：
+
+```text
+xs-rank training: 8/8 Complete
+xs-rank analysis: Complete
+mech328 v2 training: 8/8 Complete
+mech328 v2 analysis: Complete
+mech328 v1: completed later; see the mech328 v1 acceptance archive below
+audit: alignment_ok=yes, contracts_ok=yes
+```
+
+## 2026-07-10 grouped gated v2 mech328 v1 acceptance archive
+
+`os-nn-2225-gated-v2-mech328-mse` 已完成 8/8 training shard。按 runbook 补交
+`os-analyze-nn-gated-v2-mech328-mse`，完成 cluster-side pool-internal analysis、artifact sync、
+experiment audit、project contracts check，并生成 gated v2 / mech328 v1 / mech328 v2 的三线验收图。
+
+对比对象：
+
+```text
+baseline:
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_gelu_mse_v1
+
+comparisons:
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_xs_rank_gelu_mse_v1
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse_v1
+```
+
+两张验收图：
+
+```text
+experiments/results/backtests/optimization_overlay_acceptance_gated_v2_mech328_v1_v2_2022_2025/optimization_directions_overlay_acceptance.svg
+experiments/results/backtests/optimization_overlay_acceptance_gated_v2_mech328_v1_v2_2022_2025/optimization_directions_net_alpha_cumulative.svg
+```
+
+主 summary：
+
+| run | universe short Rank IC | `pool_L` short Rank IC | `pool_L` next Rank IC | `pool_L` short excess bps | `pool_L` next excess bps | next positive months | Top100 8bps next net cumulative bps | market-relative alpha bps |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| gated v2 | 0.157623 | 0.144034 | 0.007275 | 11.0144 | 13.2768 | 39/48 | 8003.8 | 6828.8 |
+| mech328 v1 | 0.160371 | 0.149266 | 0.004708 | 11.0665 | 11.7491 | 33/48 | 7263.6 | 6088.6 |
+| mech328 v2 | 0.154160 | 0.142022 | 0.008054 | 10.4377 | 14.3174 | 39/48 | 8508.0 | 7333.0 |
+
+半年度 `pool_L` next excess bps：
+
+| run | 2022H1 | 2022H2 | 2023H1 | 2023H2 | 2024H1 | 2024H2 | 2025H1 | 2025H2 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| gated v2 | 26.5 | 9.8 | 23.4 | 6.8 | 14.2 | 6.2 | 11.3 | 11.2 |
+| mech328 v1 | 17.0 | 10.8 | 17.6 | 4.0 | 23.1 | 7.0 | 5.8 | 13.2 |
+| mech328 v2 | 23.1 | 12.4 | 23.0 | 9.8 | 13.8 | 8.3 | 10.4 | 15.0 |
+
+结论：
+
+- mech328 v1 提升 short 排序力：universe short Rank IC `0.160371`，高于 gated v2
+  `0.157623`；`pool_L` short Rank IC `0.149266`，也高于 gated v2 `0.144034`。
+- 但 mech328 v1 在主 overlay gate 明显退化：`pool_L` next excess `11.7491 bps`，比
+  gated v2 低 `1.5277 bps`、比 mech328 v2 低 `2.5684 bps`；Top100 8bps next net cumulative
+  `7263.6 bps`，比 gated v2 低 `740.2 bps`。
+- mech328 v2 仍是当前最好的机制化无量纲 overlay 方案：`pool_L` next excess `14.3174 bps`，
+  Top100 8bps next net cumulative `8508.0 bps`，且 next positive months `39/48` 与 gated v2
+  持平，高于 mech328 v1 的 `33/48`。
+- 机制读法：v1 的“机制化后再 rank”确实让 short rank 更干净，但把部分成交量乘价格转成
+  notional pressure，且最终 rank 压掉资金/深度/活跃度幅度；v2 把成交量、turnover、盘口深度和
+  queue share 分开保留，再做 robust z-score，因此更符合 `pool_L` next overlay。
+
+状态：
+
+```text
+mech328 v1 training: 8/8 Complete
+mech328 v1 analysis: Complete
+artifact sync: Complete
+audit: alignment_ok=yes, contracts_ok=yes
+git diff --check: ok
+```
+
+## 2026-07-09 grouped gated v2 mech328 v2 robust-zscore submission
+
+新增同 328 特征、同 gated v2 架构的机制化 v2 无量纲实验。它仍是不追加列的同名替换，
+但相对 mech328 v1 不再把“股数变化”默认解释成资金压力，也不把所有机制化值最后压成 rank。
+目标是去掉物理单位，同时保留高低成交额、深浅盘口、相对活跃度这些模型应当知道的状态。
+
+Run id：
+
+```text
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse_v1
+```
+
+核心配置：
+
+```toml
+[features]
+feature_value_transform = "mechanismized_v2_dimensionless_328"
+feature_value_transform_group_cols = ["date", "decision_target_timestamp"]
+feature_value_transform_tick_size = 0.01
+```
+
+实现语义：
+
+- 价格类：原始价格水平不直接进模型；raw price / vwap / price diff 转成 tick 或相对参考价 bps。
+- 成交量类：`volume_diff_*` / `postopen_volume_*` / `preopen_volume` 优先转历史同分钟比例；
+  没有历史支撑列时才做 signed `log1p(shares)`，不默认乘价格。
+- 成交金额类：`turnover_diff_*` / `postopen_turnover_*` / `preopen_turnover` 保持资金语义，
+  用 signed `log1p(amount)` 压缩尾部。
+- 盘口深度类：侧总深度 / path depth 保留为 signed `log1p(depth * reference_price)`，
+  即保留深盘口 / 浅盘口状态；具体 level queue 转成相对同侧总深度的 share。
+- 历史 surprise / ratio / return / imbalance / bps 等已无量纲特征不二次机制化。
+- 最后对同一 `date x decision_target_timestamp` 截面做 robust z-score，而不是 rank；
+  这样既去掉横截面单位尺度，又保留 10 倍和 2 倍状态之间的间距差异。
+
+测试覆盖：
+
+```text
+.venv/bin/pytest -q tests/test_feature_value_transform.py tests/test_cross_sectional_relative_features.py tests/test_price_scale_features.py tests/test_torch_mlp.py tests/test_torch_standardization.py tests/test_feature_filters.py tests/test_labeled_pvc_source.py tests/test_k8s_helpers.py
+# 39 passed, 3 skipped
+python -m compileall -q src/opening_strength_fit
+.venv/bin/osf-check-project-contracts  # contracts_ok: yes
+.venv/bin/osf-audit-experiments        # alignment_ok: yes after rendering
+git diff --check                       # ok
+```
+
+集群状态：
+
+```text
+image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260709-nn-mech328-v3
+image digest: sha256:7cd2d1a9d039dbb7c2f9f5f3acf6d209f1630802c9ac2ff04db9f62f932ea536
+training job: os-nn-2225-gated-v2-mech328v2-mse
+completionMode: Indexed
+completions: 8
+parallelism: 4
+node selector: has_gpu=true
+avoid_nodes: node6,node7,node8,node12,node17,node19,node20,node24,node25,node26,node27,node28
+status: 8/8 Complete
+analysis job rendered: os-analyze-nn-gated-v2-mech328v2-mse
+analysis job status: Complete
+```
+
+本实验是当前优先读的机制化无量纲方案。若它明显好于 symbol-zscore、xs-rank 和 mech328 v1，
+后续 feature value normalization 应优先走“机制语义转无量纲 + 截面 robust z-score”，而不是
+统一 symbol z-score 或纯 rank。
+
+## 2026-07-09 grouped gated v2 mech328 XS rank submission and GPU fix
+
+新增同 328 特征、同 gated v2 架构的机制化 v1 无量纲对照。它不是追加 `price_scale_` /
+`xs_rel_` 新列，而是在 torch 模型输入内部对原 328 特征做同名替换。该版保留为对照，
+因为它把部分 share-volume 特征乘价格转成 notional pressure，可能把“成交量压力”和
+“资金压力”混在一起。
+
+Run id：
+
+```text
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_xs_rank_gelu_mse_v1
+```
+
+核心配置：
+
+```toml
+[features]
+feature_value_transform = "mechanismized_cross_sectional_rank_centered"
+feature_value_transform_group_cols = ["date", "decision_target_timestamp"]
+feature_value_transform_rank_method = "average"
+feature_value_transform_tick_size = 0.01
+```
+
+实现语义：
+
+- 价格类：原始价格水平不直接进模型；`mid_price` 用 `tick_bps` 表示价格层级 / 固定 tick 机制，
+  `ask_price_1` / `bid_price_1` / `avg_*` / `trade_vwap_*` 等转成相对 mid 或 ask1 的 bps；
+  `spread_abs` 转成 ticks。
+- 股数 / 盘口量类：`volume_diff_*` / `preopen_volume` 等先乘价格转 notional pressure；
+  盘口 level depth / queue 类优先转成相对当前侧 `ask_depth_10` / `bid_depth_10` 的比例。
+  这是 v1 的可疑假设，后续以 mech328 v2 的 volume / turnover 分离方案为优先判断。
+- 金额 / 计数类：`turnover_diff_*` / `preopen_turnover` 做 signed `log1p`，`trade_num` /
+  `*_count_*` 做 `log1p`。
+- 已是 `bps` / `return` / `imbalance` / `ratio` / `zscore` / concentration / share 的特征不再二次机制化。
+- 上述机制化值最后统一在同一 `date x decision_target_timestamp` 截面内替换成 `rank_pct - 0.5`；
+  feature list 和 grouped gated v2 分组仍是原 328 个特征名。
+
+测试覆盖：
+
+```text
+.venv/bin/pytest -q tests/test_feature_value_transform.py tests/test_cross_sectional_relative_features.py tests/test_price_scale_features.py tests/test_torch_mlp.py tests/test_torch_standardization.py tests/test_feature_filters.py tests/test_labeled_pvc_source.py tests/test_k8s_helpers.py
+# 39 passed, 3 skipped
+python -m compileall -q src/opening_strength_fit
+.venv/bin/osf-check-project-contracts  # contracts_ok: yes
+.venv/bin/osf-audit-experiments        # alignment_ok: yes after rendering
+git diff --check                       # ok
+```
+
+集群状态：
+
+```text
+image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260709-nn-mech328-v3
+image digest: sha256:7cd2d1a9d039dbb7c2f9f5f3acf6d209f1630802c9ac2ff04db9f62f932ea536
+training job: os-nn-2225-gated-v2-mech328-mse
+completionMode: Indexed
+completions: 8
+parallelism: 2
+node selector: has_gpu=true
+avoid_nodes: node6,node7,node8,node12,node17,node19,node20,node24,node25,node26,node27,node28
+fixed error: initial pod on RTX5000/RTX5090-class Blackwell node hit PyTorch sm_120 unsupported CUDA kernel
+status: 8/8 Complete
+analysis job rendered: os-analyze-nn-gated-v2-mech328-mse
+analysis job status: Complete
+```
+
+本实验回答的问题是：mentor 要的“无量纲化”如果按交易机制先处理单位，再做 rank，是否能比
+直接 rank 原始股数 / 价格更稳。它应和 `xs_rank_inplace`、`mech328_v2_robust_zscore` 成对读；
+当前结果显示 v1 低于 v2，优先解释为 v1 的 notional pressure 假设和 rank 末端压缩损失了有用状态。
+
+## 2026-07-09 grouped gated v2 in-place XS rank submission
+
+为验证 mentor 关于“量化特征不应带量纲”的方向，但避免 `symbol_train_zscore` 洗掉横截面尺度排序，
+新增同 328 特征、同 gated v2 架构的原地横截面 rank 无量纲实验。
+
+Run id：
+
+```text
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_xs_rank_inplace_gelu_mse_v1
+```
+
+核心配置：
+
+```toml
+[features]
+feature_value_transform = "cross_sectional_rank_centered"
+feature_value_transform_group_cols = ["date", "decision_target_timestamp"]
+feature_value_transform_rank_method = "average"
+```
+
+实现语义：
+
+- 不使用 `include_cross_sectional_relative`，不追加 `xs_rel_` / `norm_` 新列。
+- 模型 feature list 和 grouped gated v2 分组仍是同一批 328 个原始特征名。
+- torch fit / score 入口内部构造模型输入视图，将每个 feature 在同一 `date x decision_target_timestamp`
+  截面内替换为 `rank_pct - 0.5`；`predict_frame` 输出仍保留原始 `ask_depth_10` / `buy_price`
+  等上下文字段，避免污染 capacity / exposure 后处理。
+- NN 自身仍做默认 `global_zscore`，但这是 rank 后的数值稳定标准化，不是 per-symbol history z-score。
+
+集群状态：
+
+```text
+image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260709-nn-mech328-v3
+training job: os-nn-2225-grp-gated-v2-xsrank-mse
+completionMode: Indexed
+completions: 8
+parallelism: 3
+node selector: has_gpu=true
+status: original jobs first stayed pending, then hit RTX5090 / sm_120 incompatible CUDA on node25; recreated with image 20260709-nn-mech328-v3 and the same compatible-GPU avoid-list as mech v1/v2; 8/8 Complete
+analysis job rendered: os-analyze-nn-grp-gated-v2-xsrank-mse
+analysis job status: Complete
+```
+
+本实验只回答一个干净问题：`symbol_train_zscore` 变差，究竟是“无量纲化”方向错，还是
+“按 symbol 历史去尺度”的方式错。若该 run 恢复 gated v2 的 short Rank IC 和 Top100 next excess，
+说明应优先使用横截面无量纲化；若仍明显退化，则说明当前 328 特征里仍有可交易的绝对尺度 /
+幅度信息，不能纯 rank 化。
+
+## 2026-07-09 grouped gated v2 symbol-zscore archive
+
+按 runbook 对 `grouped_gated_v2_symbol_zscore_gelu_mse` 补齐 cluster-side pool-internal
+analysis、artifact sync、experiment audit、project contracts check 和 Top100 acceptance
+对比图。训练 Job `os-nn-2225-grp-gated-v2-symz-mse` 为 `8/8 Complete`，analysis Job
+`os-analyze-nn-grp-gated-v2-symz-mse` completed；config 状态已从 `running` 收尾为
+`completed`。
+
+Run id：
+
+```text
+nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_symbol_zscore_gelu_mse_v1
+```
+
+本地归档：
+
+```text
+experiments/results/metrics/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_symbol_zscore_gelu_mse_v1_metrics_by_year.csv
+experiments/results/metrics/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_symbol_zscore_gelu_mse_v1_metrics_by_month.csv
+experiments/results/backtests/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_symbol_zscore_gelu_mse_v1/
+experiments/results/backtests/optimization_overlay_acceptance_grouped_gated_symz_top100_v1/
+```
+
+`pool_L` Top100 summary：
+
+| run | short excess bps | next excess bps | short Rank IC | next Rank IC | next cumulative bps | next positive months |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `lgbm328` | 9.2080 | 8.8643 | 0.140789 | 0.002830 | 8589.5 | 33 |
+| `mlp_base` | 10.1642 | 12.4320 | 0.137205 | 0.004981 | 12046.6 | 37 |
+| `deep_gelu_mse` | 10.4043 | 12.9610 | 0.138165 | 0.006126 | 12559.2 | 38 |
+| `grouped_gated_gelu_mse` | 10.8974 | 13.8491 | 0.142392 | 0.006333 | 13419.8 | 36 |
+| `grouped_gated_v2_gelu_mse` | 11.0144 | 13.2768 | 0.144034 | 0.007275 | 12865.2 | 39 |
+| `grouped_gated_v2_symbol_zscore_gelu_mse` | 8.9834 | 11.6661 | 0.117035 | 0.007624 | 11304.4 | 37 |
+
+Top100 8bps acceptance 图中，`grouped_gated_v2_symbol_zscore_gelu_mse` 的 capital-adjusted
+next net cumulative 为 `7223.4 bps`，market-relative alpha cumulative 为 `6048.4 bps`；
+分别低于 gated v2 的 `8003.8 / 6828.8 bps` 和老 gated 的 `8281.1 / 7106.1 bps`。
+
+半年度稳定性：
+
+| half | short excess bps | next excess bps | short Rank IC | next Rank IC | next positive months |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 2022H1 | 13.2950 | 22.1482 | 0.132735 | 0.008950 | 5/6 |
+| 2022H2 | 11.6057 | 10.0995 | 0.120466 | 0.015186 | 6/6 |
+| 2023H1 | 10.0156 | 22.9441 | 0.123168 | 0.016929 | 6/6 |
+| 2023H2 | 7.0466 | 7.5907 | 0.118466 | -0.006955 | 5/6 |
+| 2024H1 | 8.6632 | 11.9146 | 0.108153 | 0.008422 | 5/6 |
+| 2024H2 | 9.6589 | 7.5728 | 0.121175 | -0.002401 | 4/6 |
+| 2025H1 | 6.4439 | 10.6707 | 0.113537 | 0.011946 | 3/6 |
+| 2025H2 | 5.3518 | 3.8824 | 0.094433 | 0.014640 | 3/6 |
+
+结论：symbol train-window z-score 没有改善主验收面。它把 universe next Rank IC 从 gated
+v2 的 `0.012135` 提到 `0.015024`，`pool_L` next Rank IC 也略高到 `0.007624`，但主 gate
+不是 next IC；`pool_L` Top100 next excess 低 gated v2 `1.6107 bps`、低老 gated
+`2.1830 bps`，最终 next cumulative 低 gated v2 `1560.7 bps`、低老 gated `2115.3 bps`。
+更重要的是 short Rank IC 从 gated v2 的 `0.144034` 降到 `0.117035`，说明 per-symbol
+z-score 去掉了可用于 short selector 的持久价格 / 市值 / 流动性尺度信息。该实验保留为负面证据，
+不作为候选推进；后续若需要降暴露，优先用 exposure / capacity 约束或组合层归一化，而不是在
+feature standardization 层统一做 symbol z-score。
 
 ## 2026-07-08 token transformer + grouped gated v2 archive
 
@@ -3865,7 +4333,9 @@ CSV / JSON / SVG 包；`output/legacy/**` 只保留旧本地分析和 debug 产�
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_corr09_v1/` | 同一抽样的 0.90 相关阈值 sensitivity hygiene 审计，用于人工复核更宽相关簇。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1/` | baseline + hist_surprise + path_shape 精确并集的 0.90 相关阈值 hygiene sensitivity；50k rows，354 features，19 个 drop candidates。 |
 | `experiments/results/backtests/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/` | `hist_path` 删除 26 个高重复 hist/path 特征后的 pool-internal closeout；328 features，信号基本保留，`hist_path_pruned_vs_before_summary.csv` 为剪枝前后 compact 对比。 |
-| `experiments/results/backtests/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_*_v1/` | 剪枝后 328 特征上的 PyTorch MLP 单模型对照；第三轮 `deep_gelu_mse` / `base_plus_mse` 的 `pool_L` Top100 next excess 最高，第二轮 `deep_gelu_huber` 的 short / next Rank IC 最好。 |
+| `experiments/results/backtests/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_*_v1/` | 剪枝后 328 特征上的 PyTorch MLP 单模型对照；第三轮 `deep_gelu_mse` / `base_plus_mse` 曾是 MLP overlay 高点，第二轮 `deep_gelu_huber` 的 short / next Rank IC 最好。 |
+| `experiments/results/backtests/optimization_overlay_acceptance_gated_v2_dimensionless_2022_2025/` | gated v2 / xs-rank / mech328 v2 的无量纲化验收图；mech328 v2 是当前 `pool_L` next overlay 领先方案，xs-rank 是 short IC 领先对照。 |
+| `experiments/results/backtests/optimization_overlay_acceptance_gated_v2_mech328_v1_v2_2022_2025/` | gated v2 / mech328 v1 / mech328 v2 三线验收图；mech328 v1 提升 short IC 但主 overlay 退化，作为负面对照。 |
 | `experiments/results/backtests/nn_lgbm328_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_base_rankblend_v1/` | `mlp_base` 与 LGBM 328 的 rank-centered ensemble；相对 LGBM 328 改善，但没有超过 `mlp_base`、`silu_wide_lowdrop` 或 `deep_gelu_huber`。 |
 | `experiments/results/backtests/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_wide_deep_*_v1/` | wide-deep h64 / h128 Huber 结构扫描归档；h64 overlay 有改善但 Rank IC 弱，h128 next overlay 低于 LGBM 328，均不晋级。 |
 | `experiments/results/backtests/optimization_overlay_acceptance_nn_scan_top3_vs_lgbm328/` | 第二轮 NN scan top3 和 NN+LGBM rankblend 对 LGBM 328 的 market-relative acceptance 图与 plot data。 |

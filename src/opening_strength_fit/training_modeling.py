@@ -253,6 +253,44 @@ def fit_single_prediction_model(
                 "gate_diagnostics_max_rows",
                 200_000,
             ),
+            feature_standardization=config_str(
+                config,
+                "model",
+                "feature_standardization",
+                "global_zscore",
+            ),
+            feature_standardization_group_col=config_str(
+                config,
+                "model",
+                "feature_standardization_group_col",
+                "symbol",
+            ),
+            feature_value_transform=config_str(
+                config,
+                "features",
+                "feature_value_transform",
+                "none",
+            ),
+            feature_value_transform_group_cols=tuple(
+                config_list(
+                    config,
+                    "features",
+                    "feature_value_transform_group_cols",
+                    ["date", "decision_target_timestamp"],
+                )
+            ),
+            feature_value_transform_rank_method=config_str(
+                config,
+                "features",
+                "feature_value_transform_rank_method",
+                "average",
+            ),
+            feature_value_transform_tick_size=config_float(
+                config,
+                "features",
+                "feature_value_transform_tick_size",
+                0.01,
+            ),
         )
     raise SystemExit(
         f"unsupported model.name={model_name!r}; "
@@ -533,6 +571,42 @@ def model_config_payload(config: dict, alpha: float) -> dict[str, object]:
             "random_state": config_int(config, "model", "random_state", 7),
             "num_workers": config_int(config, "model", "num_workers", 0),
             "sample_weight_col": config_str(config, "model", "sample_weight_col", ""),
+            "feature_standardization": config_str(
+                config,
+                "model",
+                "feature_standardization",
+                "global_zscore",
+            ),
+            "feature_standardization_group_col": config_str(
+                config,
+                "model",
+                "feature_standardization_group_col",
+                "symbol",
+            ),
+            "feature_value_transform": config_str(
+                config,
+                "features",
+                "feature_value_transform",
+                "none",
+            ),
+            "feature_value_transform_group_cols": config_list(
+                config,
+                "features",
+                "feature_value_transform_group_cols",
+                ["date", "decision_target_timestamp"],
+            ),
+            "feature_value_transform_rank_method": config_str(
+                config,
+                "features",
+                "feature_value_transform_rank_method",
+                "average",
+            ),
+            "feature_value_transform_tick_size": config_float(
+                config,
+                "features",
+                "feature_value_transform_tick_size",
+                0.01,
+            ),
             "gate_diagnostics_max_rows": config_int(
                 config,
                 "model",

@@ -2,12 +2,11 @@
 
 代码、CLI 和项目目录索引。本文件只回答“东西在哪里”和“入口做什么”。研究判断看
 [project_brief.md](project_brief.md)，实验事实看 [experiment_log.md](experiment_log.md)，运行命令看
-[runbook.md](runbook.md)，候选晋级标准看 [promotion_checklist.md](promotion_checklist.md)。
+[runbook.md](runbook.md)，候选晋级标准也看 [project_brief.md](project_brief.md)。
 
 ## Root
 
 - `README.md`: project entrypoint and current spine.
-- `docs/promotion_checklist.md`: minimum evidence package before a candidate replaces an incumbent.
 - `Dockerfile`: CPU training image; default command is `osf-train --help`.
 - `pyproject.toml`: package metadata, runtime/dev dependencies, CLI entrypoints, pytest, coverage, and ruff settings.
 - `requirements.lock`: frozen Python environment versions used as a reproducibility baseline.
@@ -51,7 +50,7 @@ Library:
 - `src/opening_strength_fit/features_base.py`: orderbook, trade-flow, momentum, preopen summaries, and the raw tick feature frame.
 - `src/opening_strength_fit/features_postopen.py`: `postopen_*` decision-row trajectory, queue response, and depth-state features.
 - `src/opening_strength_fit/features_history.py`: historical same-minute surprise and path-shape confirmation features.
-- `src/opening_strength_fit/features_relative.py`: cross-sectional relative and price-scale features.
+- `src/opening_strength_fit/features_relative.py`: cross-sectional relative, price-scale, and in-place feature value transforms.
 - `src/opening_strength_fit/feature_utils.py`: shared numeric feature helpers.
 - `src/opening_strength_fit/feature_config.py`: feature include/drop filter and feature-limit config helpers.
 - `src/opening_strength_fit/candidates.py`: visible-information opening candidate filters.
@@ -67,7 +66,7 @@ Library:
 - `src/opening_strength_fit/model_types.py`: prediction model dataclasses and prediction context columns.
 - `src/opening_strength_fit/model_features.py`: numeric feature filtering and target cleaning.
 - `src/opening_strength_fit/model_sklearn.py`: Ridge, sklearn GBM, and LightGBM fitters.
-- `src/opening_strength_fit/model_torch.py`: Torch MLP module construction, training loop, and scoring.
+- `src/opening_strength_fit/model_torch.py`: Torch MLP module construction, feature value transforms, standardization, training loop, and scoring.
 - `src/opening_strength_fit/model_prediction.py`: prediction dispatch for single, ensemble, and clock-segment models.
 - `src/opening_strength_fit/model_metrics.py`: IC, Rank IC, and grouped evaluation metrics.
 - `src/opening_strength_fit/training.py`: unified training pipeline, configured feature transforms/filters, and output writer.

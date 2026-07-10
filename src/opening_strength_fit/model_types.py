@@ -140,6 +140,15 @@ class TorchMLPPredictionModel:
     feature_scale: np.ndarray
     device: str
     batch_size: int
+    feature_standardization: str = "global_zscore"
+    standardization_group_col: str = "symbol"
+    standardization_group_keys: np.ndarray | None = None
+    standardization_group_mean: np.ndarray | None = None
+    standardization_group_scale: np.ndarray | None = None
+    feature_value_transform: str = "none"
+    feature_value_transform_group_cols: tuple[str, ...] = ("date", "decision_target_timestamp")
+    feature_value_transform_rank_method: str = "average"
+    feature_value_transform_tick_size: float = 0.01
     diagnostics: dict[str, Any] | None = None
     model_name: str = "torch_mlp"
     target_col: str = "label"
