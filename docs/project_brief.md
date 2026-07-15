@@ -1,6 +1,6 @@
 # Project Brief
 
-> Last reviewed: 2026-07-10
+> Last reviewed: 2026-07-15
 
 本文件是当前研究决策 memo，只保留目标、固定口径、候选状态、验收标准和下一步。实验数字与历史见
 [experiment_log.md](experiment_log.md)，操作命令见 [runbook.md](runbook.md)，代码位置见
@@ -44,6 +44,10 @@
 | rejected direction | `symbol_zscore`、`mech328_v1`、NN+LGBM rankblend | 已有负面证据，不继续宽扫 |
 
 完整指标和归档路径只记录在 [experiment_log.md](experiment_log.md)。
+
+当前边界：mech328 v2 是 `pool_L` 的 conditional-mean / right-tail head overlay，不是 Top1000
+单股 fine ranker；复核中的单股 Rank IC 轻微为负，而 100-name 平滑桶的 group IC 为正。后续必须用
+单股截尾/缩尾分解右尾贡献，并以成本和容量约束后的组合结果验收。
 
 ## 晋级标准
 

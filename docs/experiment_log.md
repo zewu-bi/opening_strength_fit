@@ -1,7 +1,7 @@
 # Experiment Log
 
-> Last reconciled: 2026-07-10
-> Coverage: 2026-05-20 through 2026-07-10
+> Last reconciled: 2026-07-15
+> Coverage: 2026-05-20 through 2026-07-15
 
 本文件是人工维护的实验事实账本，严格按发生时间升序记录假设、口径、结果、状态和决策。当前研究
 方向见 [project_brief.md](project_brief.md)，命令见 [runbook.md](runbook.md)。旧版逐日长记录原样保存在
@@ -79,6 +79,7 @@
 | 07-09~10 | mech328 v2 robust z-score | price tick/bps、volume ratio/share、turnover amount、notional depth、queue share，再做截面 robust z-score | pool_L next `14.3174 bps`；Top100 8 bps cumulative `8508.0 bps`；39/48 正月 | 晋级 overlay incumbent |
 | 07-10 | old-NN multiscale buckets | Top1000 粗桶与桶内 IC | 粗桶递减，但 TopK/桶内 IC 为负 | 信号是 head-region selector，不是稳定细排器；旧模型诊断结束 |
 | 07-10 | mech328 v3 submit | ratio-style histavg activity，无截面 z-score | 8 shards submitted，尚无 metrics | 保持 targeted challenger，见在途表 |
+| 07-15 | mech328 v2 rank/bucket re-audit | 原始 prediction、next-close label 与 `pool_L` 重新 join 并交叉实现 Spearman | `pool_L` 全池 / Top1000 单股 Rank IC `+0.008054/-0.016463`；Top1000 10×100 per-decision bucket IC `+0.050524`，汇总曲线 IC `+0.975758`；头尾 pair win `48.07%` | 计算无 sign、tie、label 或 excess 口径错误；定位为 conditional-mean/right-tail head overlay，不作单股细排器 |
 
 ## 当前决策记录
 
@@ -94,11 +95,19 @@
 Decision: mech328 v2 是 pool overlay incumbent；XS rank 是 short 排序锚；mech328 v1 和
 symbol-zscore 不晋级。v3 只有在相同数据、窗口、成本和 gate 下完成后才可挑战 incumbent。
 
+Rank/bucket boundary：2022-2025 的 9,690 个 decision groups 中，Top1000 单股 pair accuracy
+为 `49.45%`，Top100 对 Tail100 为 `48.07%`。第一百股桶均值/单股中位数为
+`+14.317/-44.942 bps`，P99 为 `+1624.81 bps`，说明正均值主要来自右尾；每时刻 Top100
+组合收益的中位数 `+11.76 bps` 只衡量组合时间稳定性，不能解释单股 IC。下一步按组对单股收益做
+P95/P99 winsorize/trim，并拆分非尾部背景、尾部发生率和尾部严重程度。
+
 Artifacts:
 
 ```text
 experiments/results/backtests/optimization_overlay_acceptance_gated_v2_dimensionless_2022_2025/
 experiments/results/backtests/optimization_overlay_acceptance_gated_v2_mech328_v1_v2_2022_2025/
+experiments/results/backtests/rank_bucket_reaudit_old3_mech328_v2_2022_2025_v1/
+experiments/results/backtests/mech328_v2_top1000_pairwise_audit_v1/
 ```
 
 ### First-pass realistic replay
