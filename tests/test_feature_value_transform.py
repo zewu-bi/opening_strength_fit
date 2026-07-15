@@ -276,7 +276,9 @@ class FeatureValueTransformTest(unittest.TestCase):
         self.assertAlmostEqual(out["trade_num"].iloc[1], 0.20, places=8)
         self.assertEqual(out["hist_surprise_volume_diff_1t_20d_ratio"].tolist(), [2.0, 3.0])
 
-    def test_torch_mechanismized_v3_dimensionless_transform_skips_cross_sectional_zscore(self) -> None:
+    def test_torch_mechanismized_v3_dimensionless_transform_skips_cross_sectional_zscore(
+        self,
+    ) -> None:
         frame = pd.DataFrame(
             {
                 "date": ["2022-01-04", "2022-01-04"],

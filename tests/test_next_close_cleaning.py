@@ -7,17 +7,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from opening_strength_fit.commands.learned_risk_layer import (  # noqa: E402
-    normalize_next_close_labels as normalize_learned_next_close_labels,
-)
-from opening_strength_fit.commands.score_risk_sweep import (  # noqa: E402
-    normalize_next_close_labels as normalize_score_risk_next_close_labels,
-)
+from opening_strength_fit.analysis import normalize_next_close_labels  # noqa: E402
 from opening_strength_fit.commands.score_tail_guards import (
     load_next_close_labels,  # noqa: E402
-)
-from opening_strength_fit.commands.signal_baseline_panels import (  # noqa: E402
-    normalize_next_close_labels as normalize_panel_next_close_labels,
 )
 from opening_strength_fit.labels import safe_price_return  # noqa: E402
 from opening_strength_fit.score_variant_eval import score_variants  # noqa: E402
@@ -41,7 +33,7 @@ class NextCloseCleaningTest(unittest.TestCase):
     def test_normalize_next_close_labels_drops_non_finite_returns(self) -> None:
         frame = self._next_close_frame()
 
-        labels = normalize_learned_next_close_labels(frame)
+        labels = normalize_next_close_labels(frame)
 
         self.assertEqual(labels["symbol"].tolist(), ["000001.SZ"])
         self.assertTrue(np.isfinite(labels["alpha_return_next_close"]).all())
@@ -57,18 +49,6 @@ class NextCloseCleaningTest(unittest.TestCase):
         self.assertTrue(np.isnan(returns.iloc[2]))
         self.assertTrue(np.isnan(returns.iloc[3]))
         self.assertFalse(np.isinf(returns).any())
-
-    def test_next_close_consumers_drop_non_finite_returns(self) -> None:
-        frame = self._next_close_frame()
-
-        for normalize in (
-            normalize_panel_next_close_labels,
-            normalize_score_risk_next_close_labels,
-        ):
-            with self.subTest(normalize=normalize.__module__):
-                labels = normalize(frame)
-                self.assertEqual(labels["symbol"].tolist(), ["000001.SZ"])
-                self.assertTrue(np.isfinite(labels["alpha_return_next_close"]).all())
 
     def test_tail_guard_label_loader_drops_non_finite_returns(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

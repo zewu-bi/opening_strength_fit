@@ -65,6 +65,12 @@ class FeatureFilterTest(unittest.TestCase):
         self.assertEqual(filters["drop_prefixes"], ("preopen_",))
         self.assertEqual(filters["drop_patterns"], (r"_debug$",))
 
+    def test_explicit_missing_feature_fails(self) -> None:
+        frame = pd.DataFrame({"present": [1.0]})
+
+        with self.assertRaisesRegex(SystemExit, "explicit model features are missing"):
+            feature_columns(frame, include_columns=("missing",))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -98,6 +99,7 @@ enabled = false
     assert (output_dir / "metrics.json").exists()
 
     success = json.loads((output_dir / "_SUCCESS").read_text(encoding="utf-8"))
+    metrics_payload = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
     predictions = pd.read_parquet(output_dir / "predictions.parquet")
     metrics = pd.read_csv(output_dir / "metrics_by_year.csv")
 
@@ -111,3 +113,12 @@ enabled = false
     assert predictions["prediction"].notna().all()
     assert metrics.loc[0, "run_id"] == "tiny_training_smoke"
     assert int(metrics.loc[0, "test_rows"]) == 6
+    assert metrics_payload["reproducibility"]["config_path"] == str(config_path)
+    assert (
+        metrics_payload["reproducibility"]["config_sha256"]
+        == hashlib.sha256(config_path.read_bytes()).hexdigest()
+    )
+    assert metrics_payload["train_stats_by_window"]["2022-01"]["feature_names"] == [
+        "feature_liquidity",
+        "feature_signal",
+    ]

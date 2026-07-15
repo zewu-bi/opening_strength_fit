@@ -8,6 +8,7 @@ from opening_strength_fit.commands.k8s_rendering import (
     render_pool_internal_analysis_job,  # noqa: E402
     render_sharded_training_job,  # noqa: E402
     render_training_job,  # noqa: E402
+    resolve_render_image,  # noqa: E402
     training_command,  # noqa: E402
 )
 from opening_strength_fit.k8s import KUBERNETES_NAME_LIMIT, temporary_pod_name
@@ -33,6 +34,17 @@ class K8sHelperTest(unittest.TestCase):
         self.assertLessEqual(len(name), KUBERNETES_NAME_LIMIT)
         self.assertTrue(name.startswith("opening-strength-"))
         self.assertIn("-sharded-", name)
+
+    def test_render_image_requires_explicit_immutable_reference(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "missing container image"):
+            resolve_render_image("", allow_mutable=False)
+        with self.assertRaisesRegex(SystemExit, "refusing mutable image"):
+            resolve_render_image("registry/opening-strength-fit:latest", allow_mutable=False)
+
+        self.assertEqual(
+            resolve_render_image("registry/opening-strength-fit:20260715-maintenance-v1"),
+            "registry/opening-strength-fit:20260715-maintenance-v1",
+        )
 
     def test_rendered_job_name_keeps_mixed_weight_token(self) -> None:
         name = _k8s_job_name(

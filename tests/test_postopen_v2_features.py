@@ -80,6 +80,18 @@ class PostopenV2FeatureTest(unittest.TestCase):
         self.assertIn("postopen_v2_queue_ask1_replenish_vs_trade_1m", out.columns)
         self.assertIn("postopen_v2_queue_bid_depth10_replenish_vs_trade_1m", out.columns)
 
+    def test_minute_lag_does_not_bridge_a_missing_decision_point(self) -> None:
+        frame = _decision_rows().iloc[[0, 2]].reset_index(drop=True)
+
+        out = add_postopen_v2_decision_features(
+            frame,
+            windows=(1, 2),
+            depth_levels=(3, 10),
+        )
+
+        self.assertTrue(pd.isna(out.loc[1, "postopen_v2_ask_volume_1_diff_1m"]))
+        self.assertAlmostEqual(out.loc[1, "postopen_v2_ask_volume_1_diff_2m"], 20.0)
+
 
 if __name__ == "__main__":
     unittest.main()

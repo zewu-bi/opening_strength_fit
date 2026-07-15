@@ -183,6 +183,63 @@ class LabeledPvcSourceTest(unittest.TestCase):
         )
         self.assertIn("volume", labeled.columns)
 
+    def test_labeled_pvc_downcast_is_invariant_to_file_partitioning(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            single_path = root / "single.parquet"
+            split_path = root / "split"
+            split_path.mkdir()
+            frame = pd.DataFrame(
+                [
+                    {
+                        "date": "2022-01-04",
+                        "symbol": "000001.SZ",
+                        "timestamp": pd.Timestamp(f"2022-01-04 09:{minute}:00"),
+                        "decision_time": f"09:{minute}:00",
+                        "decision_target_timestamp": pd.Timestamp(f"2022-01-04 09:{minute}:00"),
+                        "decision_lag_seconds": 0.0,
+                        "ask_volume_1": ask_volume,
+                        "label": 0.01,
+                        "valid_label": True,
+                    }
+                    for minute, ask_volume in ((30, 100_000_000.0), (31, 100_000_001.0))
+                ]
+            )
+            frame.to_parquet(single_path, index=False)
+            frame.iloc[[0]].to_parquet(split_path / "part_1.parquet", index=False)
+            frame.iloc[[1]].to_parquet(split_path / "part_2.parquet", index=False)
+
+            def load(path: Path) -> pd.DataFrame:
+                return load_labeled_pvc_frame(
+                    argparse.Namespace(labeled_input=None),
+                    {
+                        "data": {
+                            "source": "labeled_pvc",
+                            "labeled_path": str(path),
+                            "downcast_float32": True,
+                        },
+                        "universe": {"enabled": False},
+                        "sample": {
+                            "mode": "decision_points",
+                            "decision_times": ["09:31:00"],
+                            "decision_max_lag_seconds": 5,
+                        },
+                        "features": {
+                            "include_postopen_v2": True,
+                            "postopen_v2_windows": [1],
+                        },
+                    },
+                )
+
+            single = load(single_path)
+            split = load(split_path)
+
+        column = "postopen_v2_ask_volume_1_diff_1m"
+        self.assertEqual(str(single[column].dtype), "float32")
+        self.assertEqual(str(split[column].dtype), "float32")
+        self.assertEqual(single[column].tolist(), [1.0])
+        self.assertEqual(split[column].tolist(), [1.0])
+
     def test_labeled_pvc_relative_features_are_built_after_decision_filter(
         self,
     ) -> None:
@@ -231,6 +288,93 @@ class LabeledPvcSourceTest(unittest.TestCase):
 
         self.assertEqual(labeled["symbol"].tolist(), ["000001.SZ", "000002.SZ"])
         self.assertEqual(labeled["xs_rel_spread_bps_rank_centered"].tolist(), [0.0, 0.5])
+
+    def test_labeled_pvc_directory_builds_relative_features_across_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "cache"
+            root.mkdir()
+            for part, symbol, spread in (
+                (1, "000001.SZ", 10.0),
+                (2, "000002.SZ", 30.0),
+            ):
+                pd.DataFrame(
+                    [
+                        {
+                            "date": "2022-01-04",
+                            "symbol": symbol,
+                            "timestamp": pd.Timestamp("2022-01-04 09:31:00"),
+                            "decision_time": "09:31:00",
+                            "decision_target_timestamp": pd.Timestamp("2022-01-04 09:31:00"),
+                            "decision_lag_seconds": 0.0,
+                            "spread_bps": spread,
+                            "label": 0.01,
+                            "valid_label": True,
+                        }
+                    ]
+                ).to_parquet(root / f"part_{part}.parquet", index=False)
+
+            args = argparse.Namespace(labeled_input=None)
+            config = {
+                "data": {"source": "labeled_pvc", "labeled_path": str(root)},
+                "universe": {"enabled": False},
+                "sample": {
+                    "mode": "decision_points",
+                    "decision_times": ["09:31:00"],
+                    "decision_max_lag_seconds": 5,
+                },
+                "features": {
+                    "include_cross_sectional_relative": True,
+                    "cross_sectional_relative_columns": ["spread_bps"],
+                    "cross_sectional_relative_modes": ["rank_centered"],
+                },
+            }
+
+            labeled = load_labeled_pvc_frame(args, config)
+
+        relative = labeled.set_index("symbol")["xs_rel_spread_bps_rank_centered"]
+        self.assertEqual(relative.to_dict(), {"000001.SZ": 0.0, "000002.SZ": 0.5})
+
+    def test_labeled_pvc_directory_keeps_historical_rolling_across_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "cache"
+            root.mkdir()
+            for file_name, rows in (
+                ("part_1.parquet", (("2022-01-03", 10.0), ("2022-01-04", 12.0))),
+                ("part_2.parquet", (("2022-01-05", 14.0),)),
+            ):
+                pd.DataFrame(
+                    [
+                        {
+                            "date": date,
+                            "symbol": "000001.SZ",
+                            "timestamp": pd.Timestamp(f"{date} 09:31:00"),
+                            "decision_target_timestamp": pd.Timestamp(f"{date} 09:31:00"),
+                            "volume_diff_1t": value,
+                            "label": 0.01,
+                            "valid_label": True,
+                        }
+                        for date, value in rows
+                    ]
+                ).to_parquet(root / file_name, index=False)
+
+            args = argparse.Namespace(labeled_input=None)
+            config = {
+                "data": {"source": "labeled_pvc", "labeled_path": str(root)},
+                "universe": {"enabled": False},
+                "features": {
+                    "include_historical_same_minute_surprise": True,
+                    "historical_surprise_columns": ["volume_diff_1t"],
+                    "historical_surprise_windows": [2],
+                    "historical_surprise_min_periods": 2,
+                    "historical_surprise_modes": ["ratio"],
+                },
+            }
+
+            labeled = load_labeled_pvc_frame(args, config)
+
+        surprise = labeled.set_index("date")["hist_surprise_volume_diff_1t_2d_ratio"]
+        self.assertTrue(surprise.loc["2022-01-03":"2022-01-04"].isna().all())
+        self.assertAlmostEqual(surprise.loc["2022-01-05"], 14.0 / 11.0)
 
     def test_labeled_pvc_projects_columns_when_feature_includes_are_configured(
         self,
