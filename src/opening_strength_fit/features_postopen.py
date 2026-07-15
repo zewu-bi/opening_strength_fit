@@ -17,6 +17,26 @@ from opening_strength_fit.schema import (
 )
 
 
+def _lagged_by_minutes(
+    frame: pd.DataFrame,
+    values: pd.Series,
+    timestamp: pd.Series,
+    minutes: int,
+) -> pd.Series:
+    source_index = pd.MultiIndex.from_arrays(
+        [frame["date"], frame["symbol"], timestamp],
+        names=["date", "symbol", "timestamp"],
+    )
+    if source_index.has_duplicates:
+        raise ValueError("post-open features require unique date/symbol/decision timestamps")
+    target_index = pd.MultiIndex.from_arrays(
+        [frame["date"], frame["symbol"], timestamp - pd.Timedelta(minutes=minutes)],
+        names=source_index.names,
+    )
+    lookup = pd.Series(values.to_numpy(), index=source_index)
+    return pd.Series(lookup.reindex(target_index).to_numpy(), index=frame.index)
+
+
 def add_postopen_decision_features(
     frame: pd.DataFrame,
     *,
@@ -27,8 +47,6 @@ def add_postopen_decision_features(
         "decision_target_timestamp" if "decision_target_timestamp" in out.columns else "timestamp"
     )
     out = out.sort_values(["date", "symbol", time_col]).reset_index(drop=True)
-    group = out.groupby(["date", "symbol"], sort=False)
-
     timestamp = pd.to_datetime(out[time_col], errors="coerce")
     open_timestamp = pd.to_datetime(
         out["date"].astype(str) + " 09:30:00",
@@ -55,7 +73,7 @@ def add_postopen_decision_features(
             continue
         values = _numeric_series(out[column])
         for window in windows:
-            lagged = pd.to_numeric(group[column].shift(window), errors="coerce")
+            lagged = _lagged_by_minutes(out, values, timestamp, window)
             diff = values - lagged
             out[f"postopen_{column}_diff_{window}m"] = diff
             out[f"postopen_{column}_rel_{window}m"] = safe_divide(
@@ -112,6 +130,7 @@ class _PostOpenV2Builder:
             drop=True,
         )
         self.group_keys = [self.out["date"], self.out["symbol"]]
+        self.timestamp = pd.to_datetime(self.out[self.time_col], errors="coerce")
         self.new_columns: dict[str, pd.Series] = {}
 
     def has(self, column: str) -> bool:
@@ -132,7 +151,7 @@ class _PostOpenV2Builder:
         return pd.to_numeric(self.series(column), errors="coerce").astype("float64")
 
     def shifted(self, column: str, window: int) -> pd.Series:
-        return self.numeric(column).groupby(self.group_keys, sort=False).shift(window)
+        return _lagged_by_minutes(self.out, self.numeric(column), self.timestamp, window)
 
     def first(self, column: str) -> pd.Series:
         return self.numeric(column).groupby(self.group_keys, sort=False).transform("first")

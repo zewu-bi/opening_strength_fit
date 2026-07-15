@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,7 +20,7 @@ from opening_strength_fit.evaluation import (
     summarize_trades,
     top_score_trades,
 )
-from opening_strength_fit.io import write_frame
+from opening_strength_fit.io import write_frame, write_json
 from opening_strength_fit.model import evaluate_prediction_frame, predict_frame
 from opening_strength_fit.reports import dataset_summary, print_mapping
 from opening_strength_fit.stock_pool import (
@@ -266,10 +265,7 @@ def _final_estimator(model):
 def _estimator_feature_names(model) -> list[str]:
     imputer = model.pipeline.named_steps.get("imputer")
     if imputer is not None and hasattr(imputer, "get_feature_names_out"):
-        try:
-            return [str(name) for name in imputer.get_feature_names_out(model.features)]
-        except Exception:
-            pass
+        return [str(name) for name in imputer.get_feature_names_out(model.features)]
     return list(model.features)
 
 
@@ -292,10 +288,7 @@ def _importance_rows(
     gain_importance = None
     booster = getattr(estimator, "booster_", None)
     if booster is not None:
-        try:
-            gain_importance = booster.feature_importance(importance_type="gain")
-        except Exception:
-            gain_importance = None
+        gain_importance = booster.feature_importance(importance_type="gain")
     coefficients = getattr(estimator, "coef_", None)
 
     for index, feature in enumerate(features):
@@ -569,10 +562,7 @@ def main() -> None:
             "group_importance": str(output_dir / "feature_group_importance.csv"),
         },
     }
-    (output_dir / "feature_audit_trace.json").write_text(
-        json.dumps(trace, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    write_json(output_dir / "feature_audit_trace.json", trace)
 
     print("\nfeature_audit_metrics:")
     print(metrics.to_string(index=False))

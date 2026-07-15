@@ -14,13 +14,8 @@ from opening_strength_fit.capacity_acceptance import (
     summarize_capacity_acceptance,
     summarize_capacity_acceptance_overall,
 )
-from opening_strength_fit.config import (
-    config_float,
-    config_list,
-    config_str,
-    load_toml,
-    run_id,
-)
+from opening_strength_fit.commands.arguments import CommandArguments
+from opening_strength_fit.config import load_toml, run_id
 
 ARTIFACTS = (
     "capacity_acceptance_daily_summary.csv",
@@ -47,7 +42,7 @@ def parse_args() -> argparse.Namespace:
         action="append",
         help="Next-close label parquet/csv file or directory. May be repeated.",
     )
-    parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--output-dir", default="")
     parser.add_argument("--run-id", default="")
     parser.add_argument("--variant", default="")
     parser.add_argument("--label-col", default="")
@@ -56,27 +51,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--records-dir", default="")
     parser.add_argument("--record-prefix", default="")
     return parser.parse_args()
-
-
-def _arg_list(args: argparse.Namespace, config: dict, name: str) -> tuple[str, ...]:
-    values = getattr(args, name, None)
-    if values:
-        return tuple(values)
-    return tuple(config_list(config, "capacity_acceptance", name, ()))
-
-
-def _arg_str(args: argparse.Namespace, config: dict, name: str, default: str = "") -> str:
-    value = getattr(args, name, "")
-    if value not in (None, ""):
-        return str(value)
-    return config_str(config, "capacity_acceptance", name, default)
-
-
-def _arg_float(args: argparse.Namespace, config: dict, name: str, default: float) -> float:
-    value = getattr(args, name, None)
-    if value is not None:
-        return float(value)
-    return config_float(config, "capacity_acceptance", name, default)
 
 
 def record_capacity_acceptance_outputs(
@@ -101,23 +75,28 @@ def record_capacity_acceptance_outputs(
 def main() -> None:
     args = parse_args()
     config = load_toml(args.config) if args.config else {}
+    arguments = CommandArguments(args, config, "capacity_acceptance")
     run_name = args.run_id or (
         run_id(config, args.config) if args.config else "capacity_acceptance"
     )
-    selected_inputs = _arg_list(args, config, "selected_input")
-    label_inputs = _arg_list(args, config, "label_input")
+    selected_inputs = arguments.tuple("selected_input")
+    label_inputs = arguments.tuple("label_input")
     if not selected_inputs:
         raise SystemExit("pass --selected-input or set [capacity_acceptance].selected_input")
     if not label_inputs:
         raise SystemExit("pass --label-input or set [capacity_acceptance].label_input")
 
-    output_dir = Path(args.output_dir)
+    output_dir_value = CommandArguments(args, config, "output").string(
+        "output_dir",
+        config_name="local_dir",
+    )
+    if not output_dir_value:
+        raise SystemExit("pass --output-dir or set [output].local_dir")
+    output_dir = Path(output_dir_value)
     output_dir.mkdir(parents=True, exist_ok=True)
-    label_col = _arg_str(args, config, "label_col", DEFAULT_CAPACITY_LABEL_COL)
-    fee_bps = _arg_float(args, config, "fee_bps", 0.0)
-    capacity_total_notional = _arg_float(
-        args,
-        config,
+    label_col = arguments.string("label_col", DEFAULT_CAPACITY_LABEL_COL)
+    fee_bps = arguments.float("fee_bps", 0.0)
+    capacity_total_notional = arguments.float(
         "capacity_total_notional",
         DEFAULT_CAPACITY_TOTAL_NOTIONAL,
     )
@@ -145,7 +124,7 @@ def main() -> None:
     trace = {
         "created_at_utc": datetime.now(UTC).isoformat(),
         "run_id": run_name,
-        "variant": args.variant or _arg_str(args, config, "variant", run_name),
+        "variant": arguments.string("variant", run_name),
         "selected_inputs": list(selected_inputs),
         "label_inputs": list(label_inputs),
         "label_col": label_col,
@@ -160,14 +139,10 @@ def main() -> None:
     }
     write_json(trace_path, trace, ensure_ascii=True)
 
-    records_dir = args.records_dir or config_str(config, "capacity_acceptance", "records_dir", "")
+    records_dir = arguments.string("records_dir")
     record_paths: list[Path] = []
     if records_dir:
-        record_prefix = (
-            args.record_prefix
-            or config_str(config, "capacity_acceptance", "record_prefix", "")
-            or run_name
-        )
+        record_prefix = arguments.string("record_prefix") or run_name
         record_paths = record_capacity_acceptance_outputs(
             output_dir=output_dir,
             records_dir=Path(records_dir),

@@ -1,5 +1,3 @@
-"""Compatibility facade for relative and mechanism-aware feature transforms."""
-
 from opening_strength_fit.feature_transforms.cross_sectional import (
     add_cross_sectional_relative_features,
     add_price_scale_features,

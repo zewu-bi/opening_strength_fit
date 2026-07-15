@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import argparse
-import json
+import hashlib
 import os
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from opening_strength_fit.config import (
@@ -14,7 +13,7 @@ from opening_strength_fit.config import (
     run_id,
 )
 from opening_strength_fit.evaluation import score_bucket_returns
-from opening_strength_fit.io import write_frame_atomic
+from opening_strength_fit.io import write_frame_atomic, write_json
 from opening_strength_fit.reports import (
     dataset_summary,
     metrics_by_year_from_windows,
@@ -50,54 +49,8 @@ from opening_strength_fit.training_windows import (
 )
 
 
-def _json_default(value):
-    if isinstance(value, (np.integer,)):
-        return int(value)
-    if isinstance(value, (np.floating,)):
-        return float(value)
-    if isinstance(value, (pd.Timestamp,)):
-        return value.isoformat()
-    if pd.isna(value):
-        return None
-    raise TypeError(f"object is not JSON serializable: {type(value)!r}")
-
-
-def _json_ready(value):
-    if isinstance(value, dict):
-        return {key: _json_ready(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_ready(item) for item in value]
-    if isinstance(value, (np.integer,)):
-        return int(value)
-    if isinstance(value, (np.floating, float)):
-        return None if pd.isna(value) else float(value)
-    if isinstance(value, pd.Timestamp):
-        return value.isoformat()
-    return value
-
-
-def _write_json(path: Path, payload: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    try:
-        tmp_path.write_text(
-            json.dumps(
-                _json_ready(payload),
-                indent=2,
-                ensure_ascii=False,
-                default=_json_default,
-                allow_nan=False,
-            ),
-            encoding="utf-8",
-        )
-        os.replace(tmp_path, path)
-    finally:
-        if tmp_path.exists():
-            tmp_path.unlink()
-
-
 def _write_success_marker(output_dir: Path, *, run_name: str, windows: int) -> None:
-    _write_json(
+    write_json(
         output_dir / "_SUCCESS",
         {
             "run_id": run_name,
@@ -105,7 +58,12 @@ def _write_success_marker(output_dir: Path, *, run_name: str, windows: int) -> N
             "status": "completed",
             "format_version": 1,
         },
+        atomic=True,
     )
+
+
+def _file_sha256(path: str | Path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def train_from_args(args: argparse.Namespace) -> None:
@@ -223,10 +181,15 @@ def train_from_args(args: argparse.Namespace) -> None:
         write_frame_atomic(metrics_by_window, output_dir / "metrics_by_month.csv")
         write_frame_atomic(metrics_by_window, output_dir / "metrics_by_month.parquet")
 
-    _write_json(
+    write_json(
         output_dir / "metrics.json",
         {
             "run_id": run_name,
+            "reproducibility": {
+                "config_path": args.config,
+                "config_sha256": _file_sha256(args.config) if args.config else "",
+                "source_revision": os.environ.get("OPENING_STRENGTH_SOURCE_REVISION", ""),
+            },
             "windows": len(splits),
             "train_window": f"{splits[0].train_start_date} -> {splits[-1].train_end_date}",
             "test_window": f"{splits[0].test_start_date} -> {splits[-1].test_end_date}",
@@ -238,6 +201,7 @@ def train_from_args(args: argparse.Namespace) -> None:
             "metrics_by_window": metric_rows,
             "metrics_by_year": metrics_by_year.to_dict(orient="records"),
         },
+        atomic=True,
     )
     _write_success_marker(output_dir, run_name=run_name, windows=len(splits))
 

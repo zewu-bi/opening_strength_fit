@@ -14,9 +14,6 @@ from opening_strength_fit.alpha_conditioning import (  # noqa: E402
     fit_lgbm_config_section,
     predict_model_score,
 )
-from opening_strength_fit.analysis import (
-    json_safe as shared_json_safe,
-)
 from opening_strength_fit.analysis import write_json
 from opening_strength_fit.commands.learned_risk_layer import (
     load_or_fetch_next_close_labels,  # noqa: E402
@@ -80,10 +77,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--close-lookback-seconds", type=int, default=1_800)
     parser.add_argument("--calendar-days-after", type=int, default=10)
     return parser.parse_args()
-
-
-def json_safe(value):
-    return shared_json_safe(value)
 
 
 def variant_specs(config: dict) -> list[dict[str, object]]:

@@ -6,6 +6,7 @@ import pandas as pd
 
 from opening_strength_fit.analysis import KEY_COLUMNS, NEXT_CLOSE_LABEL_COL
 from opening_strength_fit.io import frame_columns, read_frame
+from opening_strength_fit.schema import normalize_decision_keys
 
 RETURN_BPS_DENOMINATOR = 10_000.0
 DEFAULT_CAPACITY_TOTAL_NOTIONAL = 1_000_000_000.0
@@ -24,14 +25,7 @@ SELECTED_REQUIRED_COLUMNS = (
 
 
 def normalize_key_columns(frame: pd.DataFrame) -> pd.DataFrame:
-    out = frame.copy()
-    out["date"] = pd.to_datetime(out["date"], errors="coerce").dt.strftime("%Y-%m-%d")
-    out["symbol"] = out["symbol"].astype(str)
-    out["decision_target_timestamp"] = pd.to_datetime(
-        out["decision_target_timestamp"],
-        errors="coerce",
-    )
-    return out.dropna(subset=list(KEY_COLUMNS)).copy()
+    return normalize_decision_keys(frame, key_columns=KEY_COLUMNS)
 
 
 def read_required_frames(

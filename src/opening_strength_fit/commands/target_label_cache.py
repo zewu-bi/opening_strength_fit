@@ -1,20 +1,17 @@
 from __future__ import annotations
 
 import argparse
-import json
-import os
 from pathlib import Path
 
+from opening_strength_fit.commands.arguments import CommandArguments
 from opening_strength_fit.config import (
-    config_float,
     config_float_mapping,
-    config_int,
+    config_list,
     config_str,
-    config_value,
     load_toml,
     run_id,
 )
-from opening_strength_fit.io import read_frame, write_frame
+from opening_strength_fit.io import read_frame, write_frame_atomic, write_json
 from opening_strength_fit.labels import normalize_return_label_frame
 from opening_strength_fit.reports import print_mapping
 from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns
@@ -25,30 +22,6 @@ from opening_strength_fit.targets import (
 )
 
 KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
-
-
-def _list_config(config: dict, section: str, key: str, default: tuple[str, ...]) -> tuple[str, ...]:
-    value = config_value(config, section, key, default)
-    if isinstance(value, str):
-        parts = value.replace(",", " ").split()
-    else:
-        parts = [str(item) for item in value]
-    return tuple(part.strip() for part in parts if part and part.strip())
-
-
-def _arg_or_config(args, config: dict, name: str, default: str = "") -> str:
-    value = getattr(args, name)
-    if value not in (None, ""):
-        return str(value)
-    return config_str(config, "target_cache", name, default)
-
-
-def _write_frame_atomic(frame, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    suffix = "".join(path.suffixes) or ".parquet"
-    tmp_path = path.with_name(f".{path.name}.{os.getpid()}.tmp{suffix}")
-    write_frame(frame, tmp_path)
-    os.replace(tmp_path, path)
 
 
 def _normalize_key_columns(frame):
@@ -128,6 +101,7 @@ def main() -> None:
 
     config = load_toml(args.config) if args.config else {}
     run_name = run_id(config, args.config) if args.config else "target_label_cache"
+    arguments = CommandArguments(args, config, "target_cache")
 
     input_raw = (
         args.input
@@ -148,106 +122,61 @@ def main() -> None:
         args.output_dir
         or config_str(config, "output", "local_dir", f"output/legacy/analysis/{run_name}")
     )
-    mode = _arg_or_config(args, config, "mode", "demean")
+    mode = arguments.string("mode", "demean")
     group_cols = (
         tuple(args.group_cols)
         if args.group_cols is not None
-        else _list_config(
-            config,
-            "target_cache",
-            "group_cols",
-            ("date", "decision_target_timestamp"),
+        else tuple(
+            config_list(
+                config,
+                "target_cache",
+                "group_cols",
+                ("date", "decision_target_timestamp"),
+            )
         )
     )
     neutralize_cols = (
         tuple(args.neutralize_cols)
         if args.neutralize_cols is not None
-        else _list_config(
-            config,
-            "target_cache",
-            "neutralize_cols",
-            DEFAULT_HEAT_NEUTRALIZE_COLUMNS,
+        else tuple(
+            config_list(
+                config,
+                "target_cache",
+                "neutralize_cols",
+                DEFAULT_HEAT_NEUTRALIZE_COLUMNS,
+            )
         )
     )
-    label_col = _arg_or_config(args, config, "label_col", "label")
-    target_col = _arg_or_config(args, config, "target_col", "target_label")
-    raw_label_col = _arg_or_config(args, config, "raw_label_col", "label_raw")
-    min_group_size = (
-        int(args.min_group_size)
-        if args.min_group_size is not None
-        else config_int(config, "target_cache", "min_group_size", 2)
-    )
-    neutralization_strength = (
-        float(args.neutralization_strength)
-        if args.neutralization_strength is not None
-        else config_float(config, "target_cache", "neutralization_strength", 1.0)
-    )
-    neutralization_ridge_alpha = (
-        float(args.neutralization_ridge_alpha)
-        if args.neutralization_ridge_alpha is not None
-        else config_float(config, "target_cache", "neutralization_ridge_alpha", 1.0)
-    )
-    neutralization_transform = args.neutralization_transform or config_str(
-        config,
-        "target_cache",
-        "neutralization_transform",
-        "rank_centered",
-    )
-    min_neutralize_cols = (
-        int(args.min_neutralize_cols)
-        if args.min_neutralize_cols is not None
-        else config_int(config, "target_cache", "min_neutralize_cols", 1)
-    )
-    guard_shrink_penalty = (
-        float(args.guard_shrink_penalty)
-        if args.guard_shrink_penalty is not None
-        else config_float(config, "target_cache", "guard_shrink_penalty", 0.5)
-    )
-    guard_pass_col = _arg_or_config(
-        args,
-        config,
-        "guard_pass_col",
-        "next_flip_guard_10t_pass",
-    )
+    label_col = arguments.string("label_col", "label")
+    target_col = arguments.string("target_col", "target_label")
+    raw_label_col = arguments.string("raw_label_col", "label_raw")
+    min_group_size = arguments.integer("min_group_size", 2)
+    neutralization_strength = arguments.float("neutralization_strength", 1.0)
+    neutralization_ridge_alpha = arguments.float("neutralization_ridge_alpha", 1.0)
+    neutralization_transform = arguments.string("neutralization_transform", "rank_centered")
+    min_neutralize_cols = arguments.integer("min_neutralize_cols", 1)
+    guard_shrink_penalty = arguments.float("guard_shrink_penalty", 0.5)
+    guard_pass_col = arguments.string("guard_pass_col", "next_flip_guard_10t_pass")
     guard_rank_group_cols = (
         tuple(args.guard_rank_group_cols)
         if args.guard_rank_group_cols is not None
-        else _list_config(
-            config,
-            "target_cache",
-            "guard_rank_group_cols",
-            group_cols,
+        else tuple(
+            config_list(
+                config,
+                "target_cache",
+                "guard_rank_group_cols",
+                group_cols,
+            )
         )
     )
-    guard_rank_method = args.guard_rank_method or config_str(
-        config, "target_cache", "guard_rank_method", "average"
-    )
-    guard_risk_lambda = (
-        float(args.guard_risk_lambda)
-        if args.guard_risk_lambda is not None
-        else config_float(config, "target_cache", "guard_risk_lambda", 1.0)
-    )
-    guard_risk_normalization = args.guard_risk_normalization or config_str(
-        config, "target_cache", "guard_risk_normalization", "mean"
-    )
-    long_label_input = _arg_or_config(args, config, "long_label_input", "")
-    long_label_col = _arg_or_config(
-        args,
-        config,
-        "long_label_col",
-        "alpha_return_next_close",
-    )
-    long_label_weight = (
-        float(args.long_label_weight)
-        if args.long_label_weight is not None
-        else config_float(config, "target_cache", "long_label_weight", 0.10)
-    )
-    short_label_transform = args.short_label_transform or config_str(
-        config, "target_cache", "short_label_transform", "zscore"
-    )
-    long_label_transform = args.long_label_transform or config_str(
-        config, "target_cache", "long_label_transform", "zscore"
-    )
+    guard_rank_method = arguments.string("guard_rank_method", "average")
+    guard_risk_lambda = arguments.float("guard_risk_lambda", 1.0)
+    guard_risk_normalization = arguments.string("guard_risk_normalization", "mean")
+    long_label_input = arguments.string("long_label_input")
+    long_label_col = arguments.string("long_label_col", "alpha_return_next_close")
+    long_label_weight = arguments.float("long_label_weight", 0.10)
+    short_label_transform = arguments.string("short_label_transform", "zscore")
+    long_label_transform = arguments.string("long_label_transform", "zscore")
     guard_min_values = config_float_mapping(config, "target_cache", "guard_min")
     guard_max_values = config_float_mapping(config, "target_cache", "guard_max")
     guard_rank_min_values = config_float_mapping(
@@ -345,7 +274,7 @@ def main() -> None:
         short_label_transform=short_label_transform,
         long_label_transform=long_label_transform,
     )
-    _write_frame_atomic(aligned, output_path)
+    write_frame_atomic(aligned, output_path)
 
     summary = target_label_summary(
         aligned,
@@ -384,10 +313,7 @@ def main() -> None:
         "summary": summary,
     }
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "target_cache_trace.json").write_text(
-        json.dumps(trace, indent=2, ensure_ascii=False, allow_nan=False),
-        encoding="utf-8",
-    )
+    write_json(output_dir / "target_cache_trace.json", trace)
     print_mapping("target_cache_summary", summary)
     print(f"\nwrote: {output_path}")
     print(f"trace: {output_dir / 'target_cache_trace.json'}")

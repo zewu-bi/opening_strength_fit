@@ -13,20 +13,15 @@ import numpy as np
 import pandas as pd
 
 from opening_strength_fit.analysis import (
-    clock_range as shared_clock_range,
+    clock_range,
+    write_json,
 )
 from opening_strength_fit.analysis import (
     load_or_fetch_next_close_labels as shared_load_or_fetch_next_close_labels,
 )
-from opening_strength_fit.analysis import (
-    normalize_next_close_labels as shared_normalize_next_close_labels,
-)
-from opening_strength_fit.analysis import (
-    write_json,
-)
 from opening_strength_fit.clickhouse_ticks import DEFAULT_CLICKHOUSE_TICK_TABLE
 from opening_strength_fit.commands.next_close_label_cache import fetch_next_close_labels
-from opening_strength_fit.io import read_frame as shared_read_frame
+from opening_strength_fit.io import read_frame
 from opening_strength_fit.model import corr
 
 DEFAULT_INPUT = (
@@ -90,14 +85,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def clock_range(start: str, end: str) -> list[str]:
-    return shared_clock_range(start, end)
-
-
-def read_frame(path: Path) -> pd.DataFrame:
-    return shared_read_frame(path)
-
-
 def load_predictions(path: Path, clocks: list[str], score_col: str) -> pd.DataFrame:
     required = [
         "date",
@@ -107,7 +94,7 @@ def load_predictions(path: Path, clocks: list[str], score_col: str) -> pd.DataFr
         "label",
         "buy_price",
     ]
-    frame = shared_read_frame(path, columns=required)
+    frame = read_frame(path, columns=required)
     frame = frame.dropna(
         subset=["date", "symbol", "decision_target_timestamp", score_col, "label"]
     ).copy()
@@ -121,10 +108,6 @@ def load_predictions(path: Path, clocks: list[str], score_col: str) -> pd.DataFr
     )
     frame["clock"] = frame["decision_target_timestamp"].dt.strftime("%H:%M")
     return frame.loc[frame["clock"].isin(clocks)].copy()
-
-
-def normalize_next_close_labels(frame: pd.DataFrame) -> pd.DataFrame:
-    return shared_normalize_next_close_labels(frame)
 
 
 def load_or_fetch_next_close_labels(

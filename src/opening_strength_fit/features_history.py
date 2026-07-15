@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from opening_strength_fit.feature_utils import _numeric_series, safe_divide
-from opening_strength_fit.schema import ensure_timestamp_columns, normalize_clock_time
+from opening_strength_fit.schema import ensure_timestamp_columns, frame_clock_series
 
 
 def _rolling_linear_slope(values: pd.Series, window: int) -> pd.Series:
@@ -55,11 +55,7 @@ def _grouped_rolling_linear_slope(
 
 
 def _normalized_row_clock(frame: pd.DataFrame, time_col: str) -> pd.Series:
-    if "decision_time" in frame.columns:
-        raw = frame["decision_time"].astype(str)
-        extracted = raw.str.extract(r"(\d{1,2}:\d{2}(?::\d{2})?)", expand=False).fillna("")
-        return extracted.map(lambda value: normalize_clock_time(value) if value else "")
-    return pd.to_datetime(frame[time_col], errors="coerce").dt.strftime("%H:%M:%S").fillna("")
+    return frame_clock_series(frame, timestamp_cols=(time_col,))
 
 
 def add_path_shape_confirmation_features(

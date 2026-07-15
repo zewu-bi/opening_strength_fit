@@ -10,6 +10,7 @@ import pandas as pd
 from opening_strength_fit.analysis import KEY_COLUMNS, write_json
 from opening_strength_fit.io import frame_columns, read_frame, write_frame
 from opening_strength_fit.prediction_frames import prediction_files
+from opening_strength_fit.schema import normalize_decision_keys
 
 KEYS = list(KEY_COLUMNS)
 DEFAULT_ASK_LEVELS = tuple(range(1, 11))
@@ -38,14 +39,7 @@ def finite_numeric(values: pd.Series) -> pd.Series:
 
 
 def normalize_keys(frame: pd.DataFrame) -> pd.DataFrame:
-    out = frame.copy()
-    out["date"] = pd.to_datetime(out["date"], errors="coerce").dt.strftime("%Y-%m-%d")
-    out["symbol"] = out["symbol"].astype(str)
-    out["decision_target_timestamp"] = pd.to_datetime(
-        out["decision_target_timestamp"],
-        errors="coerce",
-    )
-    return out.dropna(subset=KEYS).copy()
+    return normalize_decision_keys(frame, key_columns=KEYS)
 
 
 def _csv_selected_chunks(path: Path, *, columns: list[str], name: str) -> list[pd.DataFrame]:

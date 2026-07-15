@@ -12,8 +12,8 @@ from opening_strength_fit.optimization_acceptance_plots import (
     CUMULATIVE_MODES,
     DEFAULT_PLOT_DIRECTION_KEYS,
     default_plot_directions,
-    write_optimization_direction_plots,
 )
+from opening_strength_fit.optimization_acceptance_workflow import write_optimization_direction_plots
 from opening_strength_fit.optimization_direction_data import (
     DEFAULT_DIRECTIONS,
     DEFAULT_POOL_FEE_MODE,

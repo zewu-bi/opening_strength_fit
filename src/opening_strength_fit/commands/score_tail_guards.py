@@ -9,9 +9,7 @@ import numpy as np
 import pandas as pd
 
 from opening_strength_fit.analysis import (
-    clock_range as shared_clock_range,
-)
-from opening_strength_fit.analysis import (
+    clock_range,
     load_next_close_label_file,
     selection_return_stats,
     write_json,
@@ -22,8 +20,7 @@ from opening_strength_fit.analysis import (
 from opening_strength_fit.clickhouse_ticks import DEFAULT_CLICKHOUSE_TICK_TABLE
 from opening_strength_fit.horizon_clickhouse_labels import compute_clickhouse_close_labels
 from opening_strength_fit.horizons import HorizonSpec
-from opening_strength_fit.io import frame_columns
-from opening_strength_fit.io import read_frame as shared_read_frame
+from opening_strength_fit.io import frame_columns, read_frame
 
 DEFAULT_INPUT = (
     "output/legacy/predictions/lgbm_delay2_postopen_0931_0940_baseline_v1/predictions_all.parquet"
@@ -84,20 +81,8 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def clock_range(start: str, end: str) -> list[str]:
-    return shared_clock_range(start, end)
-
-
-def read_frame(path: Path, *, columns: list[str] | None = None) -> pd.DataFrame:
-    return shared_read_frame(path, columns=columns)
-
-
-def existing_columns(path: Path) -> set[str]:
-    return frame_columns(path)
-
-
 def load_predictions(path: Path, clocks: list[str], score_col: str) -> pd.DataFrame:
-    available = existing_columns(path)
+    available = frame_columns(path)
     requested = [
         column for column in (*BASE_COLUMNS, "buy_price", *GUARD_COLUMNS) if column in available
     ]

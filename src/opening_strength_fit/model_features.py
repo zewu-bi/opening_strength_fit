@@ -29,6 +29,10 @@ def feature_columns(
 ) -> list[str]:
     numeric_columns = df.select_dtypes(include=[np.number, "bool"]).columns
     include_columns_set = set(include_columns)
+    missing_includes = include_columns_set.difference(df.columns)
+    if missing_includes:
+        missing = ", ".join(sorted(missing_includes))
+        raise SystemExit(f"explicit model features are missing from the frame: {missing}")
     drop_columns_set = set(drop_columns)
     has_include_filter = bool(include_columns_set or include_prefixes or include_patterns)
     features = []

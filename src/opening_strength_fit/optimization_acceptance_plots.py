@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from importlib import import_module
 
 import pandas as pd
 
@@ -617,8 +618,7 @@ def ensure_plot_colors(keys: tuple[str, ...]) -> None:
 
 
 def write_optimization_direction_plots(**kwargs) -> dict[str, str]:
-    from opening_strength_fit.optimization_acceptance_workflow import (
-        write_optimization_direction_plots as _write_optimization_direction_plots,
-    )
+    """Forward the historical plots-module API to its workflow owner."""
 
-    return _write_optimization_direction_plots(**kwargs)
+    workflow = import_module("opening_strength_fit.optimization_acceptance_workflow")
+    return workflow.write_optimization_direction_plots(**kwargs)

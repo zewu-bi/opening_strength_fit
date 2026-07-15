@@ -6,6 +6,7 @@ import pandas as pd
 
 from opening_strength_fit.analysis import KEY_COLUMNS
 from opening_strength_fit.io import read_frame
+from opening_strength_fit.schema import normalize_decision_keys
 
 
 def prediction_shard_files(path: Path) -> list[Path]:
@@ -63,14 +64,7 @@ def next_close_files(path: Path, years: set[str]) -> list[Path]:
 
 
 def normalize_keys(frame: pd.DataFrame) -> pd.DataFrame:
-    out = frame.copy()
-    out["date"] = pd.to_datetime(out["date"], errors="coerce").dt.strftime("%Y-%m-%d")
-    out["symbol"] = out["symbol"].astype(str)
-    out["decision_target_timestamp"] = pd.to_datetime(
-        out["decision_target_timestamp"],
-        errors="coerce",
-    )
-    return out
+    return normalize_decision_keys(frame, drop_missing=False)
 
 
 def clock_label(values: pd.Series) -> pd.Series:

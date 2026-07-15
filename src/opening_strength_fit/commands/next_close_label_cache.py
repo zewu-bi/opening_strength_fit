@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import os
 from pathlib import Path
 
@@ -10,7 +9,6 @@ import pandas as pd
 from opening_strength_fit.analysis import (
     NEXT_CLOSE_LABEL_COL,
     normalize_next_close_labels,
-    write_json,
 )
 from opening_strength_fit.clickhouse_ticks import (
     DEFAULT_CLICKHOUSE_TICK_HOST,
@@ -31,19 +29,12 @@ from opening_strength_fit.horizon_clickhouse_labels import (
     compute_clickhouse_close_labels,
 )
 from opening_strength_fit.horizons import HorizonSpec
-from opening_strength_fit.io import frame_columns, read_frame, write_frame
+from opening_strength_fit.io import frame_columns, read_frame, write_frame, write_json
 from opening_strength_fit.reports import print_mapping
 from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns
 
 DEFAULT_DECISION_TIMES = tuple(f"09:{minute:02d}:00" for minute in range(31, 41))
 KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
-
-
-def _arg_or_config(args, config: dict, name: str, default: str = "") -> str:
-    value = getattr(args, name, "")
-    if value not in (None, ""):
-        return str(value)
-    return config_str(config, "next_close_labels", name, default)
 
 
 def _available_columns(path: Path) -> set[str]:
@@ -283,10 +274,7 @@ def main() -> None:
         "buy_price_col": buy_price_col,
     }
     write_json(output_dir / "next_close_label_cache_trace.json", summary)
-    (output_dir / "next_close_label_cache_summary.json").write_text(
-        json.dumps(summary, indent=2, ensure_ascii=False, allow_nan=False) + "\n",
-        encoding="utf-8",
-    )
+    write_json(output_dir / "next_close_label_cache_summary.json", summary)
     print_mapping("next_close_label_cache_summary", summary)
     print(f"\nwrote: {output_path}")
     print(f"trace: {output_dir / 'next_close_label_cache_trace.json'}")

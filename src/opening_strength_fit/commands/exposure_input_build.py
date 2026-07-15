@@ -17,14 +17,8 @@ from opening_strength_fit.clickhouse_ticks import (
     get_tick_client,
     validate_table_name,
 )
-from opening_strength_fit.config import (
-    config_bool,
-    config_int,
-    config_list,
-    config_str,
-    load_toml,
-    run_id,
-)
+from opening_strength_fit.commands.arguments import CommandArguments
+from opening_strength_fit.config import config_str, load_toml, run_id
 from opening_strength_fit.exposure_audit import normalize_audit_frame
 from opening_strength_fit.io import read_frame, write_frame
 from opening_strength_fit.prediction_frames import prediction_files
@@ -66,36 +60,6 @@ def parse_args() -> argparse.Namespace:
         help="Write one exposure row per full prediction key instead of daily date,symbol keys.",
     )
     return parser.parse_args()
-
-
-def _arg_list(
-    args: argparse.Namespace,
-    config: dict,
-    name: str,
-    default: Iterable[str],
-) -> list[str]:
-    value = getattr(args, name)
-    if value:
-        return list(value)
-    return config_list(config, "exposure_input", name, tuple(default))
-
-
-def _arg_str(args: argparse.Namespace, config: dict, name: str, default: str = "") -> str:
-    value = getattr(args, name)
-    return (
-        str(value)
-        if value not in (None, "")
-        else config_str(config, "exposure_input", name, default)
-    )
-
-
-def _arg_int(args: argparse.Namespace, config: dict, name: str, default: int) -> int:
-    value = getattr(args, name)
-    return int(value) if value is not None else config_int(config, "exposure_input", name, default)
-
-
-def _arg_bool(args_value: bool, config: dict, name: str, default: bool = False) -> bool:
-    return bool(args_value) or config_bool(config, "exposure_input", name, default)
 
 
 def load_env_file(path: str | Path) -> None:
@@ -287,23 +251,19 @@ def _clickhouse_setting(arg_value: object, env_name: str, default: object) -> ob
 def main() -> None:
     args = parse_args()
     config = load_toml(args.config) if args.config else {}
+    arguments = CommandArguments(args, config, "exposure_input")
     run_name = run_id(config, args.config) if config or args.config else "exposure_input"
     if args.env_file:
         load_env_file(args.env_file)
-    prediction_paths = _arg_list(args, config, "predictions", ())
+    prediction_paths = arguments.list("predictions")
     if not prediction_paths:
         raise SystemExit("pass --predictions or set [exposure_input].predictions")
-    pool = _arg_str(args, config, "pool", "universe") or "universe"
-    pool_date_lag_sessions = _arg_int(args, config, "pool_date_lag_sessions", 0)
-    date_chunk_size = _arg_int(args, config, "date_chunk_size", 60)
-    daily_bar_table = _arg_str(args, config, "daily_bar_table", DEFAULT_DAILY_BAR_TABLE)
-    industry_table = _arg_str(args, config, "industry_table", DEFAULT_INDUSTRY_TABLE)
-    include_decision_timestamp = _arg_bool(
-        args.include_decision_timestamp,
-        config,
-        "include_decision_timestamp",
-        False,
-    )
+    pool = arguments.string("pool", "universe") or "universe"
+    pool_date_lag_sessions = arguments.integer("pool_date_lag_sessions", 0)
+    date_chunk_size = arguments.integer("date_chunk_size", 60)
+    daily_bar_table = arguments.string("daily_bar_table", DEFAULT_DAILY_BAR_TABLE)
+    industry_table = arguments.string("industry_table", DEFAULT_INDUSTRY_TABLE)
+    include_decision_timestamp = arguments.flag("include_decision_timestamp")
 
     output_dir = Path(
         args.output_dir

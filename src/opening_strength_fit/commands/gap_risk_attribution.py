@@ -10,6 +10,7 @@ import pandas as pd
 import pyarrow.parquet as pq
 
 from opening_strength_fit.config import config_int, config_str, config_value, load_toml, run_id
+from opening_strength_fit.io import write_json
 
 KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
 DEFAULT_FEATURES = (
@@ -662,10 +663,7 @@ def main() -> None:
     feature_overall.to_csv(output_dir / "gap_attribution_feature_exposure_overall.csv", index=False)
     feature_delta.to_csv(output_dir / "gap_attribution_penalized_feature_delta.csv", index=False)
     residual.to_csv(output_dir / "gap_attribution_residual_penalized_vs_kept.csv", index=False)
-    (output_dir / "gap_attribution_trace.json").write_text(
-        json.dumps(trace, indent=2, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    write_json(output_dir / "gap_attribution_trace.json", trace)
 
     print("\ngap_attribution_outcomes_overall")
     print(overall_outcome.to_string(index=False))

@@ -45,7 +45,7 @@ from opening_strength_fit.horizons import (
     label_column_name,
     normalize_horizon_name,
 )
-from opening_strength_fit.io import write_frame
+from opening_strength_fit.io import json_safe, write_frame, write_json
 
 DEFAULT_OUTPUT_ROOT = "output/legacy/reports/opening_alpha_horizon_decay_delay2_cohort_avg"
 DEFAULT_RUNS = (
@@ -303,30 +303,6 @@ def parse_args() -> argparse.Namespace:
         help="Output directory for summary CSVs, labels, figures, and trace.",
     )
     return parser.parse_args()
-
-
-def json_ready(value):
-    if isinstance(value, dict):
-        return {str(key): json_ready(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [json_ready(item) for item in value]
-    if isinstance(value, (np.integer,)):
-        return int(value)
-    if isinstance(value, (np.floating, float)):
-        return None if pd.isna(value) else float(value)
-    if isinstance(value, pd.Timestamp):
-        return value.isoformat()
-    if isinstance(value, Path):
-        return str(value)
-    return value
-
-
-def write_json(path: Path, payload: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(json_ready(payload), ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
 
 
 def numeric_or_nan(frame: pd.DataFrame, column: str) -> pd.Series:
@@ -634,10 +610,10 @@ def main() -> None:
         "rank_ic_plot": str(rank_ic_plot_path),
         **attach_trace,
     }
-    write_json(trace_path, trace)
+    write_json(trace_path, trace, sort_keys=True)
     print(
         json.dumps(
-            json_ready(
+            json_safe(
                 {
                     "summary": summary_path,
                     "buckets": buckets_path,

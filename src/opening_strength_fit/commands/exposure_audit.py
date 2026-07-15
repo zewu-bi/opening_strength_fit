@@ -9,14 +9,8 @@ from pathlib import Path
 import pandas as pd
 
 from opening_strength_fit.analysis import KEY_COLUMNS, write_json
-from opening_strength_fit.config import (
-    config_bool,
-    config_int,
-    config_list,
-    config_str,
-    load_toml,
-    run_id,
-)
+from opening_strength_fit.commands.arguments import CommandArguments
+from opening_strength_fit.config import config_str, load_toml, run_id
 from opening_strength_fit.exposure_audit import (
     active_default_exposures,
     add_derived_exposure_columns,
@@ -97,29 +91,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--records-dir", default="")
     parser.add_argument("--record-prefix", default="")
     return parser.parse_args()
-
-
-def _arg_list(
-    args: argparse.Namespace, config: dict, name: str, default: Iterable[str]
-) -> list[str]:
-    value = getattr(args, name)
-    if value:
-        return list(value)
-    return config_list(config, "exposure_audit", name, tuple(default))
-
-
-def _arg_str(args: argparse.Namespace, config: dict, name: str, default: str = "") -> str:
-    value = getattr(args, name)
-    return (
-        str(value)
-        if value not in (None, "")
-        else config_str(
-            config,
-            "exposure_audit",
-            name,
-            default,
-        )
-    )
 
 
 def _frame_files(path: Path) -> list[Path]:
@@ -441,42 +412,21 @@ def record_exposure_audit_outputs(
 def main() -> None:
     args = parse_args()
     config = load_toml(args.config) if args.config else {}
+    arguments = CommandArguments(args, config, "exposure_audit")
     run_name = args.run_id or (run_id(config, args.config) if args.config else "exposure_audit")
-    prediction_paths = _arg_list(args, config, "predictions", ())
+    prediction_paths = arguments.list("predictions")
     if not prediction_paths:
         raise SystemExit("pass --predictions or set [exposure_audit].predictions")
-    exposure_paths = _arg_list(args, config, "exposure_input", ())
-    pools = tuple(_arg_list(args, config, "pool", DEFAULT_POOLS) or DEFAULT_POOLS)
-    score_col = _arg_str(args, config, "score_col", "prediction") or "prediction"
-    selection_col = _arg_str(args, config, "selection_col", "")
-    weight_col = _arg_str(args, config, "weight_col", "")
-    industry_col = _arg_str(args, config, "industry_col", "")
-    top_n = (
-        args.top_n
-        if args.top_n is not None
-        else config_int(
-            config,
-            "exposure_audit",
-            "top_n",
-            100,
-        )
-    )
-    pool_date_lag_sessions = (
-        args.pool_date_lag_sessions
-        if args.pool_date_lag_sessions is not None
-        else config_int(config, "exposure_audit", "pool_date_lag_sessions", 0)
-    )
-    requested_exposures = (
-        list(args.exposure_col)
-        if args.exposure_col
-        else config_list(config, "exposure_audit", "exposure_cols", ())
-    )
-    skip_score_exposure_corr = args.skip_score_exposure_corr or config_bool(
-        config,
-        "exposure_audit",
-        "skip_score_exposure_corr",
-        False,
-    )
+    exposure_paths = arguments.list("exposure_input")
+    pools = tuple(arguments.list("pool", DEFAULT_POOLS) or DEFAULT_POOLS)
+    score_col = arguments.string("score_col", "prediction") or "prediction"
+    selection_col = arguments.string("selection_col")
+    weight_col = arguments.string("weight_col")
+    industry_col = arguments.string("industry_col")
+    top_n = arguments.integer("top_n", 100)
+    pool_date_lag_sessions = arguments.integer("pool_date_lag_sessions", 0)
+    requested_exposures = arguments.list("exposure_col", config_name="exposure_cols")
+    skip_score_exposure_corr = arguments.flag("skip_score_exposure_corr")
     output_dir = Path(
         args.output_dir
         or config_str(config, "output", "local_dir", f"output/legacy/analysis/{run_name}")
@@ -591,13 +541,9 @@ def main() -> None:
     )
 
     record_paths: list[Path] = []
-    records_dir = args.records_dir or config_str(config, "exposure_audit", "records_dir", "")
+    records_dir = arguments.string("records_dir")
     if records_dir:
-        record_prefix = (
-            args.record_prefix
-            or config_str(config, "exposure_audit", "record_prefix", "")
-            or run_name
-        )
+        record_prefix = arguments.string("record_prefix") or run_name
         record_paths = record_exposure_audit_outputs(
             output_dir=output_dir,
             records_dir=Path(records_dir),

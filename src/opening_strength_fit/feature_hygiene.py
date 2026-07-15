@@ -1,44 +1,9 @@
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
-
-def _json_ready(value):
-    if isinstance(value, dict):
-        return {key: _json_ready(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_ready(item) for item in value]
-    if isinstance(value, (np.integer,)):
-        return int(value)
-    if isinstance(value, (np.floating, float)):
-        return None if pd.isna(value) else float(value)
-    if isinstance(value, pd.Timestamp):
-        return value.isoformat()
-    return value
-
-
-def write_json_atomic(path: Path, payload: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    try:
-        tmp_path.write_text(
-            json.dumps(
-                _json_ready(payload),
-                indent=2,
-                ensure_ascii=False,
-                allow_nan=False,
-            ),
-            encoding="utf-8",
-        )
-        os.replace(tmp_path, path)
-    finally:
-        if tmp_path.exists():
-            tmp_path.unlink()
 
 
 def load_feature_importance(path: Path | None, *, required: bool = False) -> pd.DataFrame:

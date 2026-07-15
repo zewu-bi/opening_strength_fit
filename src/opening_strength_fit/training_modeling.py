@@ -36,7 +36,7 @@ from opening_strength_fit.model import (
     predict_frame,
 )
 from opening_strength_fit.reports import print_mapping
-from opening_strength_fit.schema import normalize_clock_time
+from opening_strength_fit.schema import frame_clock_series, normalize_clock_time
 from opening_strength_fit.stock_pool import (
     StockPoolConfig,
     configured_stock_pool_selection_frame,
@@ -76,7 +76,7 @@ def metrics_row(
     *,
     run_name: str,
     split,
-    train_stats: dict[str, int],
+    train_stats: dict[str, object],
     predictions: pd.DataFrame,
     metrics: dict[str, object],
     top_summary: dict[str, object],
@@ -299,12 +299,7 @@ def fit_single_prediction_model(
 
 
 def _clock_series(frame: pd.DataFrame) -> pd.Series:
-    if "decision_time" in frame.columns:
-        raw = frame["decision_time"].astype(str)
-        extracted = raw.str.extract(r"(\d{1,2}:\d{2}(?::\d{2})?)", expand=False).fillna("")
-        return extracted.map(lambda value: normalize_clock_time(value) if value else "")
-    time_col = "decision_target_timestamp" if "decision_target_timestamp" in frame else "timestamp"
-    return pd.to_datetime(frame[time_col], errors="coerce").dt.strftime("%H:%M:%S").fillna("")
+    return frame_clock_series(frame)
 
 
 def _segment_model_config(config: dict, segment: dict, base_model_name: str) -> dict:
@@ -653,7 +648,7 @@ def fit_predict_split(
     evaluation_settings: dict[str, object],
     stock_pool_settings: StockPoolConfig | None = None,
     stock_pool: pd.DataFrame | None = None,
-) -> tuple[pd.DataFrame, dict[str, object], dict[str, int]]:
+) -> tuple[pd.DataFrame, dict[str, object], dict[str, object]]:
     stock_pool_settings = stock_pool_settings or stock_pool_config_from_mapping(config)
     train = labeled.loc[labeled["date"].isin(split.train_dates)].copy()
     test = labeled.loc[labeled["date"].isin(split.test_dates)].copy()
@@ -664,6 +659,7 @@ def fit_predict_split(
         config=config,
         alpha=alpha,
     )
+    train_stats = {**train_stats, "feature_names": list(model.features)}
     predictions = predict_frame(model, test)
     if "valid_label" in predictions.columns:
         predictions = predictions.loc[predictions["valid_label"]].copy()

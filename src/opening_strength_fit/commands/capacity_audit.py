@@ -17,17 +17,11 @@ from opening_strength_fit.capacity_audit import (
     summarize_capacity_groups,
     summarize_capacity_months,
 )
-from opening_strength_fit.config import (
-    config_bool,
-    config_float,
-    config_int,
-    config_list,
-    config_str,
-    load_toml,
-    run_id,
-)
+from opening_strength_fit.commands.arguments import CommandArguments
+from opening_strength_fit.config import config_str, load_toml, run_id
 from opening_strength_fit.io import frame_columns, read_frame
 from opening_strength_fit.prediction_frames import prediction_files
+from opening_strength_fit.schema import normalize_decision_keys
 from opening_strength_fit.stock_pool import (
     DEFAULT_STOCK_POOL_PATHS,
     load_stock_pool,
@@ -100,57 +94,6 @@ def parse_args() -> argparse.Namespace:
         help="Maximum selected rows to write. 0 writes all selected rows.",
     )
     return parser.parse_args()
-
-
-def _arg_list(
-    args: argparse.Namespace, config: dict, name: str, default: Iterable[str]
-) -> list[str]:
-    value = getattr(args, name)
-    if value:
-        return list(value)
-    return config_list(config, "capacity_audit", name, tuple(default))
-
-
-def _arg_str(args: argparse.Namespace, config: dict, name: str, default: str) -> str:
-    value = getattr(args, name)
-    return (
-        str(value)
-        if value not in (None, "")
-        else config_str(
-            config,
-            "capacity_audit",
-            name,
-            default,
-        )
-    )
-
-
-def _arg_float(args: argparse.Namespace, config: dict, name: str, default: float) -> float:
-    value = getattr(args, name)
-    return (
-        float(value)
-        if value is not None
-        else config_float(
-            config,
-            "capacity_audit",
-            name,
-            default,
-        )
-    )
-
-
-def _arg_int(args: argparse.Namespace, config: dict, name: str, default: int) -> int:
-    value = getattr(args, name)
-    return (
-        int(value)
-        if value is not None
-        else config_int(
-            config,
-            "capacity_audit",
-            name,
-            default,
-        )
-    )
 
 
 def _frame_files(path: Path) -> list[Path]:
@@ -321,15 +264,7 @@ def _load_audit_frame(
         columns=prediction_columns,
         required=KEY_COLUMNS,
     )
-    predictions["date"] = pd.to_datetime(predictions["date"], errors="coerce").dt.strftime(
-        "%Y-%m-%d"
-    )
-    predictions["symbol"] = predictions["symbol"].astype(str)
-    predictions["decision_target_timestamp"] = pd.to_datetime(
-        predictions["decision_target_timestamp"],
-        errors="coerce",
-    )
-    frame = predictions.dropna(subset=list(KEY_COLUMNS)).copy()
+    frame = normalize_decision_keys(predictions, key_columns=KEY_COLUMNS)
 
     if support_files:
         print(f"reading_capacity_support: files={len(support_files)}")
@@ -342,13 +277,7 @@ def _load_audit_frame(
             columns=support_read_columns,
             required=KEY_COLUMNS,
         )
-        support["date"] = pd.to_datetime(support["date"], errors="coerce").dt.strftime("%Y-%m-%d")
-        support["symbol"] = support["symbol"].astype(str)
-        support["decision_target_timestamp"] = pd.to_datetime(
-            support["decision_target_timestamp"],
-            errors="coerce",
-        )
-        support = support.dropna(subset=list(KEY_COLUMNS)).copy()
+        support = normalize_decision_keys(support, key_columns=KEY_COLUMNS)
         frame = _merge_keyed(frame, support)
 
     trace = {
@@ -389,14 +318,7 @@ def _pool_frame(
 
 
 def _normalize_keys(frame: pd.DataFrame) -> pd.DataFrame:
-    out = frame.copy()
-    out["date"] = pd.to_datetime(out["date"], errors="coerce").dt.strftime("%Y-%m-%d")
-    out["symbol"] = out["symbol"].astype(str)
-    out["decision_target_timestamp"] = pd.to_datetime(
-        out["decision_target_timestamp"],
-        errors="coerce",
-    )
-    return out.dropna(subset=list(KEY_COLUMNS)).copy()
+    return normalize_decision_keys(frame, key_columns=KEY_COLUMNS)
 
 
 def _read_prediction_file(
@@ -528,54 +450,42 @@ def record_capacity_audit_outputs(
 def main() -> None:
     args = parse_args()
     config = load_toml(args.config) if args.config else {}
+    arguments = CommandArguments(args, config, "capacity_audit")
     run_name = args.run_id or (run_id(config, args.config) if args.config else "capacity_audit")
-    prediction_paths = _arg_list(args, config, "predictions", ())
+    prediction_paths = arguments.list("predictions")
     if not prediction_paths:
         raise SystemExit("pass --predictions or set [capacity_audit].predictions")
-    pools = tuple(_arg_list(args, config, "pool", DEFAULT_POOLS) or DEFAULT_POOLS)
+    pools = tuple(arguments.list("pool", DEFAULT_POOLS) or DEFAULT_POOLS)
     constraints = CapacityConstraints(
-        target_notional=_arg_float(args, config, "target_notional", 1_000_000_000.0),
-        score_col=_arg_str(args, config, "score_col", "prediction") or "prediction",
-        capacity_notional_col=_arg_str(
-            args,
-            config,
+        target_notional=arguments.float("target_notional", 1_000_000_000.0),
+        score_col=arguments.string("score_col", "prediction") or "prediction",
+        capacity_notional_col=arguments.string(
             "capacity_notional_col",
             "turnover_diff_30t",
         ),
-        capacity_volume_col=_arg_str(args, config, "capacity_volume_col", ""),
-        capacity_price_col=_arg_str(args, config, "capacity_price_col", "ask_price_1"),
-        max_participation_rate=_arg_float(args, config, "max_participation_rate", 0.10),
-        max_symbol_weight=_arg_float(args, config, "max_symbol_weight", 0.01),
-        min_trade_notional=_arg_float(args, config, "min_trade_notional", 0.0),
-        max_names=_arg_int(args, config, "max_names", 0),
-        ask_depth_levels=_arg_int(args, config, "ask_depth_levels", 0),
-        ask_depth_participation_rate=_arg_float(
-            args,
-            config,
+        capacity_volume_col=arguments.string("capacity_volume_col"),
+        capacity_price_col=arguments.string("capacity_price_col", "ask_price_1"),
+        max_participation_rate=arguments.float("max_participation_rate", 0.10),
+        max_symbol_weight=arguments.float("max_symbol_weight", 0.01),
+        min_trade_notional=arguments.float("min_trade_notional", 0.0),
+        max_names=arguments.integer("max_names", 0),
+        ask_depth_levels=arguments.integer("ask_depth_levels", 0),
+        ask_depth_participation_rate=arguments.float(
             "ask_depth_participation_rate",
             0.25,
         ),
-        allow_decision_depth_fallback=bool(args.allow_decision_depth_fallback)
-        or config_bool(config, "capacity_audit", "allow_decision_depth_fallback", False),
-        industry_col=_arg_str(args, config, "industry_col", ""),
-        max_industry_weight=_arg_float(args, config, "max_industry_weight", 0.0),
+        allow_decision_depth_fallback=arguments.flag("allow_decision_depth_fallback"),
+        industry_col=arguments.string("industry_col"),
+        max_industry_weight=arguments.float("max_industry_weight", 0.0),
     )
-    label_paths = _arg_list(args, config, "label_input", ())
-    capacity_paths = _arg_list(args, config, "capacity_input", ())
+    label_paths = arguments.list("label_input")
+    capacity_paths = arguments.list("capacity_input")
     output_dir = Path(
         args.output_dir
         or config_str(config, "output", "local_dir", f"output/legacy/analysis/{run_name}")
     )
-    pool_date_lag_sessions = (
-        args.pool_date_lag_sessions
-        if args.pool_date_lag_sessions is not None
-        else config_int(config, "capacity_audit", "pool_date_lag_sessions", 0)
-    )
-    selected_output_limit = (
-        args.selected_output_limit
-        if args.selected_output_limit is not None
-        else config_int(config, "capacity_audit", "selected_output_limit", 0)
-    )
+    pool_date_lag_sessions = arguments.integer("pool_date_lag_sessions", 0)
+    selected_output_limit = arguments.integer("selected_output_limit", 0)
 
     if not capacity_paths:
         selected, group_metrics, load_trace = _run_capacity_audit_streaming(
@@ -645,13 +555,9 @@ def main() -> None:
     )
 
     record_paths: list[Path] = []
-    records_dir = args.records_dir or config_str(config, "capacity_audit", "records_dir", "")
+    records_dir = arguments.string("records_dir")
     if records_dir:
-        record_prefix = (
-            args.record_prefix
-            or config_str(config, "capacity_audit", "record_prefix", "")
-            or run_name
-        )
+        record_prefix = arguments.string("record_prefix") or run_name
         record_paths = record_capacity_audit_outputs(
             output_dir=output_dir,
             records_dir=Path(records_dir),

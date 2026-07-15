@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import json
-import math
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from opening_strength_fit.io import read_frame, write_frame
+from opening_strength_fit.io.json import json_safe as json_safe
+from opening_strength_fit.io.json import write_json as write_json
 from opening_strength_fit.labels import finite_numeric_series, normalize_return_label_frame
 
 KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
@@ -156,28 +155,6 @@ def selection_return_stats(
         if len(selected)
         else float("nan"),
     }
-
-
-def json_safe(value):
-    if isinstance(value, dict):
-        return {key: json_safe(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [json_safe(item) for item in value]
-    if isinstance(value, (np.bool_, bool)):
-        return bool(value)
-    if isinstance(value, (np.integer, int)):
-        return int(value)
-    if isinstance(value, (np.floating, float)):
-        number = float(value)
-        return number if math.isfinite(number) else None
-    return value
-
-
-def write_json(path: str | Path, payload: dict, *, ensure_ascii: bool = False) -> None:
-    Path(path).write_text(
-        json.dumps(json_safe(payload), indent=2, ensure_ascii=ensure_ascii) + "\n",
-        encoding="utf-8",
-    )
 
 
 def write_artifact_fetch_trace(

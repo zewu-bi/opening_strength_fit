@@ -33,7 +33,7 @@ from opening_strength_fit.features import (
 from opening_strength_fit.sampling import DEFAULT_DECISION_TIMES, parse_clock_times
 from opening_strength_fit.schema import (
     ensure_timestamp_columns,
-    normalize_clock_time,
+    frame_clock_series,
     standardize_columns,
 )
 from opening_strength_fit.universe import (
@@ -482,13 +482,6 @@ def apply_guard_features_from_config(
     return out
 
 
-def _clock_from_series(series: pd.Series) -> pd.Series:
-    extracted = (
-        series.astype(str).str.extract(r"(\d{1,2}:\d{2}(?::\d{2})?)", expand=False).fillna("")
-    )
-    return extracted.map(lambda value: normalize_clock_time(value) if value else "")
-
-
 def _filter_labeled_sample_from_config(
     labeled: pd.DataFrame,
     config: dict,
@@ -504,15 +497,7 @@ def _filter_labeled_sample_from_config(
     if not decision_times:
         raise SystemExit("decision point sampling needs at least one decision time")
 
-    if "decision_time" in labeled.columns:
-        clock = _clock_from_series(labeled["decision_time"])
-    else:
-        time_col = (
-            "decision_target_timestamp"
-            if "decision_target_timestamp" in labeled.columns
-            else "timestamp"
-        )
-        clock = pd.to_datetime(labeled[time_col], errors="coerce").dt.strftime("%H:%M:%S")
+    clock = frame_clock_series(labeled)
     mask = clock.isin(set(decision_times))
 
     max_lag = config_value(config, "sample", "decision_max_lag_seconds", None)

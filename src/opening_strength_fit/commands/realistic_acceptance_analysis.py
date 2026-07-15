@@ -7,14 +7,8 @@ from pathlib import Path
 
 from opening_strength_fit.analysis import write_json
 from opening_strength_fit.capacity_acceptance import load_label_frame
-from opening_strength_fit.config import (
-    config_float,
-    config_int,
-    config_list,
-    config_str,
-    load_toml,
-    run_id,
-)
+from opening_strength_fit.commands.arguments import CommandArguments
+from opening_strength_fit.config import load_toml, run_id
 from opening_strength_fit.realistic_acceptance import (
     DEFAULT_REALISTIC_LABEL_COL,
     REALISTIC_DAILY_SUMMARY,
@@ -58,7 +52,7 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--label-input", action="append")
-    parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--output-dir", default="")
     parser.add_argument("--run-id", default="")
     parser.add_argument("--variant", default="")
     parser.add_argument("--label-col", default="")
@@ -94,146 +88,68 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _arg_list(args: argparse.Namespace, config: dict, name: str) -> tuple[str, ...]:
-    values = getattr(args, name, None)
-    if values:
-        return tuple(values)
-    return tuple(config_list(config, "realistic_acceptance", name, ()))
-
-
-def _arg_tuple(args: argparse.Namespace, config: dict, name: str) -> tuple[str, ...]:
-    values = getattr(args, name, None)
-    if values:
-        return tuple(str(value) for value in values)
-    return tuple(str(value) for value in config_list(config, "realistic_acceptance", name, ()))
-
-
-def _arg_tuple_alias(
-    args: argparse.Namespace,
-    config: dict,
-    arg_name: str,
-    config_name: str,
-) -> tuple[str, ...]:
-    values = getattr(args, arg_name, None)
-    if values:
-        return tuple(str(value) for value in values)
-    config_values = config_list(config, "realistic_acceptance", config_name, ())
-    if config_values:
-        return tuple(str(value) for value in config_values)
-    return tuple(str(value) for value in config_list(config, "realistic_acceptance", arg_name, ()))
-
-
-def _arg_str(args: argparse.Namespace, config: dict, name: str, default: str = "") -> str:
-    value = getattr(args, name, "")
-    if value not in (None, ""):
-        return str(value)
-    return config_str(config, "realistic_acceptance", name, default)
-
-
-def _arg_float(args: argparse.Namespace, config: dict, name: str, default: float) -> float:
-    value = getattr(args, name, None)
-    if value is not None:
-        return float(value)
-    return config_float(config, "realistic_acceptance", name, default)
-
-
-def _arg_int(args: argparse.Namespace, config: dict, name: str, default: int) -> int:
-    value = getattr(args, name, None)
-    if value is not None:
-        return int(value)
-    return config_int(config, "realistic_acceptance", name, default)
-
-
-def _constraints(args: argparse.Namespace, config: dict) -> RealisticExecutionConstraints:
+def _constraints(arguments: CommandArguments) -> RealisticExecutionConstraints:
     defaults = RealisticExecutionConstraints()
     return RealisticExecutionConstraints(
-        capacity_total_notional=_arg_float(
-            args,
-            config,
+        capacity_total_notional=arguments.float(
             "capacity_total_notional",
             defaults.capacity_total_notional,
         ),
-        fee_bps=_arg_float(args, config, "fee_bps", defaults.fee_bps),
-        max_daily_symbol_weight=_arg_float(
-            args,
-            config,
+        fee_bps=arguments.float("fee_bps", defaults.fee_bps),
+        max_daily_symbol_weight=arguments.float(
             "max_daily_symbol_weight",
             defaults.max_daily_symbol_weight,
         ),
-        max_daily_symbol_participation_rate=_arg_float(
-            args,
-            config,
+        max_daily_symbol_participation_rate=arguments.float(
             "max_daily_symbol_participation_rate",
             defaults.max_daily_symbol_participation_rate,
         ),
-        daily_capacity_method=_arg_str(
-            args,
-            config,
+        daily_capacity_method=arguments.string(
             "daily_capacity_method",
             defaults.daily_capacity_method,
         ),
-        execution_fill_rate=_arg_float(
-            args,
-            config,
+        execution_fill_rate=arguments.float(
             "execution_fill_rate",
             defaults.execution_fill_rate,
         ),
-        min_child_notional=_arg_float(
-            args,
-            config,
+        min_child_notional=arguments.float(
             "min_child_notional",
             defaults.min_child_notional,
         ),
-        max_symbol_decision_count=_arg_int(
-            args,
-            config,
+        max_symbol_decision_count=arguments.integer(
             "max_symbol_decision_count",
             defaults.max_symbol_decision_count,
         ),
-        round_lot_shares=_arg_int(
-            args,
-            config,
+        round_lot_shares=arguments.integer(
             "round_lot_shares",
             defaults.round_lot_shares,
         ),
-        price_col=_arg_str(args, config, "price_col", defaults.price_col),
-        status_col=_arg_str(args, config, "status_col", defaults.status_col),
-        tradable_statuses=_arg_tuple_alias(
-            args,
-            config,
+        price_col=arguments.string("price_col", defaults.price_col),
+        status_col=arguments.string("status_col", defaults.status_col),
+        tradable_statuses=arguments.aliased_tuple(
             "tradable_status",
             "tradable_statuses",
         ),
-        spread_bps_col=_arg_str(args, config, "spread_bps_col", defaults.spread_bps_col),
-        max_spread_bps=_arg_float(args, config, "max_spread_bps", defaults.max_spread_bps),
-        limit_up_room_bps_col=_arg_str(
-            args,
-            config,
+        spread_bps_col=arguments.string("spread_bps_col", defaults.spread_bps_col),
+        max_spread_bps=arguments.float("max_spread_bps", defaults.max_spread_bps),
+        limit_up_room_bps_col=arguments.string(
             "limit_up_room_bps_col",
             defaults.limit_up_room_bps_col,
         ),
-        min_limit_up_room_bps=_arg_float(
-            args,
-            config,
+        min_limit_up_room_bps=arguments.float(
             "min_limit_up_room_bps",
             defaults.min_limit_up_room_bps,
         ),
-        ask_depth_notional_col=_arg_str(
-            args,
-            config,
+        ask_depth_notional_col=arguments.string(
             "ask_depth_notional_col",
             defaults.ask_depth_notional_col,
         ),
-        max_ask_depth_participation_rate=_arg_float(
-            args,
-            config,
+        max_ask_depth_participation_rate=arguments.float(
             "max_ask_depth_participation_rate",
             defaults.max_ask_depth_participation_rate,
         ),
-        industry_col=_arg_str(args, config, "industry_col", defaults.industry_col),
-        max_daily_industry_weight=_arg_float(
-            args,
-            config,
+        industry_col=arguments.string("industry_col", defaults.industry_col),
+        max_daily_industry_weight=arguments.float(
             "max_daily_industry_weight",
             defaults.max_daily_industry_weight,
         ),
@@ -262,21 +178,28 @@ def record_realistic_acceptance_outputs(
 def main() -> None:
     args = parse_args()
     config = load_toml(args.config) if args.config else {}
+    arguments = CommandArguments(args, config, "realistic_acceptance")
     run_name = args.run_id or (
         run_id(config, args.config) if args.config else "realistic_acceptance"
     )
-    selected_inputs = _arg_list(args, config, "selected_input")
-    execution_inputs = _arg_list(args, config, "execution_input")
-    label_inputs = _arg_list(args, config, "label_input")
+    selected_inputs = arguments.tuple("selected_input")
+    execution_inputs = arguments.tuple("execution_input")
+    label_inputs = arguments.tuple("label_input")
     if not selected_inputs:
         raise SystemExit("pass --selected-input or set [realistic_acceptance].selected_input")
     if not label_inputs:
         raise SystemExit("pass --label-input or set [realistic_acceptance].label_input")
 
-    output_dir = Path(args.output_dir)
+    output_dir_value = CommandArguments(args, config, "output").string(
+        "output_dir",
+        config_name="local_dir",
+    )
+    if not output_dir_value:
+        raise SystemExit("pass --output-dir or set [output].local_dir")
+    output_dir = Path(output_dir_value)
     output_dir.mkdir(parents=True, exist_ok=True)
-    label_col = _arg_str(args, config, "label_col", DEFAULT_REALISTIC_LABEL_COL)
-    constraints = _constraints(args, config)
+    label_col = arguments.string("label_col", DEFAULT_REALISTIC_LABEL_COL)
+    constraints = _constraints(arguments)
 
     context_columns = realistic_context_columns(constraints)
     selected = load_realistic_selected(selected_inputs, extra_columns=context_columns)
@@ -310,7 +233,7 @@ def main() -> None:
     trace = {
         "created_at_utc": datetime.now(UTC).isoformat(),
         "run_id": run_name,
-        "variant": args.variant or _arg_str(args, config, "variant", run_name),
+        "variant": arguments.string("variant", run_name),
         "selected_inputs": list(selected_inputs),
         "execution_inputs": list(execution_inputs),
         "execution_context_columns": list(context_columns),
@@ -337,14 +260,10 @@ def main() -> None:
     }
     write_json(trace_path, trace, ensure_ascii=True)
 
-    records_dir = args.records_dir or config_str(config, "realistic_acceptance", "records_dir", "")
+    records_dir = arguments.string("records_dir")
     record_paths: list[Path] = []
     if records_dir:
-        record_prefix = (
-            args.record_prefix
-            or config_str(config, "realistic_acceptance", "record_prefix", "")
-            or run_name
-        )
+        record_prefix = arguments.string("record_prefix") or run_name
         record_paths = record_realistic_acceptance_outputs(
             output_dir=output_dir,
             records_dir=Path(records_dir),

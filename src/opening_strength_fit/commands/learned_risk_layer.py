@@ -16,13 +16,7 @@ from opening_strength_fit.alpha_conditioning import (
     section_str,
 )
 from opening_strength_fit.analysis import (
-    json_safe as shared_json_safe,
-)
-from opening_strength_fit.analysis import (
     load_or_fetch_next_close_labels as shared_load_or_fetch_next_close_labels,
-)
-from opening_strength_fit.analysis import (
-    normalize_next_close_labels as shared_normalize_next_close_labels,
 )
 from opening_strength_fit.analysis import (
     write_json,
@@ -84,10 +78,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def json_safe(value):
-    return shared_json_safe(value)
-
-
 def risk_rank_config(config: dict) -> tuple[dict[str, float], dict[str, float]]:
     rank_min = config_float_mapping(config, "risk_layer", "risk_rank_min") or RISK_RANK_MIN
     rank_max = config_float_mapping(config, "risk_layer", "risk_rank_max") or RISK_RANK_MAX
@@ -117,10 +107,6 @@ def manual_dirty_risk(frame: pd.DataFrame, config: dict) -> pd.Series:
     if not components:
         raise SystemExit("risk teacher config produced no risk components")
     return pd.concat(components, axis=1).mean(axis=1).clip(lower=0.0, upper=1.0)
-
-
-def normalize_next_close_labels(frame: pd.DataFrame) -> pd.DataFrame:
-    return shared_normalize_next_close_labels(frame, key_columns=KEY_COLUMNS)
 
 
 def load_or_fetch_next_close_labels(

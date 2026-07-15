@@ -26,9 +26,8 @@ from opening_strength_fit.feature_hygiene import (
     feature_correlation_pairs,
     load_feature_importance,
     summarize_feature_hygiene,
-    write_json_atomic,
 )
-from opening_strength_fit.io import frame_columns, read_frame, write_frame_atomic
+from opening_strength_fit.io import frame_columns, read_frame, write_frame_atomic, write_json
 from opening_strength_fit.model import feature_columns
 from opening_strength_fit.reports import dataset_summary, print_mapping
 from opening_strength_fit.training_args import build_training_parser, load_run_config
@@ -660,7 +659,7 @@ def main(argv: list[str] | None = None) -> None:
             "candidate_actions": action_counts,
         },
     }
-    write_json_atomic(output_dir / "feature_hygiene_trace.json", trace)
+    write_json(output_dir / "feature_hygiene_trace.json", trace, atomic=True)
 
     print_mapping(
         "feature_hygiene_summary",

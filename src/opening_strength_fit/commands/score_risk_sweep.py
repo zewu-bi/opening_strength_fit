@@ -10,17 +10,12 @@ import numpy as np
 import pandas as pd
 
 from opening_strength_fit.analysis import (
-    clock_range as shared_clock_range,
+    clock_range,
+    selection_return_stats,
+    write_json,
 )
 from opening_strength_fit.analysis import (
     load_or_fetch_next_close_labels as shared_load_or_fetch_next_close_labels,
-)
-from opening_strength_fit.analysis import (
-    normalize_next_close_labels as shared_normalize_next_close_labels,
-)
-from opening_strength_fit.analysis import (
-    selection_return_stats,
-    write_json,
 )
 from opening_strength_fit.clickhouse_ticks import DEFAULT_CLICKHOUSE_TICK_TABLE
 from opening_strength_fit.config import (
@@ -133,14 +128,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def clock_range(start: str, end: str) -> list[str]:
-    return shared_clock_range(start, end)
-
-
-def existing_columns(path: Path) -> set[str]:
-    return frame_columns(path)
-
-
 def parse_input_specs(args: argparse.Namespace, config: dict) -> list[dict[str, str]]:
     specs = []
     for value in args.input:
@@ -227,7 +214,7 @@ def wait_for_path(path: Path, *, timeout_seconds: int, poll_seconds: int = 60) -
 
 def load_predictions(spec: dict[str, str], *, score_col: str, clocks: list[str]) -> pd.DataFrame:
     path = Path(spec["path"])
-    available = existing_columns(path)
+    available = frame_columns(path)
     required = [*KEY_COLUMNS, score_col, "label", "buy_price"]
     missing = [column for column in required if column not in available]
     if missing:
@@ -260,7 +247,7 @@ def load_risk_predictions(
     score_col = str(spec.get("score_col") or default_score_col or "prediction").strip()
     path = Path(spec["path"])
     wait_for_path(path, timeout_seconds=int(wait_seconds))
-    available = existing_columns(path)
+    available = frame_columns(path)
     required = [*KEY_COLUMNS, score_col]
     missing = [column for column in required if column not in available]
     if missing:
@@ -279,10 +266,6 @@ def load_risk_predictions(
     frame[raw_col] = pd.to_numeric(frame[score_col], errors="coerce")
     frame = frame.dropna(subset=["decision_target_timestamp", raw_col])
     return frame[[*KEY_COLUMNS, raw_col]].drop_duplicates(list(KEY_COLUMNS)), raw_col
-
-
-def normalize_next_close_labels(frame: pd.DataFrame) -> pd.DataFrame:
-    return shared_normalize_next_close_labels(frame, key_columns=KEY_COLUMNS)
 
 
 def load_or_fetch_next_close_labels(

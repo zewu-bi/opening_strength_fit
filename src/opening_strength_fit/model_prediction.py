@@ -13,6 +13,7 @@ from opening_strength_fit.model_types import (
     RidgePredictionModel,
     TorchMLPPredictionModel,
 )
+from opening_strength_fit.schema import frame_clock_series
 
 
 def _normalized_weights(weights: list[float], size: int) -> np.ndarray:
@@ -105,21 +106,7 @@ def _ensemble_score(model: EnsemblePredictionModel, frame: pd.DataFrame) -> np.n
 
 
 def _frame_clock(frame: pd.DataFrame) -> pd.Series:
-    if "decision_time" in frame.columns:
-        raw = frame["decision_time"].astype(str)
-        extracted = raw.str.extract(r"(\d{1,2}:\d{2}(?::\d{2})?)", expand=False).fillna("")
-        return extracted.map(_normalize_clock_value)
-    time_col = "decision_target_timestamp" if "decision_target_timestamp" in frame else "timestamp"
-    return pd.to_datetime(frame[time_col], errors="coerce").dt.strftime("%H:%M:%S").fillna("")
-
-
-def _normalize_clock_value(value: str) -> str:
-    parts = str(value).split(":")
-    if len(parts) == 2:
-        return f"{int(parts[0]):02d}:{int(parts[1]):02d}:00"
-    if len(parts) >= 3:
-        return f"{int(parts[0]):02d}:{int(parts[1]):02d}:{int(float(parts[2])):02d}"
-    return ""
+    return frame_clock_series(frame)
 
 
 def _clock_segment_score(model: ClockSegmentPredictionModel, frame: pd.DataFrame) -> np.ndarray:

@@ -10,6 +10,8 @@ OPEN_SAMPLE_START = "09:30:00"
 OPEN_SAMPLE_END = "09:40:00"
 PRICE_LEVELS = tuple(range(1, 11))
 EXCHANGE_OFFSET_US_COL = "exch_time_offset_us"
+CLOCK_PATTERN = r"(\d{1,2}:\d{2}(?::\d{2})?)"
+DECISION_KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
 
 
 def bid_price_col(level: int) -> str:
@@ -37,6 +39,50 @@ def normalize_clock_time(value: str) -> str:
     if not (0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59):
         raise ValueError(f"invalid clock time: {value!r}")
     return f"{hour:02d}:{minute:02d}:{second:02d}"
+
+
+def normalize_clock_series(values: pd.Series) -> pd.Series:
+    """Normalize clock-like strings to ``HH:MM:SS``."""
+
+    extracted = values.astype(str).str.extract(CLOCK_PATTERN, expand=False).fillna("")
+    return extracted.map(lambda value: normalize_clock_time(value) if value else "")
+
+
+def frame_clock_series(
+    frame: pd.DataFrame,
+    *,
+    clock_col: str = "decision_time",
+    timestamp_cols: tuple[str, ...] = ("decision_target_timestamp", "timestamp"),
+) -> pd.Series:
+    """Resolve the canonical decision clock from a research frame."""
+
+    if clock_col in frame.columns:
+        return normalize_clock_series(frame[clock_col])
+    for column in timestamp_cols:
+        if column in frame.columns:
+            return pd.to_datetime(frame[column], errors="coerce").dt.strftime("%H:%M:%S").fillna("")
+    expected = ", ".join((clock_col, *timestamp_cols))
+    raise ValueError(f"frame has no clock column; expected one of: {expected}")
+
+
+def normalize_decision_keys(
+    frame: pd.DataFrame,
+    *,
+    key_columns: tuple[str, ...] = DECISION_KEY_COLUMNS,
+    drop_missing: bool = True,
+) -> pd.DataFrame:
+    """Normalize the shared date/symbol/decision timestamp join keys."""
+
+    out = frame.copy()
+    out["date"] = pd.to_datetime(out["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    out["symbol"] = out["symbol"].astype(str)
+    out["decision_target_timestamp"] = pd.to_datetime(
+        out["decision_target_timestamp"],
+        errors="coerce",
+    )
+    if drop_missing:
+        return out.dropna(subset=list(key_columns)).copy()
+    return out
 
 
 def _depth_aliases() -> dict[str, str]:
