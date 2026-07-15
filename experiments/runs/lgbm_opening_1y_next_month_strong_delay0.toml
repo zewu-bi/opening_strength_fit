@@ -1,5 +1,6 @@
 [run]
 id = "lgbm_opening_1y_next_month_strong_delay0"
+kind = "experiment"
 description = "CPU LightGBM one-year train, next-month test on opening-strength candidates using PVC labeled cache with entry_tick_delay=0."
 status = "completed"
 

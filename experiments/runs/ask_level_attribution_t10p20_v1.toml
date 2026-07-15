@@ -2,7 +2,7 @@
 id = "ask_level_attribution_t10p20_v1"
 kind = "ask_level_attribution"
 description = "Attribute t10p20 split20 capacity-selected notional for LGBM 328 and NN MLP base to visible ask levels."
-status = "queued"
+status = "completed"
 
 [ask_level_attribution]
 levels = 10

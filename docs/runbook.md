@@ -1,320 +1,261 @@
-# 运行手册
+# Runbook
 
-本文件只放可执行流程：配置路径、K8s Job、artifact sync、analysis 命令和排查。不记录研究判断或实验复盘；
-研究判断见 [project_brief.md](project_brief.md)，实验事实源见 [experiment_log.md](experiment_log.md)。
+本文件只描述可执行流程。研究结论和数字见 [experiment_log.md](experiment_log.md)，当前目标见
+[project_brief.md](project_brief.md)，入口所有权见 [project_map.md](project_map.md)。示例中的
+`<run_id>`、`<image_tag>` 和路径必须替换，不把某次实验的临时值固化为通用操作。
 
-标准闭环：
-
-```text
-precheck -> render training job -> apply/wait -> render analysis job -> apply/wait -> sync compact artifacts -> audit
-```
-
-## 0. 环境和预检
+## 1. 本地准备
 
 ```bash
 cd ~/projects/opening_strength_fit
 source .venv/bin/activate
-set -a; . ./.env; set +a
+python -m pip install -c requirements.lock -e ".[dev]"
 
-osf-audit-experiments
-osf-check-project-contracts
-osf-probe-clickhouse-data --schema --field-notes
+python -m pip check
+make ci
+make contracts
 ```
 
-## 1. 配置和路径
+`make ci` 运行 Ruff lint、format check 和 pytest；`make contracts` 校验 run/config/job/CLI 对齐。
+提交集群任务前，二者都应通过。
 
-实验配置放在：
-
-```text
-experiments/runs/<run_id>.toml
-experiments/jobs/<run_id>_job.yaml
-experiments/results/metrics/<run_id>_metrics_by_year.csv
-```
-
-常用 PVC cache：
-
-```text
-base cache:
-/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_base_labeled_v2/
-
-next-close labels:
-/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/
-
-mixed w030 cache:
-/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/
-```
-
-PVC 输出约定：
-
-```text
-run output: /mnt/output/opening_strength_fit/<run_id>/
-analysis:   /mnt/output/opening_strength_fit/<run_id>/analysis/pool_internal_top100/
-local pull: output/artifacts/<run_id>/
-```
-
-Compact artifacts 同步到 `experiments/results/{metrics,backtests}/`，该目录默认被 Git 忽略；
-正式事实索引写入 [experiment_log.md](experiment_log.md)。旧 pulls、prediction parquet、本地分析、
-label shards 和重报告放 `output/legacy/`。
-
-大规模 analysis / attribution / audit 默认在集群侧读取 PVC 上的 prediction parquet 和 cache，
-只把 summary、group metrics、trace、报告图等 compact artifacts 同步回本地。只有调试单个
-shard 或排查 schema/坏行时，才把 prediction parquet 拉到本地 `output/`。
-
-Run kind 映射见 [experiments/README.md](../experiments/README.md)。TOML 模板见
-[experiments/config_templates/](../experiments/config_templates/)。
-
-`*.tmp.parquet`、`*.parquet.lock` 和 heartbeat 文件表示 cache 正在写入。
-
-## 2. 外部股池
-
-Ceph S3：
-
-```text
-bucket:   lml.bzw@ssd
-endpoint: http://ceph-s3-ssd.prod.highfortfunds.com
-prefix:   data/
-
-data/pool_L.parquet
-data/pool_M.parquet
-data/pool_S.parquet
-```
-
-`.env` 中放司令部 LDAP 凭据：
+需要 `hfcli` 提交或查看集群任务时，安装集群 extra：
 
 ```bash
-CEPH_LDAP_ID='your_headquarter_username'
-CEPH_LDAP_KEY='your_headquarter_password'
+python -m pip install -c requirements.lock -e ".[dev,cluster]"
 ```
 
-需要快速核对 Ceph 文件时，可以复用 `xy_fit` 的 venv 和 `xyfit.io.build_client()` 列
-`Bucket="lml.bzw", Prefix="data/"`。
-
-CLI 映射：
-
-```text
-S -> lml.bzw@ssd/data/pool_S.parquet
-M -> lml.bzw@ssd/data/pool_M.parquet
-L -> lml.bzw@ssd/data/pool_L.parquet
-```
-
-默认语义：`filter_train=false`、`filter_selection=true`。模型在 full universe 上训练和打分，
-TopN 从池内候选里选。保守日期口径加：
+本地连接信息放 `.env`，不要提交：
 
 ```bash
---pool L --pool-date-lag-sessions 1
+CLICKHOUSE_HOST='ch.db.prod.highfortfunds.com'
+CLICKHOUSE_PORT='8123'
+CLICKHOUSE_USER='...'
+CLICKHOUSE_PASSWORD='...'
+CEPH_LDAP_ID='...'
+CEPH_LDAP_KEY='...'
 ```
 
-TOML 模板见
-[experiments/config_templates/stock_pool_selection.toml](../experiments/config_templates/stock_pool_selection.toml)。
+## 2. 实验闭环
 
-开启 `filter_selection=true` 后，TopN 汇总使用池内候选行；`predictions*.parquet` 保留全
-universe 打分并额外写出 `stock_pool_member` 和 stock-pool score buckets。
+每个正式实验按同一顺序执行：
 
-## 3. 构建镜像
+1. 从最接近的 `experiments/runs/*.toml` 复制新配置；只改变待验证变量。
+2. 保证文件名、`[run].id` 和输出目录一致；状态从 `queued` 开始。
+3. 选择镜像策略，渲染 Job，并做 client-side dry-run。
+4. 提交、观察并等待完成；更新状态为 `running` / `completed`。
+5. 运行 pool-internal 或对应 audit/acceptance。
+6. 同步 compact artifacts，运行 experiment audit 与 project contracts。
+7. 核对 trace 和主指标，再更新 experiment log；失败实验同样记录。
 
-集群命令统一使用 `hfcli kubectl --cluster research ...`，namespace 是 `bizewu`。
-
-镜像决策：
+合法状态只有：
 
 ```text
-改了 src / pyproject / Dockerfile / 依赖，或旧镜像缺少所需入口 -> full build/push
-只改 experiments/runs/*.toml，且旧镜像已有代码和依赖 -> config overlay
+queued -> running -> completed
+                 \-> canceled
+completed/queued -> superseded
 ```
 
-TOML-only 变更不要 full build。config overlay 只替换 `experiments/runs/`，复用旧代码和依赖层，
-减少 registry manifest/layer 占用。
+不要引入 `submitted`、`done` 等同义状态。
+
+## 3. 数据与缓存
+
+### 数据源检查
+
+```bash
+osf-probe-clickhouse-data \
+  --start-date <YYYY-MM-DD> \
+  --end-date <YYYY-MM-DD>
+```
+
+训练支持：
+
+```text
+data.source = clickhouse    直接查询 stock.tick
+data.source = labeled_pvc   读取已构建 labeled cache
+data.source = path          读取本地 parquet/csv
+```
+
+### 构建 labeled cache
+
+```bash
+osf-build-labeled-cache \
+  --config experiments/runs/<cache_run_id>.toml
+```
+
+缓存完成条件是目标 parquet、manifest 和 ready marker 都存在；`.tmp`、lock 或 heartbeat 只表示仍在写。
+不要并发重建同一路径。正式 run 使用 `cache.require_manifest = true`；旧 cache 只有在 read-only
+模式下可暂时省略 manifest，新写入路径会先发布 manifest 再标记 ready。一旦存在 manifest，schema、
+文件列和构建配置 fingerprint 不匹配会直接失败。
+
+### 派生 target 与 next-close label
+
+```bash
+osf-build-target-label-cache \
+  --config experiments/runs/<target_cache_run_id>.toml
+
+osf-build-next-close-labels \
+  --config experiments/runs/<next_close_cache_run_id>.toml
+```
+
+feature hygiene 的 drop list 只影响模型输入，不能从 cache 物理删除 `ask_price_1`、entry context、
+label 或回测依赖字段。
+
+### 外部股池
+
+```text
+lml.bzw@ssd/data/pool_S.parquet
+lml.bzw@ssd/data/pool_M.parquet
+lml.bzw@ssd/data/pool_L.parquet
+```
+
+默认保持 full-universe 训练，只在选择时加 mask：
+
+```toml
+[stock_pool]
+pool = "L"
+filter_train = false
+filter_selection = true
+pool_date_lag_sessions = 0
+```
+
+严格 no-lookahead sensitivity 使用 `pool_date_lag_sessions = 1`。
+
+## 4. 镜像
+
+| 变更 | 镜像策略 |
+| --- | --- |
+| `src/`、依赖、Dockerfile 变化 | full build |
+| 只有 `experiments/runs/*.toml` 变化，且 base 已含全部入口 | config overlay |
+| GPU NN | full/overlay 镜像必须含匹配集群 CUDA 的固定 Torch build |
+| CPU analysis/audit | 使用 CPU 镜像，不引用 GPU training 镜像 |
 
 通用变量：
 
 ```bash
 IMAGE_REPO=registry.corp.highfortfunds.com/bizewu/opening-strength-fit
-PURPOSE=lgbm-cpu
-VERSION=$(date +%Y%m%d)-${PURPOSE}-v1
+VERSION=$(date +%Y%m%d)-<purpose>-v1
+IMAGE=${IMAGE_REPO}:${VERSION}
 ```
 
-当前已验证 base tag（2026-07-03；有更新镜像后替换这里）：
+`IMAGE` 必须是不可变 tag 或 digest；`osf-render-k8s-job` 不再默认使用 `:latest`。
 
-| use case | base tag | rule |
-| --- | --- | --- |
-| CPU-only：LightGBM、pool-internal analysis、capacity / exposure audit / capacity acceptance | `20260702-capacity-acceptance-v2` | 优先用 1G CPU base 做 TOML overlay。 |
-| GPU NN training：`torch_mlp` + `device = "cuda"` + GPU request | `20260702-nn-neighborhood-v1` | 优先用 9G GPU base 做 TOML overlay。 |
-| Dockerfile upstream base | `python:3.12-slim` | 只作为 build base，不直接用于 K8s Job。 |
-
-CPU-only Job 不引用 GPU 镜像。NN training 和 analysis 分开渲染时，同一批 TOML 可以分别做
-GPU overlay 给 training、CPU overlay 给 pool-internal analysis / audit。
-
-没有可复用镜像时做全量 build。CPU / LightGBM 镜像：
+Full build：
 
 ```bash
 docker build \
   --build-arg CACHE_BUST=${VERSION} \
-  -t ${IMAGE_REPO}:${VERSION} .
-
-docker push ${IMAGE_REPO}:${VERSION}
+  --build-arg SOURCE_REVISION=$(git rev-parse HEAD) \
+  -t ${IMAGE} .
+docker push ${IMAGE}
 ```
 
-NN / GPU 镜像需要包含 CUDA torch wheel：
+GPU build：
 
 ```bash
 docker build \
   --build-arg INSTALL_TORCH_CUDA=1 \
+  --build-arg TORCH_PACKAGE='torch==<validated_version>' \
   --build-arg CACHE_BUST=${VERSION} \
-  -t ${IMAGE_REPO}:${VERSION} .
-
-docker push ${IMAGE_REPO}:${VERSION}
+  --build-arg SOURCE_REVISION=$(git rev-parse HEAD) \
+  -t ${IMAGE} .
+docker push ${IMAGE}
 ```
 
-TOML-only overlay：
+Config overlay：
 
 ```bash
-BASE_VERSION=20260702-capacity-acceptance-v2   # CPU-only overlay
-# BASE_VERSION=20260702-nn-neighborhood-v1  # GPU NN training overlay
-PURPOSE=cpu-config
-# PURPOSE=nn-config
-VERSION=$(date +%Y%m%d)-${PURPOSE}-v1
-BASE_IMAGE=${IMAGE_REPO}:${BASE_VERSION}
+BASE_IMAGE=${IMAGE_REPO}:<verified_base_tag>
 OVERLAY_IMAGE=${IMAGE_REPO}:${VERSION}
-
 docker pull ${BASE_IMAGE}
-
-docker build \
-  --build-arg BASE_IMAGE=${BASE_IMAGE} \
-  -t ${OVERLAY_IMAGE} \
-  -f - . <<'DOCKERFILE'
-ARG BASE_IMAGE
-FROM ${BASE_IMAGE}
-
-WORKDIR /app/opening_strength_fit
-
-RUN rm -rf experiments/runs
-COPY experiments/runs ./experiments/runs
-DOCKERFILE
-
-docker push ${OVERLAY_IMAGE}
 ```
 
-后续 `osf-render-k8s-job --image` 使用刚 push 的 `${IMAGE_REPO}:${VERSION}` 或
-`${OVERLAY_IMAGE}`。push 后列 registry tag，删除被替代的临时 CPU tag。
-GPU TOML 模板见 [experiments/config_templates/gpu_lightgbm.toml](../experiments/config_templates/gpu_lightgbm.toml)。
+```dockerfile
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+WORKDIR /app/opening_strength_fit
+RUN rm -rf experiments/runs
+COPY experiments/runs ./experiments/runs
+```
 
-## 4. 训练 Job
+保存上段为临时 Dockerfile 后 build/push。渲染前确认目标 image digest 和所有新增 CLI 都存在。
 
-普通 Job：
+## 5. 训练 Job
+
+普通训练：
 
 ```bash
 osf-render-k8s-job \
   --config experiments/runs/<run_id>.toml \
-  --image ${IMAGE_REPO}:${VERSION}
+  --image ${IMAGE}
 
-hfcli kubectl --cluster research apply --dry-run=client -f experiments/jobs/<run_id>_job.yaml
-hfcli kubectl --cluster research delete job opening-strength-<run-slug> --ignore-not-found -n bizewu
-hfcli kubectl --cluster research apply -f experiments/jobs/<run_id>_job.yaml
-hfcli kubectl --cluster research wait --for=condition=complete job/opening-strength-<run-slug> -n bizewu --timeout=24h
+hfcli kubectl --cluster research apply --dry-run=client \
+  -f experiments/jobs/<run_id>_job.yaml
+hfcli kubectl --cluster research apply \
+  -f experiments/jobs/<run_id>_job.yaml
 ```
 
-Rolling / sharded Job：
+Rolling/sharded：
 
 ```bash
 osf-render-k8s-job \
   --config experiments/runs/<run_id>.toml \
   --sharded \
-  --image ${IMAGE_REPO}:${VERSION}
+  --image ${IMAGE}
 
-hfcli kubectl --cluster research delete job opening-strength-<run-slug>-sharded --ignore-not-found -n bizewu
-hfcli kubectl --cluster research apply -f experiments/jobs/<run_id>_sharded_job.yaml
-hfcli kubectl --cluster research wait --for=condition=complete job/<rendered-sharded-job-name> -n bizewu --timeout=24h
+hfcli kubectl --cluster research apply --dry-run=client \
+  -f experiments/jobs/<run_id>_sharded_job.yaml
+hfcli kubectl --cluster research apply \
+  -f experiments/jobs/<run_id>_sharded_job.yaml
 ```
 
-Indexed Job 的每个 shard 写独立子目录，例如 `month_YYYY-MM/` 或 `year_YYYY/`。
-
-TOML 中手动设置短 job name：
-
-```toml
-[k8s]
-job_name = "os-lgbm-36m-2225-mainline"
-shard_parallelism = 1
-```
-
-命名格式使用 `os-<model>-<window>-<period>-<target>-<display>`，例如
-`os-lgbm-36m-2225-mainline`。
-
-调整并行度：
+同名 Job spec 变化时先删除再 apply：
 
 ```bash
-hfcli kubectl --cluster research patch job <job-name> \
-  -n bizewu \
-  -p '{"spec":{"parallelism":<parallelism>}}'
+hfcli kubectl --cluster research delete job <job_name> \
+  --ignore-not-found -n bizewu
 ```
 
-观察 rolling：
+观察：
 
 ```bash
-osf-rolling-job-status --config experiments/runs/<rolling_run_id>.toml
-osf-rolling-job-status --config experiments/runs/<rolling_run_id>.toml --tail 160
-osf-rolling-job-status --config experiments/runs/<rolling_run_id>.toml --job-name <job-name>
-hfcli kubectl --cluster research logs -n bizewu <pod-name> -f
+osf-rolling-job-status --config experiments/runs/<run_id>.toml
+osf-rolling-job-status --config experiments/runs/<run_id>.toml --tail 160
+hfcli kubectl --cluster research logs -n bizewu <pod_name> -f
+hfcli kubectl --cluster research wait \
+  --for=condition=complete job/<job_name> -n bizewu --timeout=24h
 ```
 
-## 5. Pool-Internal 分析 Job
+Indexed shard 必须各自写独立目录和 `_SUCCESS`；不要只凭 Job `Complete` 判断产物完整。
 
-正式 pool-internal Top100 / Rank IC / plot data / SVG 由独立 analysis Job 在集群侧完成。
+## 6. Pool-internal 分析
 
-TOML：
-
-```toml
-[analysis.pool_internal]
-enabled = true
-job_name = "os-analyze-36m-2225-<variant>"
-variant = "<variant>"
-plot_prefix = "<variant>"
-plot_variant_label = "2022-2025 <variant>"
-plot_period = "quarter"
-pools = ["universe", "L"]
-top_n = 100
-next_close_label_input = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1"
-env_secrets = ["opening-strength-clickhouse", "xy-fit-ceph-credentials"]
-
-[analysis.pool_internal.resources]
-cpu_request = "8"
-cpu_limit = "16"
-memory_request = "256Gi"
-memory_limit = "384Gi"
-```
-
-渲染和提交：
+正式 TopN、Rank IC、稳定性和 SVG 在集群侧独立运行：
 
 ```bash
 osf-render-k8s-job \
   --config experiments/runs/<run_id>.toml \
   --analysis \
-  --image ${IMAGE_REPO}:${VERSION}
+  --image ${CPU_IMAGE}
 
-hfcli kubectl --cluster research apply --dry-run=client -f experiments/jobs/<run_id>_pool_internal_analysis_job.yaml
-hfcli kubectl --cluster research delete job <analysis-job-name> --ignore-not-found -n bizewu
-hfcli kubectl --cluster research apply -f experiments/jobs/<run_id>_pool_internal_analysis_job.yaml
-hfcli kubectl --cluster research wait --for=condition=complete job/<analysis-job-name> -n bizewu --timeout=24h
+hfcli kubectl --cluster research apply --dry-run=client \
+  -f experiments/jobs/<run_id>_pool_internal_analysis_job.yaml
+hfcli kubectl --cluster research apply \
+  -f experiments/jobs/<run_id>_pool_internal_analysis_job.yaml
 ```
 
-输入和输出：
+标准输入/输出：
 
 ```text
-predictions:       /mnt/output/opening_strength_fit/<run_id>/
-next-close labels: /mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/
-stock pools:       lml.bzw@ssd/data/pool_{S,M,L}.parquet
-output:            /mnt/output/opening_strength_fit/<run_id>/analysis/pool_internal_top100/
+predictions        /mnt/output/opening_strength_fit/<run_id>/
+next-close labels  /mnt/output/opening_strength_fit/cache/<label_cache>/
+stock pools        lml.bzw@ssd/data/pool_{S,M,L}.parquet
+analysis output    <run_output>/analysis/pool_internal_top100/
 ```
 
-analysis Job 会根据 config 的 rolling window 等待每个 `month_YYYY-MM/predictions.parquet`
-出现，再开始分析。
+2020 年以前没有 S/M/L 覆盖，早期 shard 只配置 `pools = ["universe"]`。
 
-2020 年以前没有 S/M/L 股池日期；早期 shard 分析使用：
-
-```toml
-[analysis.pool_internal]
-pools = ["universe"]
-```
-
-## 6. 同步和归档
+## 7. 同步与验收图
 
 同步 compact artifacts：
 
@@ -323,193 +264,49 @@ osf-sync-experiment-artifacts \
   --config experiments/runs/<run_id>.toml \
   --all
 
-osf-audit-experiments
+osf-audit-experiments --require-metrics
 osf-check-project-contracts
 ```
 
-主要输出：`experiments/results/metrics/`、`output/artifacts/<run_id>/`、
-`experiments/results/backtests/<record-prefix>/`。其中 `experiments/results/` 是本地 compact
-归档根目录，默认被 Git 忽略；正式事实索引同步写入 [experiment_log.md](experiment_log.md)。
+默认 `osf-audit-experiments` 只依赖 tracked run/job，可用于干净 checkout 和 CI；artifact sync 后使用
+`--require-metrics`，再校验 ignored 的本地 metrics mirror 是否完整。
 
-常见文件：
-
-```text
-experiments/results/metrics/<run_id>_metrics_by_year.csv
-experiments/results/metrics/<run_id>_metrics_by_month.csv
-output/artifacts/<run_id>/pool_internal_{summary,month_summary,clock_summary,halfyear_summary,year_summary,group_metrics,trace}.*
-output/artifacts/<run_id>/reports/**/*.{csv,svg}
-experiments/results/backtests/<record-prefix>/{pool_internal_*.csv,*_with_mean.svg}
-```
-
-调试单个 shard 才拉 prediction parquet：
+只有调试单个 shard 时才拉 prediction parquet：
 
 ```bash
 osf-sync-experiment-artifacts \
-  --config experiments/runs/<rolling_run_id>.toml \
+  --config experiments/runs/<run_id>.toml \
   --predictions --allow-partial
 ```
 
-`--allow-partial` 写入 `output/artifacts/_partial_metrics/`。
-
-非标准轻量 artifact：`score_risk_sweep`、`alpha_conditioned_rolling_validation`、
-`gap_risk_attribution`、`feature_hygiene` 会同步各自 summary/trace CSV 或审计报告。
-
-## 7. 汇总和作图
-
-Metrics：
-
-```bash
-osf-summarize-opening-results \
-  --metrics-csv experiments/results/metrics/<run_id>_metrics_by_year.csv
-
-osf-compare-opening-results
-```
-
-2022-2025 单个 run 的 pool-internal 分析仍使用 universe + `pool_L`，`plot_period = "quarter"`。
-这些文件用于 drilldown 和验收图的数据源：
-
-```text
-pool_internal_summary.csv
-pool_internal_month_summary.csv
-pool_internal_clock_summary.csv
-pool_internal_halfyear_summary.csv
-pool_internal_year_summary.csv
-pool_internal_group_metrics.csv
-pool_internal_trace.json
-<plot-prefix>_universe_pool_l_short_excess_rank_ic_with_mean/*.svg
-<plot-prefix>_universe_pool_l_next_excess_rank_ic_with_mean/*.svg
-reports/cumulative/<plot-prefix>_universe_pool_l_daily_cumulative.svg
-```
-
-固定研究流程：尝试新的特征工程或模型优化，render K8s Job，在集群上重新训练和
-pool-internal analysis，同步轻量 artifacts 后，用 `osf-plot-optimization-direction-comparison`
-生成两张验收图。
-
-默认输出目录：
-
-```text
-experiments/results/backtests/optimization_overlay_acceptance_2022_2025/
-```
-
-验收图：
-
-```text
-short rank IC和next pool_L 超额: optimization_directions_overlay_acceptance.svg
-Top100 或 10亿容量隔夜收益累和: optimization_directions_net_alpha_cumulative.svg
-```
-
-主验收图：
-
-- 上 panel：`universe short Rank IC`，看短期模型本身。
-- 下 panel：`pool_L next internal excess`，看叠加 mentor 股池后的 overnight overlay。
-- baseline 由 `--baseline-run-id` 指定；comparison models 用 `--direction key=label=run_id`，最多 3 个。
-- 不主看 short excess、`pool_L` short IC、universe next excess 或 next IC。
-
-Cumulative 图只画 next，支持两种模式：
-
-```text
---cumulative-mode top100    # 默认。baseline / comparison 使用 pool-internal Top100 summary。
---cumulative-mode capacity  # 10亿容量。baseline / comparison 使用 capacity acceptance daily summary。
-```
-
-两种模式都保留 market 和扣费后的 `pool_L` background。capacity 模式只替换模型组合线：
-模型线来自 `capacity_acceptance_daily_summary.csv`，不使用 Top100 等权 selected-return summary。
-画完后检查 trace 和 SVG 标题；capacity 图标题不应包含 `Top100`。
-
-默认扣费 `8 bps`；旧 stress 口径用 `--realized-fee-bps 5`。
-
-Top100 例子：
+标准 overlay acceptance：
 
 ```bash
 osf-plot-optimization-direction-comparison \
-  --output-dir experiments/results/backtests/<comparison_dir> \
-  --baseline-run-id <baseline_model_run_id> \
-  --baseline-label <baseline_label> \
-  --direction scale_norm=scale_norm=<scale_norm_run_id>
+  --output-dir experiments/results/backtests/<comparison_id> \
+  --baseline-run-id <incumbent_run_id> \
+  --baseline-label <incumbent_label> \
+  --direction <key>=<label>=<challenger_run_id> \
+  --realized-fee-bps 8
 ```
 
-10亿容量图先完成第 8 节的 capacity audit + capacity acceptance，再画图：
+主图只解释两件事：universe short Rank IC 与 `pool_L` next internal excess。累计图默认 Top100；
+容量模式必须读 capacity acceptance daily summary，不能复用 Top100 等权收益。
 
-```bash
-osf-plot-optimization-direction-comparison \
-  --backtests-root experiments/results/backtests \
-  --output-dir experiments/results/backtests/<comparison_dir> \
-  --pool pool_L \
-  --baseline-run-id <baseline_model_run_id> \
-  --baseline-label <baseline_label> \
-  --direction <key>=<label>=<comparison_model_run_id> \
-  --realized-fee-bps 8 \
-  --pool-fee-mode stock_pool_membership \
-  --pool-turnover-path auto \
-  --cumulative-mode capacity \
-  --capacity-total-notional 1000000000 \
-  --capacity-slices 20 \
-  --capacity-baseline-run-id <baseline_capacity_acceptance_run_id> \
-  --capacity-direction <key>=<comparison_capacity_acceptance_run_id>
-```
+## 8. Capacity audit 与 acceptance
 
-周度 4w rolling 稳定性补充：
-
-```bash
-osf-plot-weekly-pool-internal \
-  --group-metrics experiments/results/backtests/<run_id>_pool_internal_group_metrics.csv \
-  --output-dir output/legacy/reports/<run_id>_weekly_trading_day_equal \
-  --output-prefix <variant_label> \
-  --plot-variant-label "<display label>" \
-  --rolling-weeks 4
-```
-
-Legacy diagnostics entrypoints: `osf-plot-rolling-validation-tradeoff`、
-`osf-audit-feature-dependence`、`osf-run-alpha-horizon-decay`。
-
-## 8. Capacity Audit / Acceptance
-
-容量链路分两步：
+链路：
 
 ```text
-osf-audit-capacity -> capacity_audit_selected.csv -> osf-analyze-capacity-acceptance
+predictions
+  -> osf-audit-capacity
+  -> capacity_audit_selected.csv
+  -> osf-analyze-capacity-acceptance
+  -> capacity-weighted next-close return
 ```
 
-`osf-audit-capacity` 只诊断买入时容量，不读 label、不算收益。它按每个 `date x decision_time`
-在候选池内按 score 由高到低分配目标资金，显式限制单票权重、可见成交额参与率、盘口深度参与率、
-行业权重，并报告未填满资金而不是强行满仓。
-`target_notional` 是单个 `date x decision_time` group 的目标资金；若策略总资金需要分成
-`N` 个执行切片，应先用总资金除以 `N`，例如 `10 亿 / 20 = 5000 万`。
-
-正式大样本 audit 走第 1 节的集群侧原则；下面的本地命令只用于小样本 debug：
-
-```bash
-osf-audit-capacity \
-  --predictions output/legacy/predictions/<run_id>/predictions_all.parquet \
-  --output-dir output/legacy/analysis/<run_id>_capacity_audit \
-  --pool L \
-  --target-notional 50000000 \
-  --capacity-notional-col turnover_diff_30t \
-  --max-participation-rate 0.10 \
-  --max-symbol-weight 0.01
-```
-
-常用输出：
-
-```text
-capacity_audit_summary.csv          # pool 级 fill / depth / concentration 摘要
-capacity_audit_month_summary.csv    # 月度稳定性
-capacity_audit_daily_summary.csv    # 日度容量诊断
-capacity_audit_group_metrics.csv    # date x clock 组合构造结果
-capacity_audit_selected.csv         # 逐笔入选 notional / weight / participation
-capacity_audit_trace.json
-```
-
-容量主读字段：
-
-```text
-fill_success_rate          # 截面塞满目标资金的比例
-mean_top_depth_to_target   # 塞满目标资金平均要吃到 score 排名第几
-p95_top_depth_to_target    # 95% 截面塞满所需的 top depth
-max_top_depth_to_target    # 最深一次塞满所需的 top depth
-```
-
-K8s run config 可设置：
+Capacity audit 只构造组合和报告 fill/depth/participation，不计算收益。`target_notional` 是单个
+`date × decision_time` 的目标资金；总资金按 N 个执行切片时，先除以 N。
 
 ```toml
 [run]
@@ -522,125 +319,92 @@ target_notional = 50000000
 capacity_notional_col = "turnover_diff_30t"
 max_participation_rate = 0.10
 max_symbol_weight = 0.01
-ask_depth_levels = 0
 ```
 
-正式 split20 容量验收的当前事实数字放在 [project_brief.md](project_brief.md) 和
-[experiment_log.md](experiment_log.md)。本手册只保留标准配置口径和字段读法：
-
-```text
-total capital example: 1,000,000,000 split into 20 execution slices
-target_notional: 50,000,000 per date x clock and slice
-capacity_notional_col: turnover_diff_30t
-max_participation_rate: 0.10
-max_symbol_weight: 0.01
-ask_depth_levels: 0
-```
-
-读法：`fill_success_rate` 看截面是否能塞满目标资金；`mean/p95/max_top_depth_to_target`
-看需要沿 score 排名往后拿多深。若 Top100 覆盖不足但较深排名可以塞满，结论应写成
-“容量组合可行但不能硬卡固定 Top100”。
-
-若 ADV、市值、行业或额外容量列不在 prediction parquet 中，可用 `capacity_input` 传
-`date,symbol,decision_target_timestamp` 对齐的 keyed frame。
-
-`osf-analyze-capacity-acceptance` 负责收益验收：读取 audit 逐票 allocation，连接 next-close
-label，按 `allocated_notional` 加权并扣费。
+收益验收：
 
 ```toml
 [run]
 kind = "capacity_acceptance"
 
 [capacity_acceptance]
-selected_input = ["/mnt/output/opening_strength_fit/<capacity_audit_run>/capacity_audit_selected.csv"]
-label_input = ["/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1"]
+selected_input = ["/mnt/output/opening_strength_fit/<capacity_run>/capacity_audit_selected.csv"]
+label_input = ["/mnt/output/opening_strength_fit/cache/<next_close_cache>"]
 label_col = "alpha_return_next_close"
 fee_bps = 8
 capacity_total_notional = 1000000000
 ```
 
-常用输出：
+## 9. Exposure audit
 
-```text
-capacity_acceptance_daily_summary.csv  # capacity 模式累计图的数据源
-capacity_acceptance_summary.csv        # pool 级收益摘要
-capacity_acceptance_trace.json
-```
-
-## 9. Exposure Audit
-
-Top100 生产化前的暴露验收使用 `osf-audit-exposure`。默认审 `pool_L`，会从 prediction
-parquet 自动检测常见可见暴露列：price、spread、depth、成交/换手代理、短窗 return、
-市值/ADV/波动等；也可以用 `--exposure-col` 显式指定列。若暴露列不在 prediction parquet
-中，可用 `--exposure-input` 传 keyed exposure frame。`--exposure-input` 支持日频
-`date,symbol` key，也支持 intraday `date,symbol,decision_target_timestamp` key。
-
-市值/行业外部 exposure input 可从 ClickHouse 日频表构建：
+如果 prediction 不含市值/行业字段，先构建 keyed input：
 
 ```bash
 osf-build-exposure-input \
-  --predictions output/legacy/predictions/<run_id>/raw \
+  --predictions <prediction_root> \
   --pool L \
-  --output output/legacy/exposures/<run_id>_pool_l_size_industry_daily.parquet
+  --output <exposure_input.parquet>
 ```
 
-默认从 `stock.daily_bar_jy` 拉 `market_cap` / `float_market_cap` / log cap / 日频成交额，
-从 `stock.industry` 拉申万一二三级行业。输出是日频 keyed parquet，可被
-`osf-audit-exposure` 直接 join。
-
-正式大样本 exposure audit / attribution 走第 1 节的集群侧原则；下面的本地命令只用于
-小样本 debug 或复现已同步的 compact 输入：
+再运行：
 
 ```bash
 osf-audit-exposure \
-  --predictions output/legacy/predictions/<run_id>/predictions_all.parquet \
-  --exposure-input output/legacy/exposures/<run_id>_pool_l_size_industry_daily.parquet \
-  --output-dir output/legacy/analysis/<run_id>_exposure_audit \
-  --pool L \
-  --top-n 100 \
-  --exposure-col log_market_cap \
-  --exposure-col log_float_market_cap \
-  --industry-col industry_sw1
+  --predictions <predictions.parquet> \
+  --exposure-input <exposure_input.parquet> \
+  --output-dir <output_dir> \
+  --pool L --top-n 100
 ```
 
-常用输出：
+Exposure audit 解释给定 TopN/组合的画像，不替代 capacity portfolio construction。
 
-```text
-exposure_audit_summary.csv                 # pool x category x exposure 总体暴露
-exposure_audit_month_summary.csv           # 月度稳定性
-exposure_audit_group_metrics.csv           # date x clock 明细
-exposure_audit_category_summary.csv         # 类别级最大/平均暴露
-exposure_audit_industry_group_metrics.csv   # date x clock x industry active share 明细
-exposure_audit_industry_month_summary.csv   # 月度行业 active share 稳定性
-exposure_audit_industry_summary.csv         # 总体行业超/低配
-exposure_audit_daily_concentration.csv      # 日内重复选股和行业集中
-exposure_audit_concentration_summary.csv    # 集中度总体摘要
-exposure_audit_trace.json
+## 10. Realistic acceptance replay
+
+该入口重放已经完成排序与 per-decision capacity allocation 的 child orders，并叠加执行约束：
+
+```bash
+osf-analyze-realistic-acceptance \
+  --selected-input <capacity_audit_selected.csv> \
+  --execution-input <execution_context.parquet> \
+  --label-input <next_close_label_root> \
+  --output-dir <output_dir> \
+  --run-id <run_id> \
+  --variant <label> \
+  --capacity-total-notional 1000000000 \
+  --fee-bps 8 \
+  --max-daily-symbol-weight 0.005 \
+  --min-child-notional 10000 \
+  --round-lot-shares 100 \
+  --price-col capacity_price \
+  --status-col status \
+  --tradable-status T0 \
+  --tradable-status TRADE \
+  --spread-bps-col spread_bps \
+  --max-spread-bps 50 \
+  --ask-depth-notional-col ask_depth_notional \
+  --max-ask-depth-participation-rate 0.25
 ```
 
-K8s run config 可设置：
+如上下文字段不在 prediction 中，先运行：
 
-```toml
-[run]
-kind = "exposure_audit"
-
-[exposure_audit]
-predictions = ["/mnt/output/opening_strength_fit/<source_run_id>"]
-pool = ["L"]
-top_n = 100
+```bash
+osf-extract-execution-context --config experiments/runs/<context_run_id>.toml
+osf-ask-level-attribution --config experiments/runs/<attribution_run_id>.toml
 ```
 
-该工具只审计 TopN / 已给定组合的暴露，不构造容量组合；后续 `10 亿` capacity portfolio
-可以用 `selection_col` 或 `weight_col` 复用同一套暴露计算。
+当前实现是 selected-order replay：不会用更低排名股票 refill，也不会把每个 decision point 的成交额
+合并成同日真实预算。读取结果时必须同时查看 trace 的 `modeling_note` 和 context 列完整性。
 
-## 10. 排查
+## 11. 故障处理
 
-| symptom | action |
+| 症状 | 处理 |
 | --- | --- |
-| `kubectl` 没有 current-context | 使用 `hfcli kubectl --cluster research ...`。 |
-| PVC API 被 RBAC 拒绝 | 用 Pod/Job yaml 的 `claimName` 和容器内 `/mnt/output` 检查文件状态。 |
-| `field is immutable` | 删除同名 Job 后重新 apply。 |
-| K8s 内找不到新 config | 若只改 TOML，基于旧镜像做 config overlay；若代码/依赖也变了，重新全量 build/push；然后重新 render Job。 |
-| cache 只有 `.tmp` / lock / heartbeat | 等待最终 `.parquet` 和 manifest。 |
-| replay 缺少上下文字段 | 传 `--context-input`，或先运行 interface check。 |
-| completed config 没有 metrics | 运行 `osf-sync-experiment-artifacts --all`，然后 audit。 |
+| `kubectl` 无 current-context | 始终用 `hfcli kubectl --cluster research ...` |
+| `field is immutable` | 删除同名 Job 后重新 apply |
+| 容器找不到新 config | TOML-only 做 overlay；代码/依赖变化做 full build，再 render |
+| cache 只有 `.tmp`/lock/heartbeat | 等待 final parquet、manifest 与 ready marker |
+| run `completed` 但 metrics missing | 同步 `--all`，检查 shard `_SUCCESS`，再 audit |
+| GPU `no kernel image` | 使用与集群 GPU compute capability 匹配的固定 Torch/CUDA 镜像 |
+| PVC API 被 RBAC 拒绝 | 从 manifest 的 claimName 和容器内 `/mnt/output` 检查 |
+| realistic replay fill 异常 | 检查 execution context join、status/spread/depth 列和 trace |
+| experiment audit 报未知 status | 改成五个合法状态之一，不扩展同义词 |

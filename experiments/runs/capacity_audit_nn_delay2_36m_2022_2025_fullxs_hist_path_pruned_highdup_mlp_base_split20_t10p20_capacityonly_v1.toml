@@ -2,7 +2,7 @@
 id = "capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_t10p20_capacityonly_v1"
 kind = "capacity_audit"
 description = "Capacity-only audit for the 2022-2025 NN MLP base experiment, using pool_L and a 1bn total strategy capital split across 20 slices. This sensitivity uses 20% of turnover_diff_10t as the visible turnover participation cap."
-status = "running"
+status = "completed"
 
 [capacity_audit]
 predictions = ["/mnt/output/opening_strength_fit/nn/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_v1"]

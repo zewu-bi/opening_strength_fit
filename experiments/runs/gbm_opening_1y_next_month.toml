@@ -1,5 +1,6 @@
 [run]
 id = "gbm_opening_1y_next_month"
+kind = "experiment"
 description = "One-year train, next-month test opening-strength sklearn GBM baseline."
 status = "completed"
 

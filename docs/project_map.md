@@ -1,145 +1,157 @@
 # Project Map
 
-代码、CLI 和项目目录索引。本文件只回答“东西在哪里”和“入口做什么”。研究判断看
-[project_brief.md](project_brief.md)，实验事实看 [experiment_log.md](experiment_log.md)，运行命令看
-[runbook.md](runbook.md)，候选晋级标准也看 [project_brief.md](project_brief.md)。
+本文件回答“代码在哪里、谁负责什么、依赖应往哪一层流动”。研究判断见
+[project_brief.md](project_brief.md)，实验事实见 [experiment_log.md](experiment_log.md)，操作见
+[runbook.md](runbook.md)。
 
-## Root
+## 顶层目录
 
-- `README.md`: project entrypoint and current spine.
-- `Dockerfile`: CPU training image; default command is `osf-train --help`.
-- `pyproject.toml`: package metadata, runtime/dev dependencies, CLI entrypoints, pytest, coverage, and ruff settings.
-- `requirements.lock`: frozen Python environment versions used as a reproducibility baseline.
-- `Makefile`: standard local entrypoints for install, test, lint, format, contracts, and CI.
-- `.github/workflows/ci.yml`: GitHub Actions lint and pytest workflow.
-- `.pre-commit-config.yaml`: ruff check/format hooks.
-- `.env.example`: local ClickHouse, tick path, and Ceph S3 stock-pool variables.
+```text
+opening_strength_fit/
+├── src/opening_strength_fit/   可安装 Python 包
+├── tests/                      单元、回归和项目契约测试
+├── experiments/
+│   ├── runs/                   人工维护的 TOML 实验定义
+│   ├── jobs/                   由 config 渲染的 K8s manifest
+│   ├── config_templates/       可复用配置片段
+│   └── results/                ignored compact result mirror
+├── docs/                       当前维护文档
+│   └── archive/                只读历史叙述
+└── output/                     ignored 本地同步、debug 与 legacy 产物
+```
 
-## Python Package Layout
+根文件：
 
-- `src/opening_strength_fit/cli/`: thin `osf-*` command wrappers; each wrapper imports and calls one command `main`.
-- `src/opening_strength_fit/commands/`: command implementations for audits, K8s rendering, artifact sync, plots, replay loops, and diagnostics.
-- `src/opening_strength_fit/*.py`: reusable primitives and project contracts shared by commands and tests.
+| 文件 | 职责 |
+| --- | --- |
+| `pyproject.toml` | 包元数据、依赖、34 个 `osf-*` console scripts、pytest/coverage/Ruff 配置 |
+| `requirements.lock` | 本地/集群 Python 环境约束；GPU Torch 仍由镜像构建显式安装 |
+| `Makefile` | install-dev、install-cluster、test、lint、format、contracts、CI 的标准入口 |
+| `Dockerfile` | CPU/GPU 可选安装的运行镜像 |
+| `.github/workflows/ci.yml` | GitHub lint 与 pytest 门禁 |
 
-## Data And Labels
+## 依赖方向
 
-Library:
+```text
+cli -> command/workflow -> domain algorithms -> schema/types/io
+                         -> infrastructure adapters
+```
 
-- `src/opening_strength_fit/clickhouse_ticks.py`: ClickHouse `stock.tick` query and normalization.
-- `src/opening_strength_fit/schema.py`: canonical column names, depth levels, time filters, and standardization.
-- `src/opening_strength_fit/io.py`: parquet/csv read/write helpers.
-- `src/opening_strength_fit/dataset.py`: raw tick loading and labeled feature frame construction.
-- `src/opening_strength_fit/sampling.py`: decision-point sampling helpers.
-- `src/opening_strength_fit/labels.py`: entry-delay buy price, sell VWAP, label, and replay context columns.
-- `src/opening_strength_fit/label_audit.py`: label validity and distribution summaries.
+- `cli/` 只把 console script 转给一个 workflow `main`。
+- `commands/` 负责编排参数、配置、I/O 和 artifact，不承载可复用 dataframe 算法。
+- 根级 domain modules 负责数据、特征、标签、模型和分析算法。
+- K8s、PVC、ClickHouse、Ceph 等外部适配器不能被纯算法反向依赖。
+- 兼容 facade（当前 `features.py`、`model.py`）只做显式 re-export；项目内部新代码直接引用所有者模块。
 
-CLI:
+## 入口层
 
-- `osf-build-labeled-cache`: build a single labeled cache from ClickHouse without training a model.
-- `osf-build-target-label-cache`: derive target-aligned labeled caches while preserving raw labels.
-- `osf-probe-clickhouse-data`: inspect ClickHouse schema and opening-window coverage.
-- `osf-build-next-close-labels`: fetch/cache ClickHouse next-close labels for decision rows.
+| 路径 | 职责 |
+| --- | --- |
+| `cli/` | 每个文件至多一个 command import 和 `main()` 调用 |
+| `commands/` | 训练、cache、audit、analysis、plot、K8s、artifact sync 的用例编排 |
+| `commands/artifact_sync*.py` | remote fetch、metrics 合并、compact artifact 归档 |
+| `commands/k8s_*.py` | training/analysis manifest 渲染，不包含训练算法 |
 
-## Features And Pools
+常用 CLI 按用途分组：
 
-Library:
+| 用途 | CLI |
+| --- | --- |
+| 训练 | `osf-train`、`osf-run-experiment` |
+| 数据/cache | `osf-probe-clickhouse-data`、`osf-build-labeled-cache`、`osf-build-target-label-cache`、`osf-build-next-close-labels` |
+| 核心验收 | `osf-analyze-pool-internal-top100`、`osf-plot-optimization-direction-comparison` |
+| 容量/执行 | `osf-audit-capacity`、`osf-analyze-capacity-acceptance`、`osf-extract-execution-context`、`osf-ask-level-attribution`、`osf-analyze-realistic-acceptance` |
+| 暴露 | `osf-build-exposure-input`、`osf-audit-exposure` |
+| 研究诊断 | feature dependence/hygiene、horizon decay、risk sweep、weekly plots |
+| 基础设施 | `osf-render-k8s-job`、`osf-rolling-job-status`、`osf-sync-experiment-artifacts` |
+| 契约 | `osf-audit-experiments`、`osf-check-project-contracts` |
 
-- `src/opening_strength_fit/universe.py`: A-share symbol filtering and symbol-list loading.
-- `src/opening_strength_fit/stock_pool.py`: Ceph/local `date x symbol` bool stock-pool loading, masks, and summaries.
-- `src/opening_strength_fit/features.py`: compatibility export surface for feature engineering.
-- `src/opening_strength_fit/features_base.py`: orderbook, trade-flow, momentum, preopen summaries, and the raw tick feature frame.
-- `src/opening_strength_fit/features_postopen.py`: `postopen_*` decision-row trajectory, queue response, and depth-state features.
-- `src/opening_strength_fit/features_history.py`: historical same-minute surprise and path-shape confirmation features.
-- `src/opening_strength_fit/features_relative.py`: cross-sectional relative, price-scale, and in-place feature value transforms.
-- `src/opening_strength_fit/feature_utils.py`: shared numeric feature helpers.
-- `src/opening_strength_fit/feature_config.py`: feature include/drop filter and feature-limit config helpers.
-- `src/opening_strength_fit/candidates.py`: visible-information opening candidate filters.
-- `src/opening_strength_fit/targets.py`: cross-sectional demean/zscore/rank, heat-neutral, guard-shrunk, and risk-shrunk transforms.
+## 数据、schema 与 I/O
 
-## Training And Evaluation
+| 模块 | 所有权 |
+| --- | --- |
+| `schema.py` | 列名、盘口层级、时钟标准化、timestamp 构造 |
+| `io/` | dataframe I/O、原子写与 JSON artifact 序列化 |
+| `clickhouse_ticks.py` | `stock.tick` 查询、表名校验、字段标准化 |
+| `dataset.py` | raw tick → labeled feature frame |
+| `sampling.py` | decision-point 采样 |
+| `labels.py` | entry delay、buy price、sell VWAP、short label |
+| `horizon_*` | local/ClickHouse horizon labels 与报告算法 |
+| `cache_lock.py` / `cache_manifest.py` | cache 并发、ready marker、schema/fingerprint manifest |
+| `universe.py` / `stock_pool.py` | A 股 universe、S/M/L pool 读取和 mask |
 
-Library:
+`training_data.py` 是当前迁移中的 workflow 边界：负责 source resolution、PVC projection 与加载；
+跨文件历史/截面变换必须在 concat 后统一执行，不能把文件边界当成语义边界。
 
-- `src/opening_strength_fit/config.py`: TOML loading, typed config lookup, run id, and slug helpers.
-- `src/opening_strength_fit/analysis.py`: shared research-script helpers for clock/month ranges, next-close labels, finite TopN summaries, and JSON artifact traces.
-- `src/opening_strength_fit/model.py`: compatibility export surface for modeling helpers.
-- `src/opening_strength_fit/model_types.py`: prediction model dataclasses and prediction context columns.
-- `src/opening_strength_fit/model_features.py`: numeric feature filtering and target cleaning.
-- `src/opening_strength_fit/model_sklearn.py`: Ridge, sklearn GBM, and LightGBM fitters.
-- `src/opening_strength_fit/model_torch.py`: Torch MLP module construction, feature value transforms, standardization, training loop, and scoring.
-- `src/opening_strength_fit/model_prediction.py`: prediction dispatch for single, ensemble, and clock-segment models.
-- `src/opening_strength_fit/model_metrics.py`: IC, Rank IC, and grouped evaluation metrics.
-- `src/opening_strength_fit/training.py`: unified training pipeline, configured feature transforms/filters, and output writer.
-- `src/opening_strength_fit/evaluation.py`: score buckets and top-score summaries.
-- `src/opening_strength_fit/capacity_audit.py`: capacity-constrained score portfolio allocation, fill diagnostics, participation limits, and concentration summaries.
-- `src/opening_strength_fit/capacity_acceptance.py`: capacity-weighted next-close return summaries from capacity audit selected allocations.
-- `src/opening_strength_fit/execution_diagnostics.py`: capacity-selected execution context extraction and ask-level attribution helpers.
-- `src/opening_strength_fit/exposure_audit.py`: TopN / supplied-portfolio exposure metrics, score-exposure correlations, and daily concentration summaries.
-- `src/opening_strength_fit/reports.py`: compact dataset summaries, metrics reporting, and yearly aggregation.
-- `src/opening_strength_fit/pool_internal_plots.py` / `pool_internal_plot_svg.py`: pool-internal plot specs and SVG rendering.
-- `src/opening_strength_fit/optimization_acceptance_plots.py`: shared data preparation and rendering for the fixed two-figure overlay acceptance workflow.
-- `src/opening_strength_fit/optimization_acceptance_workflow.py`: orchestration for loading acceptance data, writing figures, and recording trace metadata.
-- `src/opening_strength_fit/rolling.py`: chronological, annual, and monthly split helpers.
-- `src/opening_strength_fit/rules.py`: non-ML baseline scores.
-- `src/opening_strength_fit/alpha_conditioning.py`: alpha-conditioned risk target, section-scoped LightGBM fit, scoring, and group-rank helpers.
-- `src/opening_strength_fit/__init__.py`: package marker.
+## 特征与 target
 
-CLI:
+| 模块 | 所有权 |
+| --- | --- |
+| `features_base.py` | order book、trade flow、momentum、pre-open 与基础 frame |
+| `features_postopen.py` | decision-row post-open trajectory、queue/depth state |
+| `features_history.py` | prior-date same-minute surprise、path confirmation、historical activity |
+| `feature_transforms/cross_sectional.py` | cross-sectional value/rank 与 price-scale transforms |
+| `feature_transforms/mechanism.py` | mechanismized v1/v2/v3 规则及共享 reference helpers |
+| `feature_config.py` | include/drop/limit 配置解析 |
+| `feature_hygiene.py` | correlation cluster、keep/drop 候选 |
+| `targets.py` | xs transform、heat/guard/risk-shrunk target |
+| `candidates.py` | 只用可见信息的 opening candidate filter |
+| `features_relative.py` / `features.py` | 兼容 facade；不新增实现 |
 
-- `osf-train` / `osf-run-experiment`: train/evaluate a configured experiment.
-- `osf-analyze-pool-internal-top100`: join predictions with next-close labels and selection masks to produce Top100 pool-internal validation panels.
-- `osf-analyze-capacity-acceptance`: join capacity audit selected allocations with next-close labels and produce capacity-weighted daily return summaries.
-- `osf-plot-optimization-direction-comparison`: render the fixed overlay acceptance figures for baseline plus 1-3 comparison models; cumulative mode supports Top100 and capacity acceptance inputs.
-- `osf-plot-weekly-pool-internal`: render optional trading-day-equal weekly / 4w rolling pool-internal stability diagnostics from `pool_internal_group_metrics.csv`.
-- `osf-plot-weekly-pool-internal-cumulative`: render cumulative short/next pool-internal excess from pre-aggregated daily or weekly summary rows.
-- `osf-audit-capacity`: build target-notional capacity portfolios from prediction scores and visible liquidity/depth constraints; outputs fill, depth, participation, and concentration diagnostics.
-- `osf-ask-level-attribution`: attribute capacity-selected notional to visible ask book levels.
-- `osf-extract-execution-context`: extract prediction-time price, spread, limit-up distance, and displayed depth context for capacity-selected rows.
-- `osf-build-exposure-input`: build daily `date,symbol` market-cap and industry exposure inputs from ClickHouse for use by exposure/capacity audits.
-- `osf-audit-exposure`: audit selected TopN or supplied-portfolio exposure versus the candidate pool.
-- `osf-summarize-opening-results`: summarize metrics CSVs.
-- `osf-compare-opening-results`: compare archived model metrics.
+## 模型与训练
 
-## Diagnostics And Research Loops
+| 模块 | 所有权 |
+| --- | --- |
+| `model_types.py` | prediction model dataclass 与 context columns |
+| `model_features.py` | numeric feature selection 与 target cleaning |
+| `model_sklearn.py` | Ridge、sklearn GBM、LightGBM fitters |
+| `torch_model/architectures.py` | 语义特征分组与网络结构 |
+| `torch_model/preprocessing.py` | feature value transforms 与 global/symbol standardization |
+| `torch_model/training.py` | device、loss、training loop、early stop 与 gate diagnostics |
+| `torch_model/prediction.py` | batch scoring |
+| `model_prediction.py` | single/ensemble/clock-segment prediction dispatch |
+| `model_metrics.py` | IC、Rank IC 与 grouped metrics |
+| `model_torch.py` / `model.py` | 兼容 facade；不新增实现 |
+| `training_args.py` | 训练 CLI 参数 |
+| `training_windows.py` | chronological/annual/monthly split 与 evaluation settings |
+| `training_labeled.py` | label/feature/target/sample-weight 变换管线 |
+| `training_modeling.py` | per-split fit/predict/metric orchestration |
+| `training.py` | 顶层训练闭环与标准 artifact 写入 |
 
-- `osf-audit-feature-dependence`: grouped feature importance, permutation, and drop-retrain ablation audits.
-- `osf-audit-feature-hygiene`: lightweight sampled feature hygiene, group-aware correlation clusters, and conservative keep/drop candidate reports.
-- `osf-run-alpha-horizon-decay`: evaluate opening scores on intraday/close horizons.
-- `osf-plot-signal-baseline-panels`: render delay2 short/next-close baseline panels using cached next-close labels.
-- `osf-run-score-tail-guards`: sweep visible-information TopN guard rules over an existing score file.
-- `osf-run-score-risk-sweep`: alpha-minus-risk score sweeps over existing score files.
-- `osf-run-learned-risk-layer`: learned dirty-risk / next-flip risk layers for score-sweep evidence.
-- `osf-run-alpha-conditioned-rolling-validation`: monthly validation for alpha-conditioned Top100 risk-penalty scores.
-- `osf-plot-rolling-validation-tradeoff`: render the archived rolling short-vs-next Top100 tradeoff chart from `experiments/results/backtests/*_month_summary.csv`.
-- `osf-run-gap-risk-attribution`: gap-risk Top100 replacement attribution.
+## 分析与验收
 
-## Infrastructure
+| 模块族 | 职责 |
+| --- | --- |
+| `pool_internal_*` | pool 内选择、稳定性、company bridge 与 SVG |
+| `capacity_audit.py` | 受资金、参与率、深度与集中约束的组合分配 |
+| `capacity_acceptance.py` | selected allocation × next-close label 的收益验收 |
+| `execution_diagnostics.py` | execution context 与 ask-level attribution |
+| `realistic_acceptance.py` | selected-order execution replay；不负责生成候选/refill |
+| `exposure_audit.py` | TopN/给定组合相对候选池的暴露与集中度 |
+| `optimization_direction_*` | 固定 acceptance data、plot 和 workflow |
+| `evaluation.py` / `reports.py` | score bucket、TopN 与标准汇总 |
+| `rolling.py` | 时间切分原语 |
 
-Library:
+旧 NN multiscale bucket 工具位于 `legacy/`，只用于复现已封存诊断，不参与常规依赖图；原根模块与
+command 路径保留薄兼容 facade。
 
-- `src/opening_strength_fit/k8s.py`: RunSpec, PVC helper pod, and kubectl wrappers.
-- `src/opening_strength_fit/cache_manifest.py`: JSON-safe labeled-cache schema and summary manifest helpers.
-- `src/opening_strength_fit/cache_lock.py`: labeled-cache lock acquisition, heartbeat, ready marker, and release helpers.
+## 实验与产物边界
 
-CLI:
+| 路径 | tracked | 说明 |
+| --- | --- | --- |
+| `experiments/runs/` | yes | 实验意图与状态 |
+| `experiments/jobs/` | yes | 可执行 manifest trace |
+| `experiments/results/` | no, default | compact 本地/PVC mirror；必要证据单独 force-add |
+| `output/artifacts/` | no | 当前同步副本和 partial metrics |
+| `output/legacy/` | no | 历史/debug/可重拉大文件 |
+| `docs/archive/` | yes | 冻结的人工历史叙述，不代表当前状态 |
 
-- `osf-render-k8s-job`: render training, feature-audit, cache-transform, sharded training, and cluster-side pool-internal analysis K8s manifests.
-- `osf-sync-experiment-artifacts`: pull metrics and lightweight cluster-side analysis artifacts from PVC, combine shard metrics, and archive compact evidence. Prediction parquet sync is explicit debug/legacy behavior.
-- `osf-rolling-job-status`: map K8s Indexed Job pods back to rolling months and print per-month log commands.
-- `osf-audit-experiments`: check config/job/metrics alignment.
-- `osf-check-project-contracts`: check CLI, config, directory, and K8s entrypoint contracts.
+## 工程契约
 
-## Experiments
+`tests/test_module_boundaries.py` 和 `osf-check-project-contracts` 应持续保证：
 
-- `experiments/runs/*.toml`: run configs. `run.id` must match the filename.
-- `experiments/jobs/*.yaml`: rendered K8s jobs.
-- `experiments/config_templates/`: reusable TOML snippets for run configs.
-- `experiments/results/metrics/`: local compact metrics CSV evidence produced by artifact sync; ignored by Git unless explicitly force-added.
-- `experiments/results/backtests/`: local replay, sweep, hygiene, rolling, and acceptance archives. Multi-file archives use `backtests/<record_prefix>/`; this tree is ignored by Git and indexed through `docs/experiment_log.md`.
-- `*_sharded_job.yaml`: monthly/yearly sharded K8s jobs.
-
-## Ignored Outputs
-
-- `output/artifacts/<run_id>/` and `output/artifacts/_partial_metrics/`: current local mirrors and partial metrics; ignored.
-- `output/legacy/{artifacts,predictions,analysis,labels,reports}/`: old pulls, debug prediction/label/report state, local analysis output, and heavy diagnostics; ignored.
-- `experiments/results/`: compact local archive root; ignored by Git to avoid committing large or frequently refreshed evidence files.
+- CLI wrapper 保持薄；
+- facade 保持薄且只 re-export；
+- command/workflow 不越过行数和依赖边界；
+- run id、状态、config、Job 和 entrypoint 对齐；
+- 未知实验状态、缺失显式特征和循环依赖直接失败；
+- ignored 结果目录不被无意提交。

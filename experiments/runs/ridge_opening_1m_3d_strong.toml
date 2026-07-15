@@ -1,5 +1,6 @@
 [run]
 id = "ridge_opening_1m_3d_strong"
+kind = "experiment"
 description = "Small-window Ridge baseline on opening-strength candidate rows: one-month train, three trading days test."
 status = "completed"
 

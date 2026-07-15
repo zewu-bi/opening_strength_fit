@@ -2,7 +2,7 @@
 id = "nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_histavg_activity_gelu_mse_v1"
 kind = "exploration"
 description = "GPU PyTorch grouped gated v2 GELU MSE NN over 2022-2025 on the same 328 hist_path_pruned_highdup features as gated_v2; applies mechanismized v3 strict ratio dimensionless value transform in-place, with prior-date 60d historical average daily activity denominators as fallback when market-cap/share-count columns are unavailable."
-status = "submitted"
+status = "running"
 
 [data]
 source = "labeled_pvc"

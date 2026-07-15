@@ -2,7 +2,7 @@
 id = "extract_execution_context_t10p20_v1"
 kind = "execution_context"
 description = "Extract t10p20 split20 execution context for capacity-selected LGBM 328 and NN MLP base rows."
-status = "queued"
+status = "completed"
 
 [[execution_context.inputs]]
 name = "lgbm328"
