@@ -264,62 +264,91 @@ def add_historical_daily_activity_reference_features(
     shifted by one date, so the current date never enters its own denominator.
     """
 
-    out = ensure_timestamp_columns(frame)
+    out = frame.copy(deep=False)
     if "symbol" not in out.columns or "date" not in out.columns:
         raise ValueError("historical daily activity references require date and symbol columns")
 
-    source_columns = [
-        column
-        for column in (volume_col, turnover_col)
-        if column in out.columns and pd.api.types.is_numeric_dtype(out[column])
-    ]
+    source_columns = list(
+        dict.fromkeys(
+            column
+            for column in (volume_col, turnover_col)
+            if column in out.columns and pd.api.types.is_numeric_dtype(out[column])
+        )
+    )
     if not source_columns:
-        return out.copy()
+        return out
 
     min_periods = max(1, int(min_periods))
     windows = tuple(int(window) for window in windows if int(window) >= 2)
     if not windows:
-        return out.copy()
+        return out
 
-    work = out[["symbol", "date", *source_columns]].copy()
-    work["_hist_date"] = pd.to_datetime(work["date"], errors="coerce").dt.strftime("%Y-%m-%d")
-    work["_hist_orig_order"] = np.arange(len(work))
+    hist_date = pd.to_datetime(out["date"], errors="coerce").dt.normalize()
+    valid_key = out["symbol"].notna() & hist_date.notna()
+    if not valid_key.any():
+        return out
 
-    references = work[["symbol", "_hist_date", "_hist_orig_order"]].copy()
+    work = pd.DataFrame(
+        {
+            "symbol": out.loc[valid_key, "symbol"].to_numpy(copy=False),
+            "_hist_date": hist_date.loc[valid_key].to_numpy(copy=False),
+        }
+    )
     for column in source_columns:
-        daily = (
-            work[["symbol", "_hist_date", column]]
-            .dropna(subset=["symbol", "_hist_date"])
-            .assign(**{column: pd.to_numeric(work[column], errors="coerce")})
-            .groupby(["symbol", "_hist_date"], sort=False, as_index=False)[column]
-            .max()
-            .sort_values(["symbol", "_hist_date"])
-            .reset_index(drop=True)
+        work[column] = pd.to_numeric(out.loc[valid_key, column], errors="coerce").to_numpy(
+            copy=False
         )
-        if daily.empty:
-            continue
-        past = daily.groupby("symbol", sort=False)[column].shift(1)
+
+    daily = (
+        work.groupby(["symbol", "_hist_date"], sort=False, observed=True)[source_columns]
+        .max()
+        .sort_index()
+    )
+    del work
+    if daily.empty:
+        return out
+
+    symbol_index = daily.index.levels[0]
+    row_symbol_codes = symbol_index.get_indexer(out["symbol"].to_numpy(copy=False))
+    row_days = hist_date.to_numpy(dtype="datetime64[D]").astype("int64", copy=False)
+    daily_days = daily.index.get_level_values("_hist_date").to_numpy(
+        dtype="datetime64[D]",
+    ).astype("int64", copy=False)
+    valid_daily_days = daily_days[daily_days != np.datetime64("NaT", "D").astype("int64")]
+    if len(valid_daily_days) == 0:
+        return out
+    min_day = int(valid_daily_days.min())
+    day_span = int(valid_daily_days.max() - min_day + 1)
+    daily_symbol_codes = daily.index.codes[0].astype("int64", copy=False)
+    daily_keys = daily_symbol_codes * day_span + (daily_days - min_day)
+    valid_rows = (
+        (row_symbol_codes >= 0)
+        & (row_days != np.datetime64("NaT", "D").astype("int64"))
+        & (row_days >= min_day)
+        & (row_days < min_day + day_span)
+    )
+    row_keys = (
+        row_symbol_codes[valid_rows].astype("int64", copy=False) * day_span
+        + (row_days[valid_rows] - min_day)
+    )
+    row_positions = np.flatnonzero(valid_rows)
+    for column in source_columns:
+        past = daily[column].groupby(level=0, sort=False).shift(1)
         for window in windows:
             averaged = (
-                past.groupby(daily["symbol"], sort=False)
+                past.groupby(level=0, sort=False)
                 .rolling(window=window, min_periods=min_periods)
                 .mean()
                 .reset_index(level=0, drop=True)
             )
             ref_col = f"{prefix}{column}_{window}d"
-            daily_refs = daily[["symbol", "_hist_date"]].copy()
-            daily_refs[ref_col] = averaged.to_numpy()
-            references = references.merge(
-                daily_refs,
-                on=["symbol", "_hist_date"],
-                how="left",
-                validate="many_to_one",
-            )
+            values = np.full(len(out), np.nan, dtype="float32")
+            positions = np.searchsorted(daily_keys, row_keys, side="left")
+            in_bounds = positions < len(daily_keys)
+            matched = in_bounds.copy()
+            matched[in_bounds] = daily_keys[positions[in_bounds]] == row_keys[in_bounds]
+            averaged_values = averaged.to_numpy(dtype="float32", copy=False)
+            values[row_positions[matched]] = averaged_values[positions[matched]]
+            out[ref_col] = values
 
-    new_columns = references.sort_values("_hist_orig_order").drop(
-        columns=["symbol", "_hist_date", "_hist_orig_order"]
-    )
-    if new_columns.empty:
-        return out.copy()
-    new_columns.index = out.index
-    return pd.concat([out.copy(), new_columns.astype("float32")], axis=1)
+    return out

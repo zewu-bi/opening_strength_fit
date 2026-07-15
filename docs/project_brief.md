@@ -16,11 +16,15 @@
 并借鉴 hist/path 口径；再把样本扩展到全天分钟频决策序列；策略侧以现有 selected-order realistic replay
 为起点，补成完整、因果、可交易的 `pool_L` overlay 组合回测，并以成本后 PnL 验收。
 
+当前 `2022-2025` 的 `36m train -> next 6m` folds 是研究期 rolling OOS validation，允许用于模型、
+特征、target 和候选晋级选择；模型尚未冻结，项目尚未定义 final untouched test。配置和代码中的
+`test_*` 仅表示每个 fold 内不参与拟合的 out-of-time evaluation window，不表示最终测试集。
+
 ## 固定研究口径
 
 | 项目 | 口径 |
 | --- | --- |
-| 数据 | ClickHouse `stock.tick`；本地 parquet 仅作等价输入或调试 |
+| 数据 | 分钟数据来自 ClickHouse `stock.tick`；auction-fresh 线额外使用 `stock.daily_bar_jy` 的严格上一交易日市值/股本；本地 parquet 仅作等价输入或调试 |
 | 样本键 | `date × symbol × decision_target_timestamp` |
 | 当前决策面 | `09:31:00-09:40:00`，整数分钟 |
 | 可见性 | 每个 decision point 只使用当时及以前的信息 |
@@ -38,7 +42,8 @@
 | 角色 | 模型 | 用途 |
 | --- | --- | --- |
 | overlay incumbent | `mech328_v2_robust_zscore` | 当前 `pool_L` next overlay 最强、稳定性已过线 |
-| targeted challenger | `mech328_v3_histavg_activity` | 在途的 ratio-style 无量纲化诊断；完成前不改变 incumbent |
+| targeted challenger | `mech328_v3_histavg_activity` | 在途的 ratio-style 无量纲化诊断；不做特征值层截面 zscore，保留 NN train-set global zscore；完成前不改变 incumbent |
+| causal-data challenger | `auction_fresh_pruned_grouped_gated_v2_mech_v3` | 重建 2019-2025 独立 base/mixed cache 后训练；base/target/model Job 已提交，target/model 等待上游产物 |
 | short-ranking anchor | `xs_rank_inplace`、`deep_gelu_huber` | 解释 short Rank IC 上界 |
 | structured anchors | `grouped_gated`、`grouped_gated_v2` | 对照收益高度与稳定性 |
 | capacity anchors | `mlp_base`、`deep_gelu_mse`、LGBM pruned | 已完成容量/暴露或 realistic replay 的对照 |

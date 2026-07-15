@@ -72,6 +72,7 @@ cli -> command/workflow -> domain algorithms -> schema/types/io
 | `schema.py` | 列名、盘口层级、时钟标准化、timestamp 构造 |
 | `io/` | dataframe I/O、原子写与 JSON artifact 序列化 |
 | `clickhouse_ticks.py` | `stock.tick` 查询、表名校验、字段标准化 |
+| `clickhouse_daily_reference.py` | `stock.daily_bar_jy` 严格 prior-session 市值/股本查询、单位归一化与 many-to-one enrichment |
 | `dataset.py` | raw tick → labeled feature frame |
 | `sampling.py` | decision-point 采样 |
 | `labels.py` | entry delay、buy price、sell VWAP、short label |
@@ -79,7 +80,8 @@ cli -> command/workflow -> domain algorithms -> schema/types/io
 | `cache_lock.py` / `cache_manifest.py` | cache 并发、ready marker、schema/fingerprint manifest |
 | `universe.py` / `stock_pool.py` | A 股 universe、S/M/L pool 读取和 mask |
 
-`training_data.py` 是当前迁移中的 workflow 边界：负责 source resolution、PVC projection 与加载；
+`training_data.py` 是当前迁移中的 workflow 边界：负责 source resolution、ClickHouse 日频 reference enrichment、
+PVC projection 与加载；
 跨文件历史/截面变换必须在 concat 后统一执行，不能把文件边界当成语义边界。
 
 ## 特征与 target

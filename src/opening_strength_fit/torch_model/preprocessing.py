@@ -72,6 +72,7 @@ _MECHANISMIZED_FEATURE_VALUE_TRANSFORMS = {
     "mechanismized_cross_sectional_zscore": "zscore",
     "mechanismized_xs_zscore": "zscore",
     "mechanismized_zscore": "zscore",
+    "mechanismized_none": "none",
     "mechanismized_only": "none",
     "mechanism_aware_only": "none",
 }
@@ -87,6 +88,7 @@ _MECHANISMIZED_V2_FEATURE_VALUE_TRANSFORMS = {
     "mechanismized_v2_cross_sectional_rank_centered": "rank_centered",
     "mechanismized_v2_xs_rank_centered": "rank_centered",
     "mechanismized_v2_rank_centered": "rank_centered",
+    "mechanismized_v2_none": "none",
     "mechanismized_v2_only": "none",
     "mechanism_aware_v2_cross_sectional_robust_zscore": "robust_zscore",
     "mechanism_aware_v2_dimensionless": "robust_zscore",
@@ -104,6 +106,7 @@ _MECHANISMIZED_V3_FEATURE_VALUE_TRANSFORMS = {
     "mechanismized_v3_cross_sectional_rank_centered": "rank_centered",
     "mechanismized_v3_xs_rank_centered": "rank_centered",
     "mechanismized_v3_rank_centered": "rank_centered",
+    "mechanismized_v3_none": "none",
     "mechanismized_v3_only": "none",
     "mechanism_aware_v3_cross_sectional_robust_zscore": "robust_zscore",
     "mechanism_aware_v3_dimensionless": "none",

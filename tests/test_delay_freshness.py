@@ -3,6 +3,7 @@ import unittest
 import pandas as pd
 
 from opening_strength_fit.labels import build_trade_labels
+from opening_strength_fit.sampling import require_entry_after_cross_section_ready
 
 
 def _ticks(offsets: list[int]) -> pd.DataFrame:
@@ -55,6 +56,34 @@ class DelayFreshnessTest(unittest.TestCase):
         self.assertTrue(pd.isna(first["entry_timestamp"]))
         self.assertTrue(pd.isna(first["entry_delay_seconds"]))
         self.assertTrue(pd.isna(first["entry_max_tick_gap_seconds"]))
+
+    def test_cross_section_readiness_invalidates_early_entry_only(self) -> None:
+        target = pd.Timestamp("2022-01-04 09:31:00")
+        frame = pd.DataFrame(
+            {
+                "date": ["2022-01-04", "2022-01-04"],
+                "symbol": ["600520.SH", "000001.SZ"],
+                "decision_target_timestamp": [target, target],
+                "timestamp": [
+                    target + pd.Timedelta(seconds=3),
+                    target + pd.Timedelta(seconds=5),
+                ],
+                "entry_timestamp": [
+                    target + pd.Timedelta(seconds=4),
+                    target + pd.Timedelta(seconds=6),
+                ],
+                "valid_label": [True, True],
+            }
+        )
+
+        out = require_entry_after_cross_section_ready(frame)
+
+        self.assertEqual(
+            out["cross_section_ready_timestamp"].tolist(),
+            [target + pd.Timedelta(seconds=5)] * 2,
+        )
+        self.assertEqual(out["entry_after_cross_section_ready"].tolist(), [False, True])
+        self.assertEqual(out["valid_label"].tolist(), [False, True])
 
 
 if __name__ == "__main__":

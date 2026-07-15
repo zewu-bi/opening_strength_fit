@@ -95,6 +95,47 @@ def test_historical_daily_activity_references_use_prior_dates_only():
     assert np.allclose(out.loc[third, "hist_avg_daily_turnover_2d"], 11_000.0)
 
 
+def test_historical_daily_activity_references_preserve_row_order_and_symbol_keys():
+    rows = []
+    for symbol, scale in (("000001.SZ", 1.0), ("000002.SZ", 10.0)):
+        for day, volume in enumerate((100.0, 200.0, 400.0), start=1):
+            date = f"2024-01-0{day}"
+            rows.append(
+                {
+                    "date": date,
+                    "symbol": symbol,
+                    "timestamp": pd.Timestamp(date) + pd.Timedelta(hours=9, minutes=31),
+                    "decision_target_timestamp": pd.Timestamp(date)
+                    + pd.Timedelta(hours=9, minutes=31),
+                    "volume": volume * scale,
+                    "turnover": volume * scale * 100.0,
+                }
+            )
+    frame = pd.DataFrame(rows).iloc[[4, 0, 5, 2, 1, 3]].reset_index(drop=True)
+
+    out = add_historical_daily_activity_reference_features(
+        frame,
+        windows=(2,),
+        min_periods=1,
+    )
+
+    expected = {
+        ("000001.SZ", "2024-01-01"): np.nan,
+        ("000001.SZ", "2024-01-02"): 100.0,
+        ("000001.SZ", "2024-01-03"): 150.0,
+        ("000002.SZ", "2024-01-01"): np.nan,
+        ("000002.SZ", "2024-01-02"): 1000.0,
+        ("000002.SZ", "2024-01-03"): 1500.0,
+    }
+    for _, row in out.iterrows():
+        value = expected[(row["symbol"], row["date"])]
+        actual = row["hist_avg_daily_volume_2d"]
+        if np.isnan(value):
+            assert np.isnan(actual)
+        else:
+            assert np.isclose(actual, value)
+
+
 def test_path_shape_confirmation_keeps_series_semantics():
     frame = pd.DataFrame(
         {

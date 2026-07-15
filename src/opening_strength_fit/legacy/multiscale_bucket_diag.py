@@ -73,17 +73,32 @@ def stock_pool_membership_mask(frame: pd.DataFrame, pool: pd.DataFrame) -> np.nd
     return out
 
 
-def fixed_score_spearman(excess_bps: np.ndarray) -> float:
-    n = len(excess_bps)
-    if n < 3:
+def spearman_rank_ic(scores: np.ndarray, outcomes: np.ndarray) -> float:
+    if len(scores) != len(outcomes):
+        raise ValueError("scores and outcomes must have the same length")
+    valid = np.isfinite(scores) & np.isfinite(outcomes)
+    if valid.sum() < 3:
         return math.nan
-    if not np.isfinite(excess_bps).all() or np.nanstd(excess_bps) == 0:
+    scores = scores[valid]
+    outcomes = outcomes[valid]
+    if np.ptp(scores) == 0 or np.ptp(outcomes) == 0:
         return math.nan
-    order = np.argsort(excess_bps, kind="mergesort")
-    y_rank = np.empty(n, dtype="float64")
-    y_rank[order] = np.arange(1, n + 1, dtype="float64")
-    x_rank = np.arange(n, 0, -1, dtype="float64")
+    x_rank = pd.Series(scores, copy=False).rank(method="average").to_numpy(dtype="float64")
+    y_rank = pd.Series(outcomes, copy=False).rank(method="average").to_numpy(dtype="float64")
     return float(np.corrcoef(x_rank, y_rank)[0, 1])
+
+
+def fixed_score_spearman(excess_bps: np.ndarray) -> float:
+    """Rank IC for rows already sorted from highest to lowest score.
+
+    This compatibility helper uses unique descending score positions, but keeps
+    outcome ties intact through average ranks. New calculations should call
+    ``spearman_rank_ic`` with the original score values so score ties are also
+    handled correctly.
+    """
+    n = len(excess_bps)
+    scores = np.arange(n, 0, -1, dtype="float64")
+    return spearman_rank_ic(scores, excess_bps)
 
 
 def summarize_monthly_stability(
@@ -227,12 +242,13 @@ def add_ic_rows(
     bucket_ic_rows: list[tuple] = []
     window_rows: list[tuple] = []
     for _, group in top.groupby(GROUP_COLS, sort=False, observed=True):
+        scores = group["prediction"].to_numpy(dtype="float64", copy=False)
         y = group["excess_bps"].to_numpy(dtype="float64", copy=False)
         month = group["month"].iloc[0]
         n = len(y)
         for k in top_k:
             if n >= k:
-                topk_rows.append((variant, month, k, fixed_score_spearman(y[:k])))
+                topk_rows.append((variant, month, k, spearman_rank_ic(scores[:k], y[:k])))
         for width in bucket_widths:
             max_bucket = min(top_n, n) // width
             for bucket in range(1, max_bucket + 1):
@@ -246,7 +262,7 @@ def add_ic_rows(
                         bucket,
                         start + 1,
                         end,
-                        fixed_score_spearman(y[start:end]),
+                        spearman_rank_ic(scores[start:end], y[start:end]),
                     )
                 )
         for width in window_widths:
@@ -256,7 +272,14 @@ def add_ic_rows(
             for start in range(0, max_start + 1, window_stride):
                 end = start + width
                 window_rows.append(
-                    (variant, month, width, start + 1, end, fixed_score_spearman(y[start:end]))
+                    (
+                        variant,
+                        month,
+                        width,
+                        start + 1,
+                        end,
+                        spearman_rank_ic(scores[start:end], y[start:end]),
+                    )
                 )
     return topk_rows, bucket_ic_rows, window_rows
 
@@ -280,19 +303,28 @@ def summarize_ic(rows: list[tuple], columns: list[str], key_cols: list[str]) -> 
     return summary.merge(stability, on=key_cols, how="left")
 
 
-def process_shard(
+def load_ranked_pool_shard(
     *,
     pred_path: Path,
     labels: pd.DataFrame,
     pool: pd.DataFrame,
-    top_n: int,
 ) -> tuple[pd.DataFrame, dict[str, int]]:
     pred = pd.read_parquet(pred_path, columns=PREDICTION_COLS)
     pred["date"] = normalize_date(pred["date"])
     pred = pred.loc[stock_pool_membership_mask(pred, pool)].copy()
     pred_rows = len(pred)
-    frame = pred.merge(labels, on=PREDICTION_COLS[:3], how="inner", validate="one_to_one")
-    joined_rows = len(frame)
+    duplicate_keys = int(pred.duplicated(PREDICTION_COLS[:3]).sum())
+    if duplicate_keys:
+        raise ValueError(
+            f"invalid predictions for {pred_path}: duplicates={duplicate_keys}"
+        )
+    frame = pred.merge(labels, on=PREDICTION_COLS[:3], how="left", validate="one_to_one")
+    missing_labels = int(frame["alpha_return_next_close"].isna().sum())
+    if missing_labels:
+        raise ValueError(
+            f"invalid prediction/label join for {pred_path}: "
+            f"missing_labels={missing_labels}"
+        )
     frame["pool_mean"] = frame.groupby(GROUP_COLS, observed=True)[
         "alpha_return_next_close"
     ].transform("mean")
@@ -307,25 +339,47 @@ def process_shard(
         ascending=[True, True, False],
         kind="mergesort",
     )
-    frame["score_rank"] = frame.groupby(GROUP_COLS, observed=True).cumcount() + 1
+    grouped = frame.groupby(GROUP_COLS, sort=False, observed=True)
+    frame["score_rank"] = grouped.cumcount() + 1
+    frame["group_size"] = grouped["symbol"].transform("size")
+    frame["month"] = frame["date"].str.slice(0, 7)
+    return frame, {
+        "prediction_pool_rows": pred_rows,
+        "joined_rows": len(frame),
+        "groups": int(grouped.ngroups),
+        "duplicate_keys": duplicate_keys,
+        "missing_labels": missing_labels,
+    }
+
+
+def process_shard(
+    *,
+    pred_path: Path,
+    labels: pd.DataFrame,
+    pool: pd.DataFrame,
+    top_n: int,
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    frame, trace = load_ranked_pool_shard(
+        pred_path=pred_path,
+        labels=labels,
+        pool=pool,
+    )
     top = frame.loc[frame["score_rank"] <= top_n].copy()
-    top["month"] = top["date"].str.slice(0, 7)
     top["top_n"] = top_n
+    trace["top_rows"] = len(top)
     return top[
         GROUP_COLS
         + [
             "month",
             "score_rank",
+            "prediction",
+            "alpha_return_next_close",
             "excess_bps",
             "realized_pool_top5",
             "realized_pool_top10",
             "top_n",
         ]
-    ], {
-        "prediction_pool_rows": pred_rows,
-        "joined_rows": joined_rows,
-        "top_rows": len(top),
-    }
+    ], trace
 
 
 def write_frame(path: Path, frame: pd.DataFrame) -> None:
@@ -359,6 +413,7 @@ def run_multiscale_bucket_diagnostics(config: MultiscaleBucketDiagConfig) -> Non
         "window_widths": config.window_widths,
         "window_stride": config.window_stride,
         "top_n": config.top_n,
+        "rank_ic_method": "spearman_average_rank_ties",
     }
 
     for variant, run_id in config.run_ids.items():

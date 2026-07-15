@@ -88,6 +88,36 @@ osf-build-labeled-cache \
 模式下可暂时省略 manifest，新写入路径会先发布 manifest 再标记 ready。一旦存在 manifest，schema、
 文件列和构建配置 fingerprint 不匹配会直接失败。
 
+### 严格上一交易日日频 enrichment
+
+需要把公司规模字段保留在 labeled cache 供当前或后续任务使用时，在直接读取 ClickHouse 的 base-cache
+配置中启用：
+
+```toml
+[daily_market_reference]
+enabled = true
+table = "stock.daily_bar_jy"
+lag_sessions = 1
+market_cap_unit_multiplier = 10000.0
+share_unit_multiplier = 10000.0
+```
+
+该 enrichment 先找满足 `TradingDay < sample_date` 的最近交易日，再按 `symbol` 做 many-to-one join；
+不得使用样本日记录，也不得在源表缺失时退回样本日。写入 cache 的业务字段为
+`total_market_cap`、`float_market_cap`、`total_shares`、`float_shares`、`free_float_shares`；
+`market_cap_reference_date` 和 `market_cap_reference_lag_sessions` 是审计 context，不进入模型特征。
+`stock.daily_bar_jy` 的原始市值和股本单位均为万，当前统一乘 `10000` 转成元和股。
+enrichment 字段写入 cache 不等于自动成为 raw model feature；由具体实验的 feature allowlist 和 value
+transform 决定用途。当前 mechanismized v3 将市值/股本作为 support reference，用于把名义金额、盘口量和
+成交量变成相对公司规模的无量纲值，但不把五个原始规模字段直接加入模型矩阵。
+
+跨年度批量链路默认按 `base cache -> mixed/derived target cache -> training` 分阶段提交。下游配置中的
+`wait_for_paths` 只是防止误读不完整产物的安全网，不是调度器；上游未完成时提前提交 target 或模型 Pod，
+Pod 仍会按整 Pod request 参与资源调度，可能表现为 Pending 或 Running 后等待文件。若为了 overnight 排队
+而主动预提交下游，必须在 experiment log 中记录这是 waiting job，并接受这段时间的资源排队/占用；正常流程仍
+应在 base 完成后先检查 parquet、manifest、ready marker 和 reference-date 日志，再提交 target，所有
+target 完成并审计后再提交模型。
+
 ### 派生 target 与 next-close label
 
 ```bash

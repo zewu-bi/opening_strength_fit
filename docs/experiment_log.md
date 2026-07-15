@@ -25,7 +25,10 @@
 
 | date | run | hypothesis | last known status | incumbent impact |
 | --- | --- | --- | --- | --- |
-| 2026-07-10 | `nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_histavg_activity_gelu_mse_v1` | 用 prior-date 60 日历史开盘 activity ratio 替代截面 robust z-score，同时保留 NN train-set z-score | `running`; 8 shards submitted，尚无 metrics | targeted challenger；完成并通过相同 gate 前不改变 mech328 v2 incumbent |
+| 2026-07-10 | `nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_histavg_activity_gelu_mse_v1` | 用 prior-date 60 日历史开盘 activity ratio 替代截面 robust z-score，同时保留 NN train-set global z-score | `running`; 2026-07-15 用 activity reference memory fix 镜像重提，8 shards / parallelism 8，尚无 metrics | targeted challenger；完成并通过相同 gate 前不改变 mech328 v2 incumbent |
+| 2026-07-15 | `build_delay2_{2019..2025}_auction_fresh_cache_v1` | 用修正后的集合竞价、严格上一交易日市值/股本和完整 freshness/readiness 约束重建隔离 base cache | `running`; 7 个年度 CPU Job 已提交并开始写新 lineage | 数据链路修复；不覆盖或改变旧 cache/实验 |
+| 2026-07-15 | `build_delay2_{2019..2025}_auction_fresh_mixed_w030_target_v1` | 在新 base cache 上复用既有 next-close label，重建 `w_long=0.30` mixed target | `running`; 7 个 CPU Job 已提交，容器/调度等待对应 base shard 产物 | 只为新 causal-data challenger 提供输入 |
+| 2026-07-15 | `nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1` | 同时验证 auction 修正、冗余特征 prune 和三项因果 freshness 控制 | `running`; indexed GPU Job 已提交，等待 7 个 mixed target shard | 完成并通过相同 gate 前不改变 incumbent |
 
 ## 决策时间线
 
@@ -80,8 +83,118 @@
 | 07-10 | old-NN multiscale buckets | Top1000 粗桶与桶内 IC | 粗桶递减，但 TopK/桶内 IC 为负 | 信号是 head-region selector，不是稳定细排器；旧模型诊断结束 |
 | 07-10 | mech328 v3 submit | ratio-style histavg activity，无截面 z-score | 8 shards submitted，尚无 metrics | 保持 targeted challenger，见在途表 |
 | 07-15 | mech328 v2 rank/bucket re-audit | 原始 prediction、next-close label 与 `pool_L` 重新 join 并交叉实现 Spearman | `pool_L` 全池 / Top1000 单股 Rank IC `+0.008054/-0.016463`；Top1000 10×100 per-decision bucket IC `+0.050524`，汇总曲线 IC `+0.975758`；头尾 pair win `48.07%` | 计算无 sign、tie、label 或 excess 口径错误；定位为 conditional-mean/right-tail head overlay，不作单股细排器 |
+| 07-15 | auction-fresh causal rebuild | 新竞价口径、两自由度价格基底、派生竞价 path、1m queue horizon、严格 tick freshness/截面 readiness、T-1 市值股本 | `248 passed, 3 skipped`；真实 ClickHouse 抽样和 7 个 base Job 首日日志均确认 prior-session reference，覆盖 `99.94%-100%` | 使用独立 v4 base/v3 mixed lineage；base 已先启动，target/model 随后作为 overnight waiting jobs 提交 |
 
 ## 当前决策记录
+
+### Mech328 v3 histavg activity challenger（2026-07-15 重提，在途）
+
+本轮 v3 只作为 `mech328_v2_robust_zscore` 的 targeted challenger，不改变 incumbent。实验固定使用
+同一批 328 个模型输入特征名，核心配置为：
+
+```toml
+[features]
+feature_value_transform = "mechanismized_v3_dimensionless_328"
+include_historical_daily_activity_references = true
+historical_daily_activity_windows = [60]
+historical_daily_activity_min_periods = 10
+
+[model]
+name = "torch_mlp"
+architecture = "grouped_gated_v2"
+loss = "mse"
+# feature_standardization 未显式覆盖，Torch NN 入口默认 global_zscore。
+
+[k8s]
+shard_parallelism = 8
+
+[k8s.resources]
+memory_request = "384Gi"
+memory_limit = "768Gi"
+```
+
+解释口径：
+
+- `mechanismized_v3_dimensionless_328` 在特征值层做 strict ratio-style 无量纲化：价格转 bps/tick，
+  volume/depth/count/turnover 使用机制 reference 或 prior-date 60d 历史 activity 分母。
+- v3 不做 `date × decision_target_timestamp` 的截面 robust-zscore；代码中该配置归一为
+  `mechanismized_v3_none`，即机制化后不再追加横截面 zscore/rank。
+- NN 入口仍保留 train-window global zscore，这是优化尺度标准化，不等价于横截面 zscore；它不会按每个
+  决策时点抹掉市场共同活跃度或截面幅度。
+
+2026-07-15 排查发现首次重提 OOM 并非 154 个 PVC 读取列或 328 个最终特征变多，而是
+`add_historical_daily_activity_reference_features()` 在 load 阶段为两列历史 activity denominator 做了
+整张 feature frame 深拷贝和行级 merge。修复后改为浅拷贝外壳、日频 `symbol × date` 小表 rolling、
+整数 key 映射回行级样本。小样本 PVC 审计（2022-07，约 97.5 万采样后行）显示：
+
+```text
+before fix: after_activity_refs RSS约 8.4-8.8 GiB
+after fix:  before_activity_refs 5.83 GiB
+            after_activity_refs  5.83 GiB
+```
+
+重提配置：
+
+```text
+job:   os-nn-2225-gated-v2-mech328v3-mse
+image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260715-nn-mech328-v3-activity-memfix-v3
+digest: sha256:4321581e4a2dbb8f96dcc97ea257ddf20762c564b6be7009cf56b4c8b127713a
+status at submit check: Running 0/8; 5 pods Running, 3 Pending due Insufficient memory/GPU
+```
+
+截至提交后早期健康检查，运行中的 shard 已进入 PVC 读取流程且未出现启动即 traceback/OOM；是否闭环仍以
+PVC 输出 `_SUCCESS`、`metrics_by_year.csv` 和 `predictions.parquet` 为准。
+
+### Auction-fresh causal rebuild（2026-07-15，在途）
+
+这条线不修改旧 cache 或旧实验。base cache 使用 `stock.tick` 构造分钟样本，并从
+`stock.daily_bar_jy` 按 `TradingDay < sample_date` 取得严格最近上一交易日 reference。原表市值、股本
+字段分别乘 `10000` 转成元、股，写入：
+
+```text
+total_market_cap
+float_market_cap
+total_shares
+float_shares
+free_float_shares
+market_cap_reference_date
+market_cap_reference_lag_sessions
+```
+
+缓存与镜像：
+
+```text
+base:
+/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_base_labeled_v4_auction_fresh_mcap_lag1/
+
+mixed w030:
+/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/
+
+image:
+registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260715-auction-fresh-mcap-lag1-v1
+digest: sha256:1ccde06592cf99313112cfc5b0f667a91d448a3818030b072a278cf139d42a33
+```
+
+任务依赖和提交状态：
+
+| stage | run/job family | resource | status on 2026-07-15 | dependency |
+| --- | --- | --- | --- | --- |
+| base | `build_delay2_{2019..2025}_auction_fresh_cache_v1` / `os-cache-auction-fresh-{year}` | CPU，单 Job request `8 CPU / 256Gi` | 7 个 Job `running`、零重启 | ClickHouse `stock.tick` + `stock.daily_bar_jy` |
+| mixed target | `build_delay2_{2019..2025}_auction_fresh_mixed_w030_target_v1` / `os-target-auction-fresh-{year}` | CPU，单 Job request `8 CPU / 256Gi` | 7 个 Job 已提交；提交检查时 3 个 Pod Running 等待文件、4 个 Pod Pending 因 CPU/memory | 对应年度 base 完成 + 既有 next-close label |
+| model | `nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1` / `os-nn-auction-fresh-pruned-v1` | GPU sharded training，8 completions / parallelism 2，单 Pod request `16 CPU / 512Gi / 1 GPU` | Job 已提交；提交检查时前 2 个 shard Pod Pending 因 GPU/memory | 2019-2025 七个 mixed target 全部完成 |
+
+首个样本交易日的集群日志分别引用 `2018-12-28`、`2019-12-31`、`2020-12-31`、
+`2021-12-31`、`2022-12-30`、`2023-12-29`、`2024-12-31`，均严格早于 2019-2025 各年首个
+样本日。2019 少 2 个、2021 少 1 个 reference symbol；缺失保持 null，不退回当日或错误前填。
+
+模型配置的 prune 口径保留 `mid_price + spread_bps` 两自由度价格基底，删除模型输入中的
+`ask_price_1`、`bid_price_1`、`spread_abs`；原始竞价 min/max 仅用于生成 range/position 派生量后删除；
+queue response 使用和名称一致的 1 分钟 horizon。数据层同时要求 entry/outcome tick 最大间隔 5 秒，且
+entry 必须晚于同一 decision group 的完整截面 ready timestamp。
+
+五个市值/股本业务字段会保留在 cache 中，既可供其他任务直接使用，也会被当前 mechanismized v3 作为
+support reference，把名义金额、盘口量和成交量归一化到公司规模；它们不作为五个 raw feature 直接进入
+当前模型矩阵。两个 reference metadata 字段只用于审计并显式列为非特征列。
 
 ### Overlay incumbent：mech328 v2
 

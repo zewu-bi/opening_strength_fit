@@ -229,6 +229,7 @@ class FeatureValueTransformTest(unittest.TestCase):
                 "mid_price": [10.00, 10.00],
                 "total_shares": [10_000_000.0, 20_000_000.0],
                 "market_cap": [100_000_000.0, 200_000_000.0],
+                "hist_avg_daily_turnover_60d": [100_000_000.0, 200_000_000.0],
                 "volume_diff_1t": [1_000.0, 2_000.0],
                 "turnover_diff_1t": [1_000_000.0, 4_000_000.0],
                 "ask_depth_10": [10_000.0, 20_000.0],
@@ -290,6 +291,7 @@ class FeatureValueTransformTest(unittest.TestCase):
                 "ask_price_1": [10.0, 10.0],
                 "mid_price": [10.0, 10.0],
                 "market_cap": [100_000_000.0, 200_000_000.0],
+                "hist_avg_daily_turnover_60d": [100_000_000.0, 200_000_000.0],
                 "turnover_diff_1t": [1_000_000.0, 4_000_000.0],
                 "target_label": [0.1, 0.2],
                 "valid_label": [True, True],
@@ -309,6 +311,38 @@ class FeatureValueTransformTest(unittest.TestCase):
         self.assertAlmostEqual(out["turnover_diff_1t"].iloc[0], 0.01, places=8)
         self.assertAlmostEqual(out["turnover_diff_1t"].iloc[1], 0.02, places=8)
         self.assertEqual(frame["turnover_diff_1t"].tolist(), [1_000_000.0, 4_000_000.0])
+
+    def test_torch_mechanismized_v3_normalized_none_mode_is_idempotent(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "date": ["2022-01-04", "2022-01-04"],
+                "decision_target_timestamp": [
+                    pd.Timestamp("2022-01-04 09:31:00"),
+                    pd.Timestamp("2022-01-04 09:31:00"),
+                ],
+                "symbol": ["000001.SZ", "000002.SZ"],
+                "ask_price_1": [10.0, 10.0],
+                "mid_price": [10.0, 10.0],
+                "market_cap": [100_000_000.0, 200_000_000.0],
+                "hist_avg_daily_turnover_60d": [100_000_000.0, 200_000_000.0],
+                "turnover_diff_1t": [1_000_000.0, 4_000_000.0],
+                "target_label": [0.1, 0.2],
+                "valid_label": [True, True],
+            }
+        )
+
+        out = _torch_feature_value_frame(
+            frame,
+            ["turnover_diff_1t"],
+            feature_value_transform="mechanismized_v3_none",
+            group_cols=("date", "decision_target_timestamp"),
+            rank_method="average",
+            extra_columns=("target_label", "valid_label", "symbol"),
+        )
+
+        self.assertIn("turnover_diff_1t", out.columns)
+        self.assertAlmostEqual(out["turnover_diff_1t"].iloc[0], 0.01, places=8)
+        self.assertAlmostEqual(out["turnover_diff_1t"].iloc[1], 0.02, places=8)
 
     def test_mechanismized_v3_uses_historical_activity_fallbacks(self) -> None:
         frame = pd.DataFrame(
@@ -335,10 +369,10 @@ class FeatureValueTransformTest(unittest.TestCase):
             group_cols=("date", "decision_target_timestamp"),
         )
 
-        self.assertAlmostEqual(out["volume_diff_1t"].iloc[0], 0.001, places=8)
-        self.assertAlmostEqual(out["volume_diff_1t"].iloc[1], 0.001, places=8)
         self.assertAlmostEqual(out["turnover_diff_1t"].iloc[0], 0.001, places=8)
         self.assertAlmostEqual(out["turnover_diff_1t"].iloc[1], 0.002, places=8)
+        self.assertAlmostEqual(out["volume_diff_1t"].iloc[0], 0.001, places=8)
+        self.assertAlmostEqual(out["volume_diff_1t"].iloc[1], 0.001, places=8)
         self.assertAlmostEqual(out["ask_depth_10"].iloc[0], 0.010, places=8)
         self.assertAlmostEqual(out["ask_depth_10"].iloc[1], 0.010, places=8)
 
@@ -354,6 +388,7 @@ class FeatureValueTransformTest(unittest.TestCase):
                 "ask_price_1": [10.0, 10.0],
                 "mid_price": [10.0, 10.0],
                 "market_cap": [100_000_000.0, 200_000_000.0],
+                "hist_avg_daily_turnover_60d": [100_000_000.0, 200_000_000.0],
                 "turnover_diff_1t": [1_000_000.0, 4_000_000.0],
                 "target_label": [0.1, 0.2],
                 "valid_label": [True, True],

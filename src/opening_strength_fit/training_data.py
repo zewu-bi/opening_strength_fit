@@ -27,6 +27,11 @@ from opening_strength_fit.cache_manifest import (
     publish_cache_manifest,
     validate_cache_manifest,
 )
+from opening_strength_fit.clickhouse_daily_reference import (
+    DEFAULT_DAILY_MARKET_REFERENCE_TABLE,
+    attach_daily_market_reference,
+    query_lagged_daily_market_reference,
+)
 from opening_strength_fit.clickhouse_ticks import (
     DEFAULT_CLICKHOUSE_TICK_HOST,
     DEFAULT_CLICKHOUSE_TICK_PORT,
@@ -39,6 +44,7 @@ from opening_strength_fit.clickhouse_ticks import (
 )
 from opening_strength_fit.config import (
     config_bool,
+    config_float,
     config_float_mapping,
     config_int,
     config_list,
@@ -723,6 +729,36 @@ def _build_clickhouse_labeled_frame(
         if use_universe
         else None
     )
+    daily_reference_enabled = config_bool(
+        config,
+        "daily_market_reference",
+        "enabled",
+        False,
+    )
+    daily_reference_table = config_str(
+        config,
+        "daily_market_reference",
+        "table",
+        DEFAULT_DAILY_MARKET_REFERENCE_TABLE,
+    )
+    daily_reference_lag_sessions = config_int(
+        config,
+        "daily_market_reference",
+        "lag_sessions",
+        1,
+    )
+    market_cap_unit_multiplier = config_float(
+        config,
+        "daily_market_reference",
+        "market_cap_unit_multiplier",
+        10_000.0,
+    )
+    share_unit_multiplier = config_float(
+        config,
+        "daily_market_reference",
+        "share_unit_multiplier",
+        10_000.0,
+    )
     print_mapping(
         "clickhouse_source",
         {
@@ -736,6 +772,13 @@ def _build_clickhouse_labeled_frame(
             "end_offset_us": end_offset_us,
             "symbol_regex": symbol_regex or "",
             "symbols": len(symbols) if symbols else 0,
+            "daily_market_reference": daily_reference_enabled,
+            "daily_market_reference_table": (
+                daily_reference_table if daily_reference_enabled else ""
+            ),
+            "daily_market_reference_lag_sessions": (
+                daily_reference_lag_sessions if daily_reference_enabled else 0
+            ),
         },
     )
 
@@ -760,6 +803,37 @@ def _build_clickhouse_labeled_frame(
             print(f"skip empty ClickHouse day: {trading_day}")
             continue
         ticks = normalize_clickhouse_ticks(ticks)
+        if daily_reference_enabled:
+            reference = query_lagged_daily_market_reference(
+                client,
+                trading_day=trading_day,
+                symbols=ticks["symbol"].dropna().astype(str).unique().tolist(),
+                table=daily_reference_table,
+                lag_sessions=daily_reference_lag_sessions,
+                market_cap_unit_multiplier=market_cap_unit_multiplier,
+                share_unit_multiplier=share_unit_multiplier,
+            )
+            reference_dates = (
+                pd.to_datetime(
+                    reference["market_cap_reference_date"], errors="coerce"
+                )
+                .dropna()
+                .dt.strftime("%Y-%m-%d")
+                .unique()
+                .tolist()
+            )
+            print_mapping(
+                f"daily_market_reference[{trading_day}]",
+                {
+                    "reference_date": reference_dates[0] if reference_dates else "",
+                    "symbols_requested": int(ticks["symbol"].nunique()),
+                    "symbols_returned": int(reference["symbol"].nunique()),
+                    "symbols_with_total_market_cap": int(
+                        reference["total_market_cap"].notna().sum()
+                    ),
+                },
+            )
+            ticks = attach_daily_market_reference(ticks, reference)
         labeled = build_labeled_frame_from_config(
             ticks,
             config,

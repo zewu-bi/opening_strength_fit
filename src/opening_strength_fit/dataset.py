@@ -7,7 +7,11 @@ import pandas as pd
 from opening_strength_fit.features import build_feature_frame
 from opening_strength_fit.io import read_frame
 from opening_strength_fit.labels import build_trade_labels
-from opening_strength_fit.sampling import DEFAULT_DECISION_TIMES, sample_labeled_frame
+from opening_strength_fit.sampling import (
+    DEFAULT_DECISION_TIMES,
+    require_entry_after_cross_section_ready,
+    sample_labeled_frame,
+)
 from opening_strength_fit.schema import (
     OPEN_SAMPLE_END,
     OPEN_SAMPLE_START,
@@ -59,6 +63,8 @@ def build_labeled_feature_frame(
     sample_start_time: str = OPEN_SAMPLE_START,
     sample_end_time: str = OPEN_SAMPLE_END,
     include_preopen: bool = True,
+    preopen_price_mode: str = "legacy_last_price",
+    preopen_match_time: str = "09:25:00",
     max_future_gap_seconds: int | None = None,
     tradable_statuses: Sequence[str] | None = None,
     universe_regex: str | None = None,
@@ -66,6 +72,7 @@ def build_labeled_feature_frame(
     sample_mode: str = "all_ticks",
     decision_times: list[str] | tuple[str, ...] = DEFAULT_DECISION_TIMES,
     decision_max_lag_seconds: int | None = 5,
+    require_cross_section_ready_entry: bool = False,
 ) -> pd.DataFrame:
     if universe_regex or universe_symbols:
         ticks = filter_symbol_universe(
@@ -80,6 +87,8 @@ def build_labeled_feature_frame(
         volume_col=volume_col,
         turnover_col=turnover_col,
         volume_unit_multiplier=volume_unit_multiplier,
+        preopen_price_mode=preopen_price_mode,
+        preopen_match_time=preopen_match_time,
     )
     label_sample_end_time = (
         _add_clock_seconds(sample_end_time, decision_max_lag_seconds)
@@ -102,12 +111,15 @@ def build_labeled_feature_frame(
         max_future_gap_seconds=max_future_gap_seconds,
         tradable_statuses=tradable_statuses,
     )
-    return sample_labeled_frame(
+    sampled = sample_labeled_frame(
         labeled,
         mode=sample_mode,
         decision_times=decision_times,
         max_lag_seconds=decision_max_lag_seconds,
     )
+    if require_cross_section_ready_entry:
+        sampled = require_entry_after_cross_section_ready(sampled)
+    return sampled
 
 
 def build_opening_research_frame(

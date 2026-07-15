@@ -1,13 +1,13 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: os-nn-2225-gated-v2-mech328v3-mse
+  name: os-nn-auction-fresh-pruned-v1
   namespace: bizewu
 spec:
   backoffLimit: 0
   completionMode: Indexed
   completions: 8
-  parallelism: 8
+  parallelism: 2
   ttlSecondsAfterFinished: 86400
   template:
     spec:
@@ -35,6 +35,7 @@ spec:
                     - node17
                     - node19
                     - node20
+                    - node22
                     - node24
                     - node25
                     - node26
@@ -47,7 +48,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: opening-strength-fit
-          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260715-nn-mech328-v3-activity-memfix-v3
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260715-auction-fresh-mcap-lag1-v1
           imagePullPolicy: Always
           envFrom:
             - secretRef:
@@ -65,10 +66,10 @@ spec:
               set -euo pipefail
               mkdir -p /etc/OpenCL/vendors
               echo libnvidia-opencl.so.1 > /etc/OpenCL/vendors/nvidia.icd
-              WAIT_PATH_TIMEOUT_SECONDS=43200
+              WAIT_PATH_TIMEOUT_SECONDS=172800
               WAIT_PATH_INTERVAL_SECONDS=120
               WAIT_PATH_STARTED=${SECONDS}
-              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2019_delay2_mixed_w030_labeled_v1.parquet" "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2020_delay2_mixed_w030_labeled_v1.parquet" "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2021_delay2_mixed_w030_labeled_v1.parquet" "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2022_delay2_mixed_w030_labeled_v1.parquet" "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2023_delay2_mixed_w030_labeled_v1.parquet" "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2024_delay2_mixed_w030_labeled_v1.parquet" "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2025_delay2_mixed_w030_labeled_v1.parquet")
+              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2019_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2020_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2021_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2022_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2023_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2024_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet")
               for WAIT_PATH in "${WAIT_PATHS[@]}"; do
                 until [ -f "${WAIT_PATH}" ]; do
                   if [ $((SECONDS - WAIT_PATH_STARTED)) -ge "${WAIT_PATH_TIMEOUT_SECONDS}" ]; then
@@ -80,7 +81,7 @@ spec:
                 done
                 echo "dependency file is ready: ${WAIT_PATH}"
               done
-              ROOT=/mnt/output/opening_strength_fit/nn/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_histavg_activity_gelu_mse_v1
+              ROOT=/mnt/output/opening_strength_fit/nn/nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1
               mkdir -p "${ROOT}"
               TEST_STARTS=(2022-01 2022-07 2023-01 2023-07 2024-01 2024-07 2025-01 2025-07)
               TEST_ENDS=(2022-06 2022-12 2023-06 2023-12 2024-06 2024-12 2025-06 2025-12)
@@ -103,11 +104,11 @@ spec:
               fi
 
               echo
-              echo "running nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_histavg_activity_gelu_mse_v1 shard test=${TEST_START}..${TEST_END} index=${INDEX}"
+              echo "running nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1 shard test=${TEST_START}..${TEST_END} index=${INDEX}"
               echo "output_dir=${OUT}"
 
               osf-train \
-                --config experiments/runs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_histavg_activity_gelu_mse_v1.toml \
+                --config experiments/runs/nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1.toml \
                 --rolling-monthly \
                 --train-months 36 \
                 --test-months 6 \
@@ -121,9 +122,9 @@ spec:
           resources:
             requests:
               cpu: "16"
-              memory: 384Gi
+              memory: 512Gi
               nvidia.com/gpu: "1"
             limits:
               cpu: "32"
-              memory: 768Gi
+              memory: 896Gi
               nvidia.com/gpu: "1"

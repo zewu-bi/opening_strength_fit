@@ -216,7 +216,7 @@ def _feature_group_name_v2(feature: str) -> str:
         return "historical_surprise"
     if name.startswith("path_shape_"):
         return "path_shape_confirmation"
-    if name.startswith("preopen_") or name == "exch_time_offset_us":
+    if name.startswith(("preopen_", "auction_")) or name == "exch_time_offset_us":
         return "preopen_auction"
     if name in {
         "ask1_to_limit_up_bps",

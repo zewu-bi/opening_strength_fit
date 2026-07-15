@@ -65,6 +65,21 @@ class FeatureFilterTest(unittest.TestCase):
         self.assertEqual(filters["drop_prefixes"], ("preopen_",))
         self.assertEqual(filters["drop_patterns"], (r"_debug$",))
 
+    def test_model_only_feature_exclusions_extend_selector_drops(self) -> None:
+        filters = feature_filters_from_config(
+            {
+                "features": {
+                    "drop_feature_columns": ["volume"],
+                    "exclude_model_feature_columns": ["ask_price_1", "bid_price_1"],
+                }
+            }
+        )
+
+        self.assertEqual(
+            filters["drop_columns"],
+            ("volume", "ask_price_1", "bid_price_1"),
+        )
+
     def test_explicit_missing_feature_fails(self) -> None:
         frame = pd.DataFrame({"present": [1.0]})
 

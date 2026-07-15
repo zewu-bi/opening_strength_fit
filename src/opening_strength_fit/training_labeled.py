@@ -549,6 +549,18 @@ def build_labeled_frame_from_config(
         sample_start_time=config_str(config, "sample", "start_time", "09:30:00"),
         sample_end_time=config_str(config, "sample", "end_time", "09:40:00"),
         include_preopen=config_bool(config, "features", "include_preopen", True),
+        preopen_price_mode=config_str(
+            config,
+            "features",
+            "preopen_price_mode",
+            "legacy_last_price",
+        ),
+        preopen_match_time=config_str(
+            config,
+            "features",
+            "preopen_match_time",
+            "09:25:00",
+        ),
         max_future_gap_seconds=config_value(
             config,
             "labels",
@@ -576,6 +588,12 @@ def build_labeled_frame_from_config(
         ),
         decision_max_lag_seconds=(
             None if max_decision_lag in (None, "") else int(max_decision_lag)
+        ),
+        require_cross_section_ready_entry=config_bool(
+            config,
+            "labels",
+            "require_entry_after_cross_section_ready",
+            False,
         ),
     )
     labeled = _apply_feature_transforms_from_config(labeled, config)

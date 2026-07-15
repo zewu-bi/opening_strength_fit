@@ -128,3 +128,35 @@ def sample_labeled_frame(
         )
     valid = "all_ticks, decision_points"
     raise SystemExit(f"unknown sample mode {mode!r}; expected one of: {valid}")
+
+
+def require_entry_after_cross_section_ready(
+    frame: pd.DataFrame,
+    *,
+    group_cols: tuple[str, ...] = ("date", "decision_target_timestamp"),
+) -> pd.DataFrame:
+    """Invalidate labels whose entry precedes the complete sampled cross-section."""
+
+    missing = [
+        column
+        for column in (*group_cols, "timestamp", "entry_timestamp")
+        if column not in frame.columns
+    ]
+    if missing:
+        raise ValueError(
+            "cross-section entry readiness requires columns: " + ", ".join(missing)
+        )
+
+    out = frame.copy()
+    feature_timestamp = pd.to_datetime(out["timestamp"], errors="coerce")
+    entry_timestamp = pd.to_datetime(out["entry_timestamp"], errors="coerce")
+    group_keys = [out[column] for column in group_cols]
+    ready_timestamp = feature_timestamp.groupby(group_keys, sort=False).transform("max")
+    ready = entry_timestamp.notna() & ready_timestamp.notna() & entry_timestamp.ge(
+        ready_timestamp
+    )
+    out["cross_section_ready_timestamp"] = ready_timestamp
+    out["entry_after_cross_section_ready"] = ready
+    if "valid_label" in out.columns:
+        out["valid_label"] = out["valid_label"].fillna(False).astype(bool) & ready
+    return out
