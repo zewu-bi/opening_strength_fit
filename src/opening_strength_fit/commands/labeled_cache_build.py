@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from opening_strength_fit.cache_manifest import (
-    build_cache_manifest,
+    cache_manifest_path,
+    publish_cache_manifest,
+    validate_cache_manifest,
     write_cache_manifest,
 )
 from opening_strength_fit.config import config_str, config_value, load_toml, run_id
+from opening_strength_fit.io import read_frame, write_json
 from opening_strength_fit.reports import dataset_summary, print_mapping
 from opening_strength_fit.training_args import build_training_parser
 from opening_strength_fit.training_data import (
@@ -49,16 +51,17 @@ def main() -> None:
         **dataset_summary(labeled),
     }
     print_mapping("labeled_cache_summary", summary)
-    manifest = build_cache_manifest(
-        labeled,
-        cache_path=cache_path,
-        config=config,
-        run_name=run_name,
-        config_path=args.config or "",
-    )
-    manifest_path = cache_path.with_name(f"{cache_path.name}.manifest.json")
+    manifest_path = cache_manifest_path(cache_path)
     output_manifest_path = output_dir / "labeled_cache_manifest.json"
-    write_cache_manifest(manifest, manifest_path)
+    manifest = validate_cache_manifest(cache_path, config, required=False)
+    if manifest is None:
+        manifest = publish_cache_manifest(
+            read_frame(cache_path),
+            cache_path=cache_path,
+            config=config,
+            run_name=run_name,
+            config_path=args.config or "",
+        )
     write_cache_manifest(manifest, output_manifest_path)
 
     trace = {
@@ -72,10 +75,7 @@ def main() -> None:
         "features": config.get("features", {}),
         "summary": summary,
     }
-    (output_dir / "labeled_cache_trace.json").write_text(
-        json.dumps(trace, indent=2, ensure_ascii=False, allow_nan=False) + "\n",
-        encoding="utf-8",
-    )
+    write_json(output_dir / "labeled_cache_trace.json", trace)
     print(f"\nwrote cache: {cache_path}")
     print(f"manifest: {manifest_path}")
     print(f"trace: {output_dir / 'labeled_cache_trace.json'}")

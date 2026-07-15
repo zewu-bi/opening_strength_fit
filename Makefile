@@ -1,9 +1,12 @@
-.PHONY: install-dev test test-cov lint format contracts ci
+.PHONY: install-dev install-cluster test test-cov lint format contracts ci
 
 PYTHON ?= .venv/bin/python
 
 install-dev:
-	$(PYTHON) -m pip install -e ".[dev]"
+	$(PYTHON) -m pip install -c requirements.lock -e ".[dev]"
+
+install-cluster:
+	$(PYTHON) -m pip install -c requirements.lock -e ".[dev,cluster]"
 
 test:
 	$(PYTHON) -m pytest -q

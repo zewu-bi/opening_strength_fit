@@ -1,4 +1,5 @@
 import argparse
+import os
 import textwrap
 from datetime import date
 from pathlib import Path
@@ -23,11 +24,24 @@ from opening_strength_fit.config import config_value as get
 from opening_strength_fit.config import load_toml, run_id, slug
 from opening_strength_fit.k8s import KUBERNETES_NAME_LIMIT
 
-DEFAULT_IMAGE = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:latest"
+DEFAULT_IMAGE_ENV = "OPENING_STRENGTH_IMAGE"
 
 
 def load_config(path: Path) -> dict:
     return load_toml(path)
+
+
+def resolve_render_image(image: str, *, allow_mutable: bool = False) -> str:
+    resolved = (image or os.environ.get(DEFAULT_IMAGE_ENV, "")).strip()
+    if not resolved:
+        raise SystemExit(
+            f"missing container image: pass --image or set {DEFAULT_IMAGE_ENV} "
+            "to an immutable tag or digest"
+        )
+    image_ref = resolved.rsplit("/", 1)[-1]
+    if image_ref.endswith(":latest") and not allow_mutable:
+        raise SystemExit("refusing mutable image tag ':latest'; pass an immutable tag or digest")
+    return resolved
 
 
 def training_command(config: dict) -> str:
@@ -601,8 +615,13 @@ def main() -> None:
     parser.add_argument("--config", required=True, help="TOML run config.")
     parser.add_argument(
         "--image",
-        default=DEFAULT_IMAGE,
-        help=f"Container image tag to run. Default: {DEFAULT_IMAGE}",
+        default="",
+        help=f"Container image tag to run. Defaults to ${DEFAULT_IMAGE_ENV}.",
+    )
+    parser.add_argument(
+        "--allow-mutable-image",
+        action="store_true",
+        help="Allow rendering a mutable image tag such as :latest.",
     )
     parser.add_argument(
         "--output-dir",
@@ -623,6 +642,7 @@ def main() -> None:
 
     config_path = Path(args.config)
     config = load_config(config_path)
+    image = resolve_render_image(args.image, allow_mutable=args.allow_mutable_image)
     run_id_value = run_id(config, config_path)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -630,7 +650,7 @@ def main() -> None:
     if args.analysis:
         analysis_path = output_dir / f"{run_id_value}_pool_internal_analysis_job.yaml"
         analysis_path.write_text(
-            render_pool_internal_analysis_job(config_path, config, args.image).rstrip() + "\n",
+            render_pool_internal_analysis_job(config_path, config, image).rstrip() + "\n",
             encoding="utf-8",
         )
         print("rendered_k8s_jobs:")
@@ -641,12 +661,12 @@ def main() -> None:
     training_path = output_dir / f"{run_id_value}{suffix}_job.yaml"
     if args.sharded:
         training_path.write_text(
-            render_sharded_training_job(config_path, config, args.image).rstrip() + "\n",
+            render_sharded_training_job(config_path, config, image).rstrip() + "\n",
             encoding="utf-8",
         )
     else:
         training_path.write_text(
-            render_training_job(config_path, config, args.image).rstrip() + "\n",
+            render_training_job(config_path, config, image).rstrip() + "\n",
             encoding="utf-8",
         )
 

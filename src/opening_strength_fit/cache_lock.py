@@ -89,25 +89,29 @@ def acquire_cache_lock(
     *,
     cache_path: Path | None = None,
     cache_read: bool = True,
+    ready_paths: tuple[Path, ...] = (),
     poll_seconds: float = 15.0,
 ) -> str:
+    def cache_is_ready() -> bool:
+        return bool(
+            cache_path
+            and cache_read
+            and cache_path.exists()
+            and all(path.exists() for path in ready_paths)
+        )
+
     start = time.monotonic()
     timeout_seconds = float(timeout_seconds)
     heartbeat_stale_after = max(timeout_seconds, float(poll_seconds) * 3.0, 60.0)
     while True:
-        if cache_path and cache_read and cache_path.exists():
+        if cache_is_ready():
             return "cache_ready"
         try:
             lock_path.mkdir(parents=True)
             write_cache_lock_heartbeat(lock_path)
             return "acquired"
         except FileExistsError:
-            if (
-                cache_lock_done_path(lock_path).exists()
-                and cache_path
-                and cache_read
-                and cache_path.exists()
-            ):
+            if cache_lock_done_path(lock_path).exists() and cache_is_ready():
                 return "cache_ready"
             if timeout_seconds > 0.0 and (time.monotonic() - start) >= timeout_seconds:
                 if cache_lock_has_fresh_heartbeat(

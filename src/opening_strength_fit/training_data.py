@@ -22,6 +22,11 @@ from opening_strength_fit.cache_lock import (
 from opening_strength_fit.cache_lock import (
     release_cache_lock as _release_cache_lock,
 )
+from opening_strength_fit.cache_manifest import (
+    cache_manifest_path,
+    publish_cache_manifest,
+    validate_cache_manifest,
+)
 from opening_strength_fit.clickhouse_ticks import (
     DEFAULT_CLICKHOUSE_TICK_HOST,
     DEFAULT_CLICKHOUSE_TICK_PORT,
@@ -40,11 +45,12 @@ from opening_strength_fit.config import (
     config_optional_int,
     config_str,
     config_value,
+    run_id,
 )
 from opening_strength_fit.dataset import load_ticks
 from opening_strength_fit.feature_config import feature_filters_from_config
 from opening_strength_fit.features import mechanismized_feature_value_reference_columns
-from opening_strength_fit.io import frame_columns, read_frame, write_frame
+from opening_strength_fit.io import frame_columns, read_frame, write_frame_atomic
 from opening_strength_fit.model import PREDICTION_CONTEXT_COLUMNS
 from opening_strength_fit.reports import dataset_summary, print_mapping
 from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns
@@ -518,16 +524,12 @@ def _read_labeled_pvc_file(
     *,
     columns: list[str] | None,
     filters: list[tuple[str, str, object]] | None,
-    config: dict,
 ) -> pd.DataFrame:
     file_columns = columns
     if columns is not None:
         available = frame_columns(path)
         file_columns = [column for column in columns if column in available]
-    return filter_labeled_frame(
-        read_frame(path, columns=file_columns, filters=filters),
-        config,
-    )
+    return read_frame(path, columns=file_columns, filters=filters)
 
 
 def _downcast_labeled_pvc_frame(frame: pd.DataFrame, config: dict) -> pd.DataFrame:
@@ -551,25 +553,23 @@ def _read_labeled_pvc_frame(
     files = _labeled_pvc_files(path)
     if len(files) == 1:
         return _downcast_labeled_pvc_frame(
-            _read_labeled_pvc_file(
-                files[0],
-                columns=columns,
-                filters=filters,
-                config=config,
+            filter_labeled_frame(
+                _read_labeled_pvc_file(
+                    files[0],
+                    columns=columns,
+                    filters=filters,
+                ),
+                config,
             ),
             config,
         )
 
     parts = []
     for file in files:
-        part = _downcast_labeled_pvc_frame(
-            _read_labeled_pvc_file(
-                file,
-                columns=columns,
-                filters=filters,
-                config=config,
-            ),
-            config=config,
+        part = _read_labeled_pvc_file(
+            file,
+            columns=columns,
+            filters=filters,
         )
         if part.empty:
             continue
@@ -584,20 +584,57 @@ def _read_labeled_pvc_frame(
         )
     if not parts:
         return pd.DataFrame()
-    return pd.concat(parts, ignore_index=True)
+    return _downcast_labeled_pvc_frame(
+        filter_labeled_frame(pd.concat(parts, ignore_index=True), config),
+        config,
+    )
 
 
-def _load_labeled_cache(path: Path) -> pd.DataFrame:
+def _load_labeled_cache(path: Path, config: dict) -> pd.DataFrame:
+    validate_cache_manifest(
+        path,
+        config,
+        required=config_bool(config, "cache", "require_manifest", False),
+    )
     labeled = read_frame(path)
     return ensure_timestamp_columns(standardize_columns(labeled))
 
 
 def _write_labeled_cache(labeled: pd.DataFrame, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    suffix = "".join(path.suffixes) or ".parquet"
-    tmp_path = path.with_name(f".{path.name}.{os.getpid()}.tmp{suffix}")
-    write_frame(labeled, tmp_path)
-    os.replace(tmp_path, path)
+    write_frame_atomic(labeled, path)
+
+
+def _cache_ready_paths(cache_path: Path, config: dict, *, cache_write: bool) -> tuple[Path, ...]:
+    if cache_write or config_bool(config, "cache", "require_manifest", False):
+        return (cache_manifest_path(cache_path),)
+    return ()
+
+
+def _cache_artifacts_exist(cache_path: Path, ready_paths: tuple[Path, ...]) -> bool:
+    return cache_path.exists() and all(path.exists() for path in ready_paths)
+
+
+def _manifest_run_name(args: argparse.Namespace, config: dict, cache_path: Path) -> str:
+    config_path = getattr(args, "config", None)
+    if config_path:
+        return run_id(config, config_path)
+    return str(config.get("run", {}).get("id", cache_path.stem))
+
+
+def _publish_labeled_cache(
+    labeled: pd.DataFrame,
+    path: Path,
+    args: argparse.Namespace,
+    config: dict,
+) -> None:
+    _write_labeled_cache(labeled, path)
+    publish_cache_manifest(
+        labeled,
+        cache_path=path,
+        config=config,
+        run_name=_manifest_run_name(args, config, path),
+        config_path=getattr(args, "config", "") or "",
+    )
 
 
 def _build_clickhouse_labeled_frame(
@@ -751,9 +788,15 @@ def load_clickhouse_labeled_frame(
     cache_read = config_bool(config, "cache", "read", True)
     cache_write = config_bool(config, "cache", "write", True)
 
-    if cache_path and cache_read and cache_path.exists():
+    ready_paths = (
+        _cache_ready_paths(cache_path, config, cache_write=cache_write) if cache_path else ()
+    )
+    if cache_path and cache_read and _cache_artifacts_exist(cache_path, ready_paths):
         print_mapping("labeled_cache", {"action": "read", "path": str(cache_path)})
-        return apply_candidate_filter_from_config(_load_labeled_cache(cache_path), config)
+        return apply_candidate_filter_from_config(_load_labeled_cache(cache_path, config), config)
+    if cache_path and cache_read and cache_path.exists() and ready_paths and not cache_write:
+        print_mapping("labeled_cache", {"action": "read", "path": str(cache_path)})
+        return apply_candidate_filter_from_config(_load_labeled_cache(cache_path, config), config)
 
     if not cache_path or not cache_write:
         return apply_candidate_filter_from_config(
@@ -768,6 +811,7 @@ def load_clickhouse_labeled_frame(
         timeout_seconds,
         cache_path=cache_path,
         cache_read=cache_read,
+        ready_paths=ready_paths,
     )
     if lock_status == "cache_ready":
         print_mapping(
@@ -775,17 +819,17 @@ def load_clickhouse_labeled_frame(
             {"action": "read_after_wait", "path": str(cache_path)},
         )
         return apply_candidate_filter_from_config(
-            _load_labeled_cache(cache_path),
+            _load_labeled_cache(cache_path, config),
             config,
         )
     if lock_status == "timeout":
-        if cache_read and cache_path.exists():
+        if cache_read and _cache_artifacts_exist(cache_path, ready_paths):
             print_mapping(
                 "labeled_cache",
                 {"action": "read_after_wait", "path": str(cache_path)},
             )
             return apply_candidate_filter_from_config(
-                _load_labeled_cache(cache_path),
+                _load_labeled_cache(cache_path, config),
                 config,
             )
         raise SystemExit(
@@ -794,16 +838,16 @@ def load_clickhouse_labeled_frame(
 
     try:
         with _CacheLockHeartbeat(lock_path):
-            if cache_read and cache_path.exists():
+            if cache_read and _cache_artifacts_exist(cache_path, ready_paths):
                 print_mapping(
                     "labeled_cache",
                     {"action": "read_after_lock", "path": str(cache_path)},
                 )
-                base_labeled = _load_labeled_cache(cache_path)
+                base_labeled = _load_labeled_cache(cache_path, config)
             else:
                 _clear_cache_ready(lock_path)
                 base_labeled = _build_clickhouse_labeled_frame(args, config)
-                _write_labeled_cache(base_labeled, cache_path)
+                _publish_labeled_cache(base_labeled, cache_path, args, config)
                 _mark_cache_ready(cache_path, lock_path)
                 print_mapping(
                     "labeled_cache",
