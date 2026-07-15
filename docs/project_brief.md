@@ -12,8 +12,9 @@
 的可交易超额。模型可以在 full universe 上训练和打分，但策略只评价 pool 内增量，不追求脱离股池的
 独立 universe 选股。
 
-当前 `09:31-09:40` 信号筛选阶段已经收束。下一阶段以现有 selected-order realistic replay 为起点，
-补成真正的组合回测，并把样本从开盘 10 个 decision points 扩展到更长历史和全天分钟序列。
+当前 `09:31-09:40` 信号筛选阶段已经收束。下一阶段先尝试一个原始特征的无量纲化表达，可使用多个参考值
+并借鉴 hist/path 口径；再把样本扩展到全天分钟频决策序列；策略侧以现有 selected-order realistic replay
+为起点，补成完整、因果、可交易的 `pool_L` overlay 组合回测，并以成本后 PnL 验收。
 
 ## 固定研究口径
 
@@ -86,12 +87,12 @@ child orders 出发，加入日内单票权重、状态、价差、盘口深度�
 
 ## 下一步
 
-1. 冻结 `mech328_v2_robust_zscore` 为 incumbent；只把 v3 当作有明确假设的 challenger。
-2. 将 selected-order replay 改为 pool 内完整组合构造：约束失败后 refill，并统一同日资金与成交预算。
-3. 建立分钟级 outcome path：1/3/5/10 分钟收益、顺逆向 excursion、可成交退出价、next-close path
-   和成本后收益；scalar target 从 path 派生，策略直接读取 path。
-4. 显式实现持仓、退出、持仓重叠、资金复用、成本、冲击、涨跌停和停牌规则。
-5. 扩展历史与全天 decision points，再按年份、行情状态、流动性和波动切分 OOS。
+1. 尝试一个原始特征的无量纲化表达：同一 raw feature 可使用多个参考值，借鉴 hist/path 的 reference
+   口径构造 scale-free variants，并保持唯一假设变更。
+2. 将决策面从开盘 `09:31-09:40` 扩展为全天分钟频决策序列；扩展时继续保证每个 decision point
+   只使用当时及以前可见信息。
+3. 构建完整、因果、可交易的 `pool_L` overlay 组合回测：覆盖候选 refill、持仓与退出、全日资金预算、
+   成本、容量和市场冲击，并以成本后 PnL 验收。
 
 ## 非目标
 
