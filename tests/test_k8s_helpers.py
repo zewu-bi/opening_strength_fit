@@ -122,6 +122,35 @@ class K8sHelperTest(unittest.TestCase):
         self.assertIn('--test-start-month "${TEST_START}"', manifest)
         self.assertIn('--test-end-month "${TEST_END}"', manifest)
 
+    def test_v2_sharded_job_uses_run_and_fold_directories(self) -> None:
+        config = {
+            "run": {"id": "new_halfyear_run", "kind": "exploration"},
+            "model": {"name": "lightgbm"},
+            "window": {
+                "mode": "rolling_monthly",
+                "train_months": 36,
+                "test_months": 6,
+                "test_stride_months": 6,
+                "test_start_month": "2022-01",
+                "test_end_month": "2022-12",
+            },
+            "output": {"layout": "v2"},
+            "k8s": {"resources": {"memory_limit": "128Gi"}},
+        }
+
+        manifest = render_sharded_training_job(
+            Path("experiments/runs/new_halfyear_run.toml"),
+            config,
+            "image:tag",
+        )
+
+        self.assertIn(
+            "ROOT=/mnt/output/opening_strength_fit/runs/models/lightgbm/new_halfyear_run",
+            manifest,
+        )
+        self.assertIn('OUT="${ROOT}/fold_${TEST_START}_${TEST_END}"', manifest)
+        self.assertNotIn('OUT="${ROOT}/month_${TEST_START}"', manifest)
+
     def test_osf_train_shards_require_predictions_before_skipping(self) -> None:
         config = {
             "run": {
@@ -364,6 +393,31 @@ class K8sHelperTest(unittest.TestCase):
         self.assertNotIn('has_gpu: "true"', manifest)
         self.assertNotIn('mem_per_gpu_tier: "high"', manifest)
         self.assertIn("- node20", manifest)
+
+    def test_v2_pool_internal_analysis_waits_for_fold_outputs(self) -> None:
+        config = {
+            "run": {"id": "new_nn_run", "kind": "exploration"},
+            "window": {
+                "mode": "rolling_monthly",
+                "test_months": 6,
+                "test_stride_months": 6,
+                "test_start_month": "2022-01",
+                "test_end_month": "2022-12",
+            },
+            "output": {"layout": "v2"},
+            "analysis": {"pool_internal": {"enabled": True}},
+        }
+
+        manifest = render_pool_internal_analysis_job(
+            Path("experiments/runs/new_nn_run.toml"),
+            config,
+            "image:tag",
+        )
+
+        root = "/mnt/output/opening_strength_fit/runs/models/other/new_nn_run"
+        self.assertIn(f"{root}/fold_2022-01_2022-06/metrics_by_year.csv", manifest)
+        self.assertIn(f"{root}/fold_2022-07_2022-12/metrics_by_year.csv", manifest)
+        self.assertIn(f"--predictions \\\n                {root}", manifest)
 
 
 if __name__ == "__main__":

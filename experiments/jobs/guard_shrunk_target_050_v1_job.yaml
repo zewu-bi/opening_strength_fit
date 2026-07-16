@@ -40,7 +40,7 @@ spec:
               fi
               exec osf-train \
                 --config experiments/runs/guard_shrunk_target_050_v1.toml \
-                --output-dir /mnt/output/opening_strength_fit/guard_shrunk_target_050_v1
+                --output-dir /mnt/output/opening_strength_fit/runs/models/lightgbm/guard_shrunk_target_050_v1
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output

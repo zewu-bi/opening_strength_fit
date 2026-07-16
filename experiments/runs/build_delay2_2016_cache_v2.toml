@@ -83,7 +83,7 @@ top_n = 100
 
 [output]
 local_dir = "output/legacy/analysis/build_delay2_2016_cache_v2"
-k8s_dir = "/mnt/output/opening_strength_fit/build_delay2_2016_cache_v2"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/data/labeled-cache/build_delay2_2016_cache_v2"
 
 [k8s]
 namespace = "bizewu"

@@ -30,7 +30,7 @@ spec:
             - --config
             - experiments/runs/conditional_bad_tail_binary_risk_v1.toml
             - --output-dir
-            - /mnt/output/opening_strength_fit/conditional_bad_tail_binary_risk_v1
+            - /mnt/output/opening_strength_fit/runs/analyses/learned-risk-layer/conditional_bad_tail_binary_risk_v1
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output

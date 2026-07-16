@@ -124,7 +124,7 @@ top_n = 100
 
 [output]
 local_dir = "output/artifacts/nn/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_silu_mid_mse_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/nn/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_silu_mid_mse_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/models/nn/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_silu_mid_mse_v1"
 
 [k8s]
 namespace = "bizewu"

@@ -30,7 +30,7 @@ spec:
             - --config
             - experiments/runs/lgbm_delay2_postopen_0931_0940_baseline_v1.toml
             - --output-dir
-            - /mnt/output/opening_strength_fit/lgbm_delay2_postopen_0931_0940_baseline_v1
+            - /mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_postopen_0931_0940_baseline_v1
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output

@@ -147,6 +147,9 @@ command 路径保留薄兼容 facade。
 | `output/legacy/` | no | 历史/debug/可重拉大文件 |
 | `docs/archive/` | yes | 冻结的人工历史叙述，不代表当前状态 |
 
+`pvc_layout.py` 统一管理 PVC run 分类、shard 命名和 legacy/v2 双读候选。renderer、artifact
+sync、experiment audit 与 prediction reader 不得各自重新拼接路径。
+
 ## 工程契约
 
 `tests/test_module_boundaries.py` 和 `osf-check-project-contracts` 应持续保证：

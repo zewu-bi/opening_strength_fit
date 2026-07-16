@@ -95,7 +95,7 @@ random_state = 7
 
 [output]
 local_dir = "output/legacy/analysis/lgbm_delay2_feature_dependence_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/lgbm_delay2_feature_dependence_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/analyses/feature-audit/lgbm_delay2_feature_dependence_v1"
 
 [k8s]
 namespace = "bizewu"

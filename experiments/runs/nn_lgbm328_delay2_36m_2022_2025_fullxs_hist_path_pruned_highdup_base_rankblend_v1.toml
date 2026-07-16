@@ -147,7 +147,7 @@ top_n = 100
 
 [output]
 local_dir = "output/artifacts/nn/nn_lgbm328_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_base_rankblend_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/nn/nn_lgbm328_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_base_rankblend_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/models/ensemble/nn_lgbm328_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_base_rankblend_v1"
 
 [k8s]
 namespace = "bizewu"

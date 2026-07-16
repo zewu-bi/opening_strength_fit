@@ -33,7 +33,7 @@ spec:
             - --config
             - /mnt/config/build_delay2_2024_cache_v1.toml
             - --output-dir
-            - /mnt/output/opening_strength_fit/build_delay2_2024_cache_v1
+            - /mnt/output/opening_strength_fit/runs/data/labeled-cache/build_delay2_2024_cache_v1
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output

@@ -66,7 +66,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-dir",
-        default="/mnt/output/opening_strength_fit/old_nn_multiscale_bucket_diag_v1",
+        default="/mnt/output/opening_strength_fit/runs/legacy/untracked/old_nn_multiscale_bucket_diag_v1",
     )
     parser.add_argument(
         "--months",

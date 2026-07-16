@@ -56,7 +56,7 @@ spec:
                 done
                 echo "dependency file is ready: ${WAIT_PATH}"
               done
-              ROOT=/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1
+              ROOT=/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1
               mkdir -p "${ROOT}"
               TEST_STARTS=(2025-01 2025-07)
               TEST_ENDS=(2025-06 2025-12)

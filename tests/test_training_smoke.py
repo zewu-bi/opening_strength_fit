@@ -91,9 +91,9 @@ enabled = false
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert (output_dir / "predictions_2022-01.parquet").exists()
+    assert not (output_dir / "predictions_2022-01.parquet").exists()
     assert (output_dir / "predictions.parquet").exists()
-    assert (output_dir / "score_buckets_2022-01.csv").exists()
+    assert not (output_dir / "score_buckets_2022-01.csv").exists()
     assert (output_dir / "score_buckets.csv").exists()
     assert (output_dir / "metrics_by_year.csv").exists()
     assert (output_dir / "metrics.json").exists()

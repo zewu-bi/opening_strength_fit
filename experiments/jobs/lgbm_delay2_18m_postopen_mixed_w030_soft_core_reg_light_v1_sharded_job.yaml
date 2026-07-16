@@ -56,7 +56,7 @@ spec:
                 done
                 echo "dependency file is ready: ${WAIT_PATH}"
               done
-              ROOT=/mnt/output/opening_strength_fit/lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1
+              ROOT=/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_18m_postopen_mixed_w030_soft_core_reg_light_v1
               mkdir -p "${ROOT}"
               MONTHS=(2021-08 2021-09 2021-10 2021-11 2021-12 2022-01)
               INDEX="${JOB_COMPLETION_INDEX:-}"

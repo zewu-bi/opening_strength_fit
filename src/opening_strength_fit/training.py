@@ -8,6 +8,7 @@ from pathlib import Path
 import pandas as pd
 
 from opening_strength_fit.config import (
+    config_bool,
     config_float,
     config_str,
     run_id,
@@ -123,6 +124,12 @@ def train_from_args(args: argparse.Namespace) -> None:
     prediction_frames = []
     metric_rows = []
     train_stats_by_window = {}
+    write_split_artifacts = config_bool(
+        config,
+        "output",
+        "write_split_artifacts",
+        len(splits) > 1,
+    )
     for split in splits:
         predictions, metrics_row, train_stats = fit_predict_split(
             labeled=labeled,
@@ -135,6 +142,7 @@ def train_from_args(args: argparse.Namespace) -> None:
             evaluation_settings=evaluation_settings,
             stock_pool_settings=stock_pool_settings,
             stock_pool=stock_pool,
+            write_period_artifacts=write_split_artifacts,
         )
         prediction_frames.append(predictions)
         metric_rows.append(metrics_row)

@@ -60,6 +60,23 @@ completed/queued -> superseded
 
 ## 3. 数据与缓存
 
+### PVC 输出布局
+
+新 run 使用 `experiments/config_templates/pvc_layout_v2.toml`，省略 `output.k8s_dir` 后由
+`run.kind` 和 `model.name` 自动确定目录：
+
+```text
+runs/
+├── models/{lightgbm,nn,gbm,ridge,ensemble}/
+├── data/{labeled-cache,cache-transform,next-close-label-cache}/
+├── analyses/<run-kind>/
+└── legacy/untracked/
+```
+
+v2 rolling shard 使用 `fold_<start>_<end>`，年度 shard 使用 `fold_<year>-01_<year>-12`；显式
+`k8s_dir` 的历史配置仍使用 legacy shard 命名，读取器兼容两代布局。迁移和回滚映射保存在 PVC
+的 `.layout_migrations/`；活动任务目录必须等任务结束后再移动。
+
 ### 数据源检查
 
 ```bash
@@ -277,7 +294,7 @@ hfcli kubectl --cluster research apply \
 标准输入/输出：
 
 ```text
-predictions        /mnt/output/opening_strength_fit/<run_id>/
+predictions        /mnt/output/opening_strength_fit/runs/<category>/<run_id>/
 next-close labels  /mnt/output/opening_strength_fit/cache/<label_cache>/
 stock pools        lml.bzw@ssd/data/pool_{S,M,L}.parquet
 analysis output    <run_output>/analysis/pool_internal_top100/
@@ -343,7 +360,7 @@ Capacity audit 只构造组合和报告 fill/depth/participation，不计算收�
 kind = "capacity_audit"
 
 [capacity_audit]
-predictions = ["/mnt/output/opening_strength_fit/<source_run_id>"]
+predictions = ["/mnt/output/opening_strength_fit/runs/<category>/<source_run_id>"]
 pool = ["L"]
 target_notional = 50000000
 capacity_notional_col = "turnover_diff_30t"
@@ -358,7 +375,7 @@ max_symbol_weight = 0.01
 kind = "capacity_acceptance"
 
 [capacity_acceptance]
-selected_input = ["/mnt/output/opening_strength_fit/<capacity_run>/capacity_audit_selected.csv"]
+selected_input = ["/mnt/output/opening_strength_fit/runs/analyses/capacity-audit/<capacity_run>/capacity_audit_selected.csv"]
 label_input = ["/mnt/output/opening_strength_fit/cache/<next_close_cache>"]
 label_col = "alpha_return_next_close"
 fee_bps = 8

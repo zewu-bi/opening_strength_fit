@@ -80,7 +80,7 @@ top_n = 100
 
 [output]
 local_dir = "output/legacy/analysis/learned_risk_layer_guard_teacher_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/learned_risk_layer_guard_teacher_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/analyses/learned-risk-layer/learned_risk_layer_guard_teacher_v1"
 
 [k8s]
 namespace = "bizewu"

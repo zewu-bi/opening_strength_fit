@@ -548,6 +548,7 @@ def fit_predict_split(
     args: argparse.Namespace,
     config: dict,
     target_col: str,
+    write_period_artifacts: bool = True,
 ) -> tuple[pd.DataFrame, dict[str, object], dict[str, object]]:
     train = labeled.loc[labeled["date"].isin(split.train_dates)].copy()
     test = labeled.loc[labeled["date"].isin(split.test_dates)].copy()
@@ -580,7 +581,8 @@ def fit_predict_split(
         if split.test_start_date[:7] == split.test_end_date[:7]
         else str(pd.Timestamp(split.test_start_date).year)
     )
-    write_frame(predictions, output_dir / f"predictions_{prediction_period}.parquet")
+    if write_period_artifacts:
+        write_frame(predictions, output_dir / f"predictions_{prediction_period}.parquet")
     metrics = evaluate_prediction_frame(
         predictions,
         label_col=target_col,
@@ -638,6 +640,12 @@ def main() -> None:
     prediction_frames = []
     metric_rows = []
     train_stats_by_window = {}
+    write_split_artifacts = config_bool(
+        config,
+        "output",
+        "write_split_artifacts",
+        len(splits) > 1,
+    )
     for split in splits:
         predictions, metrics_row, train_stats = fit_predict_split(
             labeled=labeled,
@@ -647,6 +655,7 @@ def main() -> None:
             args=args,
             config=config,
             target_col=target_col,
+            write_period_artifacts=write_split_artifacts,
         )
         prediction_frames.append(predictions)
         metric_rows.append(metrics_row)

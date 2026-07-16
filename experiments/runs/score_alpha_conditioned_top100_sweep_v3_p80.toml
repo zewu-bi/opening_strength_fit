@@ -19,27 +19,27 @@ include_alpha_rank = true
 include_manual_risk = false
 include_hard_gates = false
 wait_for_inputs_seconds = 86400
-next_close_label_input = "/mnt/output/opening_strength_fit/score_risk_sweep_guard_shrunk_v1/clickhouse_next_close_labels.parquet"
+next_close_label_input = "/mnt/output/opening_strength_fit/runs/analyses/score-risk-sweep/score_risk_sweep_guard_shrunk_v1/clickhouse_next_close_labels.parquet"
 
 [[risk_sweep.inputs]]
 run_id = "lgbm_delay2_postopen_0931_0940_baseline_v1"
-prediction_path = "/mnt/output/opening_strength_fit/lgbm_delay2_postopen_0931_0940_baseline_v1/predictions.parquet"
+prediction_path = "/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_postopen_0931_0940_baseline_v1/predictions.parquet"
 
 [[risk_sweep.risk_inputs]]
 risk_id = "alpha_cond_binary"
-prediction_path = "/mnt/output/opening_strength_fit/alpha_conditioned_reversal_binary_risk_v2/predictions.parquet"
+prediction_path = "/mnt/output/opening_strength_fit/runs/analyses/learned-risk-layer/alpha_conditioned_reversal_binary_risk_v2/predictions.parquet"
 score_col = "prediction"
 score_transform = "rank"
 
 [[risk_sweep.risk_inputs]]
 risk_id = "alpha_cond_gap"
-prediction_path = "/mnt/output/opening_strength_fit/alpha_conditioned_reversal_gap_risk_v2/predictions.parquet"
+prediction_path = "/mnt/output/opening_strength_fit/runs/analyses/learned-risk-layer/alpha_conditioned_reversal_gap_risk_v2/predictions.parquet"
 score_col = "prediction"
 score_transform = "rank"
 
 [output]
 local_dir = "output/legacy/analysis/score_alpha_conditioned_top100_sweep_v3_p80"
-k8s_dir = "/mnt/output/opening_strength_fit/score_alpha_conditioned_top100_sweep_v3_p80"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/analyses/score-risk-sweep/score_alpha_conditioned_top100_sweep_v3_p80"
 
 [k8s]
 namespace = "bizewu"

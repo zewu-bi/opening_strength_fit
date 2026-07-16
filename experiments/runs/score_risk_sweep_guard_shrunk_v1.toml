@@ -12,19 +12,19 @@ end_clock = "09:40"
 
 [[risk_sweep.inputs]]
 run_id = "lgbm_delay2_postopen_0931_0940_baseline_v1"
-prediction_path = "/mnt/output/opening_strength_fit/lgbm_delay2_postopen_0931_0940_baseline_v1/predictions.parquet"
+prediction_path = "/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_postopen_0931_0940_baseline_v1/predictions.parquet"
 
 [[risk_sweep.inputs]]
 run_id = "guard_shrunk_target_050_v1"
-prediction_path = "/mnt/output/opening_strength_fit/guard_shrunk_target_050_v1/predictions.parquet"
+prediction_path = "/mnt/output/opening_strength_fit/runs/models/lightgbm/guard_shrunk_target_050_v1/predictions.parquet"
 
 [[risk_sweep.inputs]]
 run_id = "guard_shrunk_target_075_v1"
-prediction_path = "/mnt/output/opening_strength_fit/guard_shrunk_target_075_v1/predictions.parquet"
+prediction_path = "/mnt/output/opening_strength_fit/runs/models/lightgbm/guard_shrunk_target_075_v1/predictions.parquet"
 
 [output]
 local_dir = "output/legacy/analysis/score_risk_sweep_guard_shrunk_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/score_risk_sweep_guard_shrunk_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/analyses/score-risk-sweep/score_risk_sweep_guard_shrunk_v1"
 
 [k8s]
 namespace = "bizewu"

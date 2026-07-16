@@ -23,6 +23,12 @@ from opening_strength_fit.commands.k8s_rendering_common import (
 )
 from opening_strength_fit.config import config_value as get
 from opening_strength_fit.config import run_id
+from opening_strength_fit.pvc_layout import (
+    output_layout,
+    rolling_shard_dir_name,
+    run_output_dir,
+    yearly_shard_dir_name,
+)
 
 
 def _analysis_config(config: dict) -> dict:
@@ -151,17 +157,20 @@ def _analysis_wait_paths(config: dict, pvc_dir: str) -> list[str]:
     if not completion_file:
         completion_file = "predictions.parquet"
     if _window_mode(config) == "rolling_monthly":
+        layout = output_layout(config)
         return [
-            f"{pvc_dir.rstrip('/')}/month_{start_month}/{completion_file}"
-            for start_month, _ in _month_windows_from_config(config)
+            f"{pvc_dir.rstrip('/')}/"
+            f"{rolling_shard_dir_name(start_month, end_month, layout)}/{completion_file}"
+            for start_month, end_month in _month_windows_from_config(config)
         ]
     try:
         start_year = _year_from_config(config, "test_start_date")
         end_year = _year_from_config(config, "test_end_date")
     except SystemExit:
         return [f"{pvc_dir.rstrip('/')}/{completion_file}"]
+    layout = output_layout(config)
     return [
-        f"{pvc_dir.rstrip('/')}/year_{year}/{completion_file}"
+        f"{pvc_dir.rstrip('/')}/{yearly_shard_dir_name(year, layout)}/{completion_file}"
         for year in range(start_year, end_year + 1)
     ]
 
@@ -233,9 +242,7 @@ def render_pool_internal_analysis_job(config_path: Path, config: dict, image: st
     pull_secret = get(config, "k8s", "image_pull_secret", "highfort")
     pvc = get(config, "k8s", "pvc", "bizewu-private-data")
     mount_path = get(config, "k8s", "mount_path", "/mnt/output")
-    pvc_dir = str(
-        get(config, "output", "k8s_dir", f"{mount_path}/opening_strength_fit/{run_id_value}")
-    )
+    pvc_dir = run_output_dir(config, run_id_value, mount_path=str(mount_path))
     analysis_dir = str(
         _analysis_get(config, "output_dir", f"{pvc_dir.rstrip('/')}/analysis/pool_internal_top100")
     )

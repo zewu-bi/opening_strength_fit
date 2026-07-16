@@ -1,0 +1,5 @@
+# New runs should opt into the structured PVC layout and omit output.k8s_dir.
+# The renderer derives runs/<category>/<run.id>/fold_<start>_<end>/ from run.kind and model.name.
+[output]
+layout = "v2"
+write_split_artifacts = false

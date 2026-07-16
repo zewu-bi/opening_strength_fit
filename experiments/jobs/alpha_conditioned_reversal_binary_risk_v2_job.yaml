@@ -30,7 +30,7 @@ spec:
             - --config
             - experiments/runs/alpha_conditioned_reversal_binary_risk_v2.toml
             - --output-dir
-            - /mnt/output/opening_strength_fit/alpha_conditioned_reversal_binary_risk_v2
+            - /mnt/output/opening_strength_fit/runs/analyses/learned-risk-layer/alpha_conditioned_reversal_binary_risk_v2
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output

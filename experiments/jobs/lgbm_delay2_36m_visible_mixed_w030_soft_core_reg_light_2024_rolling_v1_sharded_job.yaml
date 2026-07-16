@@ -53,7 +53,7 @@ spec:
                 done
                 echo "dependency file is ready: ${WAIT_PATH}"
               done
-              ROOT=/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1
+              ROOT=/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1
               mkdir -p "${ROOT}"
               MONTHS=(2024-01 2024-02 2024-03 2024-04 2024-05 2024-06 2024-07 2024-08 2024-09 2024-10 2024-11 2024-12)
               INDEX="${JOB_COMPLETION_INDEX:-}"

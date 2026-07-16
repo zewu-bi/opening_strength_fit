@@ -148,11 +148,11 @@ corr_threshold = 0.90
 near_duplicate_threshold = 0.995
 near_constant_top_ratio = 0.999
 min_corr_periods = 100
-importance_path = "/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_pool_l_feature_audit_v1/feature_importance.csv"
+importance_path = "/mnt/output/opening_strength_fit/runs/analyses/feature-audit/lgbm_delay2_36m_2022_2025_pool_l_feature_audit_v1/feature_importance.csv"
 
 [output]
 local_dir = "output/artifacts/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_corr09_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_corr09_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/analyses/feature-hygiene/lgbm_delay2_36m_2022_2025_pool_l_feature_hygiene_corr09_v1"
 
 [k8s]
 namespace = "bizewu"
@@ -172,7 +172,7 @@ wait_for_paths = [
   "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2023_delay2_mixed_w030_labeled_v1.parquet",
   "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2024_delay2_mixed_w030_labeled_v1.parquet",
   "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2025_delay2_mixed_w030_labeled_v1.parquet",
-  "/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_pool_l_feature_audit_v1/feature_importance.csv",
+  "/mnt/output/opening_strength_fit/runs/analyses/feature-audit/lgbm_delay2_36m_2022_2025_pool_l_feature_audit_v1/feature_importance.csv",
 ]
 wait_for_path_timeout_seconds = 43200
 wait_for_path_interval_seconds = 120

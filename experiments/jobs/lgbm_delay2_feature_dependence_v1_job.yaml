@@ -30,7 +30,7 @@ spec:
             - --config
             - experiments/runs/lgbm_delay2_feature_dependence_v1.toml
             - --output-dir
-            - /mnt/output/opening_strength_fit/lgbm_delay2_feature_dependence_v1
+            - /mnt/output/opening_strength_fit/runs/analyses/feature-audit/lgbm_delay2_feature_dependence_v1
             - --skip-ablation
           volumeMounts:
             - name: opening-strength-output

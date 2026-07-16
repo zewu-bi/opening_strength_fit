@@ -62,7 +62,7 @@ spec:
               done
               exec osf-audit-feature-hygiene \
                 --config experiments/runs/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1.toml \
-                --output-dir /mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1
+                --output-dir /mnt/output/opening_strength_fit/runs/analyses/feature-hygiene/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output

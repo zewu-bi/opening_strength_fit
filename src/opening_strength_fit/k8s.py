@@ -8,6 +8,7 @@ from datetime import date
 from pathlib import Path
 
 from opening_strength_fit.config import config_value, load_toml, run_id, slug
+from opening_strength_fit.pvc_layout import output_layout, run_output_dir
 
 DEFAULT_IMAGE = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:latest"
 KUBERNETES_NAME_LIMIT = 63
@@ -34,6 +35,7 @@ class RunSpec:
     pool_internal_analysis_dir: str = ""
     pool_internal_record_prefix: str = ""
     pool_internal_archive_profile: str = ""
+    output_layout: str = "legacy"
 
     @property
     def job_name(self) -> str:
@@ -81,14 +83,7 @@ def load_run_spec(path: str | Path) -> RunSpec:
     config = load_toml(config_path)
     run_id_value = run_id(config, config_path)
     mount_path = str(config_value(config, "k8s", "mount_path", "/mnt/output"))
-    pvc_dir = str(
-        config_value(
-            config,
-            "output",
-            "k8s_dir",
-            f"{mount_path}/opening_strength_fit/{run_id_value}",
-        )
-    )
+    pvc_dir = run_output_dir(config, run_id_value, mount_path=mount_path)
     default_pool_internal_dir = f"{pvc_dir.rstrip('/')}/analysis/pool_internal_top100"
     start_year = _year_from_date(
         config_value(config, "window", "test_start_date", None),
@@ -148,6 +143,7 @@ def load_run_spec(path: str | Path) -> RunSpec:
             ("analysis", "pool_internal", "archive", "profile"),
             "",
         ),
+        output_layout=output_layout(config),
     )
 
 

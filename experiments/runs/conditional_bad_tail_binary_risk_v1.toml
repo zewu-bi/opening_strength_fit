@@ -51,7 +51,7 @@ binary_short_rank_min = 0.80
 binary_next_rank_max = 0.50
 non_candidate_weight = 0.05
 candidate_weight = 1.0
-next_close_label_input = "/mnt/output/opening_strength_fit/learned_risk_layer_bad_tail_v1/clickhouse_next_close_labels.parquet"
+next_close_label_input = "/mnt/output/opening_strength_fit/runs/analyses/learned-risk-layer/learned_risk_layer_bad_tail_v1/clickhouse_next_close_labels.parquet"
 calendar_days_after = 10
 close_offset_us = 54000000000
 close_lookback_seconds = 1800
@@ -81,7 +81,7 @@ top_n = 100
 
 [output]
 local_dir = "output/legacy/analysis/conditional_bad_tail_binary_risk_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/conditional_bad_tail_binary_risk_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/analyses/learned-risk-layer/conditional_bad_tail_binary_risk_v1"
 
 [k8s]
 namespace = "bizewu"

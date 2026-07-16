@@ -35,7 +35,7 @@ spec:
               WAIT_PATH_TIMEOUT_SECONDS=86400
               WAIT_PATH_INTERVAL_SECONDS=120
               WAIT_PATH_STARTED=${SECONDS}
-              WAIT_PATHS=("/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2022-01/predictions.parquet" "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2022-07/predictions.parquet" "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2023-01/predictions.parquet" "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2023-07/predictions.parquet" "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2024-01/predictions.parquet" "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2024-07/predictions.parquet" "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/month_2025-01/predictions.parquet" "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/month_2025-07/predictions.parquet")
+              WAIT_PATHS=("/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2022-01/predictions.parquet" "/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2022-07/predictions.parquet" "/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2023-01/predictions.parquet" "/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2023-07/predictions.parquet" "/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2024-01/predictions.parquet" "/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2024-07/predictions.parquet" "/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/month_2025-01/predictions.parquet" "/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/month_2025-07/predictions.parquet")
               for WAIT_PATH in "${WAIT_PATHS[@]}"; do
                 until [ -f "${WAIT_PATH}" ]; do
                   if [ $((SECONDS - WAIT_PATH_STARTED)) -ge "${WAIT_PATH_TIMEOUT_SECONDS}" ]; then
@@ -47,26 +47,26 @@ spec:
                 done
                 echo "dependency file is ready: ${WAIT_PATH}"
               done
-              rm -rf /mnt/output/opening_strength_fit/baseline_2022_2025_cluster_analysis_v1/analysis/pool_internal_top100
-              mkdir -p /mnt/output/opening_strength_fit/baseline_2022_2025_cluster_analysis_v1/analysis/pool_internal_top100
-              mkdir -p /mnt/output/opening_strength_fit/baseline_2022_2025_cluster_analysis_v1/analysis/pool_internal_top100/reports
+              rm -rf /mnt/output/opening_strength_fit/runs/analyses/pool-internal-analysis/baseline_2022_2025_cluster_analysis_v1/analysis/pool_internal_top100
+              mkdir -p /mnt/output/opening_strength_fit/runs/analyses/pool-internal-analysis/baseline_2022_2025_cluster_analysis_v1/analysis/pool_internal_top100
+              mkdir -p /mnt/output/opening_strength_fit/runs/analyses/pool-internal-analysis/baseline_2022_2025_cluster_analysis_v1/analysis/pool_internal_top100/reports
               osf-analyze-pool-internal-top100 \
                 --predictions \
-                /mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2022-01/predictions.parquet \
+                /mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2022-01/predictions.parquet \
                 --predictions \
-                /mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2022-07/predictions.parquet \
+                /mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2022-07/predictions.parquet \
                 --predictions \
-                /mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2023-01/predictions.parquet \
+                /mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2023-01/predictions.parquet \
                 --predictions \
-                /mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2023-07/predictions.parquet \
+                /mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2023-07/predictions.parquet \
                 --predictions \
-                /mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2024-01/predictions.parquet \
+                /mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2024-01/predictions.parquet \
                 --predictions \
-                /mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2024-07/predictions.parquet \
+                /mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2018_2024_halfyear_rolling_v1/month_2024-07/predictions.parquet \
                 --predictions \
-                /mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/month_2025-01/predictions.parquet \
+                /mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/month_2025-01/predictions.parquet \
                 --predictions \
-                /mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/month_2025-07/predictions.parquet \
+                /mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2025_halfyear_rolling_v1/month_2025-07/predictions.parquet \
                 --next-close-label-input \
                 /mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1 \
                 --run-id \
@@ -74,9 +74,9 @@ spec:
                 --variant \
                 baseline_2022_2025_cluster \
                 --output-dir \
-                /mnt/output/opening_strength_fit/baseline_2022_2025_cluster_analysis_v1/analysis/pool_internal_top100 \
+                /mnt/output/opening_strength_fit/runs/analyses/pool-internal-analysis/baseline_2022_2025_cluster_analysis_v1/analysis/pool_internal_top100 \
                 --report-dir \
-                /mnt/output/opening_strength_fit/baseline_2022_2025_cluster_analysis_v1/analysis/pool_internal_top100/reports \
+                /mnt/output/opening_strength_fit/runs/analyses/pool-internal-analysis/baseline_2022_2025_cluster_analysis_v1/analysis/pool_internal_top100/reports \
                 --plot-prefix \
                 baseline_2022_2025_cluster \
                 --plot-variant-label \

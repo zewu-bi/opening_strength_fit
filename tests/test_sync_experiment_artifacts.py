@@ -21,7 +21,10 @@ from opening_strength_fit.commands.artifact_sync import (
     record_lightweight_artifacts,  # noqa: E402
     record_metrics,  # noqa: E402
 )
-from opening_strength_fit.commands.artifact_sync_metrics import next_close_label_years  # noqa: E402
+from opening_strength_fit.commands.artifact_sync_metrics import (  # noqa: E402
+    next_close_label_years,
+    pull_metrics,
+)
 from opening_strength_fit.k8s import RunSpec  # noqa: E402
 
 
@@ -86,6 +89,54 @@ def _rolling_row(
 
 
 class SyncExperimentArtifactsTest(unittest.TestCase):
+    def test_v2_monthly_metrics_are_pulled_from_fold_directories(self) -> None:
+        spec = _run_spec(
+            "v2_run",
+            pvc_dir="/mnt/output/opening_strength_fit/runs/v2_run",
+            test_start_month="2022-01",
+            test_end_month="2022-06",
+            test_months=6,
+            test_stride_months=6,
+            output_layout="v2",
+        )
+        fetched_remote_paths = []
+
+        def fake_fetch(_hfcli, _spec, _pod, remote_path, local_path):
+            fetched_remote_paths.append(remote_path)
+            if "/fold_2022-01_2022-06/" not in remote_path:
+                return False
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            pd.DataFrame([_metric_row("2022-01", 1, 0.01)]).to_csv(
+                local_path,
+                index=False,
+            )
+            return True
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch(
+                "opening_strength_fit.commands.artifact_sync_metrics.fetch_remote_file_if_exists",
+                side_effect=fake_fetch,
+            ):
+                paths = pull_metrics(
+                    "hfcli",
+                    spec,
+                    "helper-pod",
+                    Path(directory),
+                )
+
+        self.assertEqual(
+            fetched_remote_paths[0],
+            "/mnt/output/opening_strength_fit/runs/v2_run/metrics_by_year.csv",
+        )
+        self.assertIn(
+            "/mnt/output/opening_strength_fit/runs/v2_run/fold_2022-01_2022-06/metrics_by_year.csv",
+            fetched_remote_paths,
+        )
+        self.assertEqual(
+            [path.name for path in paths],
+            ["v2_run_metrics_by_year.csv", "v2_run_metrics_by_month.csv"],
+        )
+
     def test_yearly_shard_metrics_are_combined_locally(self) -> None:
         frames = [
             pd.DataFrame([_metric_row("2021-01", 10, 0.01)]),

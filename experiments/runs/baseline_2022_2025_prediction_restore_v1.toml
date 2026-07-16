@@ -147,7 +147,7 @@ top_n = 100
 
 [output]
 local_dir = "output/artifacts/baseline_2022_2025_prediction_restore_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/baseline_2022_2025_prediction_restore_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/models/lightgbm/baseline_2022_2025_prediction_restore_v1"
 
 [k8s]
 namespace = "bizewu"

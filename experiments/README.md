@@ -99,3 +99,10 @@ context columns、约束和 modeling limitations。
 | `config_templates/stock_pool_selection.toml` | S/M/L selection mask |
 | `config_templates/postopen_v2_features.toml` | post-open v2 feature switches |
 | `config_templates/gpu_lightgbm.toml` | LightGBM GPU resource switches |
+| `config_templates/pvc_layout_v2.toml` | 新 run 的结构化 PVC 输出与单份 prediction 策略 |
+
+## PVC 布局
+
+新 run 使用 `config_templates/pvc_layout_v2.toml`，按模型或任务类型写入
+`/mnt/output/opening_strength_fit/runs/<category>/<run_id>`。完整目录规则、legacy 兼容和迁移操作见
+`docs/runbook.md`；精确历史映射保存在 PVC 的 `.layout_migrations/`。

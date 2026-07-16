@@ -28,7 +28,7 @@ spec:
             - --config
             - experiments/runs/ridge_opening_1y_next_month_strong.toml
             - --output-dir
-            - /mnt/output/opening_strength_fit/ridge_opening_1y_next_month_strong
+            - /mnt/output/opening_strength_fit/runs/models/ridge/ridge_opening_1y_next_month_strong
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output

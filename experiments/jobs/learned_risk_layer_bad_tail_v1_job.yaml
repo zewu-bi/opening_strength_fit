@@ -30,7 +30,7 @@ spec:
             - --config
             - experiments/runs/learned_risk_layer_bad_tail_v1.toml
             - --output-dir
-            - /mnt/output/opening_strength_fit/learned_risk_layer_bad_tail_v1
+            - /mnt/output/opening_strength_fit/runs/analyses/learned-risk-layer/learned_risk_layer_bad_tail_v1
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output

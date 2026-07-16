@@ -163,7 +163,7 @@ random_state = 7
 
 [output]
 local_dir = "output/artifacts/lgbm_delay2_36m_2022_2025_pool_l_feature_audit_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_pool_l_feature_audit_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/analyses/feature-audit/lgbm_delay2_36m_2022_2025_pool_l_feature_audit_v1"
 
 [k8s]
 namespace = "bizewu"

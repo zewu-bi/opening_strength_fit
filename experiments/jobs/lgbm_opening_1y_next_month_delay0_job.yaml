@@ -29,7 +29,7 @@ spec:
             - --config
             - experiments/runs/lgbm_opening_1y_next_month_delay0.toml
             - --output-dir
-            - /mnt/output/opening_strength_fit/lgbm_opening_1y_next_month_delay0
+            - /mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_opening_1y_next_month_delay0
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output

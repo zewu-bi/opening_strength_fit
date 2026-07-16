@@ -5,7 +5,7 @@ description = "Core visible-feature exposure audit for the 2022-2025 hist_path h
 status = "completed"
 
 [exposure_audit]
-predictions = ["/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1"]
+predictions = ["/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1"]
 pool = ["L"]
 pool_date_lag_sessions = 0
 score_col = "prediction"
@@ -29,7 +29,7 @@ skip_score_exposure_corr = true
 
 [output]
 local_dir = "output/legacy/analysis/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1_exposure_audit"
-k8s_dir = "/mnt/output/opening_strength_fit/exposure_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_core_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/analyses/exposure-audit/exposure_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_core_v1"
 
 [k8s]
 namespace = "bizewu"
@@ -40,7 +40,7 @@ pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 env_secrets = ["xy-fit-ceph-credentials"]
 avoid_nodes = ["node7", "node8"]
-wait_for_paths = ["/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/month_2025-07/_SUCCESS"]
+wait_for_paths = ["/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/month_2025-07/_SUCCESS"]
 wait_for_path_timeout_seconds = 21600
 wait_for_path_interval_seconds = 120
 

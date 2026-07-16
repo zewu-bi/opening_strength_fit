@@ -90,7 +90,7 @@ top_n = 20
 
 [output]
 local_dir = "output/legacy/analysis/lgbm_opening_1y_next_month_delay0"
-k8s_dir = "/mnt/output/opening_strength_fit/lgbm_opening_1y_next_month_delay0"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_opening_1y_next_month_delay0"
 
 [k8s]
 namespace = "bizewu"

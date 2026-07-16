@@ -648,6 +648,7 @@ def fit_predict_split(
     evaluation_settings: dict[str, object],
     stock_pool_settings: StockPoolConfig | None = None,
     stock_pool: pd.DataFrame | None = None,
+    write_period_artifacts: bool = True,
 ) -> tuple[pd.DataFrame, dict[str, object], dict[str, object]]:
     stock_pool_settings = stock_pool_settings or stock_pool_config_from_mapping(config)
     train = labeled.loc[labeled["date"].isin(split.train_dates)].copy()
@@ -695,18 +696,19 @@ def fit_predict_split(
         if split.test_start_date[:7] == split.test_end_date[:7]
         else str(prediction_year)
     )
-    write_frame(predictions, output_dir / f"predictions_{prediction_period}.parquet")
-    buckets.to_csv(output_dir / f"score_buckets_{prediction_period}.csv", index=False)
-    if stock_pool is not None and stock_pool_settings.filter_selection:
-        pool_buckets = score_bucket_returns(
-            selection_predictions,
-            bins=int(evaluation_settings["score_bins"]),
-            group_cols=evaluation_settings["_bucket_group_cols"],
-        )
-        pool_buckets.to_csv(
-            output_dir / f"score_buckets_{prediction_period}_stock_pool.csv",
-            index=False,
-        )
+    if write_period_artifacts:
+        write_frame(predictions, output_dir / f"predictions_{prediction_period}.parquet")
+        buckets.to_csv(output_dir / f"score_buckets_{prediction_period}.csv", index=False)
+        if stock_pool is not None and stock_pool_settings.filter_selection:
+            pool_buckets = score_bucket_returns(
+                selection_predictions,
+                bins=int(evaluation_settings["score_bins"]),
+                group_cols=evaluation_settings["_bucket_group_cols"],
+            )
+            pool_buckets.to_csv(
+                output_dir / f"score_buckets_{prediction_period}_stock_pool.csv",
+                index=False,
+            )
     row = metrics_row(
         run_name=run_name,
         split=split,

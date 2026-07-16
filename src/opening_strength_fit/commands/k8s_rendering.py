@@ -23,6 +23,12 @@ from opening_strength_fit.commands.k8s_rendering_common import (
 from opening_strength_fit.config import config_value as get
 from opening_strength_fit.config import load_toml, run_id, slug
 from opening_strength_fit.k8s import KUBERNETES_NAME_LIMIT
+from opening_strength_fit.pvc_layout import (
+    output_layout,
+    rolling_shard_dir_name,
+    run_output_dir,
+    yearly_shard_dir_name,
+)
 
 DEFAULT_IMAGE_ENV = "OPENING_STRENGTH_IMAGE"
 
@@ -337,12 +343,7 @@ def render_training_job(config_path: Path, config: dict, image: str) -> str:
     pull_secret = get(config, "k8s", "image_pull_secret", "highfort")
     pvc = get(config, "k8s", "pvc", "bizewu-private-data")
     mount_path = get(config, "k8s", "mount_path", "/mnt/output")
-    output_dir = get(
-        config,
-        "output",
-        "k8s_dir",
-        f"{mount_path}/opening_strength_fit/{run_id_value}",
-    )
+    output_dir = run_output_dir(config, run_id_value, mount_path=str(mount_path))
     resources = config.get("k8s", {}).get("resources", {})
     cpu_request = resources.get("cpu_request", "4")
     cpu_limit = resources.get("cpu_limit", "8")
@@ -411,12 +412,8 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
     pull_secret = get(config, "k8s", "image_pull_secret", "highfort")
     pvc = get(config, "k8s", "pvc", "bizewu-private-data")
     mount_path = get(config, "k8s", "mount_path", "/mnt/output")
-    output_dir = get(
-        config,
-        "output",
-        "k8s_dir",
-        f"{mount_path}/opening_strength_fit/{run_id_value}",
-    )
+    layout = output_layout(config)
+    output_dir = run_output_dir(config, run_id_value, mount_path=str(mount_path))
     resources = config.get("k8s", {}).get("resources", {})
     cpu_request = resources.get("cpu_request", "4")
     cpu_limit = resources.get("cpu_limit", "8")
@@ -450,6 +447,7 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
         completion_files = _rolling_completion_files(config, command)
         completion_check = _shell_file_check(completion_files)
         completion_label = ", ".join(completion_files)
+        rolling_dir_expression = rolling_shard_dir_name("${TEST_START}", "${TEST_END}", layout)
         return textwrap.dedent(
             f"""\
             apiVersion: batch/v1
@@ -506,7 +504,7 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
 
                           TEST_START="${{TEST_STARTS[${{INDEX}}]}}"
                           TEST_END="${{TEST_ENDS[${{INDEX}}]}}"
-                          OUT="${{ROOT}}/month_${{TEST_START}}"
+                          OUT="${{ROOT}}/{rolling_dir_expression}"
                           if {completion_check}; then
                             echo "test window ${{TEST_START}}..${{TEST_END}}: required outputs already exist ({completion_label}), skipping ${{OUT}}"
                             exit 0
@@ -542,6 +540,7 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
     test_start_year = _year_from_config(config, "test_start_date")
     test_end_year = _year_from_config(config, "test_end_date")
     years = " ".join(str(year) for year in range(test_start_year, test_end_year + 1))
+    yearly_dir_expression = yearly_shard_dir_name("${YEAR}", layout)
 
     return textwrap.dedent(
         f"""\
@@ -578,7 +577,7 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
                       mkdir -p "${{ROOT}}"
 
                       for YEAR in {years}; do
-                        OUT="${{ROOT}}/year_${{YEAR}}"
+                        OUT="${{ROOT}}/{yearly_dir_expression}"
                         if [ -f "${{OUT}}/metrics_by_year.csv" ]; then
                           echo "year ${{YEAR}}: metrics already exist, skipping ${{OUT}}"
                           continue

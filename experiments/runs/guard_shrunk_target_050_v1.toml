@@ -88,7 +88,7 @@ top_n = 100
 
 [output]
 local_dir = "output/legacy/analysis/guard_shrunk_target_050_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/guard_shrunk_target_050_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/models/lightgbm/guard_shrunk_target_050_v1"
 
 [k8s]
 namespace = "bizewu"

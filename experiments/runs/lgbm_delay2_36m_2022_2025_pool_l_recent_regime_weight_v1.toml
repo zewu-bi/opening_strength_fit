@@ -93,7 +93,7 @@ top_n = 100
 
 [output]
 local_dir = "output/artifacts/lgbm_delay2_36m_2022_2025_pool_l_recent_regime_weight_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_pool_l_recent_regime_weight_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_2022_2025_pool_l_recent_regime_weight_v1"
 
 [k8s]
 namespace = "bizewu"

@@ -5,7 +5,7 @@ description = "Build the daily pool_L size and industry exposure input for the 2
 status = "completed"
 
 [exposure_input]
-predictions = ["/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1"]
+predictions = ["/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1"]
 pool = "L"
 pool_date_lag_sessions = 0
 date_chunk_size = 90
@@ -17,7 +17,7 @@ trace_output = "output/legacy/exposures/lgbm_delay2_36m_2022_2025_fullxs_hist_pa
 
 [output]
 local_dir = "output/legacy/exposures/exposure_input_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_size_industry_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/exposure_input_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_size_industry_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/analyses/exposure-input/exposure_input_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_size_industry_v1"
 
 [k8s]
 namespace = "bizewu"
@@ -29,7 +29,7 @@ mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 env_secrets = ["xy-fit-ceph-credentials"]
 avoid_nodes = ["node7", "node8"]
-wait_for_paths = ["/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/month_2025-07/_SUCCESS"]
+wait_for_paths = ["/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/month_2025-07/_SUCCESS"]
 wait_for_path_timeout_seconds = 21600
 wait_for_path_interval_seconds = 120
 

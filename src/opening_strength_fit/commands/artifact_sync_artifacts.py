@@ -21,6 +21,7 @@ from opening_strength_fit.commands.artifact_sync_remote import (
 )
 from opening_strength_fit.commands.pool_internal_analysis import record_pool_internal_outputs
 from opening_strength_fit.k8s import RunSpec
+from opening_strength_fit.pvc_layout import rolling_shard_dir_candidates
 
 SCORE_RISK_ARTIFACTS = (
     "score_risk_summary.csv",
@@ -497,14 +498,27 @@ def pull_rolling_validation_shards(
         stride_months=spec.test_stride_months,
     )
     labels = [start if start == end else f"{start}_{end}" for start, end in windows]
-    for (start_month, _), label in zip(windows, labels, strict=True):
+    for (start_month, end_month), label in zip(windows, labels, strict=True):
         shard_dir = output_dir / f"month_{start_month}"
         shard_dir.mkdir(parents=True, exist_ok=True)
         found = False
         for name in ROLLING_VALIDATION_SHARD_ARTIFACTS:
-            remote_path = f"{spec.pvc_dir}/month_{start_month}/{name}"
             local_path = shard_dir / name
-            if fetch_remote_file_if_exists(hfcli, spec, pod_name, remote_path, local_path):
+            fetched = any(
+                fetch_remote_file_if_exists(
+                    hfcli,
+                    spec,
+                    pod_name,
+                    f"{spec.pvc_dir}/{remote_dir}/{name}",
+                    local_path,
+                )
+                for remote_dir in rolling_shard_dir_candidates(
+                    start_month,
+                    end_month,
+                    preferred_layout=spec.output_layout,
+                )
+            )
+            if fetched:
                 pulled.append(local_path)
                 found = True
         if not found:
@@ -576,14 +590,27 @@ def pull_feature_audit_shards(
         stride_months=spec.test_stride_months,
     )
     labels = [start if start == end else f"{start}_{end}" for start, end in windows]
-    for (start_month, _), label in zip(windows, labels, strict=True):
+    for (start_month, end_month), label in zip(windows, labels, strict=True):
         shard_dir = output_dir / f"month_{start_month}"
         shard_dir.mkdir(parents=True, exist_ok=True)
         found = False
         for name in FEATURE_AUDIT_ARTIFACTS:
-            remote_path = f"{spec.pvc_dir}/month_{start_month}/{name}"
             local_path = shard_dir / name
-            if fetch_remote_file_if_exists(hfcli, spec, pod_name, remote_path, local_path):
+            fetched = any(
+                fetch_remote_file_if_exists(
+                    hfcli,
+                    spec,
+                    pod_name,
+                    f"{spec.pvc_dir}/{remote_dir}/{name}",
+                    local_path,
+                )
+                for remote_dir in rolling_shard_dir_candidates(
+                    start_month,
+                    end_month,
+                    preferred_layout=spec.output_layout,
+                )
+            )
+            if fetched:
                 pulled.append(local_path)
                 found = True
         if not found:

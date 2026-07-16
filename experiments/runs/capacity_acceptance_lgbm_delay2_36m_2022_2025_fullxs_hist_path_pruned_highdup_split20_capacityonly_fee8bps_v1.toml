@@ -5,7 +5,7 @@ description = "Capacity-weighted next-close acceptance for lgbm326 split20 capac
 status = "completed"
 
 [capacity_acceptance]
-selected_input = ["/mnt/output/opening_strength_fit/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_capacityonly_v1/capacity_audit_selected.csv"]
+selected_input = ["/mnt/output/opening_strength_fit/runs/analyses/capacity-audit/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_capacityonly_v1/capacity_audit_selected.csv"]
 label_input = ["/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1"]
 label_col = "alpha_return_next_close"
 fee_bps = 8
@@ -13,7 +13,7 @@ capacity_total_notional = 1000000000
 
 [output]
 local_dir = "output/artifacts/capacity_acceptance_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_capacityonly_fee8bps_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/capacity_acceptance_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_capacityonly_fee8bps_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/analyses/capacity-acceptance/capacity_acceptance_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_capacityonly_fee8bps_v1"
 
 [k8s]
 namespace = "bizewu"
@@ -25,7 +25,7 @@ mount_path = "/mnt/output"
 env_secrets = ["xy-fit-ceph-credentials"]
 avoid_nodes = ["node7", "node8"]
 wait_for_paths = [
-  "/mnt/output/opening_strength_fit/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_capacityonly_v1/capacity_audit_selected.csv",
+  "/mnt/output/opening_strength_fit/runs/analyses/capacity-audit/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_capacityonly_v1/capacity_audit_selected.csv",
   "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/opening_2025_next_close_labels_v1.parquet",
 ]
 wait_for_path_timeout_seconds = 21600

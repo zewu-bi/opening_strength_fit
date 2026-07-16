@@ -33,7 +33,7 @@ spec:
             - --config
             - /mnt/config/rolling_alpha_conditioned_top100_validation_v1.toml
             - --output-dir
-            - /mnt/output/opening_strength_fit/rolling_alpha_conditioned_top100_validation_v1
+            - /mnt/output/opening_strength_fit/runs/analyses/alpha-conditioned-rolling-validation/rolling_alpha_conditioned_top100_validation_v1
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output

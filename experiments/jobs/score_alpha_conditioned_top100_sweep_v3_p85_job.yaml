@@ -33,7 +33,7 @@ spec:
             - --config
             - /mnt/config/score_alpha_conditioned_top100_sweep_v3_p85.toml
             - --output-dir
-            - /mnt/output/opening_strength_fit/score_alpha_conditioned_top100_sweep_v3_p85
+            - /mnt/output/opening_strength_fit/runs/analyses/score-risk-sweep/score_alpha_conditioned_top100_sweep_v3_p85
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output

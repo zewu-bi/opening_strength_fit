@@ -139,6 +139,15 @@ def prediction_path(prediction_dir: Path, month: str) -> Path:
     for path in candidates:
         if path.exists():
             return path
+    for shard_dir in sorted(prediction_dir.glob("fold_*_*")):
+        try:
+            start_month, end_month = shard_dir.name.removeprefix("fold_").split("_", 1)
+        except ValueError:
+            continue
+        if start_month <= month <= end_month:
+            path = shard_dir / "predictions.parquet"
+            if path.exists():
+                return path
     raise SystemExit(f"no prediction shard found for {month} under {prediction_dir}")
 
 

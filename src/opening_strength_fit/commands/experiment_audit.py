@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from opening_strength_fit.config import load_toml
+from opening_strength_fit.pvc_layout import run_output_dir
 
 JOB_SUFFIXES = (
     ("_pool_internal_analysis_job.yaml", "pool_internal_analysis"),
@@ -52,7 +53,7 @@ def collect_runs(runs_dir: Path) -> dict[str, RunRecord]:
         evaluation = config.get("evaluation", {})
         status = str(run_section.get("status", ""))
         kind = str(run_section.get("kind", ""))
-        pvc_dir = str(output.get("k8s_dir", f"/mnt/output/opening_strength_fit/{run_id}"))
+        pvc_dir = run_output_dir(config, run_id)
         runs[run_id] = RunRecord(
             run_id=run_id,
             config_path=path,

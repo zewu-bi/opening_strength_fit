@@ -6,20 +6,20 @@ import pandas as pd
 
 from opening_strength_fit.analysis import KEY_COLUMNS
 from opening_strength_fit.io import read_frame
+from opening_strength_fit.pvc_layout import prediction_shard_dirs
 from opening_strength_fit.schema import normalize_decision_keys
 
 
 def prediction_shard_files(path: Path) -> list[Path]:
     files: list[Path] = []
-    for prefix in ("month_", "year_"):
-        for shard_dir in sorted(item for item in path.glob(f"{prefix}*") if item.is_dir()):
-            single = shard_dir / "predictions.parquet"
-            if single.exists():
-                files.append(single)
-                continue
-            shard_files = sorted(shard_dir.glob("predictions_*.parquet"))
-            if shard_files:
-                files.extend(shard_files)
+    for shard_dir in prediction_shard_dirs(path):
+        single = shard_dir / "predictions.parquet"
+        if single.exists():
+            files.append(single)
+            continue
+        shard_files = sorted(shard_dir.glob("predictions_*.parquet"))
+        if shard_files:
+            files.extend(shard_files)
     return files
 
 

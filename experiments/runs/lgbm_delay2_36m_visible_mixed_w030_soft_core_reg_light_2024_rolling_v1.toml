@@ -145,7 +145,7 @@ top_n = 100
 
 [output]
 local_dir = "output/legacy/analysis/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_visible_mixed_w030_soft_core_reg_light_2024_rolling_v1"
 
 [k8s]
 namespace = "bizewu"

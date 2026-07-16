@@ -89,7 +89,7 @@ top_n = 100
 
 [output]
 local_dir = "output/legacy/analysis/lgbm_delay2_postopen_v2_xs_demean_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/lgbm_delay2_postopen_v2_xs_demean_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_postopen_v2_xs_demean_v1"
 
 [k8s]
 namespace = "bizewu"

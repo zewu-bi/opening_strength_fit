@@ -179,7 +179,7 @@ importance_path = ""
 
 [output]
 local_dir = "output/artifacts/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/analyses/feature-hygiene/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1"
 
 [k8s]
 namespace = "bizewu"

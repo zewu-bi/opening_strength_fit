@@ -14,6 +14,10 @@ from opening_strength_fit.commands.artifact_sync_remote import (
 )
 from opening_strength_fit.config import load_toml
 from opening_strength_fit.k8s import RunSpec
+from opening_strength_fit.pvc_layout import (
+    rolling_shard_dir_candidates,
+    yearly_shard_dir_candidates,
+)
 from opening_strength_fit.reports import metrics_by_year_from_windows
 
 METRICS_SUFFIX = "_metrics_by_year.csv"
@@ -101,9 +105,22 @@ def pull_shard_metrics(
             stride_months=spec.test_stride_months,
         ):
             label = start_month if start_month == end_month else f"{start_month}_{end_month}"
-            remote_path = f"{spec.pvc_dir}/month_{start_month}/metrics_by_year.csv"
             local_path = raw_dir / f"metrics_by_year_{label}.csv"
-            if fetch_remote_file_if_exists(hfcli, spec, pod_name, remote_path, local_path):
+            fetched = any(
+                fetch_remote_file_if_exists(
+                    hfcli,
+                    spec,
+                    pod_name,
+                    f"{spec.pvc_dir}/{shard_dir}/metrics_by_year.csv",
+                    local_path,
+                )
+                for shard_dir in rolling_shard_dir_candidates(
+                    start_month,
+                    end_month,
+                    preferred_layout=spec.output_layout,
+                )
+            )
+            if fetched:
                 frames.append(pd.read_csv(local_path))
             else:
                 missing.append(label)
@@ -125,9 +142,21 @@ def pull_shard_metrics(
         )
     if spec.test_start_year > 0 and spec.test_end_year > 0:
         for year in range(spec.test_start_year, spec.test_end_year + 1):
-            remote_path = f"{spec.pvc_dir}/year_{year}/metrics_by_year.csv"
             local_path = raw_dir / f"metrics_by_year_{year}.csv"
-            if fetch_remote_file_if_exists(hfcli, spec, pod_name, remote_path, local_path):
+            fetched = any(
+                fetch_remote_file_if_exists(
+                    hfcli,
+                    spec,
+                    pod_name,
+                    f"{spec.pvc_dir}/{shard_dir}/metrics_by_year.csv",
+                    local_path,
+                )
+                for shard_dir in yearly_shard_dir_candidates(
+                    year,
+                    preferred_layout=spec.output_layout,
+                )
+            )
+            if fetched:
                 frames.append(pd.read_csv(local_path))
             else:
                 missing.append(str(year))
@@ -254,8 +283,13 @@ def fetch_predictions(
         ):
             label = start_month if start_month == end_month else f"{start_month}_{end_month}"
             remote_candidates = [
-                f"{spec.pvc_dir}/month_{start_month}/predictions_{label}.parquet",
-                f"{spec.pvc_dir}/month_{start_month}/predictions.parquet",
+                f"{spec.pvc_dir}/{shard_dir}/{name}"
+                for shard_dir in rolling_shard_dir_candidates(
+                    start_month,
+                    end_month,
+                    preferred_layout=spec.output_layout,
+                )
+                for name in ("predictions.parquet", f"predictions_{label}.parquet")
             ]
             remote_path = next(
                 (
@@ -290,8 +324,12 @@ def fetch_predictions(
         missing_years: list[str] = []
         for year in range(spec.test_start_year, spec.test_end_year + 1):
             remote_candidates = [
-                f"{spec.pvc_dir}/year_{year}/predictions_{year}.parquet",
-                f"{spec.pvc_dir}/year_{year}/predictions.parquet",
+                f"{spec.pvc_dir}/{shard_dir}/{name}"
+                for shard_dir in yearly_shard_dir_candidates(
+                    year,
+                    preferred_layout=spec.output_layout,
+                )
+                for name in ("predictions.parquet", f"predictions_{year}.parquet")
             ]
             remote_path = next(
                 (

@@ -28,7 +28,7 @@ spec:
             - --config
             - experiments/runs/gbm_opening_1m_3d.toml
             - --output-dir
-            - /mnt/output/opening_strength_fit/gbm_opening_1m_3d
+            - /mnt/output/opening_strength_fit/runs/models/gbm/gbm_opening_1m_3d
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output

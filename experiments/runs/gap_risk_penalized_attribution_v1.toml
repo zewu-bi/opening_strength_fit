@@ -10,7 +10,7 @@ test_start_month = "2021-08"
 test_end_month = "2022-01"
 
 [attribution]
-prediction_dir = "/mnt/output/opening_strength_fit/rolling_alpha_conditioned_top100_validation_v1"
+prediction_dir = "/mnt/output/opening_strength_fit/runs/analyses/alpha-conditioned-rolling-validation/rolling_alpha_conditioned_top100_validation_v1"
 labeled_path = "/mnt/output/opening_strength_fit/cache/opening_18m_202008_202201_delay2_labeled.parquet"
 months = ["2021-08", "2021-09", "2021-10", "2021-11", "2021-12", "2022-01"]
 top_n = 100
@@ -61,7 +61,7 @@ candidate_alpha_rank_min = 0.80
 
 [output]
 local_dir = "output/legacy/analysis/gap_risk_penalized_attribution_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/gap_risk_penalized_attribution_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/analyses/gap-risk-attribution/gap_risk_penalized_attribution_v1"
 
 [k8s]
 namespace = "bizewu"

@@ -97,7 +97,7 @@ top_n = 20
 
 [output]
 local_dir = "output/legacy/analysis/ridge_opening_1y_next_month_strong"
-k8s_dir = "/mnt/output/opening_strength_fit/ridge_opening_1y_next_month_strong"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/models/ridge/ridge_opening_1y_next_month_strong"
 
 [k8s]
 namespace = "bizewu"

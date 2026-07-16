@@ -5,7 +5,7 @@ description = "Capacity-only audit for the 2022-2025 hist_path high-duplicate pr
 status = "completed"
 
 [capacity_audit]
-predictions = ["/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1"]
+predictions = ["/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1"]
 pool = ["L"]
 pool_date_lag_sessions = 0
 score_col = "prediction"
@@ -29,7 +29,7 @@ selected_output_limit = 200000
 
 [output]
 local_dir = "output/artifacts/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_t10_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_t10_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/analyses/capacity-audit/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_t10_v1"
 
 [k8s]
 namespace = "bizewu"
@@ -40,7 +40,7 @@ pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 env_secrets = ["xy-fit-ceph-credentials"]
 avoid_nodes = ["node7", "node8"]
-wait_for_paths = ["/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/month_2025-07/_SUCCESS"]
+wait_for_paths = ["/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1/month_2025-07/_SUCCESS"]
 wait_for_path_timeout_seconds = 21600
 wait_for_path_interval_seconds = 120
 

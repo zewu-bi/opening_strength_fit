@@ -6,19 +6,19 @@ status = "completed"
 
 [[execution_context.inputs]]
 name = "lgbm328"
-selected_path = "/mnt/output/opening_strength_fit/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_t10p20_capacityonly_v1/capacity_audit_selected.csv"
-prediction_root = "/mnt/output/opening_strength_fit/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1"
-output_dir = "/mnt/output/opening_strength_fit/execution_context_lgbm328_t10p20_v1"
+selected_path = "/mnt/output/opening_strength_fit/runs/analyses/capacity-audit/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_t10p20_capacityonly_v1/capacity_audit_selected.csv"
+prediction_root = "/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1"
+output_dir = "/mnt/output/opening_strength_fit/runs/analyses/execution-context/execution_context_lgbm328_t10p20_v1"
 
 [[execution_context.inputs]]
 name = "mlp_base"
-selected_path = "/mnt/output/opening_strength_fit/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_t10p20_capacityonly_v1/capacity_audit_selected.csv"
-prediction_root = "/mnt/output/opening_strength_fit/nn/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_v1"
-output_dir = "/mnt/output/opening_strength_fit/execution_context_mlp_base_t10p20_v1"
+selected_path = "/mnt/output/opening_strength_fit/runs/analyses/capacity-audit/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_t10p20_capacityonly_v1/capacity_audit_selected.csv"
+prediction_root = "/mnt/output/opening_strength_fit/runs/models/nn/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_v1"
+output_dir = "/mnt/output/opening_strength_fit/runs/analyses/execution-context/execution_context_mlp_base_t10p20_v1"
 
 [output]
 local_dir = "output/artifacts/extract_execution_context_t10p20_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/extract_execution_context_t10p20_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/analyses/execution-context/extract_execution_context_t10p20_v1"
 
 [k8s]
 namespace = "bizewu"
@@ -29,8 +29,8 @@ pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 env_secrets = ["xy-fit-ceph-credentials"]
 wait_for_paths = [
-  "/mnt/output/opening_strength_fit/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_t10p20_capacityonly_v1/capacity_audit_selected.csv",
-  "/mnt/output/opening_strength_fit/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_t10p20_capacityonly_v1/capacity_audit_selected.csv",
+  "/mnt/output/opening_strength_fit/runs/analyses/capacity-audit/capacity_audit_lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_split20_t10p20_capacityonly_v1/capacity_audit_selected.csv",
+  "/mnt/output/opening_strength_fit/runs/analyses/capacity-audit/capacity_audit_nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_mlp_base_split20_t10p20_capacityonly_v1/capacity_audit_selected.csv",
 ]
 wait_for_path_timeout_seconds = 21600
 wait_for_path_interval_seconds = 120

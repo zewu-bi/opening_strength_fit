@@ -30,7 +30,7 @@ spec:
             - --config
             - experiments/runs/score_risk_sweep_guard_shrunk_v1.toml
             - --output-dir
-            - /mnt/output/opening_strength_fit/score_risk_sweep_guard_shrunk_v1
+            - /mnt/output/opening_strength_fit/runs/analyses/score-risk-sweep/score_risk_sweep_guard_shrunk_v1
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output
