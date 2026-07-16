@@ -1,12 +1,12 @@
 [run]
 id = "nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_histavg_activity_gelu_mse_v1"
 kind = "exploration"
-description = "GPU PyTorch grouped gated v2 GELU MSE NN over 2022-2025 on the same 328 features; applies strict ratio-style dimensionless transforms to volume, depth, count, and turnover using mechanism references or prior-date 60d historical activity, removes the cross-sectional robust zscore, and retains the NN train-set global zscore."
+description = "GPU PyTorch grouped gated v2 GELU MSE NN over 2022-2025 on the same 328 features; applies strict ratio-style dimensionless transforms using cached T-1 total shares and market cap, removes the cross-sectional robust zscore, and retains the NN train-set global zscore."
 status = "running"
 
 [data]
 source = "labeled_pvc"
-labeled_path = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1"
+labeled_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1"
 tick_path = ""
 input_kind = "labeled"
 feature_limit = 0
@@ -47,7 +47,7 @@ historical_surprise_min_periods = 10
 historical_surprise_modes = ["zscore", "ratio"]
 historical_surprise_columns = ["volume_diff_1t", "volume_diff_3t", "turnover_diff_1t", "turnover_diff_3t", "spread_bps", "ask_depth_10", "bid_depth_10", "depth_imbalance_1", "depth_imbalance_10", "return_vs_open", "return_vs_prev_close", "trade_vwap_1t", "postopen_v2_trade_vwap_vs_ask1_1t_bps", "postopen_v2_trade_turnover_to_depth_notional_1t", "postopen_v2_spread_compression_1m"]
 historical_surprise_prefix = "hist_surprise_"
-include_historical_daily_activity_references = true
+include_historical_daily_activity_references = false
 historical_daily_activity_windows = [60]
 historical_daily_activity_min_periods = 10
 historical_daily_activity_prefix = "hist_avg_daily_"
@@ -162,12 +162,20 @@ image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
-helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260715-nn-mech328-v3-activity-memfix-v3"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260716-nn-mech328-v3-capcache-v1"
 avoid_nodes = ["node6", "node7", "node8", "node12", "node17", "node19", "node20", "node24", "node25", "node26", "node27", "node28"]
-wait_for_paths = ["/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2019_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2020_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2021_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2022_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2023_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2024_delay2_mixed_w030_labeled_v1.parquet", "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2025_delay2_mixed_w030_labeled_v1.parquet"]
-wait_for_path_timeout_seconds = 43200
+wait_for_paths = [
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2019_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2020_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2021_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2022_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2023_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2024_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet",
+]
+wait_for_path_timeout_seconds = 172800
 wait_for_path_interval_seconds = 120
-shard_parallelism = 8
+shard_parallelism = 2
 
 [k8s.node_selector]
 has_gpu = "true"

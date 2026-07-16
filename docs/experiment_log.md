@@ -1,7 +1,7 @@
 # Experiment Log
 
-> Last reconciled: 2026-07-15
-> Coverage: 2026-05-20 through 2026-07-15
+> Last reconciled: 2026-07-16
+> Coverage: 2026-05-20 through 2026-07-16
 
 本文件是人工维护的实验事实账本，严格按发生时间升序记录假设、口径、结果、状态和决策。当前研究
 方向见 [project_brief.md](project_brief.md)，命令见 [runbook.md](runbook.md)。旧版逐日长记录原样保存在
@@ -25,7 +25,7 @@
 
 | date | run | hypothesis | last known status | incumbent impact |
 | --- | --- | --- | --- | --- |
-| 2026-07-10 | `nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_histavg_activity_gelu_mse_v1` | 用 prior-date 60 日历史开盘 activity ratio 替代截面 robust z-score，同时保留 NN train-set global z-score | `running`; 2026-07-15 用 activity reference memory fix 镜像重提，8 shards / parallelism 8，尚无 metrics | targeted challenger；完成并通过相同 gate 前不改变 mech328 v2 incumbent |
+| 2026-07-10 | `nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_histavg_activity_gelu_mse_v1` | 保留同一 328 特征与 grouped-gated-v2 结构，用 strict ratio-style v3 替代 v2 归一化 | `running`; 2026-07-16 停止旧 cache 高内存重试，切到 T-1 cap/share cache 并以 v2 同规格 `384Gi/768Gi` 重提，8 shards / parallelism 2 | targeted challenger；完成并通过相同 gate 前不改变 mech328 v2 incumbent |
 | 2026-07-15 | `build_delay2_{2019..2025}_auction_fresh_cache_v1` | 用修正后的集合竞价、严格上一交易日市值/股本和完整 freshness/readiness 约束重建隔离 base cache | `running`; 7 个年度 CPU Job 已提交并开始写新 lineage | 数据链路修复；不覆盖或改变旧 cache/实验 |
 | 2026-07-15 | `build_delay2_{2019..2025}_auction_fresh_mixed_w030_target_v1` | 在新 base cache 上复用既有 next-close label，重建 `w_long=0.30` mixed target | `running`; 7 个 CPU Job 已提交，容器/调度等待对应 base shard 产物 | 只为新 causal-data challenger 提供输入 |
 | 2026-07-15 | `nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1` | 同时验证 auction 修正、冗余特征 prune 和三项因果 freshness 控制 | `running`; indexed GPU Job 已提交，等待 7 个 mixed target shard | 完成并通过相同 gate 前不改变 incumbent |
@@ -87,7 +87,7 @@
 
 ## 当前决策记录
 
-### Mech328 v3 histavg activity challenger（2026-07-15 重提，在途）
+### Mech328 v3 cap-cache challenger（2026-07-16 重提，在途）
 
 本轮 v3 只作为 `mech328_v2_robust_zscore` 的 targeted challenger，不改变 incumbent。实验固定使用
 同一批 328 个模型输入特征名，核心配置为：
@@ -95,9 +95,7 @@
 ```toml
 [features]
 feature_value_transform = "mechanismized_v3_dimensionless_328"
-include_historical_daily_activity_references = true
-historical_daily_activity_windows = [60]
-historical_daily_activity_min_periods = 10
+include_historical_daily_activity_references = false
 
 [model]
 name = "torch_mlp"
@@ -106,7 +104,7 @@ loss = "mse"
 # feature_standardization 未显式覆盖，Torch NN 入口默认 global_zscore。
 
 [k8s]
-shard_parallelism = 8
+shard_parallelism = 2
 
 [k8s.resources]
 memory_request = "384Gi"
@@ -115,35 +113,43 @@ memory_limit = "768Gi"
 
 解释口径：
 
-- `mechanismized_v3_dimensionless_328` 在特征值层做 strict ratio-style 无量纲化：价格转 bps/tick，
-  volume/depth/count/turnover 使用机制 reference 或 prior-date 60d 历史 activity 分母。
+- `mechanismized_v3_dimensionless_328` 在特征值层继续做原 strict ratio-style 无量纲化：价格转 bps/tick，
+  volume/depth 使用 cache 中严格 T-1 `total_shares`，turnover/notional 使用 `total_market_cap`；count 口径不变。
 - v3 不做 `date × decision_target_timestamp` 的截面 robust-zscore；代码中该配置归一为
   `mechanismized_v3_none`，即机制化后不再追加横截面 zscore/rank。
 - NN 入口仍保留 train-window global zscore，这是优化尺度标准化，不等价于横截面 zscore；它不会按每个
   决策时点抹掉市场共同活跃度或截面幅度。
 
-2026-07-15 排查发现首次重提 OOM 并非 154 个 PVC 读取列或 328 个最终特征变多，而是
-`add_historical_daily_activity_reference_features()` 在 load 阶段为两列历史 activity denominator 做了
-整张 feature frame 深拷贝和行级 merge。修复后改为浅拷贝外壳、日频 `symbol × date` 小表 rolling、
-整数 key 映射回行级样本。小样本 PVC 审计（2022-07，约 97.5 万采样后行）显示：
+2026-07-16 复查确认旧 mixed cache 没有市值/股本列，v3 因而为每个模型特征重复探测缺失 reference，
+并依赖全量 prior-date 60d volume/turnover fallback。原 768Gi Job 的 8 个 shard 均失败；随后临时提高到
+`1Ti/1536Gi` 的重试已按本轮决策停止。新 mixed cache 路径为：
 
 ```text
-before fix: after_activity_refs RSS约 8.4-8.8 GiB
-after fix:  before_activity_refs 5.83 GiB
-            after_activity_refs  5.83 GiB
+/mnt/output/opening_strength_fit/cache/
+opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/
 ```
 
-重提配置：
+2019-2024 已完成 shard 共 69,929,811 行，`total_market_cap` / `total_shares` 仅 18,651 行缺失，
+缺失率 `0.0267%`。训练仍保留历史 same-minute surprise 与 path-shape 特征；只关闭不再需要的
+`historical_daily_activity_references` denominator 构建。兼容 fallback 代码仍保留供旧 cache 调用。
+
+内存实现同时改为按特征需求懒加载 reference，并在一个 transform 内复用同一组 shares、cap、price、depth
+和 count Series；缺失候选列不再分配整列 NaN，book-depth 的 market-cap fallback 只处理 shares 缺失行。
+这不改变 328 特征清单、模型结构、窗口、batch、学习率、epoch、loss 或 NN global zscore。
+
+验证与重提：
 
 ```text
 job:   os-nn-2225-gated-v2-mech328v3-mse
-image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260715-nn-mech328-v3-activity-memfix-v3
-digest: sha256:4321581e4a2dbb8f96dcc97ea257ddf20762c564b6be7009cf56b4c8b127713a
-status at submit check: Running 0/8; 5 pods Running, 3 Pending due Insufficient memory/GPU
+image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260716-nn-mech328-v3-capcache-v1
+digest: sha256:2dfef0f12017debcfb8758644fca307f72962cb62576ce3dcebfffef4d2b0330
+tests: 250 passed, 3 skipped
+resources: request 16 CPU / 384Gi / 1 GPU; limit 32 CPU / 768Gi / 1 GPU
+status at submit check: Running 0/8; first 2 pods Running, waiting for 2025 mixed cache dependency
 ```
 
-截至提交后早期健康检查，运行中的 shard 已进入 PVC 读取流程且未出现启动即 traceback/OOM；是否闭环仍以
-PVC 输出 `_SUCCESS`、`metrics_by_year.csv` 和 `predictions.parquet` 为准。
+是否闭环仍以 PVC 输出 `_SUCCESS`、`metrics_by_year.csv`、`predictions.parquet` 和运行期 cgroup memory peak
+为准；本轮目标是使用与 v2 相同的内存 request/limit 完成计算。
 
 ### Auction-fresh causal rebuild（2026-07-15，在途）
 

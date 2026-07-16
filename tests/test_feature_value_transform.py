@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 import pandas as pd
 
+from opening_strength_fit.feature_transforms import mechanism
 from opening_strength_fit.features import (
     transform_cross_sectional_feature_values,
     transform_mechanismized_feature_values,
@@ -375,6 +377,52 @@ class FeatureValueTransformTest(unittest.TestCase):
         self.assertAlmostEqual(out["volume_diff_1t"].iloc[1], 0.001, places=8)
         self.assertAlmostEqual(out["ask_depth_10"].iloc[0], 0.010, places=8)
         self.assertAlmostEqual(out["ask_depth_10"].iloc[1], 0.010, places=8)
+
+    def test_mechanismized_v3_reuses_cached_market_references(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "date": ["2022-01-04", "2022-01-04"],
+                "decision_target_timestamp": [
+                    pd.Timestamp("2022-01-04 09:31:00"),
+                    pd.Timestamp("2022-01-04 09:31:00"),
+                ],
+                "ask_price_1": [10.0, 20.0],
+                "mid_price": [10.0, 20.0],
+                "total_shares": [10_000_000.0, 20_000_000.0],
+                "total_market_cap": [100_000_000.0, 400_000_000.0],
+                "volume_diff_1t": [1_000.0, 2_000.0],
+                "turnover_diff_1t": [100_000.0, 400_000.0],
+                "ask_depth_10": [10_000.0, 20_000.0],
+            }
+        )
+
+        with (
+            patch.object(
+                mechanism,
+                "_reference_shares",
+                wraps=mechanism._reference_shares,
+            ) as shares_reference,
+            patch.object(
+                mechanism,
+                "_reference_market_cap",
+                wraps=mechanism._reference_market_cap,
+            ) as market_cap_reference,
+            patch.object(
+                mechanism,
+                "_reference_price",
+                wraps=mechanism._reference_price,
+            ) as price_reference,
+        ):
+            out = transform_mechanismized_v3_feature_values(
+                frame,
+                columns=("volume_diff_1t", "turnover_diff_1t", "ask_depth_10"),
+            )
+
+        self.assertEqual(shares_reference.call_count, 1)
+        self.assertEqual(market_cap_reference.call_count, 1)
+        self.assertEqual(price_reference.call_count, 0)
+        self.assertAlmostEqual(out["volume_diff_1t"].iloc[0], 0.0001, places=8)
+        self.assertAlmostEqual(out["turnover_diff_1t"].iloc[1], 0.001, places=8)
 
     def test_torch_mechanismized_v3_robust_zscore_transform_is_explicit(self) -> None:
         frame = pd.DataFrame(
