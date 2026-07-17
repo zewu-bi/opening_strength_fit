@@ -42,6 +42,34 @@ class LabeledPvcSourceTest(unittest.TestCase):
         self.assertIn("label", labeled.columns)
         self.assertEqual(str(labeled.loc[0, "symbol"]), "000001.SZ")
 
+    def test_labeled_pvc_directory_deduplicates_compatibility_symlink(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "cache"
+            root.mkdir()
+            path = root / "opening_2025_label_v4.parquet"
+            pd.DataFrame(
+                [
+                    {
+                        "date": "2025-01-02",
+                        "symbol": "000001.SZ",
+                        "timestamp": pd.Timestamp("2025-01-02 09:30:00"),
+                        "label": 0.01,
+                        "valid_label": True,
+                    }
+                ]
+            ).to_parquet(path, index=False)
+            (root / "opening_2025_old_name.parquet").symlink_to(path.name)
+
+            args = argparse.Namespace(labeled_input=None)
+            config = {
+                "data": {"source": "labeled_pvc", "labeled_path": str(root)},
+                "universe": {"enabled": False},
+            }
+
+            labeled = load_labeled_pvc_frame(args, config)
+
+        self.assertEqual(len(labeled), 1)
+
     def test_labeled_pvc_mechanismized_transform_reads_reference_columns(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "labeled.parquet"

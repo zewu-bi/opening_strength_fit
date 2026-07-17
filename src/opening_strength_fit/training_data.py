@@ -516,13 +516,25 @@ def _labeled_pvc_read_columns(path: Path, config: dict) -> list[str] | None:
 def _labeled_pvc_files(path: Path) -> list[Path]:
     if not path.is_dir():
         return [path]
-    files = sorted(path.rglob("*.parquet"))
+    files = _unique_labeled_pvc_files(list(path.rglob("*.parquet")))
     if files:
         return files
-    files = sorted(path.rglob("*.csv")) + sorted(path.rglob("*.csv.gz"))
+    files = _unique_labeled_pvc_files(list(path.rglob("*.csv")) + list(path.rglob("*.csv.gz")))
     if files:
         return files
     raise SystemExit(f"no parquet/csv files found under directory: {path}")
+
+
+def _unique_labeled_pvc_files(files: list[Path]) -> list[Path]:
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for file in sorted(files, key=lambda item: (item.is_symlink(), str(item))):
+        target = file.resolve()
+        if target in seen:
+            continue
+        seen.add(target)
+        unique.append(file)
+    return unique
 
 
 def _read_labeled_pvc_file(
@@ -814,9 +826,7 @@ def _build_clickhouse_labeled_frame(
                 share_unit_multiplier=share_unit_multiplier,
             )
             reference_dates = (
-                pd.to_datetime(
-                    reference["market_cap_reference_date"], errors="coerce"
-                )
+                pd.to_datetime(reference["market_cap_reference_date"], errors="coerce")
                 .dropna()
                 .dt.strftime("%Y-%m-%d")
                 .unique()

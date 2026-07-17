@@ -8,6 +8,20 @@ import pandas as pd
 FrameFilters = list[tuple[str, str, object]]
 
 
+def _unique_directory_files(files: list[Path]) -> list[Path]:
+    """Prefer real files and de-duplicate compatibility symlinks by target."""
+
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for file in sorted(files, key=lambda item: (item.is_symlink(), str(item))):
+        target = file.resolve()
+        if target in seen:
+            continue
+        seen.add(target)
+        unique.append(file)
+    return unique
+
+
 def _filter_frame(frame: pd.DataFrame, filters: FrameFilters | None) -> pd.DataFrame:
     if not filters:
         return frame
@@ -58,9 +72,11 @@ def read_frame(
         raise SystemExit(f"input path does not exist: {path}")
 
     if path.is_dir():
-        files = sorted(path.rglob("*.parquet"))
+        files = _unique_directory_files(list(path.rglob("*.parquet")))
         if not files:
-            files = sorted(path.rglob("*.csv")) + sorted(path.rglob("*.csv.gz"))
+            files = _unique_directory_files(
+                list(path.rglob("*.csv")) + list(path.rglob("*.csv.gz"))
+            )
         if not files:
             raise SystemExit(f"no parquet/csv files found under directory: {path}")
         frames = [_read_frame_file(file, columns=columns, filters=filters) for file in files]
@@ -74,9 +90,11 @@ def frame_columns(path: str | Path) -> set[str]:
     if not path.exists():
         raise SystemExit(f"input path does not exist: {path}")
     if path.is_dir():
-        files = sorted(path.rglob("*.parquet"))
+        files = _unique_directory_files(list(path.rglob("*.parquet")))
         if not files:
-            files = sorted(path.rglob("*.csv")) + sorted(path.rglob("*.csv.gz"))
+            files = _unique_directory_files(
+                list(path.rglob("*.csv")) + list(path.rglob("*.csv.gz"))
+            )
         if not files:
             raise SystemExit(f"no parquet/csv files found under directory: {path}")
         columns: set[str] = set()

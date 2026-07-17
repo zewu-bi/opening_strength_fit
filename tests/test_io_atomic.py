@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from opening_strength_fit.io import write_frame_atomic
+from opening_strength_fit.io import read_frame, write_frame_atomic
 
 
 def test_write_frame_atomic_writes_readable_parquet(tmp_path):
@@ -27,3 +27,14 @@ def test_write_frame_atomic_replaces_existing_csv(tmp_path):
     loaded = pd.read_csv(path)
     pd.testing.assert_frame_equal(loaded, new)
     assert not list(tmp_path.glob(".*.tmp*"))
+
+
+def test_read_frame_directory_deduplicates_compatibility_symlink(tmp_path):
+    path = tmp_path / "opening_2025_label_v4.parquet"
+    frame = pd.DataFrame({"symbol": ["000001.SZ"], "label": [0.01]})
+    frame.to_parquet(path, index=False)
+    (tmp_path / "opening_2025_old_name.parquet").symlink_to(path.name)
+
+    loaded = read_frame(tmp_path)
+
+    pd.testing.assert_frame_equal(loaded, frame)
