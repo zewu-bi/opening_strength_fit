@@ -315,15 +315,12 @@ def load_ranked_pool_shard(
     pred_rows = len(pred)
     duplicate_keys = int(pred.duplicated(PREDICTION_COLS[:3]).sum())
     if duplicate_keys:
-        raise ValueError(
-            f"invalid predictions for {pred_path}: duplicates={duplicate_keys}"
-        )
+        raise ValueError(f"invalid predictions for {pred_path}: duplicates={duplicate_keys}")
     frame = pred.merge(labels, on=PREDICTION_COLS[:3], how="left", validate="one_to_one")
     missing_labels = int(frame["alpha_return_next_close"].isna().sum())
     if missing_labels:
         raise ValueError(
-            f"invalid prediction/label join for {pred_path}: "
-            f"missing_labels={missing_labels}"
+            f"invalid prediction/label join for {pred_path}: missing_labels={missing_labels}"
         )
     frame["pool_mean"] = frame.groupby(GROUP_COLS, observed=True)[
         "alpha_return_next_close"

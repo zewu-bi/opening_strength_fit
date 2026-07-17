@@ -143,18 +143,14 @@ def require_entry_after_cross_section_ready(
         if column not in frame.columns
     ]
     if missing:
-        raise ValueError(
-            "cross-section entry readiness requires columns: " + ", ".join(missing)
-        )
+        raise ValueError("cross-section entry readiness requires columns: " + ", ".join(missing))
 
     out = frame.copy()
     feature_timestamp = pd.to_datetime(out["timestamp"], errors="coerce")
     entry_timestamp = pd.to_datetime(out["entry_timestamp"], errors="coerce")
     group_keys = [out[column] for column in group_cols]
     ready_timestamp = feature_timestamp.groupby(group_keys, sort=False).transform("max")
-    ready = entry_timestamp.notna() & ready_timestamp.notna() & entry_timestamp.ge(
-        ready_timestamp
-    )
+    ready = entry_timestamp.notna() & ready_timestamp.notna() & entry_timestamp.ge(ready_timestamp)
     out["cross_section_ready_timestamp"] = ready_timestamp
     out["entry_after_cross_section_ready"] = ready
     if "valid_label" in out.columns:

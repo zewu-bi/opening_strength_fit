@@ -311,9 +311,13 @@ def add_historical_daily_activity_reference_features(
     symbol_index = daily.index.levels[0]
     row_symbol_codes = symbol_index.get_indexer(out["symbol"].to_numpy(copy=False))
     row_days = hist_date.to_numpy(dtype="datetime64[D]").astype("int64", copy=False)
-    daily_days = daily.index.get_level_values("_hist_date").to_numpy(
-        dtype="datetime64[D]",
-    ).astype("int64", copy=False)
+    daily_days = (
+        daily.index.get_level_values("_hist_date")
+        .to_numpy(
+            dtype="datetime64[D]",
+        )
+        .astype("int64", copy=False)
+    )
     valid_daily_days = daily_days[daily_days != np.datetime64("NaT", "D").astype("int64")]
     if len(valid_daily_days) == 0:
         return out
@@ -327,9 +331,8 @@ def add_historical_daily_activity_reference_features(
         & (row_days >= min_day)
         & (row_days < min_day + day_span)
     )
-    row_keys = (
-        row_symbol_codes[valid_rows].astype("int64", copy=False) * day_span
-        + (row_days[valid_rows] - min_day)
+    row_keys = row_symbol_codes[valid_rows].astype("int64", copy=False) * day_span + (
+        row_days[valid_rows] - min_day
     )
     row_positions = np.flatnonzero(valid_rows)
     for column in source_columns:

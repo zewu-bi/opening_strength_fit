@@ -113,8 +113,7 @@ def query_lagged_daily_market_reference(
     missing_source_columns = sorted(required_source_columns.difference(raw.columns))
     if missing_source_columns:
         raise RuntimeError(
-            "daily market reference query missing columns: "
-            + ", ".join(missing_source_columns)
+            "daily market reference query missing columns: " + ", ".join(missing_source_columns)
         )
 
     symbol = raw["Symbol"].astype(str)
@@ -133,17 +132,13 @@ def query_lagged_daily_market_reference(
         {
             "date": str(target_day.date()),
             "symbol": symbol,
-            "total_market_cap": positive_scaled(
-                "TotalMarketValue", market_cap_unit_multiplier
-            ),
+            "total_market_cap": positive_scaled("TotalMarketValue", market_cap_unit_multiplier),
             "float_market_cap": positive_scaled(
                 "TotalFloatMarketValue", market_cap_unit_multiplier
             ),
             "total_shares": positive_scaled("TotalShareToday", share_unit_multiplier),
             "float_shares": positive_scaled("FloatAShare", share_unit_multiplier),
-            "free_float_shares": positive_scaled(
-                "FreeShareToday", share_unit_multiplier
-            ),
+            "free_float_shares": positive_scaled("FreeShareToday", share_unit_multiplier),
             "market_cap_reference_date": reference_day.normalize(),
             "market_cap_reference_lag_sessions": int(lag_sessions),
         }
@@ -170,9 +165,7 @@ def attach_daily_market_reference(
         for column in MARKET_REFERENCE_COLUMNS:
             out[column] = np.nan
         out["market_cap_reference_date"] = pd.NaT
-        out["market_cap_reference_lag_sessions"] = pd.Series(
-            pd.NA, index=out.index, dtype="Int64"
-        )
+        out["market_cap_reference_lag_sessions"] = pd.Series(pd.NA, index=out.index, dtype="Int64")
         return out
 
     required_reference = {
@@ -184,12 +177,10 @@ def attach_daily_market_reference(
     missing_reference = sorted(required_reference.difference(reference.columns))
     if missing_reference:
         raise ValueError(
-            "daily market reference merge missing columns: "
-            + ", ".join(missing_reference)
+            "daily market reference merge missing columns: " + ", ".join(missing_reference)
         )
     overlap = sorted(
-        (set(MARKET_REFERENCE_COLUMNS) | set(MARKET_REFERENCE_CONTEXT_COLUMNS))
-        & set(ticks.columns)
+        (set(MARKET_REFERENCE_COLUMNS) | set(MARKET_REFERENCE_CONTEXT_COLUMNS)) & set(ticks.columns)
     )
     if overlap:
         raise ValueError(

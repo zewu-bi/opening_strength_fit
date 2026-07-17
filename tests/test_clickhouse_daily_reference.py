@@ -61,9 +61,7 @@ def test_query_market_reference_is_strictly_lagged_and_unit_normalized() -> None
 
 
 def test_query_market_reference_rejects_same_day_reference() -> None:
-    client = _FakeClient(
-        [pd.DataFrame({"reference_day": [pd.Timestamp("2025-07-01")]})]
-    )
+    client = _FakeClient([pd.DataFrame({"reference_day": [pd.Timestamp("2025-07-01")]})])
 
     with pytest.raises(RuntimeError, match="strictly earlier"):
         query_lagged_daily_market_reference(

@@ -23,9 +23,7 @@ def test_independent_rank_ic_implementations_match_with_ties() -> None:
 
     assert spearman_rank_ic(scores, outcomes) == pytest.approx(expected)
     assert numpy_rank_ic(scores, outcomes) == pytest.approx(expected)
-    assert numpy_average_ranks(scores) == pytest.approx(
-        np.array([4.5, 4.5, 3.0, 2.0, 1.0])
-    )
+    assert numpy_average_ranks(scores) == pytest.approx(np.array([4.5, 4.5, 3.0, 2.0, 1.0]))
 
 
 def test_group_and_bucket_audit_preserve_direction() -> None:

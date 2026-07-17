@@ -136,9 +136,7 @@ def build_preopen_features(
 
     normalized_price_mode = str(price_mode).strip().lower().replace("-", "_")
     if normalized_price_mode not in {"legacy_last_price", "indicative_quote_v2"}:
-        raise ValueError(
-            "preopen price_mode must be legacy_last_price or indicative_quote_v2"
-        )
+        raise ValueError("preopen price_mode must be legacy_last_price or indicative_quote_v2")
 
     if normalized_price_mode == "indicative_quote_v2":
         keys = ["date", "symbol"]
@@ -208,9 +206,7 @@ def build_preopen_features(
                 "_preopen_indicative_last",
                 pd.Series(float("nan"), index=base.index),
             )
-            base["preopen_last_price"] = base["_preopen_match_price"].combine_first(
-                fallback
-            )
+            base["preopen_last_price"] = base["_preopen_match_price"].combine_first(fallback)
         elif "_preopen_indicative_last" in base.columns:
             base["preopen_last_price"] = base["_preopen_indicative_last"]
 

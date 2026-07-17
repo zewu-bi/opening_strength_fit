@@ -119,14 +119,16 @@ def build_bucket_diagnostics(
     }
     for scope, scoped in scopes.items():
         work = scoped.copy()
-        work["outcome_rank_pct"] = work.groupby(
-            GROUP_COLS, sort=False, observed=True
-        )["alpha_return_next_close"].rank(method="average", pct=True)
+        work["outcome_rank_pct"] = work.groupby(GROUP_COLS, sort=False, observed=True)[
+            "alpha_return_next_close"
+        ].rank(method="average", pct=True)
         for bucket_count in BUCKET_COUNTS:
             divisor = TOP_N if scope == "top1000" else work["group_size"]
             work["bucket"] = (
-                (work["score_rank"] - 1) * bucket_count // divisor + 1
-            ).clip(upper=bucket_count).astype(int)
+                ((work["score_rank"] - 1) * bucket_count // divisor + 1)
+                .clip(upper=bucket_count)
+                .astype(int)
+            )
             group_bucket = (
                 work.groupby(GROUP_COLS + ["month", "bucket"], observed=True)
                 .agg(
@@ -159,9 +161,7 @@ def build_bucket_diagnostics(
                         "bucket_count": bucket_count,
                         "bucket_rank_ic": spearman_rank_ic(
                             -group["bucket"].to_numpy(dtype="float64", copy=False),
-                            group["mean_excess_bps"].to_numpy(
-                                dtype="float64", copy=False
-                            ),
+                            group["mean_excess_bps"].to_numpy(dtype="float64", copy=False),
                         ),
                     }
                 )
@@ -170,16 +170,14 @@ def build_bucket_diagnostics(
 
 def finalize_curve_data(parts: pd.DataFrame) -> pd.DataFrame:
     curves = (
-        parts.groupby(
-            ["variant", "scope", "bucket_count", "bucket"], observed=True
-        )[["excess_sum", "outcome_rank_sum", "groups"]]
+        parts.groupby(["variant", "scope", "bucket_count", "bucket"], observed=True)[
+            ["excess_sum", "outcome_rank_sum", "groups"]
+        ]
         .sum()
         .reset_index()
     )
     curves["mean_excess_bps"] = curves.pop("excess_sum") / curves["groups"]
-    curves["mean_within_group_outcome_rank_pct"] = (
-        curves.pop("outcome_rank_sum") / curves["groups"]
-    )
+    curves["mean_within_group_outcome_rank_pct"] = curves.pop("outcome_rank_sum") / curves["groups"]
     top = curves["scope"].eq("top1000")
     curves["x"] = np.where(
         top,
@@ -304,9 +302,7 @@ def run_rank_bucket_reaudit(config: RankBucketReauditConfig) -> None:
             year = month[:4]
             if year not in labels:
                 labels.clear()
-                labels[year] = load_label_for_year(
-                    next_label_path(config.next_label_root, year)
-                )
+                labels[year] = load_label_for_year(next_label_path(config.next_label_root, year))
             frame, shard_trace = load_ranked_pool_shard(
                 pred_path=prediction_path(config.prediction_root, run_id, month),
                 labels=labels[year],
@@ -324,9 +320,7 @@ def run_rank_bucket_reaudit(config: RankBucketReauditConfig) -> None:
     group_ic = pd.concat(group_parts, ignore_index=True)
     bucket_ic = pd.concat(bucket_parts, ignore_index=True)
     curves = finalize_curve_data(pd.concat(curve_parts, ignore_index=True))
-    group_summary = summarize_ic(
-        group_ic, value="rank_ic", keys=["variant", "scope"]
-    )
+    group_summary = summarize_ic(group_ic, value="rank_ic", keys=["variant", "scope"])
     audit_errors = (
         group_ic.groupby(["variant", "scope"], observed=True)[
             [
@@ -351,6 +345,4 @@ def run_rank_bucket_reaudit(config: RankBucketReauditConfig) -> None:
     for variant in config.run_ids:
         if "mech328_v2" in variant:
             plot_return_curves(curves, variant=variant, output_dir=config.output_dir)
-    (config.output_dir / "trace.json").write_text(
-        json.dumps(trace, indent=2), encoding="utf-8"
-    )
+    (config.output_dir / "trace.json").write_text(json.dumps(trace, indent=2), encoding="utf-8")
