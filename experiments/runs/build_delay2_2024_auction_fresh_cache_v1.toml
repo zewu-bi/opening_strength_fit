@@ -2,7 +2,7 @@
 id = "build_delay2_2024_auction_fresh_cache_v1"
 kind = "labeled_cache"
 description = "Build the 2024 delay2 cache with indicative-auction features, strict T-1 market-cap/share enrichment, bounded tick freshness, and entry after complete cross-section readiness."
-status = "running"
+status = "completed"
 
 [data]
 source = "clickhouse"

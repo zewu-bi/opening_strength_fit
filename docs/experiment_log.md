@@ -1,7 +1,7 @@
 # Experiment Log
 
-> Last reconciled: 2026-07-16
-> Coverage: 2026-05-20 through 2026-07-16
+> Last reconciled: 2026-07-17
+> Coverage: 2026-05-20 through 2026-07-17
 
 本文件是人工维护的实验事实账本，严格按发生时间升序记录假设、口径、结果、状态和决策。当前研究
 方向见 [project_brief.md](project_brief.md)，命令见 [runbook.md](runbook.md)。旧版逐日长记录原样保存在
@@ -26,9 +26,11 @@
 | date | run | hypothesis | last known status | incumbent impact |
 | --- | --- | --- | --- | --- |
 | 2026-07-10 | `nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_histavg_activity_gelu_mse_v1` | 保留同一 328 特征与 grouped-gated-v2 结构，用 strict ratio-style v3 替代 v2 归一化 | `running`; 2026-07-16 停止旧 cache 高内存重试，切到 T-1 cap/share cache 并以 v2 同规格 `384Gi/768Gi` 重提，8 shards / parallelism 2 | targeted challenger；完成并通过相同 gate 前不改变 mech328 v2 incumbent |
-| 2026-07-15 | `build_delay2_{2019..2025}_auction_fresh_cache_v1` | 用修正后的集合竞价、严格上一交易日市值/股本和完整 freshness/readiness 约束重建隔离 base cache | `running`; 7 个年度 CPU Job 已提交并开始写新 lineage | 数据链路修复；不覆盖或改变旧 cache/实验 |
-| 2026-07-15 | `build_delay2_{2019..2025}_auction_fresh_mixed_w030_target_v1` | 在新 base cache 上复用既有 next-close label，重建 `w_long=0.30` mixed target | `running`; 7 个 CPU Job 已提交，容器/调度等待对应 base shard 产物 | 只为新 causal-data challenger 提供输入 |
-| 2026-07-15 | `nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1` | 同时验证 auction 修正、冗余特征 prune 和三项因果 freshness 控制 | `running`; indexed GPU Job 已提交，等待 7 个 mixed target shard | 完成并通过相同 gate 前不改变 incumbent |
+| 2026-07-16 | `build_delay2_{2019..2025}_conservative_cap_cache_v1` | 在旧 cache 覆盖率语义上只加 T-1 cap/share、基础竞价变换，并让 delay2 跳过同交易所时间戳重复行 | `completed`; 7 个年度 Job 从 ClickHouse 全量重建，单年约 10.5-18 小时 | 作为 tick-count 对照保留；不再作为新 target/model 的输入 |
+| 2026-07-16 | `build_delay2_{2019..2025}_conservative_cap_mixed_w030_target_v1` | 从保守 base 构造既有定义的 mixed-w030 target | `superseded`; 从未提交 | 固定 +6 秒口径确认后取消该下游分支 |
+| 2026-07-17 | `build_delay6_clock_state_{2019..2025}_cap_cache_v1` | entry 固定为特征状态后 6 秒，entry/sell 边界取该逻辑时刻最后已知状态，并保留 source timestamp/state age 审计列 | `running`; 7 个年度 ClickHouse base Job 已提交 | 新的 canonical label/cache lineage |
+| 2026-07-17 | `build_delay6_clock_state_{2019..2025}_cap_mixed_w030_target_v1` | 从 fixed-clock base 构造既有 mixed-w030 target | `queued`; Job 已渲染和 dry-run，等待 base manifest 与逐日覆盖率审计 | 后续新训练只读该 target lineage |
+| 2026-07-17 | `nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1` | 固定模型/特征，只把数据切到 fixed-clock cache | `queued`; sharded Job 已渲染和 dry-run，等待 7 个 mixed target | 对 auction-fresh v4 做同规格数据口径 A/B |
 
 ## 决策时间线
 
@@ -84,8 +86,100 @@
 | 07-10 | mech328 v3 submit | ratio-style histavg activity，无截面 z-score | 8 shards submitted，尚无 metrics | 保持 targeted challenger，见在途表 |
 | 07-15 | mech328 v2 rank/bucket re-audit | 原始 prediction、next-close label 与 `pool_L` 重新 join 并交叉实现 Spearman | `pool_L` 全池 / Top1000 单股 Rank IC `+0.008054/-0.016463`；Top1000 10×100 per-decision bucket IC `+0.050524`，汇总曲线 IC `+0.975758`；头尾 pair win `48.07%` | 计算无 sign、tie、label 或 excess 口径错误；定位为 conditional-mean/right-tail head overlay，不作单股细排器 |
 | 07-15 | auction-fresh causal rebuild | 新竞价口径、两自由度价格基底、派生竞价 path、1m queue horizon、严格 tick freshness/截面 readiness、T-1 市值股本 | `248 passed, 3 skipped`；真实 ClickHouse 抽样和 7 个 base Job 首日日志均确认 prior-session reference，覆盖 `99.94%-100%` | 使用独立 v4 base/v3 mixed lineage；base 已先启动，target/model 随后作为 overnight waiting jobs 提交 |
+| 07-16 | conservative cap/unique-tick rebuild | 旧 cache 语义 + T-1 cap/share + indicative-auction；同 `(date,symbol,exchange timestamp)` 只保留一个确定性快照，delay2 继续向后数两个不同时间戳；移除三项严格有效性门 | 2019-04-19 全市场：`2,326,300 -> 1,162,995` unique rows，`38,740/39,115 = 99.0413%` 样本有效；有效 entry 中 `92.51%` 为 6 秒，其余继续读到更后真实 tick；全量 `265 passed, 3 skipped` | 使用独立 v3 base/v2 mixed lineage；先跑 base，完成后按日审计覆盖率再提交 target |
+| 07-17 | auction-fresh pruned acceptance archive | 完成 indexed GPU training、pool-internal analysis、artifact sync，并用 runbook overlay acceptance 对比 mech328 v2 / gated v2 | `pool_L` next excess `16.9692 bps`，高于 mech328 v2 `14.3174` 和 gated v2 `13.2768`；Top100 8bps net cumulative `9893.9 bps`，相对 pool_L cumulative excess `8221.6 bps`；universe short IC `0.150489`，低于 mech328 v2/gated v2 | 通过 Top100 收益验收并归档为 causal-data challenger；因 short IC 退化且未做 capacity/realistic，不替换 mech328 v2 incumbent |
+| 07-17 | auction-fresh downstream acceptance | 同 runbook t10p20 capacity audit/acceptance、execution-context realistic replay、core/size exposure 和右尾 P95/P99 拆解 | capacity fee8bps cumulative `9244.5 bps`；realistic fill `0.8073`、fee8bps cumulative `7323.9 bps`；size exposure 近中性，activity exposure 仍高；P95 winsor 后 capacity/realistic 分别 `-1.5/-0.3 bps` | execution 后仍强于 LGBM/MLP anchors，但收益质量被 P95 右尾依赖否决；继续作为 archived challenger，不替换 incumbent |
+| 07-17 | fixed-clock +6s label patch | 用 event/state 语义替换“向后数两条更新”和 `>5s` freshness 失效：entry 固定 +6s，entry/sell 取边界时刻最后已知状态；同时间戳 revision 仍确定性去重 | 2019-04-19 同一批 2,326,300 ClickHouse 行：conservative `38,740/39,115=99.0413%`，fixed-clock `38,745/39,115=99.0541%`；旧口径 2,901 个有效 entry 晚于 6 秒，新口径全部精确 6 秒，entry state-age P99/max 为 3/6 秒 | 建立独立 delay6-clock-state base/mixed lineage；旧 conservative mixed target superseded；新实验只读新 lineage |
 
 ## 当前决策记录
+
+### Fixed-clock +6s state cache（2026-07-17，在途）
+
+ClickHouse `stock.tick` 在状态未变化时可以不写一条 3 秒快照，因此“下一条物理更新距离超过 5 秒”
+不能直接解释为 stale 或缺失；反过来，取消阈值后继续数两条更新又会把逻辑 +6 秒入场漂移到
+9、12、15 秒甚至更晚。新口径把执行时钟和源状态时间拆开：
+
+```toml
+[labels]
+entry_tick_delay = 2                 # 只保留为名义/兼容审计字段
+entry_alignment = "clock_state"
+entry_clock_delay_seconds = 6
+future_alignment = "clock_state"
+require_entry_after_cross_section_ready = true
+```
+
+- `entry_timestamp` 是固定的逻辑 +6 秒；`entry_source_timestamp` 是该时刻之前最后一条状态，
+  `entry_state_age_seconds` 记录携带时长。
+- sell start/end 同样以逻辑边界做 backward point-in-time state lookup，禁止读取边界之后才出现的 tick。
+- 同 `date × symbol × exchange timestamp` 的 revision 仍先按最新本地接收时间和累计成交状态确定性去重。
+  固定时钟消除了重复行对 entry 时间的影响，但重复 revision 仍会改变盘口值和 row-lag/diff/path 特征。
+- 不再配置 `entry_max_gap_seconds` 或 `max_future_gap_seconds`；真正的数据健康度需要独立 heartbeat、
+  sequence 或接收延迟证据，不能由单股票“多久没变化”代理。
+
+新缓存从 ClickHouse 原始行重新计算，不原地修改旧 parquet：
+
+```text
+base:
+/mnt/output/opening_strength_fit/cache/
+opening_2019_2025_delay6_clock_state_base_labeled_v1_mcap_lag1_unique_ticks/
+
+mixed w030:
+/mnt/output/opening_strength_fit/cache/
+opening_2019_2025_delay6_clock_state_mixed_w030_labeled_v1_mcap_lag1_unique_ticks/
+
+image:
+registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260717-clock-state-delay6-v3
+digest: sha256:768f3101eff40961f561b738fb4a55af8c014fb6b15e4fc1cccdd5efc5413e09
+```
+
+仅 v3 是正式运行镜像。最初 v1 因既有 `.dockerignore` 未排除本地 `.env`，发现后立即删除全部 7 个
+刚启动的 Job；v2 从干净基础镜像完整重建并通过“容器内无 `.env`”检查，v3 只在这个干净 v2 上覆盖
+最终代码和修正后的年度文件名。v1 必须从 registry 删除，并轮换其中涉及的凭据；不得再次拉取或运行。
+
+2019-04-19 同日 A/B 使用相同 2,326,300 条原始行和 1,162,995 个去重后状态。fixed-clock 有效覆盖率
+为 `38,745/39,115=99.0541%`，conservative tick2 为 `38,740/39,115=99.0413%`；二者
+`valid_both/new_only/old_only/invalid_both` 分别为 `38,732/13/8/362`。新口径所有有效 entry
+都是 6 秒；source state age 的 P50/P95/P99/max 为 `0/0/3/6` 秒。7 个年度 base Job 已提交；
+target 和模型保持 queued，待 base parquet、manifest 和逐日审计完成后再提交。v3 集群首日 smoke 已完成：
+2019-01-02 得到 `36,358` 行、`35,570` 个 valid label，T-1 reference 为 2018-12-28；随后已进入
+2019-01-03，7 个年度 Pod 均为 0 restart。
+
+### Conservative cap + unique-tick cache（2026-07-16，base 已完成、target 已终止）
+
+这条线回答 2019-04-19 的重复 tick 问题，不把重复记录本身判成 label 无效。新配置在进入特征和 label
+构造前，按 `date × symbol × exchange timestamp` 去重；保留行优先取最新本地接收时间，随后以累计成交
+笔数、成交量、成交额和稳定 fingerprint 决定。因而 `entry_tick_delay = 2` 表示向后两个不同的交易所
+时间戳，而不是 DataFrame 中向后两条物理记录。最老 cache 的配置不开此开关，历史结果仍可原样复现。
+
+保守 base 只在旧覆盖率语义上增加：
+
+- `stock.daily_bar_jy` 的严格 T-1 `total/float market cap` 与 `total/float/free-float shares`；
+- `indicative_quote_v2` 和既有基础特征构造；
+- `tick_timestamp_deduplication = "latest_local_timestamp"`。
+
+明确不包含 `entry_max_gap_seconds`、`max_future_gap_seconds` 和
+`require_entry_after_cross_section_ready`。缓存路径与执行镜像为：
+
+```text
+base:
+/mnt/output/opening_strength_fit/cache/
+opening_2019_2025_delay2_base_labeled_v3_conservative_mcap_lag1_unique_ticks/
+
+mixed w030（尚未提交）:
+/mnt/output/opening_strength_fit/cache/
+opening_2019_2025_delay2_mixed_w030_labeled_v2_conservative_mcap_lag1_unique_ticks/
+
+image:
+registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260716-conservative-cache-v1
+digest: sha256:b9b50bc6ed46a95959e96865fd9ce28750b02cdfeb851571233c9ded0a01f40b
+```
+
+真实 2019-04-19 全市场查询得到 2,326,300 条原始记录和 1,162,995 个唯一时间戳；去重后 39,115
+个分钟决策样本中 38,740 个有效，覆盖率 99.0413%，T-1 reference date 为 2019-04-18。有效样本中
+35,839 个（92.51%）entry delay 为 6 秒；其余样本继续读到 9、12、15 秒等后续真实 tick，并未因超过
+5 秒而失效。七个 base Job 均从 ClickHouse 全量重建完成，耗时约 10.5-18 小时；这不是旧 parquet
+上的快速补丁。首个交易日 reference date 均早于样本日。fixed-clock 口径确认后，这组 base 只保留为
+tick-count 对照；其 mixed target 从未提交，现已标记为 superseded。
 
 ### Mech328 v3 cap-cache challenger（2026-07-16 重提，在途）
 
@@ -151,7 +245,7 @@ status at submit check: Running 0/8; first 2 pods Running, waiting for 2025 mixe
 是否闭环仍以 PVC 输出 `_SUCCESS`、`metrics_by_year.csv`、`predictions.parquet` 和运行期 cgroup memory peak
 为准；本轮目标是使用与 v2 相同的内存 request/limit 完成计算。
 
-### Auction-fresh causal rebuild（2026-07-15，在途）
+### Auction-fresh causal-prune acceptance archive（2026-07-15~17，已归档）
 
 这条线不修改旧 cache 或旧实验。base cache 使用 `stock.tick` 构造分钟样本，并从
 `stock.daily_bar_jy` 按 `TradingDay < sample_date` 取得严格最近上一交易日 reference。原表市值、股本
@@ -183,11 +277,12 @@ digest: sha256:1ccde06592cf99313112cfc5b0f667a91d448a3818030b072a278cf139d42a33
 
 任务依赖和提交状态：
 
-| stage | run/job family | resource | status on 2026-07-15 | dependency |
+| stage | run/job family | resource | final status | dependency |
 | --- | --- | --- | --- | --- |
-| base | `build_delay2_{2019..2025}_auction_fresh_cache_v1` / `os-cache-auction-fresh-{year}` | CPU，单 Job request `8 CPU / 256Gi` | 7 个 Job `running`、零重启 | ClickHouse `stock.tick` + `stock.daily_bar_jy` |
-| mixed target | `build_delay2_{2019..2025}_auction_fresh_mixed_w030_target_v1` / `os-target-auction-fresh-{year}` | CPU，单 Job request `8 CPU / 256Gi` | 7 个 Job 已提交；提交检查时 3 个 Pod Running 等待文件、4 个 Pod Pending 因 CPU/memory | 对应年度 base 完成 + 既有 next-close label |
-| model | `nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1` / `os-nn-auction-fresh-pruned-v1` | GPU sharded training，8 completions / parallelism 2，单 Pod request `16 CPU / 512Gi / 1 GPU` | Job 已提交；提交检查时前 2 个 shard Pod Pending 因 GPU/memory | 2019-2025 七个 mixed target 全部完成 |
+| base | `build_delay2_{2019..2025}_auction_fresh_cache_v1` / `os-cache-auction-fresh-{year}` | CPU，单 Job request `8 CPU / 256Gi` | 7 个 Job `completed`、零重启 | ClickHouse `stock.tick` + `stock.daily_bar_jy` |
+| mixed target | `build_delay2_{2019..2025}_auction_fresh_mixed_w030_target_v1` / `os-target-auction-fresh-{year}` | CPU，单 Job request `8 CPU / 256Gi` | 7 个 Job `completed` | 对应年度 base 完成 + 既有 next-close label |
+| model | `nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1` / `os-nn-auction-fresh-pruned-v1` | GPU sharded training，8 completions / parallelism 2，单 Pod request `16 CPU / 512Gi / 1 GPU` | 8 个半年 shard completed；metrics 已同步 | 2019-2025 七个 mixed target 全部完成 |
+| pool-internal analysis | `os-analyze-nn-auction-fresh-pruned-v1` | CPU，`8 CPU / 256Gi` request | completed；join 后 `44,033,943/44,033,943` prediction rows retained | model predictions + delay2 next-close labels |
 
 首个样本交易日的集群日志分别引用 `2018-12-28`、`2019-12-31`、`2020-12-31`、
 `2021-12-31`、`2022-12-30`、`2023-12-29`、`2024-12-31`，均严格早于 2019-2025 各年首个
@@ -201,6 +296,71 @@ entry 必须晚于同一 decision group 的完整截面 ready timestamp。
 五个市值/股本业务字段会保留在 cache 中，既可供其他任务直接使用，也会被当前 mechanismized v3 作为
 support reference，把名义金额、盘口量和成交量归一化到公司规模；它们不作为五个 raw feature 直接进入
 当前模型矩阵。两个 reference metadata 字段只用于审计并显式列为非特征列。
+
+验收结果（2022-2025，`pool_L` Top100，8 bps fee；对比 mech328 v2 和 gated v2）：
+
+| metric | auction-fresh pruned v1 | mech328 v2 | gated v2 |
+| --- | ---: | ---: | ---: |
+| universe short Rank IC | 0.150489 | 0.154160 | **0.157623** |
+| pool_L short Rank IC | 0.137495 | 0.142022 | **0.144034** |
+| pool_L next excess bps | **16.9692** | 14.3174 | 13.2768 |
+| positive next months | 38/48 | **39/48** | **39/48** |
+| Top100 next net cumulative, 8 bps | **9893.9** | 8508.0 | 8003.8 |
+| cumulative excess vs pool_L | **8221.6** | 6936.8 | 6432.6 |
+| quarterly next-excess wins | **11/16** | 3/16 | 2/16 |
+
+Interpretation: 这轮收益验收胜出，但 short 排序力退化。日度 `pool_L` next excess 的均值/中位数为
+`16.97/15.28 bps`，日胜率 `58.0%`，高于 mech328 v2 的 `14.32/13.52 bps` 和 `57.8%`；但日度标准差
+升至 `79.5 bps`，高于 mech328/gated 的约 `70.4 bps`。因此增量更像严格因果数据链路和 payoff
+对齐带来的经济收益，而不是更强的 short ranker。
+
+Downstream acceptance（t10p20 capacity-only，8 bps fee；2026-07-17 补充）：
+
+| metric | auction-fresh pruned v1 | LGBM pruned 328 | MLP base |
+| --- | ---: | ---: | ---: |
+| capacity acceptance cumulative net bps | **9244.5** | 6009.2 | 7657.0 |
+| realistic mean fill | 0.8073 | 0.8022 | **0.8093** |
+| realistic cumulative net bps | **7323.9** | 4705.3 | 6113.0 |
+
+Exposure：相对 gated v2，auction-fresh 的活跃度暴露略降但仍高，`turnover_diff_10t/30t`
+`selected_mean_z` 为 `1.146/1.114`，Top decile share `48.0%/46.3%`；size 暴露从 gated v2 的
+log market-cap `z=0.318/0.278` 降到近中性（`market_cap z=-0.024`，`float_market_cap z=-0.020`）。
+
+Tail decomposition：capacity selected raw gross `27.08 bps`（fee 后 `19.08 bps`），P95 winsor 后
+`-1.51 bps`、P99 winsor 后 `21.26 bps`；realistic selected raw gross `21.58 bps`（fee 后
+`15.12 bps`），P95 winsor 后 `-0.29 bps`、P99 winsor 后 `17.18 bps`。P95 右尾占 notional
+约 `5.8%/5.6%`，却贡献 `79.62/61.58 bps`，非尾部背景为 `-52.54/-40.01 bps`。
+
+Decision: 归档为通过 Top100、capacity 和 first-pass realistic 收益 gate 的 causal-data challenger；
+但 short IC 退化且 P95 右尾依赖过强，不替换 `mech328_v2_robust_zscore` incumbent。下一步必须做 refill、
+完整资金预算、overlap 与 market-state 稳健性拆解。
+
+Artifacts:
+
+```text
+experiments/results/metrics/
+nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1_metrics_by_year.csv
+nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1_metrics_by_month.csv
+
+experiments/results/backtests/
+nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1/
+
+experiments/results/backtests/
+optimization_overlay_acceptance_auction_fresh_pruned_vs_mech328_v2_gated_v2_2022_2025/
+
+experiments/results/backtests/
+capacity_audit_nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_t10p20_capacityonly_v1/
+capacity_acceptance_nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_t10p20_capacityonly_fee8bps_v1/
+execution_context_auction_fresh_pruned_t10p20_v1/
+realistic_acceptance_auction_fresh_pruned_2022_2025_t10p20_execctx_v2/
+exposure_audit_nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_core_v1/
+exposure_audit_nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_size_industry_v1/
+tail_decomposition_auction_fresh_pruned_t10p20_execctx_v1/
+
+figures:
+optimization_directions_overlay_acceptance.svg
+optimization_directions_net_alpha_cumulative.svg
+```
 
 ### Overlay incumbent：mech328 v2
 
@@ -235,13 +395,16 @@ experiments/results/backtests/mech328_v2_top1000_pairwise_audit_v1/
 | --- | ---: | ---: | ---: | ---: |
 | LGBM pruned 328 | 0.802248 | 0.596093 | 9.7116 | 4705.3 |
 | MLP base | 0.809290 | 0.635732 | 12.6171 | 6113.0 |
+| auction-fresh pruned | 0.807326 | 0.596713 | 15.1165 | 7323.9 |
 
 Artifacts:
 
 ```text
 experiments/results/backtests/realistic_acceptance_lgbm328_2022_2025_t10p20_execctx_v2/
 experiments/results/backtests/realistic_acceptance_mlp_base_2022_2025_t10p20_execctx_v2/
+experiments/results/backtests/realistic_acceptance_auction_fresh_pruned_2022_2025_t10p20_execctx_v2/
 experiments/results/backtests/execution_context_{lgbm328,mlp_base}_t10p20_v1/
+experiments/results/backtests/execution_context_auction_fresh_pruned_t10p20_v1/
 experiments/results/backtests/ask_level_attribution_{lgbm328,mlp_base}_t10p20_v1/
 ```
 

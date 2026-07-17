@@ -1,0 +1,35 @@
+[run]
+id = "extract_execution_context_auction_fresh_pruned_t10p20_v1"
+kind = "execution_context"
+description = "Extract t10p20 split20 execution context for auction-fresh pruned capacity-selected rows."
+status = "completed"
+
+[[execution_context.inputs]]
+name = "auction_fresh_pruned"
+selected_path = "/mnt/output/opening_strength_fit/runs/analyses/capacity-audit/capacity_audit_nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_t10p20_capacityonly_v1/capacity_audit_selected.csv"
+prediction_root = "/mnt/output/opening_strength_fit/nn/nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1"
+output_dir = "/mnt/output/opening_strength_fit/runs/analyses/execution-context/execution_context_auction_fresh_pruned_t10p20_v1"
+
+[output]
+local_dir = "output/artifacts/extract_execution_context_auction_fresh_pruned_t10p20_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/analyses/execution-context/extract_execution_context_auction_fresh_pruned_t10p20_v1"
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-execctx-auction-fresh"
+image_pull_secret = "highfort"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260715-auction-fresh-mcap-lag1-v1"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+env_secrets = ["xy-fit-ceph-credentials"]
+wait_for_paths = [
+  "/mnt/output/opening_strength_fit/runs/analyses/capacity-audit/capacity_audit_nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_t10p20_capacityonly_v1/capacity_audit_selected.csv",
+]
+wait_for_path_timeout_seconds = 21600
+wait_for_path_interval_seconds = 120
+
+[k8s.resources]
+cpu_request = "8"
+cpu_limit = "16"
+memory_request = "128Gi"
+memory_limit = "256Gi"

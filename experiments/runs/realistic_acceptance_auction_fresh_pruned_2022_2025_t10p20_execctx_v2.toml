@@ -1,0 +1,38 @@
+[run]
+id = "realistic_acceptance_auction_fresh_pruned_2022_2025_t10p20_execctx_v2"
+kind = "realistic_acceptance"
+description = "Replay auction-fresh pruned t10p20 capacity-selected child orders with the 2026-07-03 execution-context v2 constraints."
+status = "completed"
+
+[realistic_acceptance]
+variant = "auction_fresh_pruned realistic t10p20 execctx v2"
+selected_input = ["experiments/results/backtests/capacity_audit_nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_t10p20_capacityonly_v1/capacity_audit_selected.csv"]
+execution_input = ["experiments/results/backtests/execution_context_auction_fresh_pruned_t10p20_v1/execution_context.parquet"]
+label_input = [
+  "output/legacy/labels/next_close_labels_2021_2024",
+  "output/legacy/labels/next_close_labels_2025",
+]
+label_col = "alpha_return_next_close"
+capacity_total_notional = 1000000000
+fee_bps = 8
+max_daily_symbol_weight = 0.005
+max_daily_symbol_participation_rate = 0.1
+daily_capacity_method = "max"
+execution_fill_rate = 1.0
+min_child_notional = 10000
+max_symbol_decision_count = 0
+round_lot_shares = 100
+price_col = "capacity_price"
+status_col = "status"
+tradable_statuses = ["T0", "TRADE"]
+spread_bps_col = "spread_bps"
+max_spread_bps = 50
+limit_up_room_bps_col = "ask1_to_limit_up_bps"
+min_limit_up_room_bps = 0
+ask_depth_notional_col = "ask_depth_notional"
+max_ask_depth_participation_rate = 0.25
+industry_col = "industry"
+max_daily_industry_weight = 0
+
+[output]
+local_dir = "experiments/results/backtests/realistic_acceptance_auction_fresh_pruned_2022_2025_t10p20_execctx_v2"

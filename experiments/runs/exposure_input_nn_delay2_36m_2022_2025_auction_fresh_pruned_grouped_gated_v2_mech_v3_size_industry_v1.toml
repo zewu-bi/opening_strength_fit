@@ -1,0 +1,38 @@
+[run]
+id = "exposure_input_nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_size_industry_v1"
+kind = "exposure_input"
+description = "Build the daily pool_L size and industry exposure input for the 2022-2025 auction-fresh causal-prune NN challenger. This support artifact is consumed by the size/industry exposure audit."
+status = "completed"
+
+[exposure_input]
+predictions = ["/mnt/output/opening_strength_fit/nn/nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1"]
+pool = "L"
+pool_date_lag_sessions = 0
+date_chunk_size = 90
+daily_bar_table = "stock.daily_bar_jy"
+industry_table = "stock.industry"
+include_decision_timestamp = false
+
+[output]
+local_dir = "output/artifacts/exposure_input_nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_size_industry_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/analyses/exposure-input/exposure_input_nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_size_industry_v1"
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-expinp-auction-fresh-size"
+image_pull_secret = "highfort"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260703-exposure-dgmse-v2"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+clickhouse_secret = "opening-strength-clickhouse"
+env_secrets = ["xy-fit-ceph-credentials"]
+avoid_nodes = ["node7", "node8"]
+wait_for_paths = ["/mnt/output/opening_strength_fit/nn/nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1/month_2025-07/metrics_by_year.csv"]
+wait_for_path_timeout_seconds = 21600
+wait_for_path_interval_seconds = 120
+
+[k8s.resources]
+cpu_request = "8"
+cpu_limit = "16"
+memory_request = "128Gi"
+memory_limit = "256Gi"

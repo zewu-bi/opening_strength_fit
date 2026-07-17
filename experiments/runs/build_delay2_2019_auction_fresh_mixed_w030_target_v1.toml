@@ -2,7 +2,7 @@
 id = "build_delay2_2019_auction_fresh_mixed_w030_target_v1"
 kind = "cache_transform"
 description = "Build the 2019 mixed-w030 target shard from the isolated auction-fresh T-1 market-cap delay2 cache and existing next-close labels."
-status = "running"
+status = "completed"
 
 [target_cache]
 input_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_base_labeled_v4_auction_fresh_mcap_lag1/opening_2019_delay2_base_labeled_v4_auction_fresh_mcap_lag1.parquet"

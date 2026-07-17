@@ -2,7 +2,7 @@
 id = "nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1"
 kind = "exploration"
 description = "Isolated auction-fresh causal-prune challenger: corrected indicative auction path, strict T-1 market-cap/share references, bounded entry/outcome freshness, entry after complete cross-section readiness, a two-degree price basis, derived auction path summaries, and horizon-matched 1m queue response."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"

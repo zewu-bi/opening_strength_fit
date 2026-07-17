@@ -1,0 +1,49 @@
+[run]
+id = "build_delay2_2024_conservative_cap_mixed_w030_target_v1"
+kind = "cache_transform"
+description = "Build the 2024 mixed-w030 target shard from the conservative T-1 market-cap cache whose delay2 counts distinct exchange timestamps."
+status = "superseded"
+
+[target_cache]
+input_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_base_labeled_v3_conservative_mcap_lag1_unique_ticks/opening_2024_delay2_base_labeled_v3_conservative_mcap_lag1_unique_ticks.parquet"
+output_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v2_conservative_mcap_lag1_unique_ticks/opening_2024_delay2_mixed_w030_labeled_v2_conservative_mcap_lag1_unique_ticks.parquet"
+mode = "mixed"
+group_cols = ["date", "decision_target_timestamp"]
+label_col = "label"
+target_col = "target_label"
+raw_label_col = "label_raw"
+min_group_size = 50
+long_label_input = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/opening_2024_next_close_labels_v1.parquet"
+long_label_col = "alpha_return_next_close"
+long_label_weight = 0.30
+short_label_transform = "zscore"
+long_label_transform = "zscore"
+
+[data]
+source = "labeled_pvc"
+labeled_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_base_labeled_v3_conservative_mcap_lag1_unique_ticks/opening_2024_delay2_base_labeled_v3_conservative_mcap_lag1_unique_ticks.parquet"
+
+[output]
+local_dir = "output/artifacts/cache_builds/build_delay2_2024_conservative_cap_mixed_w030_target_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/cache_builds/build_delay2_2024_conservative_cap_mixed_w030_target_v1"
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-target-cons-cap-2024"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260716-conservative-cache-v1"
+wait_for_paths = [
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_base_labeled_v3_conservative_mcap_lag1_unique_ticks/opening_2024_delay2_base_labeled_v3_conservative_mcap_lag1_unique_ticks.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/opening_2024_next_close_labels_v1.parquet",
+]
+wait_for_path_timeout_seconds = 86400
+wait_for_path_interval_seconds = 120
+avoid_nodes = ["node7", "node8"]
+
+[k8s.resources]
+cpu_request = "8"
+cpu_limit = "16"
+memory_request = "256Gi"
+memory_limit = "512Gi"
