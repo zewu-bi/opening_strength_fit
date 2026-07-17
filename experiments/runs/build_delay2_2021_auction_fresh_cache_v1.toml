@@ -17,7 +17,7 @@ enabled = true
 read = true
 write = true
 schema_version = "delay2_base_labeled_v4_auction_fresh_mcap_lag1"
-path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_base_labeled_v4_auction_fresh_mcap_lag1/opening_2021_delay2_base_labeled_v4_auction_fresh_mcap_lag1.parquet"
+path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v3_tick2_gap5_ready_base_mcap_lag1/opening_2021_label_v3_tick2_gap5_ready_base_mcap_lag1.parquet"
 lock_timeout_seconds = 21600
 
 [clickhouse]

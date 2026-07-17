@@ -5,15 +5,15 @@ description = "Build the 2020 mixed-w030 target shard from the isolated auction-
 status = "completed"
 
 [target_cache]
-input_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_base_labeled_v4_auction_fresh_mcap_lag1/opening_2020_delay2_base_labeled_v4_auction_fresh_mcap_lag1.parquet"
-output_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2020_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet"
+input_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v3_tick2_gap5_ready_base_mcap_lag1/opening_2020_label_v3_tick2_gap5_ready_base_mcap_lag1.parquet"
+output_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1/opening_2020_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1.parquet"
 mode = "mixed"
 group_cols = ["date", "decision_target_timestamp"]
 label_col = "label"
 target_col = "target_label"
 raw_label_col = "label_raw"
 min_group_size = 50
-long_label_input = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/opening_2020_next_close_labels_v1.parquet"
+long_label_input = "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1/opening_2020_next_close_labels_v1.parquet"
 long_label_col = "alpha_return_next_close"
 long_label_weight = 0.30
 short_label_transform = "zscore"
@@ -21,7 +21,7 @@ long_label_transform = "zscore"
 
 [data]
 source = "labeled_pvc"
-labeled_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_base_labeled_v4_auction_fresh_mcap_lag1/opening_2020_delay2_base_labeled_v4_auction_fresh_mcap_lag1.parquet"
+labeled_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v3_tick2_gap5_ready_base_mcap_lag1/opening_2020_label_v3_tick2_gap5_ready_base_mcap_lag1.parquet"
 
 [output]
 local_dir = "output/artifacts/cache_builds/build_delay2_2020_auction_fresh_mixed_w030_target_v1"
@@ -35,8 +35,8 @@ pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260715-auction-fresh-mcap-lag1-v1"
 wait_for_paths = [
-  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_base_labeled_v4_auction_fresh_mcap_lag1/opening_2020_delay2_base_labeled_v4_auction_fresh_mcap_lag1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/opening_2020_next_close_labels_v1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v3_tick2_gap5_ready_base_mcap_lag1/opening_2020_label_v3_tick2_gap5_ready_base_mcap_lag1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1/opening_2020_next_close_labels_v1.parquet",
 ]
 wait_for_path_timeout_seconds = 86400
 wait_for_path_interval_seconds = 120

@@ -6,7 +6,7 @@ status = "completed"
 
 [data]
 source = "labeled_pvc"
-labeled_path = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1"
+labeled_path = "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030"
 tick_path = ""
 input_kind = "labeled"
 feature_limit = 0
@@ -158,13 +158,13 @@ mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260608-2225-sweep-v1"
 wait_for_paths = [
-  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2019_delay2_mixed_w030_labeled_v1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2020_delay2_mixed_w030_labeled_v1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2021_delay2_mixed_w030_labeled_v1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2022_delay2_mixed_w030_labeled_v1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2023_delay2_mixed_w030_labeled_v1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2024_delay2_mixed_w030_labeled_v1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2025_delay2_mixed_w030_labeled_v1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2019_label_v1_tick2_physical_mixed_w030.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2020_label_v1_tick2_physical_mixed_w030.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2021_label_v1_tick2_physical_mixed_w030.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2022_label_v1_tick2_physical_mixed_w030.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2023_label_v1_tick2_physical_mixed_w030.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2024_label_v1_tick2_physical_mixed_w030.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2025_label_v1_tick2_physical_mixed_w030.parquet",
 ]
 wait_for_path_timeout_seconds = 43200
 wait_for_path_interval_seconds = 120
@@ -185,7 +185,7 @@ plot_variant_label = "2022-2025 bagging"
 plot_period = "quarter"
 pools = ["universe", "L"]
 top_n = 100
-next_close_label_input = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1"
+next_close_label_input = "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1"
 env_secrets = ["opening-strength-clickhouse", "xy-fit-ceph-credentials"]
 wait_for_path_timeout_seconds = 86400
 wait_for_path_interval_seconds = 120

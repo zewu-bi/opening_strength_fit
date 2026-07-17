@@ -38,7 +38,7 @@ spec:
               WAIT_PATH_TIMEOUT_SECONDS=86400
               WAIT_PATH_INTERVAL_SECONDS=120
               WAIT_PATH_STARTED=${SECONDS}
-              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_base_labeled_v4_auction_fresh_mcap_lag1/opening_2023_delay2_base_labeled_v4_auction_fresh_mcap_lag1.parquet" "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/opening_2023_next_close_labels_v1.parquet")
+              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v3_tick2_gap5_ready_base_mcap_lag1/opening_2023_label_v3_tick2_gap5_ready_base_mcap_lag1.parquet" "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1/opening_2023_next_close_labels_v1.parquet")
               for WAIT_PATH in "${WAIT_PATHS[@]}"; do
                 until [ -f "${WAIT_PATH}" ]; do
                   if [ $((SECONDS - WAIT_PATH_STARTED)) -ge "${WAIT_PATH_TIMEOUT_SECONDS}" ]; then

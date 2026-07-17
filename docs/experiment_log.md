@@ -121,28 +121,36 @@ require_entry_after_cross_section_ready = true
 ```text
 base:
 /mnt/output/opening_strength_fit/cache/
-opening_2019_2025_delay6_clock_state_base_labeled_v1_mcap_lag1_unique_ticks/
+opening_2019_2025_label_v4_clock6_state_unique_base_mcap_lag1/
 
 mixed w030:
 /mnt/output/opening_strength_fit/cache/
-opening_2019_2025_delay6_clock_state_mixed_w030_labeled_v1_mcap_lag1_unique_ticks/
+opening_2019_2025_label_v4_clock6_state_unique_mixed_w030_mcap_lag1/
 
 image:
-registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260717-clock-state-delay6-v3
-digest: sha256:768f3101eff40961f561b738fb4a55af8c014fb6b15e4fc1cccdd5efc5413e09
+registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260717-clock-state-delay6-v4
+digest: sha256:4c397a1fb4b505f51c8390c792baae56fa6a57fa3d96927a4348496fef536e75
 ```
 
-仅 v3 是正式运行镜像。最初 v1 因既有 `.dockerignore` 未排除本地 `.env`，发现后立即删除全部 7 个
-刚启动的 Job；v2 从干净基础镜像完整重建并通过“容器内无 `.env`”检查，v3 只在这个干净 v2 上覆盖
-最终代码和修正后的年度文件名。v1 必须从 registry 删除，并轮换其中涉及的凭据；不得再次拉取或运行。
+仅 v4 是正式运行镜像。最初 v1 因既有 `.dockerignore` 未排除本地 `.env`，发现后立即删除全部 7 个
+刚启动的 Job；v2 从干净基础镜像完整重建并通过“容器内无 `.env`”检查，v3 只在干净 v2 上覆盖
+fixed-clock 代码，v4 再加入规范 cache 路径和兼容链接去重，并把 source revision 固定到
+`0a91a582fc2149336405c228e7e7825b1ef808c5`。v1 必须从 registry 删除并轮换其中涉及的凭据；
+不得再次拉取或运行。
 
 2019-04-19 同日 A/B 使用相同 2,326,300 条原始行和 1,162,995 个去重后状态。fixed-clock 有效覆盖率
 为 `38,745/39,115=99.0541%`，conservative tick2 为 `38,740/39,115=99.0413%`；二者
 `valid_both/new_only/old_only/invalid_both` 分别为 `38,732/13/8/362`。新口径所有有效 entry
 都是 6 秒；source state age 的 P50/P95/P99/max 为 `0/0/3/6` 秒。7 个年度 base Job 已提交；
-target 和模型保持 queued，待 base parquet、manifest 和逐日审计完成后再提交。v3 集群首日 smoke 已完成：
+target 和模型保持 queued，待 base parquet、manifest 和逐日审计完成后再提交。v4 集群首日 smoke 已完成：
 2019-01-02 得到 `36,358` 行、`35,570` 个 valid label，T-1 reference 为 2018-12-28；随后已进入
 2019-01-03，7 个年度 Pod 均为 0 restart。
+
+同日完成 PVC cache layout v4 迁移：成品只做同文件系统 rename，最终根目录只保留 7 个规范目录；
+旧失败目录、13 个遗留 heartbeat lock、92 个退化 alias 产物均删除。PVC 不支持可靠 symlink、hard-link
+或 reflink，因此不保留旧路径兼容层，仓库内 run/Job 已统一改写为规范路径。旧 18 个月 mixed-w030
+单文件与 v1 年度分片在 `2020-08-03..2022-01-28` 的 16,748,169 行、184 列及关键键/标签哈希完全
+一致，已删除并释放 7,593,748,386 bytes；对应旧模型配置改读年度规范目录。
 
 ### Conservative cap + unique-tick cache（2026-07-16，base 已完成、target 已终止）
 
@@ -163,11 +171,11 @@ target 和模型保持 queued，待 base parquet、manifest 和逐日审计完�
 ```text
 base:
 /mnt/output/opening_strength_fit/cache/
-opening_2019_2025_delay2_base_labeled_v3_conservative_mcap_lag1_unique_ticks/
+opening_2019_2025_label_v2_tick2_unique_base_mcap_lag1/
 
 mixed w030（尚未提交）:
 /mnt/output/opening_strength_fit/cache/
-opening_2019_2025_delay2_mixed_w030_labeled_v2_conservative_mcap_lag1_unique_ticks/
+opening_2019_2025_label_v2_tick2_unique_mixed_w030_mcap_lag1/
 
 image:
 registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260716-conservative-cache-v1
@@ -220,7 +228,7 @@ memory_limit = "768Gi"
 
 ```text
 /mnt/output/opening_strength_fit/cache/
-opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/
+opening_2019_2025_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1/
 ```
 
 2019-2024 已完成 shard 共 69,929,811 行，`total_market_cap` / `total_shares` 仅 18,651 行缺失，
@@ -265,10 +273,10 @@ market_cap_reference_lag_sessions
 
 ```text
 base:
-/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_base_labeled_v4_auction_fresh_mcap_lag1/
+/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v3_tick2_gap5_ready_base_mcap_lag1/
 
 mixed w030:
-/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/
+/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1/
 
 image:
 registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260715-auction-fresh-mcap-lag1-v1

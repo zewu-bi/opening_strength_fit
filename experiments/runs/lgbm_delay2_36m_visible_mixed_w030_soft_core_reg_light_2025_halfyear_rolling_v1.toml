@@ -6,7 +6,7 @@ status = "completed"
 
 [data]
 source = "labeled_pvc"
-labeled_path = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1"
+labeled_path = "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030"
 tick_path = ""
 input_kind = "labeled"
 feature_limit = 0
@@ -158,10 +158,10 @@ mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260605-halfyear-v1"
 wait_for_paths = [
-  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2022_delay2_mixed_w030_labeled_v1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2023_delay2_mixed_w030_labeled_v1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2024_delay2_mixed_w030_labeled_v1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2025_delay2_mixed_w030_labeled_v1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2022_label_v1_tick2_physical_mixed_w030.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2023_label_v1_tick2_physical_mixed_w030.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2024_label_v1_tick2_physical_mixed_w030.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2025_label_v1_tick2_physical_mixed_w030.parquet",
 ]
 wait_for_path_timeout_seconds = 43200
 wait_for_path_interval_seconds = 120

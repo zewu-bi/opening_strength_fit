@@ -5,8 +5,8 @@ description = "Fetch 2024 ClickHouse next-close labels for delay2 base labeled c
 status = "completed"
 
 [next_close_labels]
-input_path = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_base_labeled_v2/opening_2024_delay2_base_labeled_v2.parquet"
-output_path = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/opening_2024_next_close_labels_v1.parquet"
+input_path = "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_base/opening_2024_label_v1_tick2_physical_base.parquet"
+output_path = "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1/opening_2024_next_close_labels_v1.parquet"
 buy_price_col = "buy_price"
 decision_times = [
   "09:31:00",

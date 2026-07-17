@@ -5,8 +5,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "experiments" / "runs"
-BASE_ROOT = "opening_2019_2025_delay2_base_labeled_v3_conservative_mcap_lag1_unique_ticks"
-MIXED_ROOT = "opening_2019_2025_delay2_mixed_w030_labeled_v2_conservative_mcap_lag1_unique_ticks"
+BASE_ROOT = "opening_2019_2025_label_v2_tick2_unique_base_mcap_lag1"
+MIXED_ROOT = "opening_2019_2025_label_v2_tick2_unique_mixed_w030_mcap_lag1"
 
 
 def _load(path: Path) -> dict:

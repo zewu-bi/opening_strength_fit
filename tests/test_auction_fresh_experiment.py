@@ -18,8 +18,8 @@ MECH_V3_CONFIG = (
     RUNS
     / "nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_histavg_activity_gelu_mse_v1.toml"
 )
-BASE_ROOT = "opening_2019_2025_delay2_base_labeled_v4_auction_fresh_mcap_lag1"
-MIXED_ROOT = "opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1"
+BASE_ROOT = "opening_2019_2025_label_v3_tick2_gap5_ready_base_mcap_lag1"
+MIXED_ROOT = "opening_2019_2025_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1"
 
 
 def _load(path: Path) -> dict:
@@ -32,7 +32,7 @@ def test_annual_cache_configs_are_isolated_and_causal() -> None:
         config = _load(RUNS / f"build_delay2_{year}_auction_fresh_cache_v1.toml")
 
         assert BASE_ROOT in config["cache"]["path"]
-        assert "opening_13y_201301_202512_delay2_base_labeled_v2" not in config["cache"]["path"]
+        assert "opening_2013_2025_label_v1_tick2_physical_base" not in config["cache"]["path"]
         assert config["features"]["preopen_price_mode"] == "indicative_quote_v2"
         assert config["labels"]["entry_max_gap_seconds"] == 5
         assert config["labels"]["max_future_gap_seconds"] == 5

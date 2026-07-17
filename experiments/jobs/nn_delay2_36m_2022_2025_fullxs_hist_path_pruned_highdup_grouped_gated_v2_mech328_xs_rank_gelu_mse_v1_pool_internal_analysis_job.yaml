@@ -72,7 +72,7 @@ spec:
                 --predictions \
                 /mnt/output/opening_strength_fit/runs/models/nn/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_xs_rank_gelu_mse_v1 \
                 --next-close-label-input \
-                /mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1 \
+                /mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1 \
                 --run-id \
                 nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_xs_rank_gelu_mse_v1 \
                 --variant \

@@ -19,7 +19,7 @@ read = true
 write = true
 require_manifest = true
 schema_version = "delay2_base_labeled_v3_conservative_mcap_lag1_unique_ticks"
-path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_base_labeled_v3_conservative_mcap_lag1_unique_ticks/opening_2025_delay2_base_labeled_v3_conservative_mcap_lag1_unique_ticks.parquet"
+path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v2_tick2_unique_base_mcap_lag1/opening_2025_label_v2_tick2_unique_base_mcap_lag1.parquet"
 lock_timeout_seconds = 21600
 
 [clickhouse]

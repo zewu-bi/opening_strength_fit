@@ -25,7 +25,7 @@ def _mapping(*, remove_incomplete_locks: bool = False) -> dict[str, object]:
     return mapping
 
 
-def test_migrate_mapping_renames_cache_and_keeps_compatibility_aliases(
+def test_migrate_mapping_renames_cache_without_compatibility_aliases(
     tmp_path: Path,
 ) -> None:
     old_dir = tmp_path / "opening_old"
@@ -44,14 +44,13 @@ def test_migrate_mapping_renames_cache_and_keeps_compatibility_aliases(
 
     new_dir = tmp_path / "opening_new"
     new_file = new_dir / "opening_2025_new.parquet"
-    assert old_dir.is_symlink()
-    assert old_dir.readlink() == Path("opening_new")
+    assert not old_dir.exists()
     assert new_file.read_bytes() == b"cache"
-    assert (new_dir / old_file.name).readlink() == Path(new_file.name)
+    assert not (new_dir / old_file.name).exists()
     for suffix in (".manifest.json", ".lock.done"):
         old_sidecar = new_dir / f"{old_file.name}{suffix}"
         new_sidecar = new_dir / f"{new_file.name}{suffix}"
-        assert old_sidecar.readlink() == Path(new_sidecar.name)
+        assert not old_sidecar.exists()
         payload = json.loads(new_sidecar.read_text(encoding="utf-8"))
         assert payload == {"path": str(new_file), "name": new_file.name}
 
@@ -83,6 +82,27 @@ def test_migrate_mapping_refuses_ambiguous_old_and_new_files(tmp_path: Path) -> 
         migration._migrate_mapping(tmp_path, _mapping(), [])
 
 
+def test_migrate_mapping_removes_degraded_zero_byte_aliases(tmp_path: Path) -> None:
+    old_dir = tmp_path / "opening_old"
+    old_dir.touch()
+    new_dir = tmp_path / "opening_new"
+    new_dir.mkdir()
+    new_file = new_dir / "opening_2025_new.parquet"
+    new_file.write_bytes(b"cache")
+    (new_dir / "opening_2025_old.parquet").touch()
+
+    actions: list[dict[str, object]] = []
+    migration._migrate_mapping(tmp_path, _mapping(), actions)
+
+    assert not old_dir.exists()
+    assert new_file.read_bytes() == b"cache"
+    assert not (new_dir / "opening_2025_old.parquet").exists()
+    assert [action["artifact_type"] for action in actions] == [
+        "degraded_zero_byte_alias",
+        "degraded_zero_byte_alias",
+    ]
+
+
 def test_incomplete_clock_mapping_removes_locks_without_cache_data(
     tmp_path: Path,
 ) -> None:
@@ -99,7 +119,7 @@ def test_incomplete_clock_mapping_removes_locks_without_cache_data(
     )
 
     new_dir = tmp_path / "opening_new"
-    assert old_dir.is_symlink()
+    assert not old_dir.exists()
     assert not list(new_dir.iterdir())
     assert {action["action"] for action in actions} == {
         "rename_directory",

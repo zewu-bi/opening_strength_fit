@@ -5,15 +5,15 @@ description = "Build 2023 delay2 mixed_w030 target cache from base labeled cache
 status = "completed"
 
 [target_cache]
-input_path = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_base_labeled_v2/opening_2023_delay2_base_labeled_v2.parquet"
-output_path = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_mixed_w030_labeled_v1/opening_2023_delay2_mixed_w030_labeled_v1.parquet"
+input_path = "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_base/opening_2023_label_v1_tick2_physical_base.parquet"
+output_path = "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2023_label_v1_tick2_physical_mixed_w030.parquet"
 mode = "mixed"
 group_cols = ["date", "decision_target_timestamp"]
 label_col = "label"
 target_col = "target_label"
 raw_label_col = "label_raw"
 min_group_size = 50
-long_label_input = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/opening_2023_next_close_labels_v1.parquet"
+long_label_input = "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1/opening_2023_next_close_labels_v1.parquet"
 long_label_col = "alpha_return_next_close"
 long_label_weight = 0.30
 short_label_transform = "zscore"
@@ -21,7 +21,7 @@ long_label_transform = "zscore"
 
 [data]
 source = "labeled_pvc"
-labeled_path = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_base_labeled_v2/opening_2023_delay2_base_labeled_v2.parquet"
+labeled_path = "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_base/opening_2023_label_v1_tick2_physical_base.parquet"
 
 [output]
 local_dir = "output/legacy/analysis/build_delay2_2023_mixed_w030_target_v1"
@@ -33,7 +33,7 @@ image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260604-next-close-v2"
-wait_for_paths = ["/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/opening_2023_next_close_labels_v1.parquet"]
+wait_for_paths = ["/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1/opening_2023_next_close_labels_v1.parquet"]
 wait_for_path_timeout_seconds = 43200
 wait_for_path_interval_seconds = 120
 

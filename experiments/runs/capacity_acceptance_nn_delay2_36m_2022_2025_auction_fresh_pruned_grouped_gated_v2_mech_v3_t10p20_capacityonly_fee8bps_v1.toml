@@ -6,7 +6,7 @@ status = "completed"
 
 [capacity_acceptance]
 selected_input = ["/mnt/output/opening_strength_fit/runs/analyses/capacity-audit/capacity_audit_nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_t10p20_capacityonly_v1/capacity_audit_selected.csv"]
-label_input = ["/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1"]
+label_input = ["/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1"]
 label_col = "alpha_return_next_close"
 fee_bps = 8
 capacity_total_notional = 1000000000
@@ -26,7 +26,7 @@ env_secrets = ["xy-fit-ceph-credentials"]
 avoid_nodes = ["node7", "node8"]
 wait_for_paths = [
   "/mnt/output/opening_strength_fit/runs/analyses/capacity-audit/capacity_audit_nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_t10p20_capacityonly_v1/capacity_audit_selected.csv",
-  "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1/opening_2025_next_close_labels_v1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1/opening_2025_next_close_labels_v1.parquet",
 ]
 wait_for_path_timeout_seconds = 21600
 wait_for_path_interval_seconds = 120

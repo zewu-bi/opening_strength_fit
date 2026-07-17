@@ -6,7 +6,7 @@ status = "completed"
 
 [data]
 source = "labeled_pvc"
-labeled_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1"
+labeled_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1"
 tick_path = ""
 input_kind = "labeled"
 feature_limit = 0
@@ -179,13 +179,13 @@ clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260715-auction-fresh-mcap-lag1-v1"
 avoid_nodes = ["node6", "node7", "node8", "node12", "node17", "node19", "node20", "node22", "node24", "node25", "node26", "node27", "node28"]
 wait_for_paths = [
-  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2019_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2020_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2021_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2022_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2023_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2024_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1/opening_2025_delay2_mixed_w030_labeled_v3_auction_fresh_mcap_lag1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1/opening_2019_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1/opening_2020_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1/opening_2021_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1/opening_2022_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1/opening_2023_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1/opening_2024_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1/opening_2025_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1.parquet",
 ]
 wait_for_path_timeout_seconds = 172800
 wait_for_path_interval_seconds = 120
@@ -210,7 +210,7 @@ plot_variant_label = "Auction-fresh causal-prune grouped gated v2 mech v3"
 plot_period = "quarter"
 pools = ["universe", "L"]
 top_n = 100
-next_close_label_input = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1"
+next_close_label_input = "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1"
 env_secrets = ["opening-strength-clickhouse", "xy-fit-ceph-credentials"]
 wait_for_path_timeout_seconds = 86400
 wait_for_path_interval_seconds = 120

@@ -17,7 +17,7 @@ enabled = true
 read = true
 write = true
 schema_version = "delay2_base_labeled_v2"
-path = "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_base_labeled_v2/opening_2015_delay2_base_labeled_v2.parquet"
+path = "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_base/opening_2015_label_v1_tick2_physical_base.parquet"
 lock_timeout_seconds = 21600
 
 [clickhouse]

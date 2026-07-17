@@ -88,14 +88,28 @@ def _rewrite_json(path: Path, replacements: tuple[tuple[str, str], ...]) -> None
     )
 
 
-def _link_alias(alias: Path, target_name: str) -> None:
-    if alias.is_symlink():
-        if alias.readlink() != Path(target_name):
-            raise SystemExit(f"alias points to unexpected target: {alias}")
-        return
-    if alias.exists():
-        raise SystemExit(f"cannot create alias over existing path: {alias}")
-    alias.symlink_to(target_name)
+def _remove_compatibility_artifact(
+    path: Path,
+    actions: list[dict[str, object]],
+) -> bool:
+    """Remove prior symlink aliases, including PVC-degraded zero-byte aliases."""
+
+    artifact_type = ""
+    if path.is_symlink():
+        artifact_type = "symlink"
+    elif path.is_file() and path.stat().st_size == 0:
+        artifact_type = "degraded_zero_byte_alias"
+    if not artifact_type:
+        return False
+    path.unlink()
+    actions.append(
+        {
+            "action": "remove_compatibility_artifact",
+            "path": str(path),
+            "artifact_type": artifact_type,
+        }
+    )
+    return True
 
 
 def _safe_remove_lock(lock_path: Path) -> None:
@@ -128,31 +142,27 @@ def _migrate_mapping(
 ) -> None:
     old_dir = root / str(mapping["old"])
     new_dir = root / str(mapping["new"])
-    if old_dir.is_symlink():
-        if old_dir.resolve() != new_dir.resolve():
-            raise SystemExit(f"directory alias points to unexpected target: {old_dir}")
-    elif old_dir.exists():
+    _remove_compatibility_artifact(old_dir, actions)
+    if old_dir.exists():
+        if not old_dir.is_dir():
+            raise SystemExit(f"old cache path is not a directory: {old_dir}")
         if new_dir.exists():
             raise SystemExit(f"both old and new cache directories exist: {old_dir}, {new_dir}")
         old_dir.rename(new_dir)
-        _link_alias(old_dir, new_dir.name)
         actions.append(
             {
                 "action": "rename_directory",
                 "old": str(old_dir),
                 "new": str(new_dir),
-                "compatibility_alias": str(old_dir),
             }
         )
     elif not new_dir.exists():
         if mapping.get("remove_incomplete_locks"):
             new_dir.mkdir(parents=True)
-            _link_alias(old_dir, new_dir.name)
             actions.append(
                 {
                     "action": "create_empty_canonical_directory",
                     "new": str(new_dir),
-                    "compatibility_alias": str(old_dir),
                 }
             )
         else:
@@ -179,20 +189,16 @@ def _migrate_mapping(
             (old_name, new_name),
         )
         if old_name != new_name:
-            if old_file.is_symlink():
-                if old_file.readlink() != Path(new_name):
-                    raise SystemExit(f"file alias points to unexpected target: {old_file}")
-            elif old_file.exists():
+            _remove_compatibility_artifact(old_file, actions)
+            if old_file.exists():
                 if new_file.exists():
                     raise SystemExit(f"both old and new cache files exist: {old_file}, {new_file}")
                 old_file.rename(new_file)
-                _link_alias(old_file, new_name)
                 actions.append(
                     {
                         "action": "rename_file",
                         "old": str(old_file),
                         "new": str(new_file),
-                        "compatibility_alias": str(old_file),
                     }
                 )
             elif not new_file.exists() and not mapping.get("remove_incomplete_locks"):
@@ -204,24 +210,18 @@ def _migrate_mapping(
             old_sidecar = new_dir / f"{old_name}{suffix}"
             new_sidecar = new_dir / f"{new_name}{suffix}"
             if old_name != new_name:
-                if old_sidecar.is_symlink():
-                    if old_sidecar.readlink() != Path(new_sidecar.name):
-                        raise SystemExit(
-                            f"sidecar alias points to unexpected target: {old_sidecar}"
-                        )
-                elif old_sidecar.exists():
+                _remove_compatibility_artifact(old_sidecar, actions)
+                if old_sidecar.exists():
                     if new_sidecar.exists():
                         raise SystemExit(
                             f"both old and new cache sidecars exist: {old_sidecar}, {new_sidecar}"
                         )
                     old_sidecar.rename(new_sidecar)
-                    _link_alias(old_sidecar, new_sidecar.name)
                     actions.append(
                         {
                             "action": "rename_sidecar",
                             "old": str(old_sidecar),
                             "new": str(new_sidecar),
-                            "compatibility_alias": str(old_sidecar),
                         }
                     )
             if new_sidecar.exists() and not new_sidecar.is_symlink():

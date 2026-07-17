@@ -77,6 +77,21 @@ v2 rolling shard 使用 `fold_<start>_<end>`，年度 shard 使用 `fold_<year>-
 `k8s_dir` 的历史配置仍使用 legacy shard 命名，读取器兼容两代布局。迁移和回滚映射保存在 PVC
 的 `.layout_migrations/`；活动任务目录必须等任务结束后再移动。
 
+label cache 的规范目录/文件名统一为：
+
+```text
+opening_<range>_label_vN_<entry_semantics>_<base|mixed>_<enrichment>/
+opening_<year>_label_vN_<entry_semantics>_<base|mixed>_<enrichment>.parquet
+```
+
+当前 lineage 中，`v1_tick2_physical` 是旧物理行 tick2，`v2_tick2_unique` 是去重后的 tick2，
+`v3_tick2_gap5_ready` 是严格 gap/readiness 对照，`v4_clock6_state_unique` 是正式 fixed-clock +6 秒
+语义。2026-07-17 的 layout v4 迁移只在同一 PVC 内 rename，不修改 parquet 内容。该 PVC 不可靠支持
+symlink/hard-link/reflink，因此不保留旧路径 alias；所有 run config 和 Job manifest 已机械改写为规范路径。
+空的失败目录、残留 heartbeat lock、退化成 0 字节文件的 alias，以及已由 v1 年度 mixed cache 完整
+覆盖的 18 个月冗余单文件均已清理；操作记录位于
+`/mnt/output/opening_strength_fit/.layout_migrations/`。
+
 ### 数据源检查
 
 ```bash

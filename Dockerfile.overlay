@@ -1,0 +1,19 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+WORKDIR /app/opening_strength_fit
+
+RUN rm -f .env
+
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN python -m pip install --no-deps .
+
+ARG CACHE_BUST=dev
+RUN test -n "$CACHE_BUST"
+
+ARG SOURCE_REVISION
+RUN test -n "$SOURCE_REVISION"
+ENV OPENING_STRENGTH_SOURCE_REVISION=${SOURCE_REVISION}
+
+COPY . .
