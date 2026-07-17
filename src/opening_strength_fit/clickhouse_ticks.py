@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping, Sequence
 
 import numpy as np
 import pandas as pd
@@ -84,6 +85,7 @@ STATUS_DESC = {
 }
 
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+TICK_TIMESTAMP_DEDUPLICATION_MODES = {"latest_local_timestamp"}
 
 
 def _validate_table_name(table: str) -> str:
@@ -231,6 +233,128 @@ def normalize_clickhouse_ticks(df: pd.DataFrame) -> pd.DataFrame:
                 )
             )
     return ticks
+
+
+def _latest_numeric_leaf(value: object) -> float:
+    if value is None:
+        return float("nan")
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return float("nan")
+        try:
+            return _latest_numeric_leaf(json.loads(stripped))
+        except (json.JSONDecodeError, TypeError):
+            try:
+                return float(stripped)
+            except ValueError:
+                parsed = pd.to_datetime(stripped, errors="coerce")
+                return float(parsed.value) if not pd.isna(parsed) else float("nan")
+    if isinstance(value, Mapping):
+        leaves = [_latest_numeric_leaf(item) for item in value.values()]
+        finite = [item for item in leaves if np.isfinite(item)]
+        return max(finite) if finite else float("nan")
+    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray)):
+        leaves = [_latest_numeric_leaf(item) for item in value]
+        finite = [item for item in leaves if np.isfinite(item)]
+        return max(finite) if finite else float("nan")
+    if isinstance(value, (pd.Timestamp, np.datetime64)):
+        parsed = pd.to_datetime(value, errors="coerce")
+        return float(parsed.value) if not pd.isna(parsed) else float("nan")
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return float("nan")
+    return numeric if np.isfinite(numeric) else float("nan")
+
+
+def deduplicate_tick_timestamps(
+    df: pd.DataFrame,
+    *,
+    mode: str = "latest_local_timestamp",
+    key_columns: Sequence[str] = ("date", "symbol", "timestamp"),
+) -> pd.DataFrame:
+    """Keep one deterministic snapshot for each exchange timestamp.
+
+    The retained row prefers the latest local receive timestamp, followed by the
+    largest cumulative trade state.  Removing duplicates before feature and label
+    construction makes ``entry_tick_delay`` count distinct exchange snapshots.
+    """
+
+    normalized_mode = str(mode).strip().lower()
+    if normalized_mode not in TICK_TIMESTAMP_DEDUPLICATION_MODES:
+        supported = ", ".join(sorted(TICK_TIMESTAMP_DEDUPLICATION_MODES))
+        raise SystemExit(
+            f"unsupported data.tick_timestamp_deduplication={mode!r}; expected one of: {supported}"
+        )
+
+    work = ensure_timestamp_columns(standardize_columns(df)).copy()
+    missing = [column for column in key_columns if column not in work.columns]
+    if missing:
+        raise SystemExit(f"tick timestamp deduplication missing columns: {missing}")
+
+    input_rows = len(work)
+    duplicate_mask = work.duplicated(list(key_columns), keep=False)
+    duplicate_rows = int(duplicate_mask.sum())
+    duplicate_keys = int(work.loc[duplicate_mask, list(key_columns)].drop_duplicates().shape[0])
+    if duplicate_rows:
+        duplicates = work.loc[duplicate_mask].copy()
+        duplicates["_dedup_local_receive"] = (
+            duplicates["local_timestamp"].map(_latest_numeric_leaf)
+            if "local_timestamp" in duplicates.columns
+            else np.nan
+        )
+        rank_columns: list[str] = []
+        for column in ("trade_num", "volume", "turnover"):
+            rank_column = f"_dedup_{column}"
+            duplicates[rank_column] = (
+                pd.to_numeric(duplicates[column], errors="coerce")
+                if column in duplicates.columns
+                else np.nan
+            )
+            rank_columns.append(rank_column)
+        fingerprint_columns = [
+            column for column in duplicates.columns if not column.startswith("_dedup_")
+        ]
+        duplicates["_dedup_fingerprint"] = pd.util.hash_pandas_object(
+            duplicates[fingerprint_columns].astype("string"),
+            index=False,
+        ).astype("uint64")
+        retained_duplicates = (
+            duplicates.sort_values(
+                [
+                    *key_columns,
+                    "_dedup_local_receive",
+                    *rank_columns,
+                    "_dedup_fingerprint",
+                ],
+                kind="mergesort",
+                na_position="first",
+            )
+            .drop_duplicates(list(key_columns), keep="last")
+            .drop(
+                columns=[
+                    "_dedup_local_receive",
+                    *rank_columns,
+                    "_dedup_fingerprint",
+                ]
+            )
+        )
+        work = pd.concat(
+            [work.loc[~duplicate_mask], retained_duplicates],
+            ignore_index=True,
+        )
+
+    out = work.sort_values(list(key_columns), kind="mergesort").reset_index(drop=True)
+    out.attrs["tick_timestamp_deduplication"] = {
+        "mode": normalized_mode,
+        "input_rows": int(input_rows),
+        "duplicate_rows": duplicate_rows,
+        "duplicate_keys": duplicate_keys,
+        "rows_removed": int(input_rows - len(out)),
+        "output_rows": int(len(out)),
+    }
+    return out
 
 
 def field_description_frame() -> pd.DataFrame:

@@ -57,6 +57,95 @@ class DelayFreshnessTest(unittest.TestCase):
         self.assertTrue(pd.isna(first["entry_delay_seconds"]))
         self.assertTrue(pd.isna(first["entry_max_tick_gap_seconds"]))
 
+    def test_clock_state_entry_uses_fixed_six_second_target(self) -> None:
+        labeled = build_trade_labels(
+            _ticks([0, 6, 12, 18]),
+            entry_tick_delay=2,
+            entry_alignment="clock_state",
+            entry_clock_delay_seconds=6,
+            future_alignment="clock_state",
+            hold_seconds=0,
+            sell_window_seconds=6,
+        )
+
+        first = labeled.iloc[0]
+        base = pd.Timestamp("2022-01-04 09:30:00")
+        self.assertEqual(first["entry_timestamp"], base + pd.Timedelta(seconds=6))
+        self.assertEqual(
+            first["entry_source_timestamp"],
+            base + pd.Timedelta(seconds=6),
+        )
+        self.assertEqual(first["entry_delay_seconds"], 6.0)
+        self.assertEqual(first["entry_state_age_seconds"], 0.0)
+        self.assertEqual(first["buy_price"], 10.01)
+
+    def test_clock_state_entry_carries_forward_without_looking_ahead(self) -> None:
+        labeled = build_trade_labels(
+            _ticks([0, 9, 12, 18]),
+            entry_tick_delay=2,
+            entry_alignment="clock_state",
+            entry_clock_delay_seconds=6,
+            future_alignment="clock_state",
+            hold_seconds=0,
+            sell_window_seconds=6,
+        )
+
+        first = labeled.iloc[0]
+        base = pd.Timestamp("2022-01-04 09:30:00")
+        self.assertEqual(first["entry_timestamp"], base + pd.Timedelta(seconds=6))
+        self.assertEqual(first["entry_source_timestamp"], base)
+        self.assertEqual(first["entry_state_age_seconds"], 6.0)
+        self.assertEqual(first["buy_price"], 10.0)
+
+    def test_clock_state_future_boundaries_use_last_known_cumulative_state(self) -> None:
+        labeled = build_trade_labels(
+            _ticks([0, 6, 65, 72, 125, 132]),
+            entry_tick_delay=2,
+            entry_alignment="clock_state",
+            entry_clock_delay_seconds=6,
+            future_alignment="clock_state",
+            hold_seconds=60,
+            sell_window_seconds=60,
+        )
+
+        first = labeled.iloc[0]
+        base = pd.Timestamp("2022-01-04 09:30:00")
+        self.assertEqual(
+            first["sell_start_target_timestamp"],
+            base + pd.Timedelta(seconds=66),
+        )
+        self.assertEqual(
+            first["sell_start_source_timestamp"],
+            base + pd.Timedelta(seconds=65),
+        )
+        self.assertEqual(first["sell_start_state_age_seconds"], 1.0)
+        self.assertEqual(
+            first["sell_end_target_timestamp"],
+            base + pd.Timedelta(seconds=126),
+        )
+        self.assertEqual(
+            first["sell_end_source_timestamp"],
+            base + pd.Timedelta(seconds=125),
+        )
+        self.assertEqual(first["sell_end_state_age_seconds"], 1.0)
+
+    def test_clock_state_rejects_observed_gap_validity_gates(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "entry_max_gap_seconds"):
+            build_trade_labels(
+                _ticks([0, 6, 12]),
+                entry_alignment="clock_state",
+                entry_clock_delay_seconds=6,
+                entry_max_gap_seconds=5,
+            )
+        with self.assertRaisesRegex(SystemExit, "max_future_gap_seconds"):
+            build_trade_labels(
+                _ticks([0, 6, 12]),
+                entry_alignment="clock_state",
+                entry_clock_delay_seconds=6,
+                future_alignment="clock_state",
+                max_future_gap_seconds=5,
+            )
+
     def test_cross_section_readiness_invalidates_early_entry_only(self) -> None:
         target = pd.Timestamp("2022-01-04 09:31:00")
         frame = pd.DataFrame(

@@ -133,6 +133,80 @@ def _future_values(
     return out
 
 
+def _clock_state_values(
+    frame: pd.DataFrame,
+    *,
+    seconds: int,
+    value_columns: Sequence[str],
+    suffix: str,
+    group_columns: Sequence[str] = ("date", "symbol"),
+    timestamp_col: str = "timestamp",
+    target_timestamp_col: str | None = None,
+) -> pd.DataFrame:
+    """Read the last known state at a fixed wall-clock target.
+
+    ``stock.tick`` omits unchanged snapshots, so a missing physical row does not
+    imply a missing market state.  The logical target timestamp and the source
+    row timestamp are kept separately to make carried-forward state auditable.
+    """
+
+    if seconds < 0:
+        raise SystemExit("clock-state alignment seconds must be non-negative")
+
+    target_col = target_timestamp_col or timestamp_col
+    out = pd.DataFrame(index=frame.index)
+    out[f"target_timestamp_{suffix}"] = pd.NaT
+    out[f"timestamp_{suffix}"] = pd.NaT
+    out[f"{suffix}_state_age_seconds"] = pd.Series(
+        np.nan,
+        index=frame.index,
+        dtype="float64",
+    )
+    for column in value_columns:
+        out[f"{column}_{suffix}"] = pd.Series(pd.NA, index=frame.index, dtype="object")
+
+    aligned_parts = []
+    for _, group in frame.groupby(list(group_columns), sort=False, observed=True):
+        group = group.sort_values(timestamp_col, kind="mergesort")
+        left = pd.DataFrame(
+            {
+                "_row": group.index.to_numpy(),
+                "_target_ts": group[target_col] + pd.to_timedelta(seconds, unit="s"),
+            }
+        ).dropna(subset=["_target_ts"])
+        right = (
+            group[[timestamp_col, *value_columns]]
+            .dropna(subset=[timestamp_col])
+            .rename(columns={timestamp_col: "_source_ts"})
+            .sort_values("_source_ts", kind="mergesort")
+        )
+        if left.empty or right.empty:
+            continue
+        left["_target_ts"] = pd.to_datetime(left["_target_ts"]).astype("datetime64[ns]")
+        right["_source_ts"] = pd.to_datetime(right["_source_ts"]).astype("datetime64[ns]")
+        merged = pd.merge_asof(
+            left.sort_values("_target_ts", kind="mergesort"),
+            right,
+            left_on="_target_ts",
+            right_on="_source_ts",
+            direction="backward",
+        )
+        aligned_parts.append(merged.sort_values("_row").set_index("_row"))
+
+    if not aligned_parts:
+        return out
+
+    aligned = pd.concat(aligned_parts).sort_index()
+    out.loc[aligned.index, f"target_timestamp_{suffix}"] = aligned["_target_ts"]
+    out.loc[aligned.index, f"timestamp_{suffix}"] = aligned["_source_ts"]
+    out.loc[aligned.index, f"{suffix}_state_age_seconds"] = (
+        aligned["_target_ts"] - aligned["_source_ts"]
+    ) / pd.Timedelta(seconds=1)
+    for column in value_columns:
+        out.loc[aligned.index, f"{column}_{suffix}"] = aligned[column]
+    return out
+
+
 def _future_tick_values(
     frame: pd.DataFrame,
     *,
@@ -227,9 +301,12 @@ def build_trade_labels(
     volume_unit_multiplier: float = 1.0,
     fee_bps: float = 0.0,
     entry_tick_delay: int = 0,
+    entry_alignment: str = "tick_offset",
+    entry_clock_delay_seconds: int | None = None,
     entry_max_gap_seconds: int | None = None,
     sample_start_time: str = OPEN_SAMPLE_START,
     sample_end_time: str = OPEN_SAMPLE_END,
+    future_alignment: str = "next_tick",
     max_future_gap_seconds: int | None = None,
     tradable_statuses: Sequence[str] | None = None,
 ) -> pd.DataFrame:
@@ -244,6 +321,26 @@ def build_trade_labels(
     work = ensure_timestamp_columns(ticks)
     work = work.sort_values(["date", "symbol", "timestamp"]).reset_index(drop=True)
 
+    normalized_entry_alignment = str(entry_alignment).strip().lower().replace("-", "_")
+    if normalized_entry_alignment not in {"tick_offset", "clock_state"}:
+        raise SystemExit(
+            f"unknown entry_alignment {entry_alignment!r}; expected tick_offset or clock_state"
+        )
+    normalized_future_alignment = str(future_alignment).strip().lower().replace("-", "_")
+    if normalized_future_alignment not in {"next_tick", "clock_state"}:
+        raise SystemExit(
+            f"unknown future_alignment {future_alignment!r}; expected next_tick or clock_state"
+        )
+    if normalized_entry_alignment == "clock_state":
+        if entry_clock_delay_seconds is None:
+            raise SystemExit("clock_state entry alignment requires entry_clock_delay_seconds")
+        if entry_max_gap_seconds is not None:
+            raise SystemExit(
+                "entry_max_gap_seconds is incompatible with clock_state entry alignment"
+            )
+    if normalized_future_alignment == "clock_state" and max_future_gap_seconds is not None:
+        raise SystemExit("max_future_gap_seconds is incompatible with clock_state future alignment")
+
     entry_value_columns = [buy_price_col]
     for level in PRICE_LEVELS:
         for column in (ask_price_col(level), ask_volume_col(level)):
@@ -252,29 +349,61 @@ def build_trade_labels(
     if "status" in work.columns:
         entry_value_columns.append("status")
     entry_value_columns = list(dict.fromkeys(entry_value_columns))
-    entry = _future_tick_values(
-        work,
-        offset_ticks=int(entry_tick_delay),
-        value_columns=entry_value_columns,
-        suffix="entry",
-        max_gap_seconds=entry_max_gap_seconds,
-    )
-    work["entry_timestamp"] = pd.to_datetime(
-        entry["timestamp_entry"],
-        errors="coerce",
-    ).astype("datetime64[ns]")
-    work["entry_delay_ticks"] = pd.to_numeric(
-        entry["entry_delay_ticks"],
-        errors="coerce",
-    ).astype("float64")
-    work["entry_delay_seconds"] = pd.to_numeric(
-        entry["entry_delay_seconds"],
-        errors="coerce",
-    ).astype("float64")
-    work["entry_max_tick_gap_seconds"] = pd.to_numeric(
-        entry["entry_max_tick_gap_seconds"],
-        errors="coerce",
-    ).astype("float64")
+    if normalized_entry_alignment == "clock_state":
+        entry = _clock_state_values(
+            work,
+            seconds=int(entry_clock_delay_seconds),
+            value_columns=entry_value_columns,
+            suffix="entry",
+        )
+        work["entry_timestamp"] = pd.to_datetime(
+            entry["target_timestamp_entry"],
+            errors="coerce",
+        ).astype("datetime64[ns]")
+        work["entry_source_timestamp"] = pd.to_datetime(
+            entry["timestamp_entry"],
+            errors="coerce",
+        ).astype("datetime64[ns]")
+        work["entry_state_age_seconds"] = pd.to_numeric(
+            entry["entry_state_age_seconds"],
+            errors="coerce",
+        ).astype("float64")
+        matched_entry = work["entry_source_timestamp"].notna()
+        work["entry_delay_ticks"] = np.where(
+            matched_entry,
+            float(entry_tick_delay),
+            np.nan,
+        )
+        work["entry_delay_seconds"] = np.where(
+            matched_entry,
+            float(entry_clock_delay_seconds),
+            np.nan,
+        )
+        work["entry_max_tick_gap_seconds"] = np.nan
+    else:
+        entry = _future_tick_values(
+            work,
+            offset_ticks=int(entry_tick_delay),
+            value_columns=entry_value_columns,
+            suffix="entry",
+            max_gap_seconds=entry_max_gap_seconds,
+        )
+        work["entry_timestamp"] = pd.to_datetime(
+            entry["timestamp_entry"],
+            errors="coerce",
+        ).astype("datetime64[ns]")
+        work["entry_delay_ticks"] = pd.to_numeric(
+            entry["entry_delay_ticks"],
+            errors="coerce",
+        ).astype("float64")
+        work["entry_delay_seconds"] = pd.to_numeric(
+            entry["entry_delay_seconds"],
+            errors="coerce",
+        ).astype("float64")
+        work["entry_max_tick_gap_seconds"] = pd.to_numeric(
+            entry["entry_max_tick_gap_seconds"],
+            errors="coerce",
+        ).astype("float64")
     work["buy_price"] = pd.to_numeric(
         entry[f"{buy_price_col}_entry"],
         errors="coerce",
@@ -296,23 +425,44 @@ def build_trade_labels(
         work["entry_status"] = entry["status_entry"]
 
     value_columns = [volume_col, turnover_col]
-    sell_start = _future_values(
+    future_value_builder = (
+        _clock_state_values if normalized_future_alignment == "clock_state" else _future_values
+    )
+    sell_start = future_value_builder(
         work,
         seconds=hold_seconds,
         value_columns=value_columns,
         suffix="sell_start",
         target_timestamp_col="entry_timestamp",
-        max_gap_seconds=max_future_gap_seconds,
+        **(
+            {}
+            if normalized_future_alignment == "clock_state"
+            else {"max_gap_seconds": max_future_gap_seconds}
+        ),
     )
-    sell_end = _future_values(
+    sell_end = future_value_builder(
         work,
         seconds=hold_seconds + sell_window_seconds,
         value_columns=value_columns,
         suffix="sell_end",
         target_timestamp_col="entry_timestamp",
-        max_gap_seconds=max_future_gap_seconds,
+        **(
+            {}
+            if normalized_future_alignment == "clock_state"
+            else {"max_gap_seconds": max_future_gap_seconds}
+        ),
     )
     work = pd.concat([work, sell_start, sell_end], axis=1)
+    if normalized_future_alignment == "clock_state":
+        for suffix in ("sell_start", "sell_end"):
+            work[f"{suffix}_target_timestamp"] = pd.to_datetime(
+                work[f"target_timestamp_{suffix}"],
+                errors="coerce",
+            ).astype("datetime64[ns]")
+            work[f"{suffix}_source_timestamp"] = pd.to_datetime(
+                work[f"timestamp_{suffix}"],
+                errors="coerce",
+            ).astype("datetime64[ns]")
 
     start_volume = pd.to_numeric(
         work[f"{volume_col}_sell_start"],

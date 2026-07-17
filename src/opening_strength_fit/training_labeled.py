@@ -9,6 +9,7 @@ from opening_strength_fit.candidates import (
     filter_opening_candidates,
     opening_candidate_mask,
 )
+from opening_strength_fit.clickhouse_ticks import deduplicate_tick_timestamps
 from opening_strength_fit.config import (
     config_bool,
     config_clock_list,
@@ -30,6 +31,7 @@ from opening_strength_fit.features import (
     add_postopen_v2_decision_features,
     add_price_scale_features,
 )
+from opening_strength_fit.reports import print_mapping
 from opening_strength_fit.sampling import DEFAULT_DECISION_TIMES, parse_clock_times
 from opening_strength_fit.schema import (
     ensure_timestamp_columns,
@@ -514,6 +516,21 @@ def build_labeled_frame_from_config(
     *,
     apply_candidate_filter: bool = True,
 ) -> pd.DataFrame:
+    tick_timestamp_deduplication = config_str(
+        config,
+        "data",
+        "tick_timestamp_deduplication",
+        "",
+    ).strip()
+    if tick_timestamp_deduplication:
+        ticks = deduplicate_tick_timestamps(
+            ticks,
+            mode=tick_timestamp_deduplication,
+        )
+        print_mapping(
+            "tick_timestamp_deduplication",
+            ticks.attrs["tick_timestamp_deduplication"],
+        )
     volume_unit_multiplier = config_float(
         config,
         "labels",
@@ -540,6 +557,18 @@ def build_labeled_frame_from_config(
         volume_unit_multiplier=volume_unit_multiplier,
         fee_bps=config_float(config, "labels", "fee_bps", 0.0),
         entry_tick_delay=config_int(config, "labels", "entry_tick_delay", 0),
+        entry_alignment=config_str(
+            config,
+            "labels",
+            "entry_alignment",
+            "tick_offset",
+        ),
+        entry_clock_delay_seconds=config_value(
+            config,
+            "labels",
+            "entry_clock_delay_seconds",
+            None,
+        ),
         entry_max_gap_seconds=config_value(
             config,
             "labels",
@@ -560,6 +589,12 @@ def build_labeled_frame_from_config(
             "features",
             "preopen_match_time",
             "09:25:00",
+        ),
+        future_alignment=config_str(
+            config,
+            "labels",
+            "future_alignment",
+            "next_tick",
         ),
         max_future_gap_seconds=config_value(
             config,

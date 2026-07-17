@@ -135,6 +135,9 @@ def build_cache_manifest(
         "entry_delay_ticks",
         "entry_delay_seconds",
         "entry_max_tick_gap_seconds",
+        "entry_state_age_seconds",
+        "sell_start_state_age_seconds",
+        "sell_end_state_age_seconds",
     ):
         if column in frame.columns:
             timing_summary[column] = _numeric_distribution(frame[column])

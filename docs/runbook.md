@@ -105,6 +105,37 @@ osf-build-labeled-cache \
 模式下可暂时省略 manifest，新写入路径会先发布 manifest 再标记 ready。一旦存在 manifest，schema、
 文件列和构建配置 fingerprint 不匹配会直接失败。
 
+当源 `stock.tick` 存在同一股票、同一交易所时间戳的重复物理行，并希望 `entry_tick_delay` 按真实快照
+而不是物理行计数时，仅在新 cache lineage 中启用：
+
+```toml
+[data]
+tick_timestamp_deduplication = "latest_local_timestamp"
+```
+
+该步骤在特征和 label 构造前按 `date × symbol × timestamp` 只保留一行，优先最新本地接收时间，再按
+累计成交状态和稳定 fingerprint 决定。重复行不消耗 delay tick，也不直接判 label 无效；例如 delay2
+遇到重复时间戳会继续读取后面的第二个不同时间戳。未设置此字段的旧配置仍按物理行 `shift(-N)`，用于
+保持历史 cache 的原样可复现性。
+
+对省略未变化快照的 event/state 数据，正式 fixed-clock cache 不按“后续第 N 条更新”定义执行时间，
+也不以单股票相邻更新间隔代理数据新鲜度。使用：
+
+```toml
+[labels]
+entry_tick_delay = 2
+entry_alignment = "clock_state"
+entry_clock_delay_seconds = 6
+future_alignment = "clock_state"
+require_entry_after_cross_section_ready = true
+```
+
+`entry_timestamp` 表示逻辑执行时钟，`entry_source_timestamp` 表示该时钟之前最后一条可见状态；
+两者之差写入 `entry_state_age_seconds`。sell start/end 使用同样的 backward point-in-time lookup。
+clock-state 模式禁止同时设置 `entry_max_gap_seconds` 或 `max_future_gap_seconds`，避免再次把
+“状态未变化”误判成缺失。若要判断 feed 是否真正 stale，应另查 heartbeat、sequence、抓取进程状态或
+本地接收延迟。固定时钟不能替代同交易所时间戳去重：重复 revision 仍会改变盘口值和 lag/diff/path 特征。
+
 ### 严格上一交易日日频 enrichment
 
 需要把公司规模字段保留在 labeled cache 供当前或后续任务使用时，在直接读取 ClickHouse 的 base-cache
