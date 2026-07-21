@@ -18,6 +18,12 @@ from opening_strength_fit.commands.k8s_rendering_common import (
     node_selector_yaml as _node_selector_yaml,
 )
 from opening_strength_fit.commands.k8s_rendering_common import (
+    training_config_map_mount_yaml as _training_config_map_mount_yaml,
+)
+from opening_strength_fit.commands.k8s_rendering_common import (
+    training_config_map_volume_yaml as _training_config_map_volume_yaml,
+)
+from opening_strength_fit.commands.k8s_rendering_common import (
     wait_for_specific_paths_yaml as _wait_for_specific_paths_yaml,
 )
 from opening_strength_fit.config import config_value as get
@@ -316,6 +322,14 @@ def _shard_parallelism(config: dict, resources: dict) -> int:
     return max(1, int(raw or 1))
 
 
+def _shard_job_mode(config: dict) -> str:
+    mode = str(get(config, "k8s", "shard_job_mode", "indexed") or "indexed")
+    mode = mode.strip().lower().replace("-", "_")
+    if mode not in {"indexed", "separate"}:
+        raise SystemExit("k8s.shard_job_mode must be 'indexed' or 'separate'")
+    return mode
+
+
 def _window_mode(config: dict) -> str:
     return str(get(config, "window", "mode", "chronological"))
 
@@ -425,12 +439,17 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
     env_from = _k8s_env_from(config, indent=18)
     opencl_bootstrap = _gpu_opencl_bootstrap_yaml(resources, indent=26)
     wait_for_paths = _wait_for_paths_yaml(config, indent=26)
+    config_map_volume = _training_config_map_volume_yaml(config, indent=20)
+    config_map_mount = _training_config_map_mount_yaml(config, indent=24)
     if _window_mode(config) == "rolling_monthly":
         env_from = _k8s_env_from(config, indent=22)
         month_windows = _month_windows_from_config(config)
         test_starts = " ".join(start for start, _ in month_windows)
         test_ends = " ".join(end for _, end in month_windows)
-        index_suffix_chars = 1 + len(str(len(month_windows) - 1))
+        shard_job_mode = _shard_job_mode(config)
+        index_suffix_chars = (2 if shard_job_mode == "separate" else 1) + len(
+            str(len(month_windows) - 1)
+        )
         if not explicit_job_name:
             job_name = _k8s_job_name(
                 "opening-strength",
@@ -448,6 +467,101 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
         completion_check = _shell_file_check(completion_files)
         completion_label = ", ".join(completion_files)
         rolling_dir_expression = rolling_shard_dir_name("${TEST_START}", "${TEST_END}", layout)
+        per_index_backoff = get(config, "k8s", "backoff_limit_per_index", None)
+        backoff_field = "backoffLimitPerIndex" if per_index_backoff is not None else "backoffLimit"
+        backoff_value = int(per_index_backoff) if per_index_backoff is not None else 0
+        if shard_job_mode == "separate":
+            config_map_volume = _training_config_map_volume_yaml(config, indent=32)
+            scheduler_yaml = _scheduler_yaml(config, resources, indent=30)
+            env_from = _k8s_env_from(config, indent=34)
+            opencl_bootstrap = _gpu_opencl_bootstrap_yaml(resources, indent=38)
+            wait_for_paths = _wait_for_paths_yaml(config, indent=38)
+            config_map_mount = _training_config_map_mount_yaml(config, indent=36)
+            gpu_resource_line = _gpu_resource_line(resources, indent=38)
+            manifests: list[str] = []
+            for index, (test_start, test_end) in enumerate(month_windows):
+                suffix = f"-s{index}"
+                if len(job_name) + len(suffix) > KUBERNETES_NAME_LIMIT:
+                    raise SystemExit(
+                        f"separate shard job name exceeds {KUBERNETES_NAME_LIMIT} characters: "
+                        f"{job_name}{suffix}"
+                    )
+                shard_job_name = f"{job_name}{suffix}"
+                rolling_dir = rolling_shard_dir_name(test_start, test_end, layout)
+                manifests.append(
+                    textwrap.dedent(
+                        f"""\
+                        apiVersion: batch/v1
+                        kind: Job
+                        metadata:
+                          name: {shard_job_name}
+                          namespace: {namespace}
+                        spec:
+                          backoffLimit: 0
+                          ttlSecondsAfterFinished: 86400
+                          template:
+                            spec:
+                              restartPolicy: Never
+                              imagePullSecrets:
+                                - name: {pull_secret}
+                              volumes:
+                                - name: opening-strength-output
+                                  persistentVolumeClaim:
+                                    claimName: {pvc}
+{config_map_volume.rstrip()}
+{scheduler_yaml.rstrip()}
+                              containers:
+                                - name: opening-strength-fit
+                                  image: {image}
+                                  imagePullPolicy: Always
+{env_from}                                  workingDir: /app/opening_strength_fit
+                                  command:
+                                    - /bin/bash
+                                    - -lc
+                                    - |
+                                      set -euo pipefail
+{opencl_bootstrap.rstrip()}
+{wait_for_paths.rstrip()}
+                                      ROOT={output_dir}
+                                      mkdir -p "${{ROOT}}"
+                                      TEST_START={test_start}
+                                      TEST_END={test_end}
+                                      OUT="${{ROOT}}/{rolling_dir}"
+                                      if {completion_check}; then
+                                        echo "test window ${{TEST_START}}..${{TEST_END}}: required outputs already exist ({completion_label}), skipping ${{OUT}}"
+                                        exit 0
+                                      fi
+
+                                      echo
+                                      echo "running {run_id_value} shard test=${{TEST_START}}..${{TEST_END}} index={index}"
+                                      echo "output_dir=${{OUT}}"
+
+                                      {command} \\
+                                        --config {config_path.as_posix()} \\
+                                        --rolling-monthly \\
+                                        --train-months {train_months} \\
+                                        --test-months {test_months} \\
+                                        --test-stride-months {test_stride_months} \\
+                                        --test-start-month "${{TEST_START}}" \\
+                                        --test-end-month "${{TEST_END}}" \\
+                                        --output-dir "${{OUT}}"
+                                  volumeMounts:
+                                    - name: opening-strength-output
+                                      mountPath: {mount_path}
+{config_map_mount.rstrip()}
+                                  resources:
+                                    requests:
+                                      cpu: "{cpu_request}"
+                                      memory: {memory_request}
+{gpu_resource_line.rstrip()}
+                                    limits:
+                                      cpu: "{cpu_limit}"
+                                      memory: {memory_limit}
+{gpu_resource_line.rstrip()}
+                        """
+                    ).rstrip()
+                )
+            return "\n---\n".join(manifests) + "\n"
         return textwrap.dedent(
             f"""\
             apiVersion: batch/v1
@@ -456,7 +570,7 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
               name: {job_name}
               namespace: {namespace}
             spec:
-              backoffLimit: 0
+              {backoff_field}: {backoff_value}
               completionMode: Indexed
               completions: {len(month_windows)}
               parallelism: {shard_parallelism}
@@ -470,6 +584,7 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
                     - name: opening-strength-output
                       persistentVolumeClaim:
                         claimName: {pvc}
+{config_map_volume.rstrip()}
 {scheduler_yaml.rstrip()}
                   containers:
                     - name: opening-strength-fit
@@ -526,6 +641,7 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
                       volumeMounts:
                         - name: opening-strength-output
                           mountPath: {mount_path}
+{config_map_mount.rstrip()}
                       resources:
                         requests:
                           cpu: "{cpu_request}"

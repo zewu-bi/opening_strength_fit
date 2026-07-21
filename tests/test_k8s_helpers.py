@@ -71,7 +71,10 @@ class K8sHelperTest(unittest.TestCase):
                 "test_end_month": "2021-10",
             },
             "output": {"k8s_dir": "/mnt/output/opening_strength_fit/run"},
-            "k8s": {"resources": {"memory_limit": "256Gi"}},
+            "k8s": {
+                "backoff_limit_per_index": 0,
+                "resources": {"memory_limit": "256Gi"},
+            },
         }
 
         manifest = render_sharded_training_job(
@@ -82,6 +85,8 @@ class K8sHelperTest(unittest.TestCase):
 
         self.assertIn("completionMode: Indexed", manifest)
         self.assertIn("completions: 3", manifest)
+        self.assertIn("backoffLimitPerIndex: 0", manifest)
+        self.assertNotIn("backoffLimit: 0", manifest)
         self.assertIn("JOB_COMPLETION_INDEX", manifest)
         self.assertIn("TEST_STARTS=(2021-08 2021-09 2021-10)", manifest)
         self.assertIn("TEST_ENDS=(2021-08 2021-09 2021-10)", manifest)
@@ -121,6 +126,48 @@ class K8sHelperTest(unittest.TestCase):
         self.assertIn("2024-06 2024-12)", manifest)
         self.assertIn('--test-start-month "${TEST_START}"', manifest)
         self.assertIn('--test-end-month "${TEST_END}"', manifest)
+
+    def test_rolling_monthly_can_render_independent_shard_jobs(self) -> None:
+        config = {
+            "run": {"id": "nn_independent_shards", "kind": "exploration"},
+            "model": {"name": "torch_mlp"},
+            "window": {
+                "mode": "rolling_monthly",
+                "train_months": 36,
+                "test_months": 6,
+                "test_stride_months": 6,
+                "test_start_month": "2022-01",
+                "test_end_month": "2022-12",
+            },
+            "output": {"k8s_dir": "/mnt/output/opening_strength_fit/nn/run"},
+            "k8s": {
+                "job_name": "os-nn-independent",
+                "shard_job_mode": "separate",
+                "config_map_name": "os-nn-independent-config",
+                "config_map_volume_name": "run-config",
+                "config_map_mount_path": "/app/opening_strength_fit/experiments/runs/run.toml",
+                "config_map_sub_path": "run.toml",
+                "resources": {"memory_limit": "896Gi"},
+            },
+        }
+
+        manifest = render_sharded_training_job(
+            Path("experiments/runs/run.toml"),
+            config,
+            "image:tag",
+        )
+
+        self.assertEqual(manifest.count("kind: Job"), 2)
+        self.assertIn("name: os-nn-independent-s0", manifest)
+        self.assertIn("name: os-nn-independent-s1", manifest)
+        self.assertNotIn("completionMode: Indexed", manifest)
+        self.assertNotIn("JOB_COMPLETION_INDEX", manifest)
+        self.assertIn("TEST_START=2022-01", manifest)
+        self.assertIn("TEST_START=2022-07", manifest)
+        self.assertIn('OUT="${ROOT}/month_2022-01"', manifest)
+        self.assertIn('OUT="${ROOT}/month_2022-07"', manifest)
+        self.assertEqual(manifest.count("name: os-nn-independent-config"), 2)
+        self.assertEqual(manifest.count("subPath: run.toml"), 2)
 
     def test_v2_sharded_job_uses_run_and_fold_directories(self) -> None:
         config = {

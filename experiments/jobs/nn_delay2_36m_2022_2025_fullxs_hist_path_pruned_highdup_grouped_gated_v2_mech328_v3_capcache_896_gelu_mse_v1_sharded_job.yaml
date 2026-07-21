@@ -1,13 +1,13 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: os-nn-2225-gated-v2-mech328v3-896
+  name: os-nn-2225-gated-v2-mech328v3-1536
   namespace: bizewu
 spec:
-  backoffLimit: 0
+  backoffLimitPerIndex: 0
   completionMode: Indexed
   completions: 8
-  parallelism: 8
+  parallelism: 1
   ttlSecondsAfterFinished: 86400
   template:
     spec:
@@ -18,9 +18,9 @@ spec:
         - name: opening-strength-output
           persistentVolumeClaim:
             claimName: bizewu-private-data
-        - name: mech328-v3-896-config
+        - name: mech328-v3-1536-config
           configMap:
-            name: os-nn-mech328v3-896-config
+            name: os-nn-mech328v3-1536-config
       nodeSelector:
         has_gpu: "true"
       affinity:
@@ -121,15 +121,15 @@ spec:
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output
-            - name: mech328-v3-896-config
+            - name: mech328-v3-1536-config
               mountPath: /app/opening_strength_fit/experiments/runs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_capcache_896_gelu_mse_v1.toml
               subPath: nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_capcache_896_gelu_mse_v1.toml
           resources:
             requests:
-              cpu: "16"
-              memory: 512Gi
+              cpu: "32"
+              memory: 1536Gi
               nvidia.com/gpu: "1"
             limits:
               cpu: "32"
-              memory: 896Gi
+              memory: 1536Gi
               nvidia.com/gpu: "1"

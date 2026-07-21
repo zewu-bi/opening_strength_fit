@@ -88,6 +88,44 @@ def env_from_secrets_yaml(secret_names: list[str], indent: int) -> str:
     return textwrap.indent("\n".join(lines) + "\n", " " * indent)
 
 
+def _training_config_map(config: dict) -> tuple[str, str, str, str] | None:
+    k8s = config.get("k8s", {})
+    name = str(k8s.get("config_map_name", "") or "").strip()
+    mount_path = str(k8s.get("config_map_mount_path", "") or "").strip()
+    sub_path = str(k8s.get("config_map_sub_path", "") or "").strip()
+    volume_name = str(k8s.get("config_map_volume_name", "run-config") or "").strip()
+    if not name and not mount_path and not sub_path:
+        return None
+    if not name or not mount_path or not sub_path or not volume_name:
+        raise SystemExit(
+            "k8s config-map mounting requires config_map_name, config_map_mount_path, "
+            "config_map_sub_path, and a non-empty config_map_volume_name"
+        )
+    return name, volume_name, mount_path, sub_path
+
+
+def training_config_map_volume_yaml(config: dict, indent: int) -> str:
+    spec = _training_config_map(config)
+    if spec is None:
+        return ""
+    name, volume_name, _, _ = spec
+    return textwrap.indent(
+        f"- name: {volume_name}\n  configMap:\n    name: {name}\n",
+        " " * indent,
+    )
+
+
+def training_config_map_mount_yaml(config: dict, indent: int) -> str:
+    spec = _training_config_map(config)
+    if spec is None:
+        return ""
+    _, volume_name, mount_path, sub_path = spec
+    return textwrap.indent(
+        f"- name: {volume_name}\n  mountPath: {mount_path}\n  subPath: {sub_path}\n",
+        " " * indent,
+    )
+
+
 def compact_run_slug(run_id_value: str, *, max_length: int) -> str:
     run_slug = slug(run_id_value)
     if len(run_slug) <= max_length:

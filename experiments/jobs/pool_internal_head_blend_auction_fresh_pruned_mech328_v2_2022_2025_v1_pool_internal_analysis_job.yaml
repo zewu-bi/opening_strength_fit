@@ -1,0 +1,69 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-headblend-auction-mech-v1
+  namespace: bizewu
+  labels:
+    app: opening-strength-fit
+    experiment: pool-internal-head-blend
+spec:
+  completions: 1
+  parallelism: 1
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: opening-strength-fit
+        experiment: pool-internal-head-blend
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      volumes:
+        - name: opening-strength-output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+        - name: head-blend-code
+          configMap:
+            name: os-headblend-auction-mech-v1
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                      - node7
+                      - node8
+      containers:
+        - name: opening-strength-fit
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260715-auction-fresh-mcap-lag1-v1
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: xy-fit-ceph-credentials
+          workingDir: /app/opening_strength_fit
+          command:
+            - /bin/bash
+            - -lc
+            - |
+              set -euo pipefail
+              osf-analyze-pool-internal-top100 --help >/dev/null
+              exec python /mnt/config/run_pool_internal_head_blend.py \
+                --config /mnt/config/pool_internal_head_blend_auction_fresh_pruned_mech328_v2_2022_2025_v1.toml \
+                --output-dir /mnt/output/opening_strength_fit/runs/analyses/pool-internal-head-blend/pool_internal_head_blend_auction_fresh_pruned_mech328_v2_2022_2025_v1
+          volumeMounts:
+            - name: opening-strength-output
+              mountPath: /mnt/output
+            - name: head-blend-code
+              mountPath: /mnt/config
+              readOnly: true
+          resources:
+            requests:
+              cpu: "8"
+              memory: 256Gi
+            limits:
+              cpu: "16"
+              memory: 512Gi

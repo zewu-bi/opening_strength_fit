@@ -5,8 +5,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
+import opening_strength_fit.training_data as training_data
 from opening_strength_fit.training_data import (
     _labeled_pvc_read_columns,
     load_labeled_pvc_frame,
@@ -267,6 +269,23 @@ class LabeledPvcSourceTest(unittest.TestCase):
         self.assertEqual(str(split[column].dtype), "float32")
         self.assertEqual(single[column].tolist(), [1.0])
         self.assertEqual(split[column].tolist(), [1.0])
+
+    def test_labeled_pvc_downcast_does_not_copy_unchanged_columns(self) -> None:
+        frame = pd.DataFrame(
+            {
+                "value": pd.Series([1.0, 2.0], dtype="float64"),
+                "count": pd.Series([1, 2], dtype="int64"),
+            }
+        )
+
+        result = training_data._downcast_labeled_pvc_frame(
+            frame,
+            {"data": {"downcast_float32": True}},
+        )
+
+        self.assertEqual(str(frame["value"].dtype), "float64")
+        self.assertEqual(str(result["value"].dtype), "float32")
+        self.assertTrue(np.shares_memory(frame["count"].to_numpy(), result["count"].to_numpy()))
 
     def test_labeled_pvc_relative_features_are_built_after_decision_filter(
         self,

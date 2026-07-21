@@ -31,6 +31,7 @@
 | 2026-07-17 | `build_delay6_clock_state_{2019..2025}_cap_cache_v1` | entry 固定为特征状态后 6 秒，entry/sell 边界取该逻辑时刻最后已知状态，并保留 source timestamp/state age 审计列 | `running`; 7 个年度 ClickHouse base Job 已提交 | 新的 canonical label/cache lineage |
 | 2026-07-17 | `build_delay6_clock_state_{2019..2025}_cap_mixed_w030_target_v1` | 从 fixed-clock base 构造既有 mixed-w030 target | `queued`; Job 已渲染和 dry-run，等待 base manifest 与逐日覆盖率审计 | 后续新训练只读该 target lineage |
 | 2026-07-17 | `nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1` | 固定模型/特征，只把数据切到 fixed-clock cache | `queued`; sharded Job 已渲染和 dry-run，等待 7 个 mixed target | 对 auction-fresh v4 做同规格数据口径 A/B |
+| 2026-07-17 | `pool_internal_head_blend_auction_fresh_pruned_mech328_v2_2022_2025_v1` | 以 mech328 v2 为底座，只对 auction-fresh Top100/200 头部做有限 rank boost，并用 mech rank gate 保护中段 | `running`; `os-headblend-auction-mech-v1` 在 node15 运行，1 completion / parallelism 1 | 同一 Job 比较两锚、两档无门控 boost 和两档 agreement gate；结果出来前不改变 incumbent |
 
 ## 决策时间线
 
@@ -89,6 +90,7 @@
 | 07-16 | conservative cap/unique-tick rebuild | 旧 cache 语义 + T-1 cap/share + indicative-auction；同 `(date,symbol,exchange timestamp)` 只保留一个确定性快照，delay2 继续向后数两个不同时间戳；移除三项严格有效性门 | 2019-04-19 全市场：`2,326,300 -> 1,162,995` unique rows，`38,740/39,115 = 99.0413%` 样本有效；有效 entry 中 `92.51%` 为 6 秒，其余继续读到更后真实 tick；全量 `265 passed, 3 skipped` | 使用独立 v3 base/v2 mixed lineage；先跑 base，完成后按日审计覆盖率再提交 target |
 | 07-17 | auction-fresh pruned acceptance archive | 完成 indexed GPU training、pool-internal analysis、artifact sync，并用 runbook overlay acceptance 对比 mech328 v2 / gated v2 | `pool_L` next excess `16.9692 bps`，高于 mech328 v2 `14.3174` 和 gated v2 `13.2768`；Top100 8bps net cumulative `9893.9 bps`，相对 pool_L cumulative excess `8221.6 bps`；universe short IC `0.150489`，低于 mech328 v2/gated v2 | 通过 Top100 收益验收并归档为 causal-data challenger；因 short IC 退化且未做 capacity/realistic，不替换 mech328 v2 incumbent |
 | 07-17 | auction-fresh downstream acceptance | 同 runbook t10p20 capacity audit/acceptance、execution-context realistic replay、core/size exposure 和右尾 P95/P99 拆解 | capacity fee8bps cumulative `9244.5 bps`；realistic fill `0.8073`、fee8bps cumulative `7323.9 bps`；size exposure 近中性，activity exposure 仍高；P95 winsor 后 capacity/realistic 分别 `-1.5/-0.3 bps` | execution 后仍强于 LGBM/MLP anchors，但收益质量被 P95 右尾依赖否决；继续作为 archived challenger，不替换 incumbent |
+| 07-17 | auction-fresh rank/bucket vs mech328 v2 | 对 auction-fresh 补跑 Top1000 rank bucket 与 50/100/200 names-per-bucket multiscale；补跑 mech328 v2 multiscale，并生成 full `pool_L` 与 Top1000 对比曲线 | Top1000 单股 Rank IC：auction `-0.015657`、mech `-0.016463`；Top1000 10 桶前 1/2 桶 auction 高 `+2.65/+2.29 bps`，后 8-10 桶低 `-1.15/-1.59/-0.65 bps`；full `pool_L` 20 桶 0-5% 高 `+3.16 bps`，15%-75% 多数弱于 mech | auction-fresh 更像 head/right-tail selector，mech328 v2 更像中段更平滑的 pool overlay ranker；不做二选一替换，优先做 head-only blend/gate |
 | 07-17 | fixed-clock +6s label patch | 用 event/state 语义替换“向后数两条更新”和 `>5s` freshness 失效：entry 固定 +6s，entry/sell 取边界时刻最后已知状态；同时间戳 revision 仍确定性去重 | 2019-04-19 同一批 2,326,300 ClickHouse 行：conservative `38,740/39,115=99.0413%`，fixed-clock `38,745/39,115=99.0541%`；旧口径 2,901 个有效 entry 晚于 6 秒，新口径全部精确 6 秒，entry state-age P99/max 为 3/6 秒 | 建立独立 delay6-clock-state base/mixed lineage；旧 conservative mixed target superseded；新实验只读新 lineage |
 
 ## 当前决策记录
@@ -364,10 +366,16 @@ realistic_acceptance_auction_fresh_pruned_2022_2025_t10p20_execctx_v2/
 exposure_audit_nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_core_v1/
 exposure_audit_nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_size_industry_v1/
 tail_decomposition_auction_fresh_pruned_t10p20_execctx_v1/
+rank_bucket_reaudit_auction_fresh_pruned_2022_2025_v1/
+multiscale_bucket_diag_auction_fresh_pruned_2022_2025_v1/
+multiscale_bucket_diag_mech328_v2_2022_2025_v1/
+rank_bucket_comparison_auction_fresh_pruned_vs_mech328_v2_2022_2025_v1/
 
 figures:
 optimization_directions_overlay_acceptance.svg
 optimization_directions_net_alpha_cumulative.svg
+pool_l_20_bucket_return_comparison.svg
+top1000_20_bucket_return_comparison.svg
 ```
 
 ### Overlay incumbent：mech328 v2

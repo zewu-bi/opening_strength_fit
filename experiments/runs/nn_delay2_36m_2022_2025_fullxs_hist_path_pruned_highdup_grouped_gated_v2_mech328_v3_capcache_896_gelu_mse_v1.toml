@@ -1,7 +1,7 @@
 [run]
 id = "nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_capcache_896_gelu_mse_v1"
 kind = "exploration"
-description = "GPU PyTorch grouped gated v2 GELU MSE NN over 2022-2025 on the same 328 features; reruns strict ratio-style v3 on the auction-fresh T-1 cap/share cache with the fresh-pruned memory envelope (512Gi request, 896Gi limit) for attribution."
+description = "GPU PyTorch grouped gated v2 GELU MSE NN over 2022-2025 on the same 328 features; reruns strict ratio-style v3 on the prior tick2-gap5 T-1 cap/share cache with one shard at a time and a 1536Gi guaranteed memory envelope for attribution."
 status = "running"
 
 [data]
@@ -157,7 +157,7 @@ k8s_dir = "/mnt/output/opening_strength_fit/nn/nn_delay2_36m_2022_2025_fullxs_hi
 
 [k8s]
 namespace = "bizewu"
-job_name = "os-nn-2225-gated-v2-mech328v3-896"
+job_name = "os-nn-2225-gated-v2-mech328v3-1536"
 image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
@@ -175,16 +175,22 @@ wait_for_paths = [
 ]
 wait_for_path_timeout_seconds = 172800
 wait_for_path_interval_seconds = 120
-shard_parallelism = 8
+shard_parallelism = 1
+shard_job_mode = "indexed"
+backoff_limit_per_index = 0
+config_map_name = "os-nn-mech328v3-1536-config"
+config_map_volume_name = "mech328-v3-1536-config"
+config_map_mount_path = "/app/opening_strength_fit/experiments/runs/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_capcache_896_gelu_mse_v1.toml"
+config_map_sub_path = "nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_capcache_896_gelu_mse_v1.toml"
 
 [k8s.node_selector]
 has_gpu = "true"
 
 [k8s.resources]
-cpu_request = "16"
+cpu_request = "32"
 cpu_limit = "32"
-memory_request = "512Gi"
-memory_limit = "896Gi"
+memory_request = "1536Gi"
+memory_limit = "1536Gi"
 gpu_limit = 1
 
 [analysis.pool_internal]

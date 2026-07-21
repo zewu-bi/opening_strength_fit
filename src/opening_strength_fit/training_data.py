@@ -556,7 +556,7 @@ def _downcast_labeled_pvc_frame(frame: pd.DataFrame, config: dict) -> pd.DataFra
     float_columns = frame.select_dtypes(include=["float64"]).columns
     if len(float_columns) == 0:
         return frame
-    out = frame.copy()
+    out = frame.copy(deep=False)
     out[float_columns] = out[float_columns].astype("float32")
     return out
 

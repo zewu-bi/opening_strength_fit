@@ -101,8 +101,9 @@ auction-fresh pruned 的同口径 replay。三者都从 capacity-selected child 
 
 1. 等 fixed-clock +6s 七个年度 base 完成并审计逐日覆盖率/state age，随后构建 mixed-w030 target，
    用同规格 auction-pruned 模型与 auction-fresh v4 做唯一变量 A/B；新的数据实验只使用该 lineage。
-2. 对 `auction_fresh_pruned_grouped_gated_v2_mech_v3` 做 refill/完整策略回放、overlap、右尾稳健性和
-   market-state 拆解；只有这些复核不推翻收益质量时才进入 incumbent 对照。
+2. 完成已提交的 `pool_internal_head_blend_auction_fresh_pruned_mech328_v2_2022_2025_v1`：以 mech328 v2
+   为底座，只给 auction-fresh Top100/200 头部有限 boost，并用 mech rank gate 保护中段；按 Top100/200、
+   20 桶、overlap、月/季稳定性和 P95/P99 尾部敏感性共同验收。
 3. 等 `mech328_v3_histavg_activity` 完成后，按同一 runbook gate 与 mech328 v2、gated v2、
    auction-fresh pruned v1 做四线对照。
 4. 将决策面从开盘 `09:31-09:40` 扩展为全天分钟频决策序列；扩展时继续保证每个 decision point
