@@ -1,16 +1,11 @@
 from __future__ import annotations
 
 import ast
-import inspect
 from pathlib import Path
 
 import opening_strength_fit.features as features
-import opening_strength_fit.features_relative as relative_features
 import opening_strength_fit.model as model
-import opening_strength_fit.model_torch as torch_facade
-import opening_strength_fit.multiscale_bucket_diag as multiscale_facade
 import opening_strength_fit.optimization_acceptance_plots as acceptance_plots
-from opening_strength_fit.commands import old_nn_multiscale_bucket_diag as old_command_facade
 from opening_strength_fit.legacy import multiscale_bucket_diag as multiscale_legacy
 from opening_strength_fit.legacy import old_nn_multiscale_bucket_diag as old_command_legacy
 from opening_strength_fit.torch_model import architectures as torch_architectures
@@ -49,10 +44,9 @@ def _internal_imports(path: Path) -> set[str]:
 
 
 def _is_command_or_cli_module(module: str) -> bool:
-    return module in {
-        "opening_strength_fit.commands",
-        "opening_strength_fit.cli",
-    } or module.startswith(("opening_strength_fit.commands.", "opening_strength_fit.cli."))
+    return module == "opening_strength_fit.commands" or module.startswith(
+        "opening_strength_fit.commands."
+    )
 
 
 def _module_graph() -> dict[str, set[str]]:
@@ -102,18 +96,12 @@ def _dependency_cycle(graph: dict[str, set[str]]) -> list[str]:
 
 def test_compatibility_modules_stay_thin() -> None:
     assert _line_count("src/opening_strength_fit/features.py") <= 120
-    assert _line_count("src/opening_strength_fit/features_relative.py") <= 40
     assert _line_count("src/opening_strength_fit/model.py") <= 120
-    assert _line_count("src/opening_strength_fit/model_torch.py") <= 120
-    assert _line_count("src/opening_strength_fit/multiscale_bucket_diag.py") <= 60
 
 
-def test_archived_diagnostic_import_paths_remain_compatible() -> None:
-    assert (
-        multiscale_facade.run_multiscale_bucket_diagnostics
-        is multiscale_legacy.run_multiscale_bucket_diagnostics
-    )
-    assert old_command_facade.main is old_command_legacy.main
+def test_archived_diagnostics_remain_directly_importable() -> None:
+    assert callable(multiscale_legacy.run_multiscale_bucket_diagnostics)
+    assert callable(old_command_legacy.main)
     assert callable(acceptance_plots.write_optimization_direction_plots)
 
 
@@ -143,45 +131,12 @@ def test_feature_public_api_is_exported_from_compatibility_module() -> None:
     assert features.build_feature_frame.__module__.endswith("features_base")
 
 
-def test_relative_feature_facade_exports_only_public_transforms() -> None:
-    assert relative_features.__all__ == [
-        "add_cross_sectional_relative_features",
-        "transform_cross_sectional_feature_values",
-        "add_price_scale_features",
-        "mechanismized_feature_value_reference_columns",
-        "transform_mechanismized_feature_values",
-        "transform_mechanismized_v2_feature_values",
-        "transform_mechanismized_v3_feature_values",
-    ]
-
-
 def test_model_public_api_is_exported_from_compatibility_module() -> None:
     assert model.feature_columns.__module__.endswith("model_features")
     assert model.fit_lightgbm_frame.__module__.endswith("model_sklearn")
     assert model.fit_torch_mlp_frame is torch_training.fit_torch_mlp_frame
     assert model.predict_frame.__module__.endswith("model_prediction")
     assert model.evaluate_prediction_frame.__module__.endswith("model_metrics")
-
-
-def test_torch_model_facade_preserves_api_across_implementation_layers() -> None:
-    assert torch_facade.__all__ == [
-        "fit_torch_mlp_frame",
-        "_torch_mlp_score",
-        "_torch_feature_value_frame",
-        "_fit_symbol_train_standardization",
-        "_standardized_float_matrix",
-    ]
-    assert inspect.signature(torch_facade.fit_torch_mlp_frame) == inspect.signature(
-        torch_training.fit_torch_mlp_frame
-    )
-    assert torch_facade.fit_torch_mlp_frame is torch_training.fit_torch_mlp_frame
-    assert torch_facade._torch_mlp_score is torch_prediction._torch_mlp_score
-    assert torch_facade._torch_feature_value_frame is torch_preprocessing._torch_feature_value_frame
-    assert (
-        torch_facade._fit_symbol_train_standardization
-        is torch_preprocessing._fit_symbol_train_standardization
-    )
-    assert torch_facade._standardized_float_matrix is torch_preprocessing._standardized_float_matrix
 
 
 def test_torch_model_implementation_ownership_is_explicit() -> None:
@@ -202,11 +157,11 @@ def test_internal_module_graph_is_acyclic() -> None:
     assert cycle == [], " -> ".join(cycle)
 
 
-def test_domain_modules_do_not_import_command_or_cli_layers() -> None:
+def test_domain_modules_do_not_import_command_layer() -> None:
     violations = []
     for path in sorted(PACKAGE_ROOT.rglob("*.py")):
         relative = path.relative_to(PACKAGE_ROOT)
-        if relative.parts[0] in {"cli", "commands"}:
+        if relative.parts[0] == "commands":
             continue
         forbidden = {
             imported for imported in _internal_imports(path) if _is_command_or_cli_module(imported)

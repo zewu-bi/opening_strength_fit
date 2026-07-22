@@ -22,7 +22,9 @@ jobs:
           ruff format --check .
       - name: Test
         run: python -m pytest -q
+      - name: Public smoke example
+        run: make smoke PYTHON=python
       - name: Contracts
         run: |
-          python -m opening_strength_fit.cli.audit_experiments
-          python -m opening_strength_fit.cli.project_contracts
+          python -m opening_strength_fit.commands.experiment_audit
+          python -m opening_strength_fit.commands.project_contracts

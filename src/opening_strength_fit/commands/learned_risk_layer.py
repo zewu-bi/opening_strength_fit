@@ -21,7 +21,10 @@ from opening_strength_fit.analysis import (
 from opening_strength_fit.analysis import (
     write_json,
 )
-from opening_strength_fit.clickhouse_ticks import DEFAULT_CLICKHOUSE_TICK_TABLE
+from opening_strength_fit.clickhouse_ticks import (
+    DEFAULT_CLICKHOUSE_TICK_HOST,
+    DEFAULT_CLICKHOUSE_TICK_TABLE,
+)
 from opening_strength_fit.config import (
     config_bool,
     config_float,
@@ -145,7 +148,7 @@ def load_or_fetch_next_close_labels(
                 config,
                 "clickhouse",
                 "host",
-                os.environ.get("CLICKHOUSE_HOST", "ch.db.prod.highfortfunds.com"),
+                DEFAULT_CLICKHOUSE_TICK_HOST,
             ),
             port=int(
                 args.clickhouse_port

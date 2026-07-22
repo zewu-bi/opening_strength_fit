@@ -54,7 +54,7 @@ def _run_audit_fixture(
     command = [
         sys.executable,
         "-m",
-        "opening_strength_fit.cli.audit_experiments",
+        "opening_strength_fit.commands.experiment_audit",
         "--runs-dir",
         str(runs_dir),
         "--jobs-dir",
@@ -91,7 +91,7 @@ def test_project_entrypoints_are_importable() -> None:
 
 def test_experiment_registry_is_aligned() -> None:
     result = subprocess.run(
-        [sys.executable, "-m", "opening_strength_fit.cli.audit_experiments"],
+        [sys.executable, "-m", "opening_strength_fit.commands.experiment_audit"],
         cwd=ROOT,
         check=False,
         capture_output=True,

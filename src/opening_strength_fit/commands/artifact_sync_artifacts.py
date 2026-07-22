@@ -733,9 +733,8 @@ def record_lightweight_artifacts(
         ]
     elif spec.kind == "strategy_acceptance":
         archive_dir = backtests_dir / spec.run_id
-        records = [
-            (output_dir / name, archive_dir / name) for name in STRATEGY_ACCEPTANCE_ARTIFACTS
-        ]
+        names = (STRATEGY_ACCEPTANCE_ARTIFACTS[i] for i in (0, 3, 4, 7, 10, 11, 12, 13))
+        records = [(output_dir / name, archive_dir / name) for name in names]
     elif is_feature_audit(spec):
         archive_dir = backtests_dir / spec.run_id
         records = [

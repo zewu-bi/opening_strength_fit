@@ -1,0 +1,167 @@
+Exit code: 0
+Wall time: 0 seconds
+Output:
+{
+  "created_at_utc": "2026-07-22T07:53:47.885212+00:00",
+  "run_id": "strategy_acceptance_clock6_v4_control_2022_2025_v1",
+  "variant": "clock6 v4 auction-pruned control",
+  "config": "experiments/runs/strategy_acceptance_clock6_v4_control_2022_2025_v1.toml",
+  "source_revision": "e8902e8a4bf4d0dd2b52ad76f6dd936c2e31eec8",
+  "prediction_roots": [
+    "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1"
+  ],
+  "prediction_files": [
+    {
+      "path": "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1/month_2022-01/predictions.parquet",
+      "input_rows": 5292009,
+      "pool_rows": 3575331,
+      "dates": 117,
+      "capacity_selected_rows": 203776
+    },
+    {
+      "path": "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1/month_2022-07/predictions.parquet",
+      "input_rows": 5860098,
+      "pool_rows": 3989993,
+      "dates": 125,
+      "capacity_selected_rows": 216070
+    },
+    {
+      "path": "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1/month_2023-01/predictions.parquet",
+      "input_rows": 5682408,
+      "pool_rows": 3884019,
+      "dates": 118,
+      "capacity_selected_rows": 186651
+    },
+    {
+      "path": "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1/month_2023-07/predictions.parquet",
+      "input_rows": 6139698,
+      "pool_rows": 4218941,
+      "dates": 124,
+      "capacity_selected_rows": 214478
+    },
+    {
+      "path": "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1/month_2024-01/predictions.parquet",
+      "input_rows": 5850871,
+      "pool_rows": 4012610,
+      "dates": 117,
+      "capacity_selected_rows": 237859
+    },
+    {
+      "path": "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1/month_2024-07/predictions.parquet",
+      "input_rows": 6197361,
+      "pool_rows": 4248847,
+      "dates": 125,
+      "capacity_selected_rows": 221109
+    },
+    {
+      "path": "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1/month_2025-01/predictions.parquet",
+      "input_rows": 5898337,
+      "pool_rows": 4024849,
+      "dates": 117,
+      "capacity_selected_rows": 154730
+    },
+    {
+      "path": "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1/month_2025-07/predictions.parquet",
+      "input_rows": 6412340,
+      "pool_rows": 4350847,
+      "dates": 126,
+      "capacity_selected_rows": 148761
+    }
+  ],
+  "label_inputs": [
+    "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1/opening_2022_next_close_labels_v1.parquet",
+    "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1/opening_2023_next_close_labels_v1.parquet",
+    "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1/opening_2024_next_close_labels_v1.parquet",
+    "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1/opening_2025_next_close_labels_v1.parquet"
+  ],
+  "label_col": "alpha_return_next_close",
+  "pool": "pool_L",
+  "pool_path": "lml.bzw@ssd/data/pool_L.parquet",
+  "pool_date_lag_sessions": 0,
+  "policies": [
+    "capacity_only",
+    "realistic_no_refill",
+    "visible_pretrade_refill"
+  ],
+  "capacity_constraints": {
+    "target_notional": 50000000.0,
+    "score_col": "prediction",
+    "capacity_notional_col": "turnover_diff_10t",
+    "capacity_volume_col": "",
+    "capacity_price_col": "ask_price_1",
+    "max_participation_rate": 0.2,
+    "max_symbol_weight": 0.01,
+    "min_trade_notional": 0.0,
+    "max_names": 0,
+    "ask_depth_levels": 0,
+    "ask_depth_participation_rate": 0.25,
+    "allow_decision_depth_fallback": false,
+    "industry_col": "",
+    "max_industry_weight": 0.0
+  },
+  "execution_constraints": {
+    "capacity_total_notional": 1000000000.0,
+    "fee_bps": 8.0,
+    "max_daily_symbol_weight": 0.005,
+    "max_daily_symbol_participation_rate": 0.1,
+    "daily_capacity_method": "max",
+    "execution_fill_rate": 1.0,
+    "min_child_notional": 10000.0,
+    "max_symbol_decision_count": 0,
+    "round_lot_shares": 100,
+    "price_col": "capacity_price",
+    "status_col": "status",
+    "tradable_statuses": [
+      "T0",
+      "TRADE"
+    ],
+    "spread_bps_col": "spread_bps",
+    "max_spread_bps": 50.0,
+    "limit_up_room_bps_col": "ask1_to_limit_up_bps",
+    "min_limit_up_room_bps": 0.0,
+    "ask_depth_notional_col": "ask_depth_notional",
+    "max_ask_depth_participation_rate": 0.25,
+    "industry_col": "industry",
+    "max_daily_industry_weight": 0.0
+  },
+  "tail_settings": {
+    "quantiles": [
+      0.95,
+      0.99
+    ],
+    "bootstrap_samples": 5000,
+    "bootstrap_seed": 20260722
+  },
+  "selected_rows_by_policy": {
+    "capacity_only": 1583434,
+    "realistic_no_refill": 1541808,
+    "visible_pretrade_refill": 2030834
+  },
+  "group_targets_by_policy": {
+    "capacity_only": 9690,
+    "realistic_no_refill": 9690,
+    "visible_pretrade_refill": 9690
+  },
+  "modeling_notes": {
+    "capacity_only": "Score-ranked per-decision capacity allocation before execution filters.",
+    "realistic_no_refill": "Selected-order replay; rejected or clipped orders remain cash and lower-ranked candidates are not revisited.",
+    "visible_pretrade_refill": "Full candidate ranking is filtered and allocated using only decision-time status, spread, depth, capacity, lot, and daily concentration state. It is not an instantaneous retry after observing a realized fill failure.",
+    "holding": "Overlap treats all opening slices as simultaneously funded until next close; this is an aggregate audit, not a general intraday entry/exit ledger."
+  },
+  "compact_artifacts": [
+    "strategy_acceptance_summary.csv",
+    "strategy_acceptance_daily.csv",
+    "strategy_acceptance_group_metrics.csv",
+    "strategy_acceptance_capacity_summary.csv",
+    "strategy_acceptance_overlap_summary.csv",
+    "strategy_acceptance_overlap_daily.csv",
+    "strategy_acceptance_overlap_adjacent.csv",
+    "strategy_acceptance_tail_summary.csv",
+    "strategy_acceptance_tail_monthly.csv",
+    "strategy_acceptance_tail_concentration.csv",
+    "strategy_acceptance_bootstrap.csv",
+    "strategy_acceptance_leave_one_out.csv",
+    "strategy_acceptance_trace.json",
+    "_SUCCESS"
+  ]
+}

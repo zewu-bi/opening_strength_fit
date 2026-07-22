@@ -5,7 +5,6 @@ import pandas as pd
 
 from opening_strength_fit.evaluation import resolve_group_cols
 from opening_strength_fit.feature_utils import safe_divide
-from opening_strength_fit.model_torch import _torch_mlp_score
 from opening_strength_fit.model_types import (
     PREDICTION_CONTEXT_COLUMNS,
     ClockSegmentPredictionModel,
@@ -14,6 +13,7 @@ from opening_strength_fit.model_types import (
     TorchMLPPredictionModel,
 )
 from opening_strength_fit.schema import frame_clock_series
+from opening_strength_fit.torch_model.prediction import _torch_mlp_score
 
 
 def _normalized_weights(weights: list[float], size: int) -> np.ndarray:

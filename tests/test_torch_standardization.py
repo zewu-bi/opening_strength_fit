@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from opening_strength_fit.model_torch import (
+from opening_strength_fit.torch_model.preprocessing import (
     _fit_symbol_train_standardization,
     _standardized_float_matrix,
 )

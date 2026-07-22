@@ -719,6 +719,42 @@ class SyncExperimentArtifactsTest(unittest.TestCase):
             artifact_names,
         )
 
+    def test_strategy_acceptance_record_excludes_row_level_outputs(self) -> None:
+        spec = _run_spec("strategy_acceptance_v1", kind="strategy_acceptance")
+        summary_names = {
+            "strategy_acceptance_summary.csv",
+            "strategy_acceptance_capacity_summary.csv",
+            "strategy_acceptance_overlap_summary.csv",
+            "strategy_acceptance_tail_summary.csv",
+            "strategy_acceptance_bootstrap.csv",
+            "strategy_acceptance_leave_one_out.csv",
+            "strategy_acceptance_trace.json",
+            "_SUCCESS",
+        }
+        row_level_names = {
+            "strategy_acceptance_daily.csv",
+            "strategy_acceptance_group_metrics.csv",
+            "strategy_acceptance_overlap_daily.csv",
+            "strategy_acceptance_overlap_adjacent.csv",
+            "strategy_acceptance_tail_monthly.csv",
+            "strategy_acceptance_tail_concentration.csv",
+        }
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output_dir = root / "artifacts" / spec.run_id
+            output_dir.mkdir(parents=True)
+            for name in summary_names | row_level_names:
+                (output_dir / name).write_text("artifact\n", encoding="utf-8")
+
+            recorded = record_lightweight_artifacts(
+                spec,
+                root / "artifacts",
+                root / "evidence",
+            )
+
+        self.assertEqual({path.name for path in recorded}, summary_names)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from collections.abc import Mapping, Sequence
 
@@ -10,7 +11,7 @@ import pandas as pd
 from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns
 from opening_strength_fit.universe import DEFAULT_A_SHARE_SYMBOL_REGEX
 
-DEFAULT_CLICKHOUSE_TICK_HOST = "ch.db.prod.highfortfunds.com"
+DEFAULT_CLICKHOUSE_TICK_HOST = os.environ.get("CLICKHOUSE_HOST", "localhost")
 DEFAULT_CLICKHOUSE_TICK_PORT = 8123
 DEFAULT_CLICKHOUSE_TICK_TABLE = "stock.tick"
 DEFAULT_TICK_START_OFFSET_US = 33_300_000_000

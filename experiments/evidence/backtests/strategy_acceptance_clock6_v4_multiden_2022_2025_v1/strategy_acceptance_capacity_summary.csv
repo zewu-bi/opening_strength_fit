@@ -1,0 +1,5 @@
+Exit code: 0
+Wall time: 0 seconds
+Output:
+pool,groups,months,candidate_rows,viable_rows,selected_rows,target_notional,allocated_notional,fill_ratio,filled_groups,unfilled_groups,fill_success_rate,min_fill_ratio,mean_top_depth_to_target,p50_top_depth_to_target,p90_top_depth_to_target,p95_top_depth_to_target,max_top_depth_to_target,mean_rank_reached,max_rank_reached,max_symbol_weight,mean_effective_symbols,max_capacity_participation_rate,max_ask_depth_participation_rate
+pool_L,9690,48,3333.894427244582,3322.204334365325,159.1902992776058,50000000.0,50000000.0,1.0,9690,0,1.0,1.0,159.1902992776058,151.0,212.0,236.0,462.0,159.1902992776058,462.0,0.01,120.46256264900879,0.2000000143049947,

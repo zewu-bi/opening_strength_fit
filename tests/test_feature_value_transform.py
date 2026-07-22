@@ -12,7 +12,7 @@ from opening_strength_fit.features import (
     transform_mechanismized_v2_feature_values,
     transform_mechanismized_v3_feature_values,
 )
-from opening_strength_fit.model_torch import _torch_feature_value_frame
+from opening_strength_fit.torch_model.preprocessing import _torch_feature_value_frame
 
 
 class FeatureValueTransformTest(unittest.TestCase):

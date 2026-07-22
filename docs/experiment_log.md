@@ -4,21 +4,20 @@
 > Coverage: 2026-05-20 through 2026-07-22
 
 本文件是人工维护的实验事实账本，严格按发生时间升序记录假设、口径、结果、状态和决策。当前研究
-方向见 [project_brief.md](project_brief.md)，命令见 [runbook.md](runbook.md)。旧版逐日长记录原样保存在
-[archive/experiment_ledger_2026-05-20_2026-07-10.md](archive/experiment_ledger_2026-05-20_2026-07-10.md)，
-仅用于追溯上下文，不再承担当前状态或索引职责。
+方向见 [project_brief.md](project_brief.md)，命令见 [runbook.md](runbook.md)。旧版逐日长记录已从 HEAD
+移除；需要时按 [archive README](archive/README.md) 从完整 Git 历史读取。
 
 ## 证据规则
 
 发生冲突时按以下顺序判断事实：
 
-1. compact result CSV/JSON/trace 中的数值与时间；
+1. `experiments/evidence/` 中的 compact CSV/JSON/trace；
 2. `experiments/runs/<run_id>.toml` 中的实验定义；
 3. 对应 Git commit 与 K8s manifest；
 4. 人工叙述。
 
-`experiments/results/` 和 `output/` 默认不纳入 Git；它们是本地/PVC mirror，不是单独的持久事实源。
-持久追溯依赖 run config、Job manifest、代码 revision、trace 与本日志共同完成。完整 run 状态不要手工复制，
+`experiments/results/` 和 `output/` 默认不纳入 Git；它们是本地/PVC mirror，不是持久事实源。持久追溯依赖
+run config、Job manifest、代码 revision、compact evidence 与本日志共同完成。完整 run 状态不要手工复制，
 使用 `osf-audit-experiments` 从 TOML 生成。
 
 ## 近期实验状态

@@ -1,0 +1,7 @@
+Exit code: 0
+Wall time: 0 seconds
+Output:
+policy,pool,block_unit,blocks,samples,observed_cumulative_net_bps,bootstrap_p05_cumulative_net_bps,bootstrap_median_cumulative_net_bps,bootstrap_p95_cumulative_net_bps,bootstrap_positive_probability
+capacity_only,pool_L,month,48,5000,8989.798474221458,805.7804572033655,8992.715694084225,17130.49590926659,0.9642
+realistic_no_refill,pool_L,month,48,5000,7183.620700821114,724.8780280530442,7107.851013123629,13783.925724808958,0.965
+visible_pretrade_refill,pool_L,month,48,5000,8431.131082952248,209.17397877430946,8445.419802808512,16737.738299967652,0.9534

@@ -1,50 +1,72 @@
 # opening_strength_fit
 
-`opening_strength_fit` 研究 A 股开盘阶段的分钟级短周期信号。项目从 ClickHouse
-`stock.tick` 或本地 tick parquet 构造 `date × symbol × decision_time` 样本，只使用决策时点
-及以前可见的信息，为 `pool_L` 内部的选股与调仓提供 overlay score。
+`opening_strength_fit` 是 A 股开盘阶段分钟级 overlay 信号研究工具。它把 tick 数据变成
+`date × symbol × decision_time` 样本，只使用决策时点及以前的信息，在既定股票池内部完成训练、排序、
+容量分配、执行约束和尾部稳健性验收。
 
-截至 2026-07-22：
+这不是可直接交易的完整策略。当前实现覆盖开盘 `09:31-09:40` 的研究链路；完整日内持仓、退出、现金复用、
+滑点和市场冲击账本仍是下一阶段工作。
+
+## 研究逻辑
 
 ```text
-研究切片       09:31:00-09:40:00，每分钟一个 decision point
-训练目标       short label + 0.30 × next-close label
-历史基线       soft_core_reg_light
-当前 incumbent grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse
-已完成挑战者 普通 328 mech v3：pool_L next excess 16.3318 bps
-旧 cache 最强  auction-fresh pruned mech v3：pool_L next excess 16.9692 bps
-canonical v4   auction-pruned control / 多分母：pool_L next excess 16.8024 / 17.1714 bps
+tick / labeled input
+  -> 因果采样、entry/exit label
+  -> 盘口/成交/竞价/历史特征
+  -> rolling OOS 训练与预测
+  -> pool_L 内 TopN 排序
+  -> capacity allocation
+  -> execution / refill / overlap / tail acceptance
 ```
 
-项目不以脱离股池的独立 universe 策略为目标。canonical cache v4 的 control 与只新增 25 个
-无量纲比例的 challenger 已完成；多分母只带来小幅均值增量，分期胜率不足以支持保留第二条复杂分支。
-control 的统一下游验收也已完成：realistic no-refill 的 fill/累计资金净收益为
-`80.7803%/7183.6 bps`，因果可见 refill 提高到 `99.9969%/8431.1 bps`，但 P95 winsor 后仍为
-`-9.33 bps`，且 overlap 与月块下界略有恶化，因此 refill 保留为标准策略机制和验收项、当前策略不晋级。
-下一阶段扩展到全天分钟级、因果可见的时序 label/score，并构建完整持仓、退出、现金复用、成本、容量和
-市场冲击账本，以成本后 PnL 与尾部稳健性验收。
+当前信号候选已收束到 fixed-clock +6 秒语义。简单的 auction-pruned control 与多分母 ablation 在
+`pool_L` 的 next excess 分别为 `16.8024/17.1714 bps`；多分母增量不稳定，未保留为第二条主线。
+control 的 visible refill 提升资金利用率和累计收益，但缩尾后收益为负，当前策略不晋级。完整数字、边界和
+决策见 [project brief](docs/project_brief.md) 与 [experiment log](docs/experiment_log.md)。
 
-## 文档
+## 可复现范围
 
-| 文件 | 唯一职责 |
-| --- | --- |
-| [docs/project_brief.md](docs/project_brief.md) | 当前目标、固定口径、incumbent、验收标准与下一步。 |
-| [docs/experiment_log.md](docs/experiment_log.md) | 严格按时间排序的实验事实、数字、状态与结论。 |
-| [docs/runbook.md](docs/runbook.md) | 从本地检查到 K8s、同步、验收的操作步骤。 |
-| [docs/project_map.md](docs/project_map.md) | 目录、模块边界、数据流与 CLI 所有权。 |
-| [experiments/README.md](experiments/README.md) | run/job/result 的目录契约和生命周期。 |
+| 层级 | 是否需要私有数据 | 入口 | Git 中保留 |
+| --- | --- | --- | --- |
+| 本地 smoke | 否 | `make smoke` | 小型 CSV、TOML、代码、预期结构 |
+| 软件回归 | 否 | `make ci && make contracts` | 测试、依赖锁、项目/实验契约 |
+| 研究复跑 | 是 | `osf-train --config ...` | run TOML、Job manifest、代码、compact evidence |
+| 大型数据层 | 是 | cache/build/sync 命令 | 只保留 schema、配置、manifest 语义；Parquet/prediction/model 留在 PVC |
 
-历史叙述、命令和代码索引不要复制到其他文档；需要引用实验数字时，链接到 experiment log。
+因此，干净 checkout 可以验证软件和跑通一个确定性 Ridge 示例；复跑正式 2022-2025 研究还需要原始 tick、
+股票池和对应 PVC cache。仓库不会伪装成包含这些外部数据。
 
-## 本地检查
+## 快速开始
 
 ```bash
-cd ~/projects/opening_strength_fit
-source .venv/bin/activate
-python -m pip install -c requirements.lock -e ".[dev]"
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -c requirements.lock -e ".[dev]"
+
+make smoke
 make ci
 make contracts
 ```
 
-集群实验闭环见 [docs/runbook.md](docs/runbook.md)。`experiments/results/` 与 `output/` 默认忽略；
-run config、K8s manifest、trace 和实验日志共同承担可追溯性。
+`make smoke` 的输出写到已忽略的 `output/smoke/`。CPU/Ridge/LightGBM 依赖由
+`requirements.lock` 固定；GPU Torch 由集群镜像显式安装，正式 NN 的镜像 tag 保存在对应 run/job 中。
+
+## 目录
+
+```text
+src/opening_strength_fit/  算法、数据适配器和 commands
+tests/                     单元、回归、边界与 smoke 测试
+examples/smoke/            无私有数据的最小复现样例
+experiments/runs/          人工维护的实验定义
+experiments/jobs/          渲染后的实际执行 trace
+experiments/evidence/      Git 跟踪的摘要、稳健性结果和 trace
+experiments/results/       本地结果镜像，忽略
+docs/                      当前研究口径、操作与代码地图
+output/                    cache、prediction、debug 和同步产物，忽略
+```
+
+继续阅读：
+
+- [项目目标与当前结论](docs/project_brief.md)
+- [复现和集群操作](docs/runbook.md)
+- [代码与数据流](docs/project_map.md)
+- [实验目录契约](experiments/README.md)

@@ -8,6 +8,18 @@ from opening_strength_fit.config import load_toml
 
 ROOT = Path(__file__).resolve().parents[3]
 MAX_COMMAND_MODULE_LINES = 800
+MAX_EVIDENCE_FILE_BYTES = 1_000_000
+REQUIRED_REPRODUCIBILITY_FILES = (
+    ".env.example",
+    "Dockerfile",
+    "Makefile",
+    "README.md",
+    "examples/smoke/labeled.csv",
+    "examples/smoke/ridge.toml",
+    "experiments/evidence/README.md",
+    "pyproject.toml",
+    "requirements.lock",
+)
 K8S_JOB_ENTRYPOINTS = (
     "osf-analyze-capacity-acceptance",
     "osf-ask-level-attribution",
@@ -31,10 +43,11 @@ K8S_JOB_ENTRYPOINTS = (
 )
 REQUIRED_DIRS = (
     "src/opening_strength_fit",
-    "src/opening_strength_fit/cli",
     "src/opening_strength_fit/commands",
+    "examples/smoke",
     "experiments/runs",
     "experiments/jobs",
+    "experiments/evidence",
     "experiments/results",
     "docs",
     "tests",
@@ -73,6 +86,20 @@ def project_files() -> list[str]:
         return sorted(files)
 
 
+def tracked_files() -> list[str]:
+    try:
+        result = subprocess.run(
+            ["git", "ls-files"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return sorted(line for line in result.stdout.splitlines() if line)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return []
+
+
 def read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
@@ -109,42 +136,20 @@ def _module_files(files: list[str], package_dir: str) -> list[str]:
 def check_project_scripts(files: list[str], errors: list[str]) -> None:
     pyproject = tomllib.loads(read("pyproject.toml"))
     entrypoints = pyproject.get("project", {}).get("scripts", {})
-    command_targets = set(entrypoints.values())
-    cli_modules = _module_files(files, "src/opening_strength_fit/cli")
-
-    for module in cli_modules:
-        module_name = Path(module).stem
-        target = f"opening_strength_fit.cli.{module_name}:main"
-        text = read(module)
-        if target not in command_targets:
-            errors.append(f"{module}: missing [project.scripts] entrypoint")
-        line_count = len(text.splitlines())
-        if line_count > 12:
-            errors.append(f"{module}: CLI wrapper should stay thin; found {line_count} lines")
-        import_lines = [
-            line
-            for line in text.splitlines()
-            if line.startswith("from opening_strength_fit.") and line.endswith(" import main")
-        ]
-        if len(import_lines) != 1:
-            errors.append(f"{module}: must import exactly one command module main")
-            continue
-        imported = import_lines[0].removeprefix("from opening_strength_fit.")
-        imported = imported.removesuffix(" import main")
-        if not imported.startswith("commands."):
-            errors.append(f"{module}: CLI wrapper must target opening_strength_fit.commands.*")
-            continue
-        domain_path = f"src/opening_strength_fit/{imported.replace('.', '/')}.py"
-        if domain_path not in files:
-            errors.append(f"{module}: imported domain module {domain_path} does not exist")
 
     for command, target in sorted(entrypoints.items()):
         if not command.startswith("osf-"):
             errors.append(f"pyproject.toml: command {command!r} must use osf- prefix")
-        if not target.startswith("opening_strength_fit.cli.") or not target.endswith(":main"):
+        if not target.startswith("opening_strength_fit.commands.") or not target.endswith(":main"):
             errors.append(
-                f"pyproject.toml: command {command!r} must target opening_strength_fit.cli.*:main"
+                f"pyproject.toml: command {command!r} must target "
+                "opening_strength_fit.commands.*:main"
             )
+            continue
+        module_name = target.removeprefix("opening_strength_fit.").removesuffix(":main")
+        module_path = f"src/opening_strength_fit/{module_name.replace('.', '/')}.py"
+        if module_path not in files:
+            errors.append(f"pyproject.toml: command {command!r} target {module_path} is missing")
 
 
 def check_required_dirs(files: list[str], errors: list[str]) -> None:
@@ -154,6 +159,22 @@ def check_required_dirs(files: list[str], errors: list[str]) -> None:
         if directory in LOCAL_ARCHIVE_DIRS or _has_local_files(directory):
             continue
         errors.append(f"{directory}: no files found")
+
+
+def check_reproducibility_files(files: list[str], errors: list[str]) -> None:
+    for path in REQUIRED_REPRODUCIBILITY_FILES:
+        if path not in files:
+            errors.append(f"{path}: required reproducibility file is missing")
+
+    forbidden_prefixes = ("output/", "experiments/results/")
+    forbidden_names = {".env", ".coverage"}
+    forbidden_suffixes = {".parquet", ".pkl", ".pickle", ".pt", ".pth", ".joblib"}
+    for path in tracked_files():
+        candidate = Path(path)
+        if path.startswith(forbidden_prefixes) or candidate.name in forbidden_names:
+            errors.append(f"{path}: generated or private file must not be tracked")
+        if candidate.suffix.lower() in forbidden_suffixes:
+            errors.append(f"{path}: data or model binary must not be tracked")
 
 
 def _has_local_files(directory: str) -> bool:
@@ -186,6 +207,28 @@ def check_command_module_size(files: list[str], errors: list[str]) -> None:
             )
 
 
+def check_evidence(files: list[str], errors: list[str]) -> None:
+    forbidden_suffixes = {".parquet", ".pkl", ".pickle", ".pt", ".pth", ".joblib"}
+    prefix = "experiments/evidence/backtests/"
+    for path in files:
+        if not path.startswith("experiments/evidence/"):
+            continue
+        evidence_path = ROOT / path
+        if evidence_path.suffix.lower() in forbidden_suffixes:
+            errors.append(f"{path}: row-level data or model binaries do not belong in evidence")
+        if evidence_path.stat().st_size > MAX_EVIDENCE_FILE_BYTES:
+            errors.append(
+                f"{path}: evidence file exceeds {MAX_EVIDENCE_FILE_BYTES} bytes; "
+                "record an aggregate instead"
+            )
+        if not path.startswith(prefix):
+            continue
+        relative = path.removeprefix(prefix)
+        run_id_value, separator, _ = relative.partition("/")
+        if separator and f"experiments/runs/{run_id_value}.toml" not in files:
+            errors.append(f"{path}: evidence has no matching run config")
+
+
 def check_k8s_jobs(files: list[str], errors: list[str]) -> None:
     for job in [path for path in files if path.startswith("experiments/jobs/")]:
         if not job.endswith("_job.yaml"):
@@ -202,9 +245,11 @@ def collect_errors() -> list[str]:
     files = project_files()
     errors: list[str] = []
     check_required_dirs(files, errors)
+    check_reproducibility_files(files, errors)
     check_legacy_script_tree(files, errors)
     check_project_scripts(files, errors)
     check_command_module_size(files, errors)
+    check_evidence(files, errors)
     check_run_configs(files, errors)
     check_k8s_jobs(files, errors)
     return errors
@@ -214,19 +259,11 @@ def main() -> None:
     files = project_files()
     errors = collect_errors()
 
-    cli_modules = [
-        path
-        for path in files
-        if path.startswith("src/opening_strength_fit/cli/")
-        and path.endswith(".py")
-        and not path.endswith("/__init__.py")
-    ]
     library_modules = [
         path
         for path in files
         if path.startswith("src/opening_strength_fit/")
         and path.endswith(".py")
-        and not path.startswith("src/opening_strength_fit/cli/")
         and not path.startswith("src/opening_strength_fit/commands/")
     ]
     command_modules = [
@@ -238,7 +275,6 @@ def main() -> None:
     ]
 
     print("project_contracts:")
-    print(f"  cli_modules: {len(cli_modules)}")
     print(f"  command_modules: {len(command_modules)}")
     print(f"  library_modules: {len(library_modules)}")
     print(f"  required_dirs: {len(REQUIRED_DIRS)}")

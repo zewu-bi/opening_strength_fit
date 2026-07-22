@@ -1,4 +1,4 @@
-.PHONY: install-dev install-cluster test test-cov lint format contracts ci
+.PHONY: install-dev install-cluster smoke test test-cov lint format contracts ci
 
 PYTHON ?= .venv/bin/python
 
@@ -7,6 +7,11 @@ install-dev:
 
 install-cluster:
 	$(PYTHON) -m pip install -c requirements.lock -e ".[dev,cluster]"
+
+smoke:
+	$(PYTHON) -m opening_strength_fit.commands.experiment_run \
+		--config examples/smoke/ridge.toml \
+		--output-dir output/smoke
 
 test:
 	$(PYTHON) -m pytest -q
@@ -23,7 +28,7 @@ format:
 	$(PYTHON) -m ruff format .
 
 contracts:
-	$(PYTHON) -m opening_strength_fit.cli.audit_experiments
-	$(PYTHON) -m opening_strength_fit.cli.project_contracts
+	$(PYTHON) -m opening_strength_fit.commands.experiment_audit
+	$(PYTHON) -m opening_strength_fit.commands.project_contracts
 
 ci: lint test

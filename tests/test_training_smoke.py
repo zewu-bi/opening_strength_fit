@@ -78,7 +78,7 @@ enabled = false
         [
             sys.executable,
             "-m",
-            "opening_strength_fit.cli.run_experiment",
+            "opening_strength_fit.commands.experiment_run",
             "--config",
             str(config_path),
             "--output-dir",

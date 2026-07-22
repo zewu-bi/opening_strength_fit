@@ -97,7 +97,9 @@ def build_variant_score(frame: pd.DataFrame, spec: dict[str, object]) -> pd.Seri
     return frame["base_rank_score"] + weight * boost
 
 
-def summarize_group_metrics(group_metrics: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def summarize_group_metrics(
+    group_metrics: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     metric_cols = [
         "short_internal_excess_bps",
         "next_internal_excess_bps",
@@ -110,7 +112,9 @@ def summarize_group_metrics(group_metrics: pd.DataFrame) -> tuple[pd.DataFrame, 
         .reset_index()
     )
     quarterly_frame = group_metrics.copy()
-    quarterly_frame["quarter"] = pd.to_datetime(quarterly_frame["date"]).dt.to_period("Q").astype(str)
+    quarterly_frame["quarter"] = (
+        pd.to_datetime(quarterly_frame["date"]).dt.to_period("Q").astype(str)
+    )
     quarterly = (
         quarterly_frame.groupby(["variant", "top_n", "quarter"], observed=True)[metric_cols]
         .mean()
@@ -217,7 +221,9 @@ def main() -> None:
         if year not in label_cache:
             label_cache.clear()
             label_cache[year] = read_next_labels(next_label_path(next_root, year))
-        frame = frame.merge(label_cache[year], on=list(KEY_COLUMNS), how="left", validate="many_to_one")
+        frame = frame.merge(
+            label_cache[year], on=list(KEY_COLUMNS), how="left", validate="many_to_one"
+        )
         missing_next = int(frame[NEXT_CLOSE_LABEL_COL].isna().sum())
         if missing_next:
             raise ValueError(f"missing next-close labels for {month}: {missing_next}")
@@ -234,7 +240,9 @@ def main() -> None:
         frame["pool_short_mean"] = frame.groupby(GROUP_COLS, observed=True)["label"].transform(
             "mean"
         )
-        frame["next_excess_bps"] = (frame[NEXT_CLOSE_LABEL_COL] - frame["pool_next_mean"]) * 10_000.0
+        frame["next_excess_bps"] = (
+            frame[NEXT_CLOSE_LABEL_COL] - frame["pool_next_mean"]
+        ) * 10_000.0
         frame["short_excess_bps"] = (frame["label"] - frame["pool_short_mean"]) * 10_000.0
 
         month_trace = {
@@ -317,7 +325,9 @@ def main() -> None:
             bucket = bucket.clip(lower=1, upper=bucket_count)
             bucket_frame = frame[GROUP_COLS + ["next_excess_bps", "short_excess_bps"]].copy()
             bucket_frame["bucket"] = bucket
-            bucket_frame["month"] = pd.to_datetime(bucket_frame["date"]).dt.to_period("M").astype(str)
+            bucket_frame["month"] = (
+                pd.to_datetime(bucket_frame["date"]).dt.to_period("M").astype(str)
+            )
             group_bucket = (
                 bucket_frame.groupby(GROUP_COLS + ["month", "bucket"], observed=True)
                 .agg(
@@ -398,10 +408,18 @@ def main() -> None:
     tail_summary(selected).to_csv(
         output_dir / "blend_selected_tail_summary.csv", index=False, float_format="%.6f"
     )
-    overlap_summary.to_csv(output_dir / "blend_overlap_summary.csv", index=False, float_format="%.6f")
-    overlap_monthly.to_csv(output_dir / "blend_overlap_monthly.csv", index=False, float_format="%.6f")
-    bucket_summary.to_csv(output_dir / "blend_pool_l_20bucket_summary.csv", index=False, float_format="%.6f")
-    bucket_monthly.to_csv(output_dir / "blend_pool_l_20bucket_monthly.csv", index=False, float_format="%.6f")
+    overlap_summary.to_csv(
+        output_dir / "blend_overlap_summary.csv", index=False, float_format="%.6f"
+    )
+    overlap_monthly.to_csv(
+        output_dir / "blend_overlap_monthly.csv", index=False, float_format="%.6f"
+    )
+    bucket_summary.to_csv(
+        output_dir / "blend_pool_l_20bucket_summary.csv", index=False, float_format="%.6f"
+    )
+    bucket_monthly.to_csv(
+        output_dir / "blend_pool_l_20bucket_monthly.csv", index=False, float_format="%.6f"
+    )
     with (output_dir / "blend_trace.json").open("w", encoding="utf-8") as file:
         json.dump(trace, file, ensure_ascii=True, indent=2)
     (output_dir / "_SUCCESS").touch()

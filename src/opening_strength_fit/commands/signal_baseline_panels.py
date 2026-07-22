@@ -19,7 +19,10 @@ from opening_strength_fit.analysis import (
 from opening_strength_fit.analysis import (
     load_or_fetch_next_close_labels as shared_load_or_fetch_next_close_labels,
 )
-from opening_strength_fit.clickhouse_ticks import DEFAULT_CLICKHOUSE_TICK_TABLE
+from opening_strength_fit.clickhouse_ticks import (
+    DEFAULT_CLICKHOUSE_TICK_HOST,
+    DEFAULT_CLICKHOUSE_TICK_TABLE,
+)
 from opening_strength_fit.commands.next_close_label_cache import fetch_next_close_labels
 from opening_strength_fit.io import read_frame
 from opening_strength_fit.model import corr
@@ -124,7 +127,7 @@ def load_or_fetch_next_close_labels(
             )
         return fetch_next_close_labels(
             base[["date", "symbol", "decision_target_timestamp", "buy_price"]].copy(),
-            host=args.clickhouse_host or "ch.db.prod.highfortfunds.com",
+            host=args.clickhouse_host or DEFAULT_CLICKHOUSE_TICK_HOST,
             port=int(args.clickhouse_port),
             username=args.clickhouse_user,
             password=args.clickhouse_password,

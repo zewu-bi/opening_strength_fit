@@ -1,0 +1,9 @@
+Exit code: 0
+Wall time: 0 seconds
+Output:
+{
+  "run_id": "strategy_acceptance_clock6_v4_control_2022_2025_v1",
+  "status": "completed",
+  "completed_at_utc": "2026-07-22T07:53:48.085364+00:00",
+  "format_version": 1
+}

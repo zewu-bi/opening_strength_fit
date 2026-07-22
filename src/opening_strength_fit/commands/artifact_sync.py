@@ -55,6 +55,7 @@ from opening_strength_fit.k8s import (
 )
 
 DEFAULT_METRICS_DIR = "experiments/results/metrics"
+DEFAULT_RECORDS_DIR = "experiments/evidence"
 DEFAULT_PARTIAL_METRICS_DIR = "output/artifacts/_partial_metrics"
 DEFAULT_METRIC_SHARDS_ROOT = "output/artifacts"
 
@@ -160,7 +161,11 @@ def main() -> None:
     )
     parser.add_argument("--next-close-labels-root", default="output/legacy/labels")
     parser.add_argument("--next-close-label-pvc-dir", default=DEFAULT_NEXT_CLOSE_LABEL_PVC_DIR)
-    parser.add_argument("--records-dir", default="experiments/results")
+    parser.add_argument(
+        "--records-dir",
+        default=DEFAULT_RECORDS_DIR,
+        help="Tracked destination for compact evidence selected by --record.",
+    )
     parser.add_argument("--runs-dir", default="experiments/runs")
     parser.add_argument("--metrics", action="store_true", help="Fetch metrics CSVs.")
     parser.add_argument(
@@ -234,8 +239,6 @@ def main() -> None:
 
     records_dir = Path(args.records_dir)
     metrics_dir = Path(args.metrics_dir)
-    if args.metrics_dir == DEFAULT_METRICS_DIR:
-        metrics_dir = records_dir / "metrics"
     if args.allow_partial and args.metrics_dir == DEFAULT_METRICS_DIR:
         metrics_dir = Path(args.partial_metrics_dir)
     metric_shards_root = Path(args.metric_shards_root)

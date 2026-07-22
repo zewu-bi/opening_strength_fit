@@ -10,7 +10,6 @@ from opening_strength_fit.model_metrics import (
 )
 from opening_strength_fit.model_prediction import predict_frame
 from opening_strength_fit.model_sklearn import fit_gbm_frame, fit_lightgbm_frame, fit_ridge_frame
-from opening_strength_fit.model_torch import fit_torch_mlp_frame
 from opening_strength_fit.model_types import (
     PREDICTION_CONTEXT_COLUMNS,
     ClockSegmentPredictionModel,
@@ -18,6 +17,7 @@ from opening_strength_fit.model_types import (
     RidgePredictionModel,
     TorchMLPPredictionModel,
 )
+from opening_strength_fit.torch_model.training import fit_torch_mlp_frame
 
 __all__ = [
     "PREDICTION_CONTEXT_COLUMNS",

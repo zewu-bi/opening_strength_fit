@@ -17,7 +17,10 @@ from opening_strength_fit.analysis import (
 from opening_strength_fit.analysis import (
     load_or_fetch_next_close_labels as shared_load_or_fetch_next_close_labels,
 )
-from opening_strength_fit.clickhouse_ticks import DEFAULT_CLICKHOUSE_TICK_TABLE
+from opening_strength_fit.clickhouse_ticks import (
+    DEFAULT_CLICKHOUSE_TICK_HOST,
+    DEFAULT_CLICKHOUSE_TICK_TABLE,
+)
 from opening_strength_fit.horizon_clickhouse_labels import compute_clickhouse_close_labels
 from opening_strength_fit.horizons import HorizonSpec
 from opening_strength_fit.io import frame_columns, read_frame
@@ -133,7 +136,7 @@ def load_or_fetch_next_close_labels(
         return compute_clickhouse_close_labels(
             base[["date", "symbol", "decision_target_timestamp", "buy_price"]].copy(),
             [HorizonSpec(name="next_close", label="next close", seconds=None)],
-            host=args.clickhouse_host or "ch.db.prod.highfortfunds.com",
+            host=args.clickhouse_host or DEFAULT_CLICKHOUSE_TICK_HOST,
             port=int(args.clickhouse_port),
             username=args.clickhouse_user,
             password=args.clickhouse_password,
