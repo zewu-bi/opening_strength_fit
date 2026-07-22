@@ -17,11 +17,12 @@ canonical v4   auction-pruned control / 多分母：pool_L next excess 16.8024 /
 ```
 
 项目不以脱离股池的独立 universe 策略为目标。canonical cache v4 的 control 与只新增 25 个
-无量纲比例的 challenger 已完成；多分母只带来小幅均值增量，分期胜率不足以支持保留第二条复杂分支，
-因此后续优先使用更简单的 control 做下游复核，也不触发普通 328 的 v4 归因重跑。下一阶段扩展到
-全天分钟频决策序列，并把开盘 Top100 诊断补成完整、因果、
-可交易的 `pool_L` overlay 组合回测，覆盖候选 refill、持仓与退出、全日资金预算、成本、容量和市场冲击，
-并以成本后 PnL 验收。
+无量纲比例的 challenger 已完成；多分母只带来小幅均值增量，分期胜率不足以支持保留第二条复杂分支。
+control 的统一下游验收也已完成：realistic no-refill 的 fill/累计资金净收益为
+`80.7803%/7183.6 bps`，因果可见 refill 提高到 `99.9969%/8431.1 bps`，但 P95 winsor 后仍为
+`-9.33 bps`，且 overlap 与月块下界略有恶化，因此 refill 保留为标准策略机制和验收项、当前策略不晋级。
+下一阶段扩展到全天分钟级、因果可见的时序 label/score，并构建完整持仓、退出、现金复用、成本、容量和
+市场冲击账本，以成本后 PnL 与尾部稳健性验收。
 
 ## 文档
 

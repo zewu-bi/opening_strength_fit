@@ -2,7 +2,7 @@
 id = "strategy_acceptance_clock6_v4_control_2022_2025_v1"
 kind = "strategy_acceptance"
 description = "Unified capacity, realistic no-refill, visible pre-trade refill, overlap, and tail acceptance for the canonical fixed-clock v4 auction-pruned 325-feature control."
-status = "queued"
+status = "completed"
 
 [strategy_acceptance]
 variant = "clock6 v4 auction-pruned control"

@@ -638,6 +638,18 @@ day/symbol 贡献、leave-one-out、月度 block bootstrap 及 incumbent 同口�
 当前 overlap 假设开盘各切片持有到 next close，只做日内聚合资金审计，不是通用 entry/exit ledger。
 扩展到全天且持有期变化时，需要由完整持仓与现金账本替代该假设。
 
+仓库内已完成的可复用范例是：
+
+```text
+experiments/runs/strategy_acceptance_clock6_v4_control_2022_2025_v1.toml
+experiments/runs/strategy_acceptance_clock6_v4_multiden_2022_2025_v1.toml
+```
+
+两者均由 `20260722-strategy-acceptance-v1` 镜像运行，compact artifacts 已用
+`osf-sync-experiment-artifacts --artifacts --record` 归档。正式数字和决策只维护在
+[experiment log](experiment_log.md)；后续候选复制配置时必须换 run id、输入 lineage、输出目录和 Job
+名称，不要覆盖这两个完成实例。
+
 ## 12. 故障处理
 
 | 症状 | 处理 |

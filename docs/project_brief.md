@@ -17,9 +17,12 @@ control 与 350-feature 多分母版本均已完成，`pool_L` next excess 分�
 高于 mech328 v2 的 `14.3174 bps`。多分母只增加 `0.3690 bps` 均值和 `178.8 bps` 累和，月/季度
 相对 control 胜率仅 `25/48`、`8/16`，next 正月还从 `38/48` 降到 `37/48`，不足以证明复杂度增量。
 因此保留 mech328 v2 incumbent，把更简单的 v4 control 作为 canonical signal challenger，
-多分母版本归档为 ablation。下一阶段优先做 refill/完整策略回放、exposure/overlap 与尾部稳健性复核；再把样本扩展到全天
-分钟频决策序列。策略侧以现有 selected-order realistic replay 为起点，补成完整、因果、可交易的
-`pool_L` overlay 组合回测，并以成本后 PnL 验收。
+多分母版本归档为 ablation。control 的统一下游验收已经完成：capacity-only、realistic no-refill、
+visible pre-trade refill 的 fill 分别为 `100%/80.7803%/99.9969%`，累计资金净收益分别为
+`8989.8/7183.6/8431.1 bps`。refill 的 `+1247.5 bps` 增益是真实且必须评估的，但 P95 winsor
+为 `-9.33 bps`，月块 bootstrap P05 从 no-refill 的 `724.9` 降至 `209.2 bps`，重复单票名义占比也
+从 `80.95%` 升至 `83.32%`。因此 refill/overlap/tail 已固化成标准工具，不再拆成零散项目；当前策略
+仍不晋级。下一阶段扩展到全天分钟级、因果可见的时序 label/score，并补齐完整持仓、退出和现金账本。
 
 当前 `2022-2025` 的 `36m train -> next 6m` folds 是研究期 rolling OOS validation，允许用于模型、
 特征、target 和候选晋级选择；模型尚未冻结，项目尚未定义 final untouched test。配置和代码中的
@@ -49,8 +52,8 @@ control 与 350-feature 多分母版本均已完成，`pool_L` next excess 分�
 | overlay incumbent | `mech328_v2_robust_zscore` | 当前生产验收底座；不是信号层 next excess 最高，但稳定性和下游证据更完整 |
 | completed signal challenger | `mech328_v3_capcache` | 普通 328 特征的 ratio-style 无量纲化；不做特征值层截面 zscore，保留 NN train-set global zscore；`pool_L` short/next excess `11.1004/16.3318 bps`，next 正月 `38/48`；信号层完成，尚未替换 incumbent |
 | archived causal-data challenger | `auction_fresh_pruned_grouped_gated_v2_mech_v3` | Top100 next 收益验收胜出：`pool_L` next excess `16.97 bps`、Top100 8bps net cumulative `9893.9 bps`；capacity acceptance `9244.5 bps`、realistic `7323.9 bps`，但 P95 winsor 后接近/低于 0，暂不替换 incumbent |
-| canonical cache signal challenger | `delay6_clock_state auction-pruned control` | 固定 +6 秒逻辑 entry；325 features；`pool_L` short/next excess `11.2267/16.8024 bps`，Top100 8bps net cumulative `9713.0 bps`；作为下游复核的简洁候选 |
-| archived feature ablation | `delay6_clock_state auction-pruned multi-denominator` | 只增加 25 个比例到 350 features；next excess `17.1714 bps`，但分期胜率与正月不支持独立晋级 |
+| canonical cache signal challenger | `delay6_clock_state auction-pruned control` | 固定 +6 秒逻辑 entry；325 features；`pool_L` short/next excess `11.2267/16.8024 bps`；统一策略验收 refill fill/net `99.9969%/8431.1 bps`，但 P95 winsor `-9.33 bps`，策略不晋级 |
+| archived feature ablation | `delay6_clock_state auction-pruned multi-denominator` | 只增加 25 个比例到 350 features；next excess `17.1714 bps`；refill net 仅比 control 高 `167.6 bps`、月/季度胜 `25/48`、`9/16`，继续归档 |
 | coverage-control lineage | `conservative_cap_unique_ticks` | 旧 tick-count 覆盖率语义 + T-1 cap/share + 基础竞价变换；base 已完成，仅作对照，未提交的 target 已 superseded |
 | short-ranking anchor | `xs_rank_inplace`、`deep_gelu_huber` | 解释 short Rank IC 上界 |
 | structured anchors | `grouped_gated`、`grouped_gated_v2` | 对照收益高度与稳定性 |
@@ -59,10 +62,10 @@ control 与 350-feature 多分母版本均已完成，`pool_L` next excess 分�
 
 完整指标和归档路径只记录在 [experiment_log.md](experiment_log.md)。
 
-当前边界：mech328 v2 是 `pool_L` 的 conditional-mean / right-tail head overlay，不是 Top1000
-单股 fine ranker；复核中的单股 Rank IC 轻微为负，而 100-name 平滑桶的 group IC 为正。auction-fresh
-的同类复核显示 capacity/realistic 结果仍强，但 P95 右尾缩尾后收益接近或低于 0；后续必须用 refill、
-完整资金预算与跨状态稳健性证明收益不是少数右尾驱动。
+当前边界：mech328 v2 与 fixed-clock v4 control 都更接近 `pool_L` 的 conditional-mean/right-tail head
+overlay，而不是 Top1000 单股 fine ranker。control refill 在 leave-one-month/quarter-out 下始终为正，删掉
+top 5 days 后仍有 `10.38 bps` 成本后收益，说明不是单一月份、日期或股票驱动；但 P95 winsor/trim
+分别为 `-9.33/-56.96 bps`，说明更广泛的正尾仍决定收益高度。时间稳定与截面正尾依赖必须分开解释。
 
 ## 晋级标准
 
@@ -92,28 +95,30 @@ Top1000 每100名的100 bps收益区间分布。最后一张固定为单 panel�
 ## 已有执行证据及边界
 
 2026-07-03 已完成 LGBM 328 与 `mlp_base` 的 first-pass realistic acceptance；2026-07-17 补完
-auction-fresh pruned 的同口径 replay。三者都从 capacity-selected child orders 出发，加入日内单票权重、
-状态、价差、盘口深度、最小订单和整手约束。它证明执行约束会显著降低简单 capacity acceptance 的
-累计收益；auction-fresh 在该约束下仍高于 LGBM/MLP anchors，但右尾依赖更清楚。
+auction-fresh pruned 的同口径 replay。2026-07-22 又对 fixed-clock v4 control 与 multiden 完成统一
+capacity/no-refill/visible-refill、overlap 和 tail 验收。新工具不再只从 selected child orders 出发；
+visible refill 会回到完整候选排名，并只用决策时点可见的状态、价差、深度、容量、整手和当日已用预算
+继续下探。它证明执行约束会显著降低 capacity-only 收益，也证明补单能恢复资金利用率和部分 PnL。
 
 这仍不是完整策略回测：
 
-- 被约束掉的订单不会用更低排名股票 refill；
-- 每个 decision point 的成交额约束没有汇总成同日真实 turnover budget；
-- 没有完整的持仓、退出、资金复用和冲击路径；
+- visible refill 是决策前可见过滤后的重新分配，不是观察真实成交失败后的即时二次下单；
+- overlap 只按所有开盘切片持有到 next close 聚合，没有逐时持仓、退出和现金复用账本；
+- 没有真实订单回报、二次下单延迟、滑点函数和市场冲击路径；
 - ask-level 归因只有 ask1 有有效深度，ask2-10 为零，不能解释成真实十档可成交性。
 
-因此下一阶段是补齐已有链路，不是从零开始“做真实回测”。
+因此下一阶段是把已验证的小工具嵌入完整时序策略账本，不是继续重复独立小分析。
 
 ## 下一步
 
-1. 只将更简单的 fixed-clock v4 auction-pruned control 带入 refill、capacity/realistic、overlap 和
-   P95/P99 右尾复核；多分母作为已完成 ablation 归档，不并行维护两条下游分支。
-2. control 没有在 cache v4 上明显掉档，因此不触发普通 328 mech v3 的 v4 归因重跑。
-3. 将决策面从开盘 `09:31-09:40` 扩展为全天分钟频决策序列；扩展时继续保证每个 decision point
-   只使用当时及以前可见信息。
-4. 构建完整、因果、可交易的 `pool_L` overlay 组合回测：覆盖候选 refill、持仓与退出、全日资金预算、
-   成本、容量和市场冲击，并以成本后 PnL 验收。
+1. 将决策面从开盘 `09:31-09:40` 扩展为全天分钟频决策序列，并构造每个 decision point 因果可见的
+   entry/exit/holding label；禁止用后续状态定义当时可见性。
+2. 在全天 label/cache 上继续使用更简单的 fixed-clock v4 control；多分母只作归档对照，不维护第二条
+   下游分支，也不触发普通 328 mech v3 的 v4 归因重跑。
+3. 构建完整、因果、可交易的 `pool_L` overlay 策略账本：覆盖候选 refill、持仓与退出、现金复用、全日
+   资金预算、成本、容量和市场冲击。
+4. 把本轮统一工具作为每个策略候选的固定 acceptance；refill 只有在净 PnL 提升且 tail/overlap 不恶化
+   时才晋级，当前 control 结果不满足该 gate。
 
 ## 非目标
 
