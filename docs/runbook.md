@@ -380,8 +380,13 @@ osf-plot-optimization-direction-comparison \
   --baseline-run-id <incumbent_run_id> \
   --baseline-label <incumbent_label> \
   --direction <key>=<label>=<challenger_run_id> \
+  --cumulative-relative-mode pool_l \
   --realized-fee-bps 8
 ```
+
+累和图下方面板必须显式选择参考口径：`market` 是全 A 股市场平均，`pool_l` 是
+`cumsum((selected_next_mean_bps - pool_next_mean_bps) × daily_capital_fraction)`。后者沿用
+pool-internal 的 raw excess 定义，手续费只进入上方面板的净收益曲线；trace 会记录所选模式、列名和定义。
 
 主图只解释两件事：universe short Rank IC 与 `pool_L` next internal excess。累计图默认 Top100；
 容量模式必须读 capacity acceptance daily summary，不能复用 Top100 等权收益。

@@ -55,13 +55,21 @@ CUMULATIVE_PERCENT_DISPLAY_COLUMNS = {
     "next_cumulative_net_return_bps": "next_cumulative_net_return_pct",
     "next_cumulative_vs_baseline_bps": "next_cumulative_vs_baseline_pct",
     "next_cumulative_alpha_vs_market_bps": "next_cumulative_alpha_vs_market_pct",
+    "next_cumulative_internal_excess_return_bps": ("next_cumulative_internal_excess_return_pct"),
 }
 CUMULATIVE_NET_RETURN_PANEL_TITLE = "扣除手续费累和收益"
 CUMULATIVE_MARKET_ALPHA_PANEL_TITLE = "对比全A股市场平均alpha"
+CUMULATIVE_POOL_L_EXCESS_PANEL_TITLE = "相对 pool_L 累和超额"
 CUMULATIVE_MODE_TOP100 = "top100"
 CUMULATIVE_MODE_CAPACITY = "capacity"
 CUMULATIVE_MODE_REALISTIC = "realistic"
 CUMULATIVE_MODES = (CUMULATIVE_MODE_TOP100, CUMULATIVE_MODE_CAPACITY, CUMULATIVE_MODE_REALISTIC)
+CUMULATIVE_RELATIVE_MODE_MARKET = "market"
+CUMULATIVE_RELATIVE_MODE_POOL_L = "pool_l"
+CUMULATIVE_RELATIVE_MODES = (
+    CUMULATIVE_RELATIVE_MODE_MARKET,
+    CUMULATIVE_RELATIVE_MODE_POOL_L,
+)
 
 
 def default_plot_directions(

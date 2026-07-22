@@ -10,6 +10,8 @@ from opening_strength_fit.capacity_acceptance import (
 from opening_strength_fit.optimization_acceptance_plots import (
     CUMULATIVE_MODE_TOP100,
     CUMULATIVE_MODES,
+    CUMULATIVE_RELATIVE_MODE_MARKET,
+    CUMULATIVE_RELATIVE_MODES,
     DEFAULT_PLOT_DIRECTION_KEYS,
     default_plot_directions,
 )
@@ -145,6 +147,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Cumulative plot source: TopN pool-internal summaries or capacity acceptance summaries.",
     )
     parser.add_argument(
+        "--cumulative-relative-mode",
+        choices=CUMULATIVE_RELATIVE_MODES,
+        default=CUMULATIVE_RELATIVE_MODE_MARKET,
+        help=(
+            "Lower cumulative panel: net alpha versus the full-market average, or raw "
+            "selected-minus-pool_L internal excess."
+        ),
+    )
+    parser.add_argument(
         "--capacity-baseline-run-id",
         default="",
         help="Capacity acceptance backtest directory for the baseline model in capacity mode.",
@@ -217,6 +228,7 @@ def main(argv: list[str] | None = None) -> None:
         pool_turnover_path=args.pool_turnover_path,
         pool_fee_mode=args.pool_fee_mode,
         cumulative_mode=args.cumulative_mode,
+        cumulative_relative_mode=args.cumulative_relative_mode,
         capacity_total_notional=capacity_total_notional,
         capacity_decision_notional=capacity_decision_notional,
         capacity_baseline_run_id=args.capacity_baseline_run_id or None,

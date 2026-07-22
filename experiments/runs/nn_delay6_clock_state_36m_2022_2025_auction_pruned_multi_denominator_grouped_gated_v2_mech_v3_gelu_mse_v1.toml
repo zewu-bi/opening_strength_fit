@@ -1,7 +1,7 @@
 [run]
-id = "nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1"
+id = "nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1"
 kind = "exploration"
-description = "Fixed-wall-clock causal challenger: corrected indicative auction path, strict T-1 market-cap/share references, decision state +6s entry, point-in-time state at entry/outcome boundaries, deterministic timestamp revisions, complete cross-section readiness, pruned price basis, auction path summaries, and horizon-matched 1m queue response."
+description = "Fixed-wall-clock auction-pruned mech-v3 challenger with 25 additive, audited multi-denominator activity/liquidity ratios; all target, window, model, and causal timing settings match the auction-pruned control."
 status = "completed"
 
 [data]
@@ -57,6 +57,16 @@ include_historical_daily_activity_references = true
 historical_daily_activity_windows = [60]
 historical_daily_activity_min_periods = 10
 historical_daily_activity_prefix = "hist_avg_daily_"
+include_multi_denominator_features = true
+multi_denominator_turnover_columns = ["preopen_turnover", "turnover_diff_1t", "postopen_turnover_diff_1m", "postopen_turnover_diff_3m", "postopen_turnover_diff_5m"]
+multi_denominator_volume_columns = ["preopen_volume", "volume_diff_1t", "postopen_volume_diff_1m", "postopen_volume_diff_3m", "postopen_volume_diff_5m"]
+multi_denominator_depth_columns = ["ask_depth_10", "bid_depth_10"]
+multi_denominator_cross_sectional_median_columns = ["postopen_turnover_diff_1m"]
+multi_denominator_cross_sectional_group_cols = ["date", "decision_target_timestamp"]
+multi_denominator_historical_window = 60
+multi_denominator_prefix = "multi_den_ratio_"
+multi_denominator_min_features = 25
+multi_denominator_max_features = 40
 include_path_shape_confirmation = true
 path_shape_windows = [2, 3, 5]
 path_shape_prefix = "path_shape_"
@@ -101,7 +111,7 @@ exclude_model_feature_columns = [
   "postopen_v2_bid1_queue_replenish_vs_trade_1m",
 ]
 include_feature_columns = ["exch_time_offset_us", "trade_num", "mid_price", "spread_bps", "total_ask_volume", "total_bid_volume", "total_ask_count", "total_bid_count", "avg_ask_price", "avg_bid_price", "auction_price_range_bps", "auction_last_position_in_range", "postopen_v2_queue_ask1_replenish_vs_trade_1m", "postopen_v2_queue_bid1_replenish_vs_trade_1m"]
-include_feature_prefixes = ["preopen_", "ask_volume_", "bid_volume_", "ask_count_", "bid_count_", "ask_depth_", "bid_depth_", "depth_imbalance_", "ask_gap_", "bid_gap_", "volume_diff_", "turnover_diff_", "trade_vwap_", "return_", "postopen_v2_trade_vwap_vs_", "postopen_v2_trade_turnover_to_depth_notional_", "postopen_v2_trade_volume_to_ask_depth10_", "postopen_v2_trade_volume_to_bid_depth10_", "postopen_v2_mid_price_from_open_", "postopen_v2_ask_price_1_from_open_", "postopen_v2_bid_price_1_from_open_", "postopen_v2_depth_imbalance_", "postopen_v2_ask_depth_", "postopen_v2_bid_depth_", "postopen_v2_depth_concentration_", "postopen_v2_ask1_share_depth_", "postopen_v2_bid1_share_depth_", "postopen_v2_ask_gap_curve_", "postopen_v2_bid_gap_curve_", "postopen_v2_ask_gap_max_", "postopen_v2_bid_gap_max_", "postopen_v2_spread_compression_", "postopen_v2_spread_bps_from_open_", "hist_surprise_", "path_shape_"]
+include_feature_prefixes = ["preopen_", "ask_volume_", "bid_volume_", "ask_count_", "bid_count_", "ask_depth_", "bid_depth_", "depth_imbalance_", "ask_gap_", "bid_gap_", "volume_diff_", "turnover_diff_", "trade_vwap_", "return_", "postopen_v2_trade_vwap_vs_", "postopen_v2_trade_turnover_to_depth_notional_", "postopen_v2_trade_volume_to_ask_depth10_", "postopen_v2_trade_volume_to_bid_depth10_", "postopen_v2_mid_price_from_open_", "postopen_v2_ask_price_1_from_open_", "postopen_v2_bid_price_1_from_open_", "postopen_v2_depth_imbalance_", "postopen_v2_ask_depth_", "postopen_v2_bid_depth_", "postopen_v2_depth_concentration_", "postopen_v2_ask1_share_depth_", "postopen_v2_bid1_share_depth_", "postopen_v2_ask_gap_curve_", "postopen_v2_bid_gap_curve_", "postopen_v2_ask_gap_max_", "postopen_v2_bid_gap_max_", "postopen_v2_spread_compression_", "postopen_v2_spread_bps_from_open_", "hist_surprise_", "path_shape_", "multi_den_ratio_"]
 include_feature_regexes = ["^postopen_(?!v2_)"]
 feature_value_transform = "mechanismized_v3_dimensionless_328"
 feature_value_transform_group_cols = ["date", "decision_target_timestamp"]
@@ -167,17 +177,17 @@ ic_mode = "cross_section"
 top_n = 100
 
 [output]
-local_dir = "output/artifacts/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1"
-k8s_dir = "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1"
+local_dir = "output/artifacts/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1"
 
 [k8s]
 namespace = "bizewu"
-job_name = "os-nn-clock6-auction-pruned-v1"
+job_name = "os-nn-clock6-auction-multiden-v1"
 image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
-helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260717-clock-state-delay6-v4"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260721-clock6-multiden-v1"
 avoid_nodes = ["node6", "node7", "node8", "node12", "node17", "node19", "node20", "node22", "node24", "node25", "node26", "node27", "node28"]
 wait_for_paths = [
   "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v4_clock6_state_unique_mixed_w030_mcap_lag1/opening_2019_label_v4_clock6_state_unique_mixed_w030_mcap_lag1.parquet",
@@ -198,16 +208,16 @@ has_gpu = "true"
 [k8s.resources]
 cpu_request = "16"
 cpu_limit = "32"
-memory_request = "576Gi"
+memory_request = "608Gi"
 memory_limit = "960Gi"
 gpu_limit = 1
 
 [analysis.pool_internal]
 enabled = true
-job_name = "os-analyze-nn-clock6-auction-pruned-v1"
-variant = "nn_clock6_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse"
-plot_prefix = "nn_clock6_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse"
-plot_variant_label = "Clock-state +6s causal-prune grouped gated v2 mech v3"
+job_name = "os-analyze-nn-clock6-auction-multiden-v1"
+variant = "nn_clock6_auction_pruned_multiden_grouped_gated_v2_mech_v3_gelu_mse"
+plot_prefix = "nn_clock6_auction_pruned_multiden_grouped_gated_v2_mech_v3_gelu_mse"
+plot_variant_label = "Clock-state +6s causal-prune + 25 multi-denominator ratios"
 plot_period = "quarter"
 pools = ["universe", "L"]
 top_n = 100

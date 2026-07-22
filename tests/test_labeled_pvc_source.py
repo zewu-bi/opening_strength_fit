@@ -109,6 +109,45 @@ class LabeledPvcSourceTest(unittest.TestCase):
         self.assertIn("market_cap", columns)
         self.assertIn("total_shares", columns)
 
+    def test_labeled_pvc_multi_denominator_features_read_simple_references(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "labeled.parquet"
+            pd.DataFrame(
+                [
+                    {
+                        "date": "2022-01-04",
+                        "symbol": "000001.SZ",
+                        "timestamp": pd.Timestamp("2022-01-04 09:31:00"),
+                        "decision_target_timestamp": pd.Timestamp("2022-01-04 09:31:00"),
+                        "volume": 1_000.0,
+                        "turnover": 10_000.0,
+                        "float_market_cap": 100_000_000.0,
+                        "float_shares": 10_000_000.0,
+                        "ask_depth_10": 100.0,
+                        "label": 0.01,
+                        "valid_label": True,
+                    }
+                ]
+            ).to_parquet(path, index=False)
+            config = {
+                "data": {"source": "labeled_pvc", "labeled_path": str(path)},
+                "features": {
+                    "include_feature_prefixes": ["multi_den_ratio_"],
+                    "include_multi_denominator_features": True,
+                    "multi_denominator_depth_columns": ["ask_depth_10"],
+                },
+            }
+
+            columns = _labeled_pvc_read_columns(path, config)
+
+        self.assertIsNotNone(columns)
+        assert columns is not None
+        self.assertIn("volume", columns)
+        self.assertIn("turnover", columns)
+        self.assertIn("float_market_cap", columns)
+        self.assertIn("float_shares", columns)
+        self.assertIn("ask_depth_10", columns)
+
     def test_labeled_pvc_source_filters_configured_decision_times(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "labeled.parquet"

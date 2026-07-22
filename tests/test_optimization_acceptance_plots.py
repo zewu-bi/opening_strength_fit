@@ -384,6 +384,7 @@ def test_cumulative_percent_display_columns_preserve_source_bps() -> None:
             "next_cumulative_net_return_bps": [1234.0, -50.0],
             "next_cumulative_vs_baseline_bps": [321.0, -25.0],
             "next_cumulative_alpha_vs_market_bps": [111.0, -10.0],
+            "next_cumulative_internal_excess_return_bps": [222.0, -20.0],
         }
     )
 
@@ -394,6 +395,7 @@ def test_cumulative_percent_display_columns_preserve_source_bps() -> None:
     assert out["next_cumulative_net_return_pct"].tolist() == pytest.approx([12.34, -0.5])
     assert out["next_cumulative_vs_baseline_pct"].tolist() == pytest.approx([3.21, -0.25])
     assert out["next_cumulative_alpha_vs_market_pct"].tolist() == pytest.approx([1.11, -0.1])
+    assert out["next_cumulative_internal_excess_return_pct"].tolist() == pytest.approx([2.22, -0.2])
 
 
 def test_realized_cumulative_can_use_stock_pool_membership_fee(tmp_path: Path) -> None:

@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: os-nn-clock6-auction-pruned-v1
+  name: os-nn-clock6-auction-multiden-v1
   namespace: bizewu
 spec:
   backoffLimit: 0
@@ -49,7 +49,7 @@ spec:
           effect: NoSchedule
       containers:
         - name: opening-strength-fit
-          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260717-clock-state-delay6-v4
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260721-clock6-multiden-v1
           imagePullPolicy: Always
           envFrom:
             - secretRef:
@@ -82,7 +82,7 @@ spec:
                 done
                 echo "dependency file is ready: ${WAIT_PATH}"
               done
-              ROOT=/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1
+              ROOT=/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1
               mkdir -p "${ROOT}"
               TEST_STARTS=(2022-01 2022-07 2023-01 2023-07 2024-01 2024-07 2025-01 2025-07)
               TEST_ENDS=(2022-06 2022-12 2023-06 2023-12 2024-06 2024-12 2025-06 2025-12)
@@ -105,11 +105,11 @@ spec:
               fi
 
               echo
-              echo "running nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1 shard test=${TEST_START}..${TEST_END} index=${INDEX}"
+              echo "running nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1 shard test=${TEST_START}..${TEST_END} index=${INDEX}"
               echo "output_dir=${OUT}"
 
               osf-train \
-                --config experiments/runs/nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1.toml \
+                --config experiments/runs/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1.toml \
                 --rolling-monthly \
                 --train-months 36 \
                 --test-months 6 \
@@ -124,7 +124,7 @@ spec:
           resources:
             requests:
               cpu: "16"
-              memory: 576Gi
+              memory: 608Gi
               nvidia.com/gpu: "1"
             limits:
               cpu: "32"

@@ -26,6 +26,7 @@ from opening_strength_fit.features import (
     add_cross_sectional_relative_features,
     add_historical_daily_activity_reference_features,
     add_historical_same_minute_surprise_features,
+    add_multi_denominator_ratio_features,
     add_path_shape_confirmation_features,
     add_postopen_decision_features,
     add_postopen_v2_decision_features,
@@ -305,6 +306,59 @@ def _apply_post_sample_feature_transforms_from_config(
                 "features",
                 "historical_surprise_prefix",
                 "hist_surprise_",
+            ),
+        )
+    if config_bool(config, "features", "include_multi_denominator_features", False):
+        labeled = add_multi_denominator_ratio_features(
+            labeled,
+            turnover_columns=tuple(
+                config_list(config, "features", "multi_denominator_turnover_columns", [])
+            ),
+            volume_columns=tuple(
+                config_list(config, "features", "multi_denominator_volume_columns", [])
+            ),
+            depth_columns=tuple(
+                config_list(config, "features", "multi_denominator_depth_columns", [])
+            ),
+            cross_sectional_median_columns=tuple(
+                config_list(
+                    config,
+                    "features",
+                    "multi_denominator_cross_sectional_median_columns",
+                    [],
+                )
+            ),
+            cross_sectional_group_cols=tuple(
+                config_list(
+                    config,
+                    "features",
+                    "multi_denominator_cross_sectional_group_cols",
+                    ["date", "decision_target_timestamp"],
+                )
+            ),
+            historical_window=config_int(
+                config,
+                "features",
+                "multi_denominator_historical_window",
+                60,
+            ),
+            prefix=config_str(
+                config,
+                "features",
+                "multi_denominator_prefix",
+                "multi_den_ratio_",
+            ),
+            min_features=config_int(
+                config,
+                "features",
+                "multi_denominator_min_features",
+                0,
+            ),
+            max_features=config_int(
+                config,
+                "features",
+                "multi_denominator_max_features",
+                40,
             ),
         )
     return labeled

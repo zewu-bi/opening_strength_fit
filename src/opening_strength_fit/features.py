@@ -14,6 +14,9 @@ from opening_strength_fit.features_history import (
     add_path_shape_confirmation_features,
     move_positive_over_window,
 )
+from opening_strength_fit.features_multi_denominator import (
+    add_multi_denominator_ratio_features,
+)
 from opening_strength_fit.features_postopen import (
     add_postopen_decision_features,
     add_postopen_v2_decision_features,
@@ -46,6 +49,7 @@ __all__ = [
     "move_positive_over_window",
     "add_historical_daily_activity_reference_features",
     "add_historical_same_minute_surprise_features",
+    "add_multi_denominator_ratio_features",
     "build_preopen_features",
     "build_feature_frame",
 ]

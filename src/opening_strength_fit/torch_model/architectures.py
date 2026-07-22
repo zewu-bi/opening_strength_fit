@@ -212,6 +212,14 @@ def _feature_group_name(feature: str) -> str:
 
 def _feature_group_name_v2(feature: str) -> str:
     name = feature.lower()
+    if name.startswith("multi_den_ratio_"):
+        if "preopen_" in name:
+            return "preopen_auction"
+        if "depth_" in name:
+            return "book_depth_level"
+        if "volume_" in name or "turnover_" in name:
+            return "trade_activity"
+        return "other"
     if name.startswith("hist_surprise_"):
         return "historical_surprise"
     if name.startswith("path_shape_"):

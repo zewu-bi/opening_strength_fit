@@ -380,6 +380,33 @@ def _historical_surprise_source_columns(config: dict, available: set[str]) -> li
     return source
 
 
+def _multi_denominator_source_columns(config: dict) -> list[str]:
+    if not config_bool(config, "features", "include_multi_denominator_features", False):
+        return []
+    source = [
+        "volume",
+        "turnover",
+        "float_shares",
+        "float_market_cap",
+        *config_list(config, "features", "multi_denominator_turnover_columns", []),
+        *config_list(config, "features", "multi_denominator_volume_columns", []),
+        *config_list(config, "features", "multi_denominator_depth_columns", []),
+        *config_list(
+            config,
+            "features",
+            "multi_denominator_cross_sectional_median_columns",
+            [],
+        ),
+        *config_list(
+            config,
+            "features",
+            "multi_denominator_cross_sectional_group_cols",
+            ["date", "decision_target_timestamp"],
+        ),
+    ]
+    return list(dict.fromkeys(source))
+
+
 def _price_scale_source_columns(config: dict) -> list[str]:
     if not config_bool(config, "features", "include_price_scale_features", False):
         return []
@@ -482,6 +509,7 @@ def _labeled_pvc_read_columns(path: Path, config: dict) -> list[str] | None:
     selected.extend(_price_scale_source_columns(config))
     selected.extend(_cross_sectional_relative_source_columns(config, available))
     selected.extend(_historical_surprise_source_columns(config, available))
+    selected.extend(_multi_denominator_source_columns(config))
     value_transform = config_str(config, "features", "feature_value_transform", "")
     value_transform = value_transform.strip().lower().replace("-", "_")
     if value_transform.startswith(("mechanismized_v3", "mechanism_aware_v3")) or config_bool(

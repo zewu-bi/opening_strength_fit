@@ -12,6 +12,10 @@ from opening_strength_fit.optimization_acceptance_plots import (
     CUMULATIVE_MODE_TOP100,
     CUMULATIVE_MODES,
     CUMULATIVE_NET_RETURN_PANEL_TITLE,
+    CUMULATIVE_POOL_L_EXCESS_PANEL_TITLE,
+    CUMULATIVE_RELATIVE_MODE_MARKET,
+    CUMULATIVE_RELATIVE_MODE_POOL_L,
+    CUMULATIVE_RELATIVE_MODES,
     _attach_capacity_fraction_to_market_source,
     _panel_values,
     _replace_capacity_pool_source,
@@ -63,6 +67,7 @@ def write_optimization_direction_plots(
     pool_turnover_path: str | Path | None = "auto",
     pool_fee_mode: str = DEFAULT_POOL_FEE_MODE,
     cumulative_mode: str = CUMULATIVE_MODE_TOP100,
+    cumulative_relative_mode: str = CUMULATIVE_RELATIVE_MODE_MARKET,
     capacity_total_notional: float | None = None,
     capacity_decision_notional: float | None = None,
     capacity_baseline_run_id: str | None = None,
@@ -75,6 +80,11 @@ def write_optimization_direction_plots(
     if cumulative_mode not in CUMULATIVE_MODES:
         raise ValueError(
             f"unknown cumulative_mode {cumulative_mode!r}; expected {CUMULATIVE_MODES}"
+        )
+    if cumulative_relative_mode not in CUMULATIVE_RELATIVE_MODES:
+        raise ValueError(
+            "unknown cumulative_relative_mode "
+            f"{cumulative_relative_mode!r}; expected {CUMULATIVE_RELATIVE_MODES}"
         )
     if directions is None:
         plot_directions = default_plot_directions()
@@ -350,10 +360,27 @@ def write_optimization_direction_plots(
         pools=top_cumulative_series,
         column="next_cumulative_net_return_pct",
     )
-    market_alpha_values = _panel_values(
+    if cumulative_relative_mode == CUMULATIVE_RELATIVE_MODE_POOL_L:
+        cumulative_relative_title = CUMULATIVE_POOL_L_EXCESS_PANEL_TITLE
+        cumulative_relative_column = "next_cumulative_internal_excess_return_pct"
+        cumulative_relative_definition = (
+            "bottom panel plots each model's capital-adjusted cumulative raw pool-internal "
+            "excess, cumsum((selected_next_mean_bps - pool_next_mean_bps) * "
+            "daily_capital_fraction), displayed as percent; trading fees apply only to the "
+            "top net-return panel and the pool_L background is the zero reference"
+        )
+    else:
+        cumulative_relative_title = CUMULATIVE_MARKET_ALPHA_PANEL_TITLE
+        cumulative_relative_column = "next_cumulative_alpha_vs_market_pct"
+        cumulative_relative_definition = (
+            "bottom panel plots pool/background and model capital-adjusted cumulative "
+            "net bps minus full-market capital-adjusted cumulative bps, displayed as "
+            "percent"
+        )
+    cumulative_relative_values = _panel_values(
         net_alpha_cumulative_plot_data,
         pools=alpha_cumulative_series,
-        column="next_cumulative_alpha_vs_market_pct",
+        column=cumulative_relative_column,
     )
     write_two_panel_line_svg(
         net_alpha_cumulative_plot_data,
@@ -369,11 +396,11 @@ def write_optimization_direction_plots(
                 "fixed_ylim": True,
             },
             {
-                "title": CUMULATIVE_MARKET_ALPHA_PANEL_TITLE,
+                "title": cumulative_relative_title,
                 "ylabel": "%",
-                "column": "next_cumulative_alpha_vs_market_pct",
-                "default_ylim": line_axis(market_alpha_values),
-                "tick_step": line_step(market_alpha_values),
+                "column": cumulative_relative_column,
+                "default_ylim": line_axis(cumulative_relative_values),
+                "tick_step": line_step(cumulative_relative_values),
                 "tick_decimals": None,
                 "fixed_ylim": True,
             },
@@ -395,6 +422,7 @@ def write_optimization_direction_plots(
         "realized_fee_bps": realized_fee_bps,
         "top_n": top_n,
         "cumulative_mode": cumulative_mode,
+        "cumulative_relative_mode": cumulative_relative_mode,
         "capacity_total_notional": capacity_total_notional,
         "capacity_decision_notional": capacity_decision_notional,
         "capacity_baseline_run_id": capacity_baseline_run_id,
@@ -447,7 +475,17 @@ def write_optimization_direction_plots(
         "plotted_series": {
             "overlay_acceptance": ["baseline", *series],
             "cumulative_top": list(top_cumulative_series),
-            "cumulative_market_alpha": list(alpha_cumulative_series),
+            "cumulative_relative": list(alpha_cumulative_series),
+            "cumulative_market_alpha": (
+                list(alpha_cumulative_series)
+                if cumulative_relative_mode == CUMULATIVE_RELATIVE_MODE_MARKET
+                else []
+            ),
+            "cumulative_pool_l_excess": (
+                list(alpha_cumulative_series)
+                if cumulative_relative_mode == CUMULATIVE_RELATIVE_MODE_POOL_L
+                else []
+            ),
         },
         "figures": {
             "overlay_acceptance": str(overlay_acceptance_svg),
@@ -461,7 +499,7 @@ def write_optimization_direction_plots(
             "figure_title": cumulative_title,
             "panels": [
                 CUMULATIVE_NET_RETURN_PANEL_TITLE,
-                CUMULATIVE_MARKET_ALPHA_PANEL_TITLE,
+                cumulative_relative_title,
             ],
             "market_series": "full A-share market average overnight return",
             "background_series": "pool_L background overnight return after pool_fee_bps",
@@ -476,10 +514,18 @@ def write_optimization_direction_plots(
                 "equal-weight stock-pool membership turnover when available"
             ),
             "pool_turnover_source": "see pool_turnover_source column in cumulative plot data",
+            "relative_mode": cumulative_relative_mode,
+            "relative_column": cumulative_relative_column,
+            "relative_definition": cumulative_relative_definition,
             "market_alpha_definition": (
-                "bottom panel plots pool/background and model capital-adjusted cumulative "
-                "net bps minus full-market capital-adjusted cumulative bps, displayed as "
-                "percent"
+                cumulative_relative_definition
+                if cumulative_relative_mode == CUMULATIVE_RELATIVE_MODE_MARKET
+                else None
+            ),
+            "pool_l_excess_definition": (
+                cumulative_relative_definition
+                if cumulative_relative_mode == CUMULATIVE_RELATIVE_MODE_POOL_L
+                else None
             ),
             "accumulation_definition": (
                 "capital-adjusted cumulative net bps = cumsum(daily_net_bps * "

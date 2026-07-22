@@ -2,7 +2,7 @@
 id = "nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_capcache_896_gelu_mse_v1"
 kind = "exploration"
 description = "GPU PyTorch grouped gated v2 GELU MSE NN over 2022-2025 on the same 328 features; reruns strict ratio-style v3 on the prior tick2-gap5 T-1 cap/share cache with one shard at a time and a 1536Gi guaranteed memory envelope for attribution."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"
