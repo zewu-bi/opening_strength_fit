@@ -63,5 +63,9 @@ osf-sync-experiment-artifacts \
 默认 tracked 目标为 `experiments/evidence/`。单文件上限 1MB，禁止 Parquet、pickle 和模型二进制；需要
 审阅的大表应先聚合。每个 `evidence/backtests/<run_id>/` 必须存在同名 run TOML。
 
+canonical multiden 额外保留 short IC + next excess、Top100 累和、Top1000 平滑分桶和 Top1000 十组
+收益分布四图，以及每图的 compact CSV/trace。已有本地 mirror 时运行 `make evidence-four-figures` 刷新；
+control 只作为前两图的 ablation baseline。
+
 PVC 布局和故障处理见 [runbook](../docs/runbook.md)，当前研究判断见
 [project brief](../docs/project_brief.md)。

@@ -19,10 +19,11 @@ tick / labeled input
   -> execution / refill / overlap / tail acceptance
 ```
 
-当前信号候选已收束到 fixed-clock +6 秒语义。简单的 auction-pruned control 与多分母 ablation 在
-`pool_L` 的 next excess 分别为 `16.8024/17.1714 bps`；多分母增量不稳定，未保留为第二条主线。
-control 的 visible refill 提升资金利用率和累计收益，但缩尾后收益为负，当前策略不晋级。完整数字、边界和
-决策见 [project brief](docs/project_brief.md) 与 [experiment log](docs/experiment_log.md)。
+当前信号候选已收束到 fixed-clock +6 秒语义。多分母 auction-pruned 模型以 `17.1714 bps` 的
+`pool_L` next excess 作为 canonical challenger；简单 control 的 `16.8024 bps` 结果保留为单变量对照。
+multiden 的 visible refill 提升资金利用率和累计收益，但缩尾后收益仍为负，当前策略不晋级。完整数字、边界
+和决策见 [project brief](docs/project_brief.md)、[四图验收包](experiments/evidence/backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/)
+与 [experiment log](docs/experiment_log.md)。
 
 ## 可复现范围
 

@@ -28,10 +28,10 @@ run config、Job manifest、代码 revision、compact evidence 与本日志共�
 | 2026-07-16 | `build_delay2_{2019..2025}_conservative_cap_mixed_w030_target_v1` | 从保守 base 构造既有定义的 mixed-w030 target | `superseded`; 从未提交 | 固定 +6 秒口径确认后取消该下游分支 |
 | 2026-07-17 | `build_delay6_clock_state_{2019..2025}_cap_cache_v1` | entry 固定为特征状态后 6 秒，entry/sell 边界取该逻辑时刻最后已知状态，并保留 source timestamp/state age 审计列 | `completed`; 7 个年度 ClickHouse base 及 manifest/ready marker 均完成 | 新的 canonical label/cache lineage |
 | 2026-07-17 | `build_delay6_clock_state_{2019..2025}_cap_mixed_w030_target_v1` | 从 fixed-clock base 构造既有 mixed-w030 target | `completed`; 7 个年度 mixed-w030 target 均完成并被两组训练消费 | 后续新训练只读该 target lineage |
-| 2026-07-17 | `nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1` | 固定模型/特征，只把数据切到 fixed-clock cache | `completed`; 8/8 shards、47,333,122 行预测、pool analysis 和 compact artifact sync 全部完成 | `pool_L` next `16.8024 bps`；作为 canonical v4 简洁 challenger 归档 |
-| 2026-07-21 | `nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1` | 在 v4 auction-pruned control 上仅新增经去重审查的多分母无量纲特征 | `completed`; 8/8 shards、47,333,122 行预测、pool analysis 和 compact artifact sync 全部完成 | next 均值小幅增至 `17.1714 bps`，但分期胜率不足；作为 feature ablation 归档 |
+| 2026-07-17 | `nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1` | 固定模型/特征，只把数据切到 fixed-clock cache | `completed`; 8/8 shards、47,333,122 行预测、pool analysis 和 compact artifact sync 全部完成 | `pool_L` next `16.8024 bps`；保留为 v4 单变量 ablation baseline |
+| 2026-07-21 | `nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1` | 在 v4 auction-pruned control 上仅新增经去重审查的多分母无量纲特征 | `completed`; 8/8 shards、47,333,122 行预测、pool analysis、四图与 compact evidence 完成 | next `17.1714 bps`；当前 canonical v4 challenger，分期胜率不足仍作为边界记录 |
 | 2026-07-22 | `strategy_acceptance_clock6_v4_control_2022_2025_v1` | 在同一完整候选集上统一比较 capacity-only、realistic no-refill 与因果可见 refill，并复核 overlap/tail | `completed`; 9,690 groups、969 日，compact artifacts/trace 已同步 | refill fill/net `99.9969%/8431.1 bps`，较 no-refill `+1247.5 bps`；但 P95 winsor `-9.33 bps`、overlap/bootstrap 恶化，策略不晋级 |
-| 2026-07-22 | `strategy_acceptance_clock6_v4_multiden_2022_2025_v1` | 用同一工具对已归档 multiden 做一次性同口径对照 | `completed`; 9,690 groups、969 日，compact artifacts/trace 已同步 | refill net 仅比 control 高 `167.6 bps`，月/季度胜 `25/48`、`9/16`；不恢复第二条分支 |
+| 2026-07-22 | `strategy_acceptance_clock6_v4_multiden_2022_2025_v1` | 用同一工具验收 canonical multiden | `completed`; 9,690 groups、969 日，compact artifacts/trace 已同步 | refill net 比 control 高 `167.6 bps`；P95 gate 仍未通过，策略不晋级 |
 
 ## 决策时间线
 
@@ -95,10 +95,11 @@ run config、Job manifest、代码 revision、compact evidence 与本日志共�
 | 07-17 | auction-fresh head-only blend closeout | 以 mech328 v2 为底座，只对 auction-fresh Top100/200 头部做有限 boost/gate | 最佳 `auction_head200_w20` Top100 next excess `16.5749 bps`，高于 mech328 v2 `14.3174`，低于 auction-only `17.1780`；P95 winsor `-7.1044 bps` | blend 可将 mech 拉向 auction 头部，但未超过 auction-only，也未消除右尾依赖；不晋级 |
 | 07-21 | ordinary 328 mech v3 cap-cache closeout | 同一 328 特征与 grouped-gated-v2 结构，用 strict ratio-style v3 替代 v2 robust-zscore；使用 T-1 cap/share cache | 8 个半年 shard 已完成，pool analysis 保留 `44,033,943/44,033,943` 行；`pool_L` short/next excess `11.1004/16.3318 bps`，next 正月 `38/48`，universe short Rank IC `0.151300` | 之前的 `histavg_activity`/`running` 记录已被 `mech328_v3_capcache_896` 完成产物 supersede；信号层强于 mech328 v2，略低于 auction-pruned；cache v4 应对两者分别重跑 |
 | 07-21 | auction-pruned multi-denominator submission | 完整审查 v4 cache 的 211 个原始/上下文列；在 325-feature control 上只追加金额、成交量和聚合深度的简单比例，保持模型/target/window 不变 | 排除价格、收益、imbalance、count 和逐档队列；排除已被 pruned 的同分钟历史 ratios；排除与现有 `postopen_*_rel_*m` 一一等价的“当前流量/当日累计量”。最终新增 25 列，总计 350；真实 2019-01-02 v4 数据和新镜像验证通过；`286 passed, 3 skipped`，contracts OK | 提交 `os-nn-clock6-auction-multiden-v1`；control 并行度 6→4，新任务目标并行度 4，等待同一 2022 mixed target |
-| 07-22 | fixed-clock v4 auction-pruned closeout | 完成 control 与只加 25 个比例的 multi-denominator 两组 8-shard 训练、pool-internal、artifact sync 和三线验收 | control/multi-den `pool_L` next `16.8024/17.1714 bps`，Top100 fee8 累和 `9713.0/9891.7 bps`；多分母相对 control 月/季度胜 `25/48`、`8/16`，next 正月 `37/48 vs 38/48` | 两组均归档；保留简单 control 作 canonical downstream challenger，多分母不单独晋级；mech328 v2 incumbent 不变 |
+| 07-22 | fixed-clock v4 auction-pruned closeout | 完成 control 与只加 25 个比例的 multi-denominator 两组 8-shard 训练、pool-internal、artifact sync 和三线验收 | control/multi-den `pool_L` next `16.8024/17.1714 bps`，Top100 fee8 累和 `9713.0/9891.7 bps`；多分母相对 control 月/季度胜 `25/48`、`8/16`，next 正月 `37/48 vs 38/48` | 当时保留 control 作 canonical downstream challenger；该选择随后由本表的 multiden switch supersede，mech328 v2 incumbent 不变 |
 | 07-22 | fixed four-figure acceptance | 将 short IC + next excess、Top100累和、Top1000平滑分桶、Top1000十组收益分布固化为同一证据包 | 收益分布图固定100 bps档、`x=±3000 bps`、对数`y=10^2~3×10^5`，并提供compact CSV复画脚本 | 后续正式candidate必须保留四图、plot data和trace；探索图不得覆盖标准产物 |
 | 07-22 | unified strategy acceptance toolkit | 复用 capacity/realistic 实现，将 visible pre-trade refill、同日 overlap、P95/P99、top contribution、月块 bootstrap 与 leave-one-out 打包成单一 CLI/run kind | `295 passed, 3 skipped`、contracts OK；镜像 source revision `e8902e8`；control/multiden 两个 Job 与 `_SUCCESS` 完成 | 小项目不再独立维护；每个策略候选固定运行同一工具，refill 不能只凭 fill 晋级 |
 | 07-22 | fixed-clock v4 unified downstream acceptance | 1bn capital、10×50m target/day、`turnover_diff_10t` 20%、单 decision symbol 1%、daily symbol 0.5%、ask depth 25%、spread≤50bps、fee8、min child10k、lot100 | control capacity/no-refill/refill net `8989.8/7183.6/8431.1 bps`；refill P95 winsor/trim `-9.33/-56.96 bps`，bootstrap P05 `209.2 bps`，top5 days 后仍 `10.38 bps` net | refill 有经济贡献但 tail/overlap gate 未过；不晋级当前策略，下一主线切到全天因果 label 与完整持仓/现金/退出账本 |
+| 07-22 | canonical multiden switch + tracked four-figure bundle | 用 multiden 替换 control 作为唯一 continuation candidate；control 只保留为 A/B baseline | 四张 SVG、compact CSV、三份 trace 与 SHA-256 manifest 进入 tracked evidence；完整统计差异不改写 | multiden 成为 canonical challenger；选择不等同于稳定 A/B 晋级，opening policy 仍未通过策略 gate |
 
 ## 当前决策记录
 
@@ -211,10 +212,10 @@ experiments/results/backtests/optimization_overlay_acceptance_clock6_v4_control_
 experiments/results/backtests/optimization_overlay_acceptance_clock6_v4_control_multiden_vs_mech328_v2_2022_2025/optimization_directions_trace.json
 ```
 
-Decision：两组正式实验与 compact metrics/artifacts 全部归档。v4 control 在主 overlay gate 上明显高于
-mech328 v2，且相对旧-cache 没有掉档；普通 328 v4 的条件触发器未满足。多分母的微小均值优势没有
-稳定分期支持，因此不维护第二条下游分支。incumbent 仍是有完整 downstream evidence 的 mech328 v2。
-后续统一策略验收以 325-feature control 为主；multiden 只在工具首次落地时做一次性同口径诊断。
+Decision at closeout：两组正式实验与 compact metrics/artifacts 全部归档。v4 control 在主 overlay gate 上
+明显高于 mech328 v2，且相对旧-cache 没有掉档；多分母的微小均值优势没有稳定分期支持。该 closeout
+判断保留为实验事实；随后项目方向选择 multiden 作为唯一 continuation candidate，control 降为 A/B
+baseline。incumbent 仍是有完整 downstream evidence 的 mech328 v2。
 
 ### Unified strategy acceptance toolkit 与 fixed-clock v4 复核（2026-07-22，已完成）
 
@@ -253,16 +254,18 @@ control refill 相对 no-refill 恢复 `19.2166 pp` fill、`+2.5748 bps` mean ne
 月份或季度驱动，却仍高度依赖分散在多个时点的正尾股票。
 
 multiden 在 refill 下只比 control 多 `167.6 bps`；日度相关 `0.99875`，月/季度胜仅 `25/48`、
-`9/16`。它的 bootstrap 下界略好但同样未通过 P95，不能推翻已归档决定。
+`9/16`。它的 bootstrap 下界略好但同样未通过 P95，因此 canonical 替换是后续工程方向选择，不解释为
+稳定的统计 A/B 晋级。
 
 Decision：refill、overlap 和 tail 都保留为统一 acceptance 的必跑项，不再拆成单独小项目。visible refill
-有经济贡献，但因 tail、bootstrap 与 overlap 同时恶化，当前 policy 不通过晋级 gate；下一步不继续调
-开盘小工具，而是扩展全天分钟级、因果可见的时序 label/score，并建立完整持仓、退出、现金复用和冲击
-账本。完成实例与 lineage：
+有经济贡献，但因 tail、bootstrap 与 overlap 同时恶化，当前 policy 不通过晋级 gate；下一步以 multiden
+为 opening candidate 扩展全天分钟级、因果可见的时序 label/score，并建立完整持仓、退出、现金复用和
+冲击账本。完成实例与 lineage：
 
 ```text
 experiments/runs/strategy_acceptance_clock6_v4_control_2022_2025_v1.toml
 experiments/runs/strategy_acceptance_clock6_v4_multiden_2022_2025_v1.toml
+experiments/evidence/backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/
 experiments/results/backtests/strategy_acceptance_clock6_v4_{control,multiden}_2022_2025_v1/
 image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260722-strategy-acceptance-v1
 digest: sha256:05323ea52c26fc1ef1a6fb1fc774f5c46ff40dbd3dd3c546ac80ff38d0cc590b

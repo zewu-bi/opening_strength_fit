@@ -9,6 +9,11 @@ from opening_strength_fit.config import load_toml
 ROOT = Path(__file__).resolve().parents[3]
 MAX_COMMAND_MODULE_LINES = 800
 MAX_EVIDENCE_FILE_BYTES = 1_000_000
+CANONICAL_EVIDENCE_RUN_ID = (
+    "nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_"
+    "grouped_gated_v2_mech_v3_gelu_mse_v1"
+)
+CANONICAL_EVIDENCE_DIR = f"experiments/evidence/backtests/{CANONICAL_EVIDENCE_RUN_ID}"
 REQUIRED_REPRODUCIBILITY_FILES = (
     ".env.example",
     "Dockerfile",
@@ -17,6 +22,20 @@ REQUIRED_REPRODUCIBILITY_FILES = (
     "examples/smoke/labeled.csv",
     "examples/smoke/ridge.toml",
     "experiments/evidence/README.md",
+    f"{CANONICAL_EVIDENCE_DIR}/README.md",
+    f"{CANONICAL_EVIDENCE_DIR}/01_signal_acceptance.svg",
+    f"{CANONICAL_EVIDENCE_DIR}/01_signal_acceptance.csv",
+    f"{CANONICAL_EVIDENCE_DIR}/02_top100_cumulative.svg",
+    f"{CANONICAL_EVIDENCE_DIR}/02_top100_cumulative.csv",
+    f"{CANONICAL_EVIDENCE_DIR}/03_top1000_bucket_curve.svg",
+    f"{CANONICAL_EVIDENCE_DIR}/03_top1000_bucket_curve.csv",
+    f"{CANONICAL_EVIDENCE_DIR}/04_top1000_return_distribution.svg",
+    f"{CANONICAL_EVIDENCE_DIR}/04_top1000_return_distribution.csv",
+    f"{CANONICAL_EVIDENCE_DIR}/manifest.json",
+    f"{CANONICAL_EVIDENCE_DIR}/trace_optimization.json",
+    f"{CANONICAL_EVIDENCE_DIR}/trace_top1000_bucket.json",
+    f"{CANONICAL_EVIDENCE_DIR}/trace_top1000_distribution.json",
+    "experiments/scripts/build_four_figure_evidence.py",
     "pyproject.toml",
     "requirements.lock",
 )

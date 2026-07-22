@@ -23,6 +23,7 @@ universe 策略。
 | 目标 | `xs_norm(short_return) + 0.30 × xs_norm(next_close_return)` |
 | 验证 | `36m train -> next 6m` rolling OOS，覆盖 2022-2025 |
 | incumbent | `grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse` |
+| canonical challenger | fixed-clock v4 auction-pruned multi-denominator |
 
 rolling OOS 可用于模型和特征选择，因此不是 untouched final test。配置中的 `test_*` 表示 fold 内不参与拟合
 的时间窗，不代表最终冻结测试集。
@@ -32,13 +33,14 @@ rolling OOS 可用于模型和特征选择，因此不是 untouched final test�
 | 候选 | `pool_L` next excess | 决策 |
 | --- | ---: | --- |
 | mech328 v2 incumbent | `14.3174 bps`（fixed-clock 重算） | 保留稳定底座 |
-| fixed-clock v4 control | `16.8024 bps` | canonical challenger |
-| fixed-clock v4 multi-denominator | `17.1714 bps` | 均值仅增 `0.3690 bps`，分期胜率不足，归档 |
+| fixed-clock v4 control | `16.8024 bps` | 单变量 ablation baseline |
+| fixed-clock v4 multi-denominator | `17.1714 bps` | canonical challenger；分期胜率不足仍作为边界记录 |
 
-control 的 capacity-only、realistic no-refill、visible pre-trade refill fill 分别为
-`100%/80.7803%/99.9969%`，累计资金净收益为 `8989.8/7183.6/8431.1 bps`。refill 的增益真实，
-但 P95 winsor 后为 `-9.33 bps`，且 overlap 与月块下界恶化，因此 refill 保留为标准验收机制，当前策略
-不晋级。可审阅摘要和 trace 位于 `experiments/evidence/`。
+multiden 的 capacity-only、realistic no-refill、visible pre-trade refill fill 分别为
+`100%/81.3916%/99.9970%`，累计资金净收益为 `9217.9/7433.4/8598.7 bps`。refill 的增益真实，
+但 P95 winsor 后为 `-8.59 bps`，且 overlap 与月块下界仍不足以通过 gate，因此 refill 保留为标准验收
+机制，当前策略不晋级。可审阅结果见[四图验收包](../experiments/evidence/backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/)
+和 [strategy evidence](../experiments/evidence/backtests/strategy_acceptance_clock6_v4_multiden_2022_2025_v1/)。
 
 ## 验收逻辑
 
@@ -63,6 +65,6 @@ control 的 capacity-only、realistic no-refill、visible pre-trade refill fill 
 - ask2-10 深度在现有输入中无有效信息；
 - GPU NN 复跑依赖 run/job 中记录的集群镜像和外部 cache。
 
-下一步使用更简单的 fixed-clock control 扩展全天因果 label/score，并把现有 acceptance 工具嵌入完整策略
+下一步使用 fixed-clock multiden candidate 扩展全天因果 label/score，并把现有 acceptance 工具嵌入完整策略
 账本。非目标包括继续宽扫普通 MLP、用事后全天平均 score 验收、把 Top100 等权收益当作容量收益，或把
 公司日频 API 当作分钟策略回测器。

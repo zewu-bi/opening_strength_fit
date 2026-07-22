@@ -1,0 +1,88 @@
+{
+  "created_at_utc": "2026-07-22T05:29:33.696799+00:00",
+  "prediction_root": "/mnt/output/opening_strength_fit/nn",
+  "next_label_root": "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1",
+  "pool_path": "lml.bzw@ssd/data/pool_L.parquet",
+  "variant": "auction_multiden",
+  "run_id": "nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1",
+  "months": {
+    "2022-01": {
+      "prediction_pool_rows": 3575331,
+      "joined_rows": 3575331,
+      "groups": 1170,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "top_rows": 1170000,
+      "extreme_abs_4000_rows": 149
+    },
+    "2022-07": {
+      "prediction_pool_rows": 3989993,
+      "joined_rows": 3989993,
+      "groups": 1250,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "top_rows": 1250000,
+      "extreme_abs_4000_rows": 35
+    },
+    "2023-01": {
+      "prediction_pool_rows": 3884019,
+      "joined_rows": 3884019,
+      "groups": 1180,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "top_rows": 1180000,
+      "extreme_abs_4000_rows": 131
+    },
+    "2023-07": {
+      "prediction_pool_rows": 4218941,
+      "joined_rows": 4218941,
+      "groups": 1240,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "top_rows": 1240000,
+      "extreme_abs_4000_rows": 44
+    },
+    "2024-01": {
+      "prediction_pool_rows": 4012610,
+      "joined_rows": 4012610,
+      "groups": 1170,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "top_rows": 1170000,
+      "extreme_abs_4000_rows": 48
+    },
+    "2024-07": {
+      "prediction_pool_rows": 4248847,
+      "joined_rows": 4248847,
+      "groups": 1250,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "top_rows": 1250000,
+      "extreme_abs_4000_rows": 75
+    },
+    "2025-01": {
+      "prediction_pool_rows": 4024849,
+      "joined_rows": 4024849,
+      "groups": 1170,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "top_rows": 1170000,
+      "extreme_abs_4000_rows": 61
+    },
+    "2025-07": {
+      "prediction_pool_rows": 4350847,
+      "joined_rows": 4350847,
+      "groups": 1260,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "top_rows": 1260000,
+      "extreme_abs_4000_rows": 22
+    }
+  },
+  "scope": "Top1000 within pool_L, split into ten 100-name score buckets",
+  "value": "next internal excess bps",
+  "bin_width_bps": 100,
+  "observation_unit": "stock x decision cross-section",
+  "total_top1000_rows": 9690000,
+  "total_abs_4000_rows": 565
+}

@@ -1,0 +1,138 @@
+{
+  "backtests_root": "experiments/results/backtests",
+  "output_dir": "experiments/results/backtests/optimization_overlay_acceptance_clock6_v4_control_multiden_vs_mech328_v2_2022_2025",
+  "pool": "pool_L",
+  "cumulative_decision_normalizer": 1.0,
+  "return_bps_denominator": 10000.0,
+  "next_close_capital_divisor": 2.0,
+  "realized_fee_bps": 8.0,
+  "top_n": 100,
+  "cumulative_mode": "top100",
+  "cumulative_relative_mode": "pool_l",
+  "capacity_total_notional": null,
+  "capacity_decision_notional": null,
+  "capacity_baseline_run_id": null,
+  "capacity_run_ids": {},
+  "realistic_baseline_run_id": null,
+  "realistic_run_ids": {},
+  "pool_turnover_path": "auto",
+  "pool_fee_mode": "stock_pool_membership",
+  "daily_cumulative_semantics": "next-close labels span entry day to next trading day's close, so cumulative acceptance scales next-close bps by the daily capital fraction before linear cumulative summation. Without explicit capacity settings this falls back to 1 / next_close_capital_divisor",
+  "overlay_acceptance": {
+    "figure_title": "2022-2025 rank IC / pool_L\u8d85\u989d",
+    "panels": [
+      "short universe rank IC",
+      "next pool_L Top100 excess"
+    ],
+    "reason": "short pool excess is omitted because A-share T+1 makes short-horizon cash PnL non-tradable; next IC is omitted because this model is not trained to rank next-day returns directly",
+    "baseline_run_id": "nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse_v1",
+    "baseline_label": "gated"
+  },
+  "baseline_pool_cumulative": {
+    "enabled": true,
+    "run_id": "nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse_v1",
+    "pool": "pool_L",
+    "key": "baseline_pool_l",
+    "label": "gated"
+  },
+  "market_cumulative": {
+    "enabled": true,
+    "run_id": "nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse_v1",
+    "pool": "universe",
+    "key": "market",
+    "definition": "universe pool_next_mean_bps scaled by daily_capital_fraction and cumulatively summed"
+  },
+  "directions": [
+    {
+      "key": "clock6_v4_control",
+      "label": "dimensionless",
+      "run_id": "nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1"
+    },
+    {
+      "key": "clock6_v4_multiden",
+      "label": "multi denominator",
+      "run_id": "nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1"
+    }
+  ],
+  "plotted_series": {
+    "overlay_acceptance": [
+      "baseline",
+      "clock6_v4_control",
+      "clock6_v4_multiden"
+    ],
+    "cumulative_top": [
+      "market",
+      "background",
+      "baseline_pool_l",
+      "clock6_v4_control",
+      "clock6_v4_multiden"
+    ],
+    "cumulative_relative": [
+      "baseline_pool_l",
+      "clock6_v4_control",
+      "clock6_v4_multiden"
+    ],
+    "cumulative_market_alpha": [],
+    "cumulative_pool_l_excess": [
+      "baseline_pool_l",
+      "clock6_v4_control",
+      "clock6_v4_multiden"
+    ]
+  },
+  "figures": {
+    "overlay_acceptance": "experiments/results/backtests/optimization_overlay_acceptance_clock6_v4_control_multiden_vs_mech328_v2_2022_2025/optimization_directions_overlay_acceptance.svg",
+    "net_alpha_cumulative": "experiments/results/backtests/optimization_overlay_acceptance_clock6_v4_control_multiden_vs_mech328_v2_2022_2025/optimization_directions_net_alpha_cumulative.svg"
+  },
+  "plot_data": {
+    "overlay_acceptance": "experiments/results/backtests/optimization_overlay_acceptance_clock6_v4_control_multiden_vs_mech328_v2_2022_2025/optimization_directions_overlay_acceptance_plot_data.csv",
+    "net_alpha_cumulative": "experiments/results/backtests/optimization_overlay_acceptance_clock6_v4_control_multiden_vs_mech328_v2_2022_2025/optimization_directions_net_alpha_cumulative_plot_data.csv"
+  },
+  "cumulative_acceptance": {
+    "figure_title": "2022-2025 fee 8bps \u6c60\u5185Top100\u9694\u591c\u51c0\u6536\u76ca\u7d2f\u548c",
+    "panels": [
+      "\u6263\u9664\u624b\u7eed\u8d39\u7d2f\u548c\u6536\u76ca",
+      "\u76f8\u5bf9 pool_L \u7d2f\u548c\u8d85\u989d"
+    ],
+    "market_series": "full A-share market average overnight return",
+    "background_series": "pool_L background overnight return after pool_fee_bps is always drawn in the top panel; it is omitted as a zero line in pool_l relative mode and drawn relative to market in market mode",
+    "reason": "short cumulative is omitted because this workflow cannot trade T+0",
+    "unit": "%",
+    "source_unit": "bps",
+    "fee_bps_per_trade": 8.0,
+    "capacity_definition": "In TopN mode, model lines use selected TopN pool-internal summaries.",
+    "absolute_definition": "top panel plots market, pool background, baseline selected TopN, and comparison selected TopN cumulative next-close returns. Pool/model lines subtract their realized fee before dividing by next_close_capital_divisor and cumulative summation; market uses universe pool_next_mean_bps without a trading fee. Figure axis displays cumulative bps divided by 100 as percent",
+    "background_definition": "pool_L background overnight return minus pool_fee_bps; pool fee uses equal-weight stock-pool membership turnover when available",
+    "pool_turnover_source": "see pool_turnover_source column in cumulative plot data",
+    "relative_mode": "pool_l",
+    "relative_column": "next_cumulative_alpha_pct",
+    "relative_definition": "bottom panel plots each model's capital-adjusted cumulative net return minus its own pool_L capital-adjusted cumulative net return, displayed as percent; both model and pool_L fees are included",
+    "market_alpha_definition": null,
+    "pool_l_excess_definition": "bottom panel plots each model's capital-adjusted cumulative net return minus its own pool_L capital-adjusted cumulative net return, displayed as percent; both model and pool_L fees are included",
+    "accumulation_definition": "capital-adjusted cumulative net bps = cumsum(daily_net_bps * daily_capital_fraction)"
+  },
+  "source_files": {
+    "clock6_v4_control": {
+      "short": "experiments/results/backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1/short_excess_rank_ic_plot_data.csv",
+      "next": "experiments/results/backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1/next_excess_rank_ic_plot_data.csv",
+      "daily_cumulative": "experiments/results/backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1/daily_cumulative_plot_data.csv",
+      "daily_realized": "experiments/results/backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1/daily_pool_internal_summary.csv"
+    },
+    "clock6_v4_multiden": {
+      "short": "experiments/results/backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/short_excess_rank_ic_plot_data.csv",
+      "next": "experiments/results/backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/next_excess_rank_ic_plot_data.csv",
+      "daily_cumulative": "experiments/results/backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/daily_cumulative_plot_data.csv",
+      "daily_realized": "experiments/results/backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/daily_pool_internal_summary.csv"
+    }
+  },
+  "baseline_universe_cumulative": {
+    "enabled": true,
+    "requested_by_cli": false,
+    "run_id": "nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse_v1",
+    "pool": "universe",
+    "key": "baseline_universe",
+    "used_as": "market source",
+    "panels": [
+      "next"
+    ]
+  }
+}

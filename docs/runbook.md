@@ -122,6 +122,15 @@ tracked `experiments/evidence/`。策略验收只记录 summary、bootstrap、le
 分布。对应入口为 `osf-plot-optimization-direction-comparison` 和
 `experiments/scripts/run_top1000_rank_bucket_diagnostics.py`。
 
+当前 canonical multiden 的四图、compact plot data 和 trace 可从本地 ignored mirror 统一刷新：
+
+```bash
+make evidence-four-figures
+```
+
+目标目录为 `experiments/evidence/backtests/<multiden-run-id>/`。control 只在前两图中保留为 ablation
+baseline，不作为下一阶段 candidate。
+
 ## 7. 容量与策略验收
 
 ```text
@@ -147,8 +156,8 @@ refill 只有在成本后资本收益提升，且 tail、overlap、集中度不�
 可复用配置：
 
 ```text
-experiments/runs/strategy_acceptance_clock6_v4_control_2022_2025_v1.toml
 experiments/runs/strategy_acceptance_clock6_v4_multiden_2022_2025_v1.toml
+experiments/runs/strategy_acceptance_clock6_v4_control_2022_2025_v1.toml  # comparison only
 ```
 
 ## 8. 全天分钟级因果 label/cache

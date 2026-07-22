@@ -1,0 +1,52 @@
+test_month,variant,pool,pool_label,short_rank_ic,next_internal_excess_bps
+2022Q1,gated,baseline,gated,0.166447,24.849965
+2022Q1,dimensionless,clock6_v4_control,dimensionless,0.174308,38.900281
+2022Q1,multi denominator,clock6_v4_multiden,multi denominator,0.176678,37.448758
+2022Q2,gated,baseline,gated,0.179870,21.075436
+2022Q2,dimensionless,clock6_v4_control,dimensionless,0.184731,14.849723
+2022Q2,multi denominator,clock6_v4_multiden,multi denominator,0.186907,18.154422
+2022Q3,gated,baseline,gated,0.166370,20.370460
+2022Q3,dimensionless,clock6_v4_control,dimensionless,0.169770,13.144509
+2022Q3,multi denominator,clock6_v4_multiden,multi denominator,0.170270,14.070785
+2022Q4,gated,baseline,gated,0.154027,2.351556
+2022Q4,dimensionless,clock6_v4_control,dimensionless,0.157993,6.205248
+2022Q4,multi denominator,clock6_v4_multiden,multi denominator,0.159338,4.255096
+2023Q1,gated,baseline,gated,0.172230,16.258324
+2023Q1,dimensionless,clock6_v4_control,dimensionless,0.174105,22.451100
+2023Q1,multi denominator,clock6_v4_multiden,multi denominator,0.172038,21.716678
+2023Q2,gated,baseline,gated,0.155343,31.179322
+2023Q2,dimensionless,clock6_v4_control,dimensionless,0.156532,41.337528
+2023Q2,multi denominator,clock6_v4_multiden,multi denominator,0.156466,44.769835
+2023Q3,gated,baseline,gated,0.156852,9.339579
+2023Q3,dimensionless,clock6_v4_control,dimensionless,0.155335,8.008938
+2023Q3,multi denominator,clock6_v4_multiden,multi denominator,0.154950,11.335653
+2023Q4,gated,baseline,gated,0.157902,9.674119
+2023Q4,dimensionless,clock6_v4_control,dimensionless,0.153838,9.513110
+2023Q4,multi denominator,clock6_v4_multiden,multi denominator,0.153155,8.660974
+2024Q1,gated,baseline,gated,0.146245,13.857627
+2024Q1,dimensionless,clock6_v4_control,dimensionless,0.150321,19.504815
+2024Q1,multi denominator,clock6_v4_multiden,multi denominator,0.151263,25.445676
+2024Q2,gated,baseline,gated,0.162441,14.621597
+2024Q2,dimensionless,clock6_v4_control,dimensionless,0.163442,11.104547
+2024Q2,multi denominator,clock6_v4_multiden,multi denominator,0.162975,12.666222
+2024Q3,gated,baseline,gated,0.182424,-0.024637
+2024Q3,dimensionless,clock6_v4_control,dimensionless,0.189334,8.327148
+2024Q3,multi denominator,clock6_v4_multiden,multi denominator,0.190688,4.110261
+2024Q4,gated,baseline,gated,0.135358,14.543172
+2024Q4,dimensionless,clock6_v4_control,dimensionless,0.133222,17.131209
+2024Q4,multi denominator,clock6_v4_multiden,multi denominator,0.135062,16.562424
+2025Q1,gated,baseline,gated,0.129001,14.759681
+2025Q1,dimensionless,clock6_v4_control,dimensionless,0.133003,19.411873
+2025Q1,multi denominator,clock6_v4_multiden,multi denominator,0.131137,19.158739
+2025Q2,gated,baseline,gated,0.137208,4.064562
+2025Q2,dimensionless,clock6_v4_control,dimensionless,0.139090,8.457389
+2025Q2,multi denominator,clock6_v4_multiden,multi denominator,0.132097,10.542213
+2025Q3,gated,baseline,gated,0.140200,28.488134
+2025Q3,dimensionless,clock6_v4_control,dimensionless,0.135785,24.643972
+2025Q3,multi denominator,clock6_v4_multiden,multi denominator,0.141072,18.831628
+2025Q4,gated,baseline,gated,0.123045,3.821811
+2025Q4,dimensionless,clock6_v4_control,dimensionless,0.125574,7.846862
+2025Q4,multi denominator,clock6_v4_multiden,multi denominator,0.127264,9.903491
+Mean,gated,baseline,gated,0.154060,14.326919
+Mean,dimensionless,clock6_v4_control,dimensionless,0.156024,16.927391
+Mean,multi denominator,clock6_v4_multiden,multi denominator,0.156335,17.352053
