@@ -259,6 +259,8 @@ def run(args, config: dict, *, run_name: str, output_dir: Path) -> None:
     if cache_root.suffix:
         raise SystemExit("full-day [cache].path must be a directory, not a file")
     cache_root.mkdir(parents=True, exist_ok=True)
+    success_path = cache_root / "_SUCCESS"
+    success_path.unlink(missing_ok=True)
 
     horizons = config_list(
         config, "full_day_labels", "horizons", ["5m", "30m", "close", "next_close"]
@@ -459,7 +461,7 @@ def run(args, config: dict, *, run_name: str, output_dir: Path) -> None:
     }
     manifest_path = cache_root / "full_day_label_cache_manifest.json"
     write_json(manifest_path, manifest, atomic=True)
-    write_json(cache_root / "_SUCCESS", {"run_id": run_name}, atomic=True)
+    write_json(success_path, {"run_id": run_name}, atomic=True)
     trace = {
         "run_id": run_name,
         "manifest_path": str(manifest_path),
