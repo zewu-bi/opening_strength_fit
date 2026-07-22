@@ -60,7 +60,7 @@ cli -> command/workflow -> domain algorithms -> schema/types/io
 | 训练 | `osf-train`、`osf-run-experiment` |
 | 数据/cache | `osf-probe-clickhouse-data`、`osf-build-labeled-cache`、`osf-build-target-label-cache`、`osf-build-next-close-labels` |
 | 核心验收 | `osf-analyze-pool-internal-top100`、`osf-plot-optimization-direction-comparison` |
-| 容量/执行 | `osf-audit-capacity`、`osf-analyze-capacity-acceptance`、`osf-extract-execution-context`、`osf-ask-level-attribution`、`osf-analyze-realistic-acceptance` |
+| 容量/执行 | `osf-audit-capacity`、`osf-analyze-capacity-acceptance`、`osf-extract-execution-context`、`osf-ask-level-attribution`、`osf-analyze-realistic-acceptance`、`osf-audit-strategy-acceptance` |
 | 暴露 | `osf-build-exposure-input`、`osf-audit-exposure` |
 | 研究诊断 | feature dependence/hygiene、horizon decay、risk sweep、weekly plots |
 | 基础设施 | `osf-render-k8s-job`、`osf-rolling-job-status`、`osf-sync-experiment-artifacts` |
@@ -129,6 +129,7 @@ PVC projection 与加载；
 | `capacity_acceptance.py` | selected allocation × next-close label 的收益验收 |
 | `execution_diagnostics.py` | execution context 与 ask-level attribution |
 | `realistic_acceptance.py` | selected-order execution replay；不负责生成候选/refill |
+| `strategy_acceptance.py` | capacity/realistic/refill policy、持仓 overlap 与尾部稳健性统一验收 |
 | `exposure_audit.py` | TopN/给定组合相对候选池的暴露与集中度 |
 | `optimization_direction_*` | 固定 acceptance data、plot 和 workflow |
 | `experiments/scripts/run_top1000_rank_bucket_diagnostics.py` | Top1000 IC、平滑分桶和100 bps收益区间计数 |

@@ -145,6 +145,7 @@ def is_artifact_run(record: RunRecord) -> bool:
         "ask_level_attribution",
         "execution_context",
         "realistic_acceptance",
+        "strategy_acceptance",
         "gap_risk_attribution",
         "pool_internal_analysis",
     }

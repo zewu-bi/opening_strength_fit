@@ -15,6 +15,7 @@ K8S_JOB_ENTRYPOINTS = (
     "osf-audit-exposure",
     "osf-audit-feature-dependence",
     "osf-audit-feature-hygiene",
+    "osf-audit-strategy-acceptance",
     "osf-analyze-pool-internal-top100",
     "osf-build-exposure-input",
     "osf-build-labeled-cache",

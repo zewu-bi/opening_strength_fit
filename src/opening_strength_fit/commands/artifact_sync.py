@@ -4,9 +4,7 @@ import argparse
 from pathlib import Path
 
 from opening_strength_fit.commands.artifact_sync_artifacts import (
-    combine_rolling_validation_shards as combine_rolling_validation_shards,
-)
-from opening_strength_fit.commands.artifact_sync_artifacts import (
+    STRATEGY_ACCEPTANCE_ARTIFACTS,
     is_capacity_acceptance,
     is_capacity_audit,
     is_exposure_audit,
@@ -17,6 +15,7 @@ from opening_strength_fit.commands.artifact_sync_artifacts import (
     is_rolling_validation,
     is_score_risk_sweep,
     local_artifact_dir,
+    pull_artifact_set,
     pull_capacity_acceptance_artifacts,
     pull_capacity_audit_artifacts,
     pull_exposure_audit_artifacts,
@@ -26,7 +25,11 @@ from opening_strength_fit.commands.artifact_sync_artifacts import (
     pull_pool_internal_analysis_artifacts,
     pull_rolling_validation_artifacts,
     pull_score_risk_artifacts,
+    record_artifact_fetch,
     record_lightweight_artifacts,
+)
+from opening_strength_fit.commands.artifact_sync_artifacts import (
+    combine_rolling_validation_shards as combine_rolling_validation_shards,
 )
 from opening_strength_fit.commands.artifact_sync_artifacts import (
     pull_rolling_validation_shards as pull_rolling_validation_shards,
@@ -54,6 +57,27 @@ from opening_strength_fit.k8s import (
 DEFAULT_METRICS_DIR = "experiments/results/metrics"
 DEFAULT_PARTIAL_METRICS_DIR = "output/artifacts/_partial_metrics"
 DEFAULT_METRIC_SHARDS_ROOT = "output/artifacts"
+
+
+def pull_strategy_acceptance_artifacts(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    output_root: Path | None,
+) -> list[Path]:
+    output_dir, pulled, missing = pull_artifact_set(
+        hfcli,
+        spec,
+        pod_name,
+        output_root,
+        STRATEGY_ACCEPTANCE_ARTIFACTS,
+    )
+    if not pulled:
+        raise SystemExit(
+            f"{spec.run_id}: no strategy-acceptance artifacts found under {spec.pvc_dir}"
+        )
+    record_artifact_fetch(spec, output_dir, pulled, missing)
+    return pulled
 
 
 def parse_run(value: str) -> tuple[str, str]:
@@ -333,6 +357,13 @@ def main() -> None:
                     )
                 elif is_capacity_audit(spec):
                     paths = pull_capacity_audit_artifacts(
+                        args.hfcli,
+                        spec,
+                        pod_name,
+                        artifacts_root,
+                    )
+                elif spec.kind == "strategy_acceptance":
+                    paths = pull_strategy_acceptance_artifacts(
                         args.hfcli,
                         spec,
                         pod_name,

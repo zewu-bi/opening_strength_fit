@@ -76,6 +76,22 @@ CAPACITY_ACCEPTANCE_ARTIFACTS = (
     "capacity_acceptance_summary.csv",
     "capacity_acceptance_trace.json",
 )
+STRATEGY_ACCEPTANCE_ARTIFACTS = (
+    "strategy_acceptance_summary.csv",
+    "strategy_acceptance_daily.csv",
+    "strategy_acceptance_group_metrics.csv",
+    "strategy_acceptance_capacity_summary.csv",
+    "strategy_acceptance_overlap_summary.csv",
+    "strategy_acceptance_overlap_daily.csv",
+    "strategy_acceptance_overlap_adjacent.csv",
+    "strategy_acceptance_tail_summary.csv",
+    "strategy_acceptance_tail_monthly.csv",
+    "strategy_acceptance_tail_concentration.csv",
+    "strategy_acceptance_bootstrap.csv",
+    "strategy_acceptance_leave_one_out.csv",
+    "strategy_acceptance_trace.json",
+    "_SUCCESS",
+)
 EXPOSURE_AUDIT_ARTIFACTS = (
     "exposure_audit_group_metrics.csv",
     "exposure_audit_month_summary.csv",
@@ -152,6 +168,7 @@ def is_non_standard_artifact_run(spec: RunSpec) -> bool:
         or is_gap_attribution(spec)
         or is_capacity_acceptance(spec)
         or is_capacity_audit(spec)
+        or spec.kind == "strategy_acceptance"
         or is_exposure_audit(spec)
         or is_feature_audit(spec)
         or is_feature_hygiene(spec)
@@ -713,6 +730,11 @@ def record_lightweight_artifacts(
         archive_dir = backtests_dir / spec.run_id
         records = [
             (output_dir / name, archive_dir / name) for name in CAPACITY_ACCEPTANCE_ARTIFACTS
+        ]
+    elif spec.kind == "strategy_acceptance":
+        archive_dir = backtests_dir / spec.run_id
+        records = [
+            (output_dir / name, archive_dir / name) for name in STRATEGY_ACCEPTANCE_ARTIFACTS
         ]
     elif is_feature_audit(spec):
         archive_dir = backtests_dir / spec.run_id

@@ -62,6 +62,7 @@ status = "queued"
 | `execution_context` | `osf-extract-execution-context` |
 | `ask_level_attribution` | `osf-ask-level-attribution` |
 | `realistic_acceptance` | `osf-analyze-realistic-acceptance` |
+| `strategy_acceptance` | `osf-audit-strategy-acceptance` |
 | `exposure_input` | `osf-build-exposure-input` |
 | `exposure_audit` | `osf-audit-exposure` |
 | `feature_audit` | `osf-audit-feature-dependence` |
@@ -90,7 +91,8 @@ experiment log 已记录 decision
 
 Artifact-only run 不要求训练 metrics，但必须生成该 kind 约定的 summary、trace 和主要输出；不要借用
 训练 run 的 `_SUCCESS` 作为统一完成条件。`realistic_acceptance` 还必须在 trace 中保留 execution
-context columns、约束和 modeling limitations。
+context columns、约束和 modeling limitations；`strategy_acceptance` 必须保留三种 policy 的定义、
+capacity/execution/tail 约束及 holding/causality 边界。
 
 ## Config templates
 

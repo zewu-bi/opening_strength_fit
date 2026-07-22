@@ -550,7 +550,95 @@ osf-ask-level-attribution --config experiments/runs/<attribution_run_id>.toml
 当前实现是 selected-order replay：不会用更低排名股票 refill，也不会把每个 decision point 的成交额
 合并成同日真实预算。读取结果时必须同时查看 trace 的 `modeling_note` 和 context 列完整性。
 
-## 11. 故障处理
+## 11. 统一策略验收
+
+`osf-audit-strategy-acceptance` 将现有 capacity allocation、realistic replay 与统一的 refill、overlap、
+尾部稳健性放在同一数据和约束口径下。它固定比较三种 policy：
+
+```text
+capacity_only
+realistic_no_refill
+visible_pretrade_refill
+```
+
+`visible_pretrade_refill` 从完整候选排名出发，先使用决策时点可见的 status、spread、depth、capacity、
+整手和日内集中度状态过滤/限额，再向低排名候选继续分配。它不是观察到真实成交失败后的瞬时撤单补单；
+没有订单回报和二次下单延迟数据时，不得把它解释成该语义。
+
+最小配置：
+
+```toml
+[run]
+kind = "strategy_acceptance"
+
+[strategy_acceptance]
+variant = "<variant>"
+predictions = ["/mnt/output/opening_strength_fit/runs/models/<run_id>"]
+label_input = ["/mnt/output/opening_strength_fit/cache/<next_close_labels>"]
+label_col = "alpha_return_next_close"
+pool = "L"
+pool_path = "lml.bzw@ssd/data/pool_L.parquet"
+policies = ["capacity_only", "realistic_no_refill", "visible_pretrade_refill"]
+
+[capacity]
+target_notional = 50000000
+capacity_notional_col = "turnover_diff_10t"
+capacity_price_col = "ask_price_1"
+max_participation_rate = 0.20
+max_symbol_weight = 0.01
+
+[execution]
+capacity_total_notional = 1000000000
+fee_bps = 8
+max_daily_symbol_weight = 0.005
+min_child_notional = 10000
+round_lot_shares = 100
+price_col = "capacity_price"
+status_col = "status"
+tradable_statuses = ["T0", "TRADE"]
+spread_bps_col = "spread_bps"
+max_spread_bps = 50
+ask_depth_notional_col = "ask_depth_notional"
+max_ask_depth_participation_rate = 0.25
+
+[tail]
+quantiles = [0.95, 0.99]
+bootstrap_samples = 5000
+bootstrap_seed = 20260722
+```
+
+本地或集群执行：
+
+```bash
+osf-audit-strategy-acceptance \
+  --config experiments/runs/<strategy_acceptance_run_id>.toml
+
+osf-render-k8s-job \
+  --config experiments/runs/<strategy_acceptance_run_id>.toml \
+  --image ${CPU_IMAGE}
+```
+
+核心产物：
+
+| 产物 | 语义 |
+| --- | --- |
+| `strategy_acceptance_summary.csv` | 三种 policy 的 fill、成本后 PnL、overlap、P95/P99 和 bootstrap 总表 |
+| `strategy_acceptance_daily.csv` | 保留现金后的日度资金收益 |
+| `strategy_acceptance_group_metrics.csv` | 每个 `date × decision_time` 的 fill 与下探 rank |
+| `strategy_acceptance_overlap_*` | 日内重复单票、集中度和相邻分钟 name/notional overlap |
+| `strategy_acceptance_tail_*` | P95/P99 winsor/trim、尾部贡献、月度拆分和 top day/symbol 贡献 |
+| `strategy_acceptance_bootstrap.csv` | 月度 block bootstrap 的累计成本后收益区间 |
+| `strategy_acceptance_leave_one_out.csv` | leave-one-month/quarter-out 稳健性 |
+| `strategy_acceptance_trace.json` | 输入 lineage、全部约束、policy 定义和边界 |
+
+验收时不以 fill ratio 单独决定 refill。只有 `visible_pretrade_refill` 相对 `realistic_no_refill` 提高成本后
+资本收益且不恶化尾部/集中度，才保留 refill。P95/P99 单边缩尾也是诊断而非单项否决；必须和 top
+day/symbol 贡献、leave-one-out、月度 block bootstrap 及 incumbent 同口径结果一起解释。
+
+当前 overlap 假设开盘各切片持有到 next close，只做日内聚合资金审计，不是通用 entry/exit ledger。
+扩展到全天且持有期变化时，需要由完整持仓与现金账本替代该假设。
+
+## 12. 故障处理
 
 | 症状 | 处理 |
 | --- | --- |

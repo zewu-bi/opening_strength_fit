@@ -62,6 +62,8 @@ def training_command(config: dict) -> str:
         return "osf-analyze-capacity-acceptance"
     if run_kind == "capacity_audit":
         return "osf-audit-capacity"
+    if run_kind == "strategy_acceptance":
+        return "osf-audit-strategy-acceptance"
     if run_kind == "ask_level_attribution":
         return "osf-ask-level-attribution"
     if run_kind == "execution_context":
@@ -116,6 +118,8 @@ def _rolling_completion_files(config: dict, command: str) -> list[str]:
         return ["capacity_acceptance_trace.json", "capacity_acceptance_daily_summary.csv"]
     if run_kind == "capacity_audit":
         return ["capacity_audit_trace.json", "capacity_audit_summary.csv"]
+    if run_kind == "strategy_acceptance":
+        return ["_SUCCESS", "strategy_acceptance_summary.csv"]
     if run_kind == "ask_level_attribution":
         return ["ask_level_attribution_trace.json", "_SUCCESS"]
     if run_kind == "execution_context":

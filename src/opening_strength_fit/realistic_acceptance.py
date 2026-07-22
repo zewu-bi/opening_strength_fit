@@ -82,7 +82,7 @@ def _finite_numeric(values: pd.Series) -> pd.Series:
     return pd.to_numeric(values, errors="coerce").replace([np.inf, -np.inf], np.nan)
 
 
-def _validate_constraints(constraints: RealisticExecutionConstraints) -> None:
+def validate_execution_constraints(constraints: RealisticExecutionConstraints) -> None:
     if constraints.capacity_total_notional <= 0:
         raise ValueError("capacity_total_notional must be positive")
     if constraints.fee_bps < 0:
@@ -242,7 +242,7 @@ def merge_realistic_execution_context(
     return merged
 
 
-def _round_notional_to_lot(
+def round_notional_to_lot(
     notional: float,
     row: pd.Series,
     constraints: RealisticExecutionConstraints,
@@ -258,7 +258,7 @@ def _round_notional_to_lot(
     return float(shares * float(constraints.round_lot_shares) * price)
 
 
-def _tradable_mask(frame: pd.DataFrame, constraints: RealisticExecutionConstraints) -> pd.Series:
+def tradable_mask(frame: pd.DataFrame, constraints: RealisticExecutionConstraints) -> pd.Series:
     mask = pd.Series(True, index=frame.index)
     if constraints.status_col and constraints.tradable_statuses:
         if constraints.status_col in frame.columns:
@@ -273,7 +273,7 @@ def _tradable_mask(frame: pd.DataFrame, constraints: RealisticExecutionConstrain
     return mask
 
 
-def _row_depth_limit(row: pd.Series, constraints: RealisticExecutionConstraints) -> float:
+def row_depth_limit(row: pd.Series, constraints: RealisticExecutionConstraints) -> float:
     if constraints.max_ask_depth_participation_rate <= 0:
         return np.inf
     if not constraints.ask_depth_notional_col:
@@ -292,7 +292,7 @@ def apply_realistic_execution_constraints(
     selected: pd.DataFrame,
     constraints: RealisticExecutionConstraints,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    _validate_constraints(constraints)
+    validate_execution_constraints(constraints)
     work = selected.copy()
     work["date"] = pd.to_datetime(work["date"], errors="coerce").dt.strftime("%Y-%m-%d")
     work["decision_target_timestamp"] = pd.to_datetime(
@@ -322,7 +322,7 @@ def apply_realistic_execution_constraints(
 
     for (_pool, _date), day in work.groupby(["pool", "date"], sort=False):
         day = day.copy()
-        day = day.loc[_tradable_mask(day, constraints)].copy()
+        day = day.loc[tradable_mask(day, constraints)].copy()
         if day.empty:
             continue
         symbol_remaining = {
@@ -368,14 +368,14 @@ def apply_realistic_execution_constraints(
                 original,
                 max(0.0, float(symbol_remaining.get(symbol, 0.0))),
                 max(0.0, float(group_remaining.get(decision_time, 0.0))),
-                _row_depth_limit(row, constraints),
+                row_depth_limit(row, constraints),
             )
             industry_value = ""
             if industry_remaining and constraints.industry_col in row:
                 industry_value = str(row[constraints.industry_col])
                 allowed = min(allowed, max(0.0, float(industry_remaining.get(industry_value, 0.0))))
             allowed *= float(constraints.execution_fill_rate)
-            allowed = _round_notional_to_lot(allowed, row, constraints)
+            allowed = round_notional_to_lot(allowed, row, constraints)
             if constraints.min_child_notional > 0 and allowed < constraints.min_child_notional:
                 continue
             if allowed <= 0:
@@ -414,7 +414,7 @@ def summarize_realistic_acceptance(
     constraints: RealisticExecutionConstraints,
     label_col: str = DEFAULT_REALISTIC_LABEL_COL,
 ) -> pd.DataFrame:
-    _validate_constraints(constraints)
+    validate_execution_constraints(constraints)
     if adjusted.empty:
         merged = adjusted.copy()
         merged["_gross_pnl"] = pd.Series(dtype="float64")

@@ -1,0 +1,89 @@
+[run]
+id = "strategy_acceptance_clock6_v4_multiden_2022_2025_v1"
+kind = "strategy_acceptance"
+description = "Unified capacity, realistic no-refill, visible pre-trade refill, overlap, and tail acceptance for the fixed-clock v4 auction-pruned 350-feature multi-denominator ablation."
+status = "queued"
+
+[strategy_acceptance]
+variant = "clock6 v4 auction-pruned multi-denominator"
+predictions = ["/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1"]
+label_input = [
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1/opening_2022_next_close_labels_v1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1/opening_2023_next_close_labels_v1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1/opening_2024_next_close_labels_v1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1/opening_2025_next_close_labels_v1.parquet",
+]
+label_col = "alpha_return_next_close"
+pool = "L"
+pool_path = "lml.bzw@ssd/data/pool_L.parquet"
+pool_date_lag_sessions = 0
+policies = ["capacity_only", "realistic_no_refill", "visible_pretrade_refill"]
+
+[capacity]
+score_col = "prediction"
+target_notional = 50000000
+capacity_notional_col = "turnover_diff_10t"
+capacity_volume_col = ""
+capacity_price_col = "ask_price_1"
+max_participation_rate = 0.20
+max_symbol_weight = 0.01
+min_trade_notional = 0
+max_names = 0
+ask_depth_levels = 0
+ask_depth_participation_rate = 0.25
+allow_decision_depth_fallback = false
+industry_col = ""
+max_industry_weight = 0
+
+[execution]
+capacity_total_notional = 1000000000
+fee_bps = 8
+max_daily_symbol_weight = 0.005
+max_daily_symbol_participation_rate = 0.10
+daily_capacity_method = "max"
+execution_fill_rate = 1.0
+min_child_notional = 10000
+max_symbol_decision_count = 0
+round_lot_shares = 100
+price_col = "capacity_price"
+status_col = "status"
+tradable_statuses = ["T0", "TRADE"]
+spread_bps_col = "spread_bps"
+max_spread_bps = 50
+limit_up_room_bps_col = "ask1_to_limit_up_bps"
+min_limit_up_room_bps = 0
+ask_depth_notional_col = "ask_depth_notional"
+max_ask_depth_participation_rate = 0.25
+industry_col = "industry"
+max_daily_industry_weight = 0
+
+[tail]
+quantiles = [0.95, 0.99]
+bootstrap_samples = 5000
+bootstrap_seed = 20260722
+
+[output]
+local_dir = "output/artifacts/strategy_acceptance_clock6_v4_multiden_2022_2025_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/runs/analyses/strategy-acceptance/strategy_acceptance_clock6_v4_multiden_2022_2025_v1"
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-stratacc-clock6-multiden-v1"
+image_pull_secret = "highfort"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260722-strategy-acceptance-v1"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+env_secrets = ["xy-fit-ceph-credentials"]
+avoid_nodes = ["node7", "node8"]
+wait_for_paths = [
+  "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/month_2025-07/predictions.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1/opening_2025_next_close_labels_v1.parquet",
+]
+wait_for_path_timeout_seconds = 21600
+wait_for_path_interval_seconds = 120
+
+[k8s.resources]
+cpu_request = "16"
+cpu_limit = "32"
+memory_request = "256Gi"
+memory_limit = "512Gi"
