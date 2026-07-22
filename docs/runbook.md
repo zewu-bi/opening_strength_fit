@@ -384,9 +384,66 @@ osf-plot-optimization-direction-comparison \
   --realized-fee-bps 8
 ```
 
-累和图下方面板必须显式选择参考口径：`market` 是全 A 股市场平均，`pool_l` 是
-`cumsum((selected_next_mean_bps - pool_next_mean_bps) × daily_capital_fraction)`。后者沿用
-pool-internal 的 raw excess 定义，手续费只进入上方面板的净收益曲线；trace 会记录所选模式、列名和定义。
+### 固定四图验收
+
+每个进入信号阶段正式比较的 candidate 必须保留下面四张图；四图使用同一 OOS 月份、同一
+next-close label lineage 和 `pool_L`，不能用 Top100-only 探索图替代 Top1000 图。
+
+| # | 固定产物 | 验收内容 | 生成入口 |
+| --- | --- | --- | --- |
+| 1 | `optimization_directions_overlay_acceptance.svg` | universe short Rank IC + `pool_L` Top100 next internal excess | `osf-plot-optimization-direction-comparison`；实现位于 `src/opening_strength_fit/optimization_acceptance_workflow.py` |
+| 2 | `optimization_directions_net_alpha_cumulative.svg` | Top100 8 bps 累计净收益及相对 `pool_L` 的累计净收益差 | 同一 `osf-plot-optimization-direction-comparison` 调用 |
+| 3 | `top1000_bucket_returns.svg` | Top1000 的 10/20/50 个平滑 score bucket 收益形状 | `experiments/scripts/run_top1000_rank_bucket_diagnostics.py` 默认模式 |
+| 4 | `top1000_score_bucket_return_100bps_counts.svg` | Top1000 每100名一组的完整收益区间分布，用于识别中部重叠和左右尾差异 | `experiments/scripts/plot_top1000_score_bucket_return_histogram.py` |
+
+先完成 pool-internal analysis 和 compact artifact sync，再生成前两张比较图。Top1000 两张图的数据
+量更大，通常在集群读取 prediction/label 后只同步 compact CSV、SVG、PNG 和 trace。第三张图的标准
+数据与图由下面的默认模式生成：
+
+```bash
+python experiments/scripts/run_top1000_rank_bucket_diagnostics.py \
+  --prediction-root <prediction_root> \
+  --next-label-root <next_close_label_root> \
+  --pool-path lml.bzw@ssd/data/pool_L.parquet \
+  --output-dir <rank_bucket_output> \
+  --variant <candidate_label> \
+  --run-id <candidate_run_id>
+```
+
+第四张图先按固定的十个100名桶和100 bps收益档生成计数：
+
+```bash
+python experiments/scripts/run_top1000_rank_bucket_diagnostics.py \
+  --prediction-root <prediction_root> \
+  --next-label-root <next_close_label_root> \
+  --pool-path lml.bzw@ssd/data/pool_L.parquet \
+  --output-dir <return_histogram_output> \
+  --variant <candidate_label> \
+  --run-id <candidate_run_id> \
+  --top1000-bucket-return-histogram-only \
+  --histogram-bin-width-bps 100
+```
+
+同步 `top1000_score_bucket_return_100bps_counts.csv` 后，使用固定画图脚本复画：
+
+```bash
+python experiments/scripts/plot_top1000_score_bucket_return_histogram.py \
+  --histogram-csv <return_histogram_output>/top1000_score_bucket_return_100bps_counts.csv \
+  --output-dir <return_histogram_output> \
+  --variant <candidate_label>
+```
+
+第四张图的正式显示契约固定为单 panel、`x=[-3000, 3000] bps`、对数
+`y=[10^2, 3×10^5]`、十条 Rank 1–100 至 Rank 901–1000 曲线。探索性改 bin 或坐标范围时必须换
+产物名，不覆盖正式验收图。完成条件是四张 SVG、各自 plot-data/summary CSV 和 trace 均存在，并确认
+candidate/incumbent 的月份、pool、label 和费用口径一致。当前可执行 Job 示例是
+`experiments/jobs/top1000_rank_bucket_diag_auction_multiden_2022_2025_v1_job.yaml` 和
+`experiments/jobs/top1000_score_bucket_return_histogram_auction_multiden_2022_2025_v1_job.yaml`。
+
+累和图下方面板必须显式选择参考口径：`market` 是全 A 股市场平均，`pool_l` 是每条模型的
+累计净收益减去同一数据口径下 `pool_L` 的累计净收益。模型与 `pool_L` 各自的手续费都计入；
+trace 会记录所选模式、列名和定义。上方面板固定绘制 market、`pool_L` 和模型；
+`pool_l` 模式的下方面板不画 `pool_L=0` 的橙色零信息线，`market` 模式则保留 pool 相对 market 的线。
 
 主图只解释两件事：universe short Rank IC 与 `pool_L` next internal excess。累计图默认 Top100；
 容量模式必须读 capacity acceptance daily summary，不能复用 Top100 等权收益。

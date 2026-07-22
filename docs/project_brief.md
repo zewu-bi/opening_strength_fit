@@ -73,6 +73,11 @@ control 与 350-feature 多分母版本均已完成，`pool_L` next excess 分�
 3. universe short Rank IC 作为辅助解释，不作为 pool overlay 的否决项；
 4. capacity、exposure 和 Top100 曲线作为诊断，不单独决定晋级。
 
+正式信号验收证据包固定为四张图：short IC + next excess、Top100 8 bps 累和、Top1000 平滑分桶、
+Top1000 每100名的100 bps收益区间分布。最后一张固定为单 panel、`x=±3000 bps`、对数
+`y=10^2~3×10^5`；它与平滑分桶图共同区分“整体排序改善”和“少数右尾大赢家增多”。完整命令、
+产物名和脚本位置见 [runbook.md](runbook.md#固定四图验收)。
+
 策略阶段的主 gate 前移为：
 
 1. 每分钟因果入场、持仓和退出；

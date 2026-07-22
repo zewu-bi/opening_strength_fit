@@ -151,8 +151,8 @@ def build_parser() -> argparse.ArgumentParser:
         choices=CUMULATIVE_RELATIVE_MODES,
         default=CUMULATIVE_RELATIVE_MODE_MARKET,
         help=(
-            "Lower cumulative panel: net alpha versus the full-market average, or raw "
-            "selected-minus-pool_L internal excess."
+            "Lower cumulative panel: net alpha versus the full-market average, or model "
+            "cumulative net return minus pool_L cumulative net return."
         ),
     )
     parser.add_argument(

@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-top100-hist-auction-multiden-v1
+  namespace: bizewu
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      volumes:
+        - name: opening-strength-output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+        - name: analysis-script
+          configMap:
+            name: os-top1000-rank-bucket-script-v1
+      containers:
+        - name: opening-strength-fit
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260721-clock6-multiden-v1
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: opening-strength-clickhouse
+            - secretRef:
+                name: xy-fit-ceph-credentials
+          workingDir: /app/opening_strength_fit
+          command:
+            - python
+            - /opt/analysis/run_top1000_rank_bucket_diagnostics.py
+            - --prediction-root
+            - /mnt/output/opening_strength_fit/nn
+            - --next-label-root
+            - /mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1
+            - --pool-path
+            - lml.bzw@ssd/data/pool_L.parquet
+            - --output-dir
+            - /mnt/output/opening_strength_fit/runs/analyses/rank-bucket/top100_positive_return_histogram_auction_multiden_2022_2025_v1
+            - --variant
+            - auction_multiden
+            - --run-id
+            - nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1
+            - --top100-positive-histogram-only
+          volumeMounts:
+            - name: opening-strength-output
+              mountPath: /mnt/output
+            - name: analysis-script
+              mountPath: /opt/analysis
+              readOnly: true
+          resources:
+            requests:
+              cpu: "8"
+              memory: 128Gi
+            limits:
+              cpu: "16"
+              memory: 256Gi

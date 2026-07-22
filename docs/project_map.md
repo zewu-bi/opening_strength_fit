@@ -13,6 +13,7 @@ opening_strength_fit/
 ├── experiments/
 │   ├── runs/                   人工维护的 TOML 实验定义
 │   ├── jobs/                   由 config 渲染的 K8s manifest
+│   ├── scripts/                大样本研究诊断与固定验收复画脚本
 │   ├── config_templates/       可复用配置片段
 │   └── results/                ignored compact result mirror
 ├── docs/                       当前维护文档
@@ -130,6 +131,8 @@ PVC projection 与加载；
 | `realistic_acceptance.py` | selected-order execution replay；不负责生成候选/refill |
 | `exposure_audit.py` | TopN/给定组合相对候选池的暴露与集中度 |
 | `optimization_direction_*` | 固定 acceptance data、plot 和 workflow |
+| `experiments/scripts/run_top1000_rank_bucket_diagnostics.py` | Top1000 IC、平滑分桶和100 bps收益区间计数 |
+| `experiments/scripts/plot_top1000_score_bucket_return_histogram.py` | 从 compact CSV 复画固定坐标的Top1000十曲线收益分布验收图 |
 | `evaluation.py` / `reports.py` | score bucket、TopN 与标准汇总 |
 | `rolling.py` | 时间切分原语 |
 

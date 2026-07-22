@@ -54,6 +54,7 @@ AUTO_COLOR_SEQUENCE = (
 CUMULATIVE_PERCENT_DISPLAY_COLUMNS = {
     "next_cumulative_net_return_bps": "next_cumulative_net_return_pct",
     "next_cumulative_vs_baseline_bps": "next_cumulative_vs_baseline_pct",
+    "next_cumulative_alpha_bps": "next_cumulative_alpha_pct",
     "next_cumulative_alpha_vs_market_bps": "next_cumulative_alpha_vs_market_pct",
     "next_cumulative_internal_excess_return_bps": ("next_cumulative_internal_excess_return_pct"),
 }
@@ -103,6 +104,23 @@ def validate_plot_directions(directions: tuple[DirectionSpec, ...]) -> tuple[Dir
     if reserved_direction_keys:
         raise ValueError(f"direction keys are reserved: {reserved_direction_keys}")
     return directions
+
+
+def cumulative_plot_series(
+    model_series: tuple[str, ...],
+    *,
+    relative_mode: str,
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Return the fixed top-panel series and mode-specific lower-panel series."""
+
+    top_series = ("market", "background", *model_series)
+    if relative_mode == CUMULATIVE_RELATIVE_MODE_POOL_L:
+        return top_series, model_series
+    if relative_mode == CUMULATIVE_RELATIVE_MODE_MARKET:
+        return top_series, ("background", *model_series)
+    raise ValueError(
+        f"unknown cumulative relative mode {relative_mode!r}; expected {CUMULATIVE_RELATIVE_MODES}"
+    )
 
 
 def combine_overlay_acceptance_data(

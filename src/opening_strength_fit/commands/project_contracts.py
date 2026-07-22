@@ -26,6 +26,7 @@ K8S_JOB_ENTRYPOINTS = (
     "osf-run-learned-risk-layer",
     "osf-run-score-risk-sweep",
     "osf-train",
+    "run_top1000_rank_bucket_diagnostics.py",
 )
 REQUIRED_DIRS = (
     "src/opening_strength_fit",

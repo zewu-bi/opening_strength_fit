@@ -95,6 +95,7 @@
 | 07-21 | ordinary 328 mech v3 cap-cache closeout | 同一 328 特征与 grouped-gated-v2 结构，用 strict ratio-style v3 替代 v2 robust-zscore；使用 T-1 cap/share cache | 8 个半年 shard 已完成，pool analysis 保留 `44,033,943/44,033,943` 行；`pool_L` short/next excess `11.1004/16.3318 bps`，next 正月 `38/48`，universe short Rank IC `0.151300` | 之前的 `histavg_activity`/`running` 记录已被 `mech328_v3_capcache_896` 完成产物 supersede；信号层强于 mech328 v2，略低于 auction-pruned；cache v4 应对两者分别重跑 |
 | 07-21 | auction-pruned multi-denominator submission | 完整审查 v4 cache 的 211 个原始/上下文列；在 325-feature control 上只追加金额、成交量和聚合深度的简单比例，保持模型/target/window 不变 | 排除价格、收益、imbalance、count 和逐档队列；排除已被 pruned 的同分钟历史 ratios；排除与现有 `postopen_*_rel_*m` 一一等价的“当前流量/当日累计量”。最终新增 25 列，总计 350；真实 2019-01-02 v4 数据和新镜像验证通过；`286 passed, 3 skipped`，contracts OK | 提交 `os-nn-clock6-auction-multiden-v1`；control 并行度 6→4，新任务目标并行度 4，等待同一 2022 mixed target |
 | 07-22 | fixed-clock v4 auction-pruned closeout | 完成 control 与只加 25 个比例的 multi-denominator 两组 8-shard 训练、pool-internal、artifact sync 和三线验收 | control/multi-den `pool_L` next `16.8024/17.1714 bps`，Top100 fee8 累和 `9713.0/9891.7 bps`；多分母相对 control 月/季度胜 `25/48`、`8/16`，next 正月 `37/48 vs 38/48` | 两组均归档；保留简单 control 作 canonical downstream challenger，多分母不单独晋级；mech328 v2 incumbent 不变 |
+| 07-22 | fixed four-figure acceptance | 将 short IC + next excess、Top100累和、Top1000平滑分桶、Top1000十组收益分布固化为同一证据包 | 收益分布图固定100 bps档、`x=±3000 bps`、对数`y=10^2~3×10^5`，并提供compact CSV复画脚本 | 后续正式candidate必须保留四图、plot data和trace；探索图不得覆盖标准产物 |
 
 ## 当前决策记录
 
@@ -178,11 +179,11 @@ reference 为 2018-12-28；两组 auction-pruned 训练随后各完成 8 个半�
 两组 pool-internal analysis 都保留 `47,333,122/47,333,122` 行，覆盖 9,690 个 decision groups、
 48 个月和 10 个 clocks。与 incumbent 的主 summary 如下：
 
-| run | universe short Rank IC | `pool_L` short Rank IC | `pool_L` next Rank IC | short excess bps | next excess bps | next 正月 | Top100 fee8 net cumulative bps | raw cumulative excess vs `pool_L` bps |
+| run | universe short Rank IC | `pool_L` short Rank IC | `pool_L` next Rank IC | short excess bps | next excess bps | next 正月 | Top100 fee8 net cumulative bps | fee8 net cumulative excess vs `pool_L` bps |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| mech328 v2 | 0.154160 | 0.142022 | **0.008054** | 10.4377 | 14.3174 | **39/48** | 8508.0 | 6936.8 |
-| clock6 v4 control, 325 features | 0.156070 | 0.141574 | 0.006411 | 11.2267 | 16.8024 | 38/48 | 9713.0 | 8140.8 |
-| clock6 v4 multi-den, 350 features | **0.156418** | **0.142410** | 0.007140 | **11.3773** | **17.1714** | 37/48 | **9891.7** | **8319.5** |
+| mech328 v2 | 0.154160 | 0.142022 | **0.008054** | 10.4377 | 14.3174 | **39/48** | 8508.0 | 3445.8 |
+| clock6 v4 control, 325 features | 0.156070 | 0.141574 | 0.006411 | 11.2267 | 16.8024 | 38/48 | 9713.0 | 4649.8 |
+| clock6 v4 multi-den, 350 features | **0.156418** | **0.142410** | 0.007140 | **11.3773** | **17.1714** | 37/48 | **9891.7** | **4828.6** |
 
 半年 `pool_L` next excess 全部为正：
 
@@ -197,9 +198,9 @@ reference 为 2018-12-28；两组 auction-pruned 训练随后各完成 8 个半�
 `5/8`，增量主要体现在均值和正尾，不能视为稳定晋级。旧-cache auction-fresh 的 next excess / fee8
 累和为 `16.9692/9893.9 bps`：v4 control 基本复现而没有明显掉档，多分母的累和也几乎相同。
 
-两张验收图只比较 mech328 v2、v4 control 和 v4 multi-den。累和图上方面板为 8 bps 净收益，
-下方面板显式使用 `pool_l` 模式，即 raw pool-internal excess 在 1/2 日资金占用下的累和，手续费不重复
-进入下方面板：
+两张验收图只比较 gated、dimensionless 和 multi denominator。累和图上方面板为 8 bps 净收益，
+下方面板显式使用 `pool_l` 模式，即模型累计净收益减同口径 `pool_L` 累计净收益；两边都包含各自手续费。
+上方面板保留 market 和 `pool_L` 背景线，下方面板不绘制 `pool_L=0` 的橙色零信息线：
 
 ```text
 experiments/results/backtests/optimization_overlay_acceptance_clock6_v4_control_multiden_vs_mech328_v2_2022_2025/optimization_directions_overlay_acceptance.svg

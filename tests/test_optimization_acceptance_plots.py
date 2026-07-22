@@ -22,6 +22,7 @@ from opening_strength_fit.optimization_acceptance_plots import (
     apply_display_labels,
     capacity_label,
     combine_net_alpha_cumulative_data,
+    cumulative_plot_series,
     default_plot_directions,
     ensure_plot_colors,
     validate_plot_directions,
@@ -90,6 +91,19 @@ def test_validate_plot_directions_rejects_bad_counts_and_reserved_keys() -> None
 
     with pytest.raises(ValueError, match="reserved"):
         validate_plot_directions((_direction("market"), _direction("b")))
+
+
+def test_cumulative_plot_series_keeps_pool_on_top_and_only_when_informative_below() -> None:
+    models = ("baseline_pool_l", "dimensionless", "multi_denominator")
+
+    pool_top, pool_relative = cumulative_plot_series(models, relative_mode="pool_l")
+    market_top, market_relative = cumulative_plot_series(models, relative_mode="market")
+
+    expected_top = ("market", "background", *models)
+    assert pool_top == expected_top
+    assert market_top == expected_top
+    assert pool_relative == models
+    assert market_relative == ("background", *models)
 
 
 def test_ensure_plot_colors_assigns_comparison_models_by_order() -> None:
@@ -383,8 +397,9 @@ def test_cumulative_percent_display_columns_preserve_source_bps() -> None:
         {
             "next_cumulative_net_return_bps": [1234.0, -50.0],
             "next_cumulative_vs_baseline_bps": [321.0, -25.0],
+            "next_cumulative_alpha_bps": [222.0, -20.0],
             "next_cumulative_alpha_vs_market_bps": [111.0, -10.0],
-            "next_cumulative_internal_excess_return_bps": [222.0, -20.0],
+            "next_cumulative_internal_excess_return_bps": [444.0, -40.0],
         }
     )
 
@@ -394,8 +409,32 @@ def test_cumulative_percent_display_columns_preserve_source_bps() -> None:
     assert out["next_cumulative_vs_baseline_bps"].tolist() == pytest.approx([321.0, -25.0])
     assert out["next_cumulative_net_return_pct"].tolist() == pytest.approx([12.34, -0.5])
     assert out["next_cumulative_vs_baseline_pct"].tolist() == pytest.approx([3.21, -0.25])
+    assert out["next_cumulative_alpha_pct"].tolist() == pytest.approx([2.22, -0.2])
     assert out["next_cumulative_alpha_vs_market_pct"].tolist() == pytest.approx([1.11, -0.1])
-    assert out["next_cumulative_internal_excess_return_pct"].tolist() == pytest.approx([2.22, -0.2])
+    assert out["next_cumulative_internal_excess_return_pct"].tolist() == pytest.approx([4.44, -0.4])
+
+
+def test_pool_relative_net_cumulative_is_distinct_from_raw_internal_excess() -> None:
+    data = pd.DataFrame(
+        {
+            "pool": ["model"],
+            "pool_label": ["model"],
+            "week_start": ["2024-01-02"],
+            "variant": ["model"],
+            "pool_next_net_return_bps": [20.0],
+            "pool_next_capital_net_return_bps": [10.0],
+            "pool_next_cumulative_net_return_bps": [30.0],
+            "next_net_return_bps": [60.0],
+            "next_capital_net_return_bps": [30.0],
+            "next_cumulative_net_return_bps": [100.0],
+            "next_cumulative_internal_excess_return_bps": [140.0],
+        }
+    )
+
+    out = combine_net_alpha_cumulative_data(data)
+
+    assert out["next_cumulative_alpha_bps"].tolist() == pytest.approx([70.0])
+    assert out["next_cumulative_internal_excess_return_bps"].tolist() == pytest.approx([140.0])
 
 
 def test_realized_cumulative_can_use_stock_pool_membership_fee(tmp_path: Path) -> None:
