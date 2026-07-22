@@ -151,7 +151,26 @@ experiments/runs/strategy_acceptance_clock6_v4_control_2022_2025_v1.toml
 experiments/runs/strategy_acceptance_clock6_v4_multiden_2022_2025_v1.toml
 ```
 
-## 8. 常见故障
+## 8. 全天分钟级因果 label/cache
+
+全天 V1 继续使用 `osf-build-labeled-cache`；当配置包含
+`[full_day_labels].enabled = true` 时，入口自动切换到按交易日分片的构建器。先运行一日 smoke，再启动年度
+任务：
+
+```bash
+osf-build-labeled-cache \
+  --config experiments/runs/build_full_day_clock6_temporal_smoke_20250102_v1.toml
+
+kubectl apply -f \
+  experiments/jobs/build_full_day_clock6_temporal_smoke_20250102_v1_job.yaml
+```
+
+逐日输出为 `date=YYYY-MM-DD/labels.parquet` 和 `summary.json`；两者都存在时自动断点复用。根目录的
+`full_day_label_cache_manifest.json` 必须满足 `causal_timestamp_violations = 0`，最终成功标志为
+`_SUCCESS`。字段口径、午休交易时钟和年度启动步骤见
+[全天分钟级因果 label/cache V1](full_day_temporal_labels_v1.md)。
+
+## 9. 常见故障
 
 | 症状 | 检查 |
 | --- | --- |

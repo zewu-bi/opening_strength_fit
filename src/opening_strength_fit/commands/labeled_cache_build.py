@@ -8,7 +8,7 @@ from opening_strength_fit.cache_manifest import (
     validate_cache_manifest,
     write_cache_manifest,
 )
-from opening_strength_fit.config import config_str, config_value, load_toml, run_id
+from opening_strength_fit.config import config_bool, config_str, config_value, load_toml, run_id
 from opening_strength_fit.io import read_frame, write_json
 from opening_strength_fit.reports import dataset_summary, print_mapping
 from opening_strength_fit.training_args import build_training_parser
@@ -30,6 +30,12 @@ def main() -> None:
         or config_str(config, "output", "local_dir", f"output/legacy/analysis/{run_name}")
     )
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    if config_bool(config, "full_day_labels", "enabled", False):
+        from opening_strength_fit.commands.full_day_label_cache import run
+
+        run(args, config, run_name=run_name, output_dir=output_dir)
+        return
 
     cache_path = resolve_cache_path(config)
     if cache_path is None:
