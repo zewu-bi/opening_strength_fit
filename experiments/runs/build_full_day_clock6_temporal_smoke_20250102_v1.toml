@@ -2,7 +2,7 @@
 id = "build_full_day_clock6_temporal_smoke_20250102_v1"
 kind = "labeled_cache"
 description = "One-session smoke for causal minute decisions across both A-share sessions with clock+6s entry and 5m/30m/close/next-close labels."
-status = "queued"
+status = "completed"
 
 [data]
 source = "clickhouse"

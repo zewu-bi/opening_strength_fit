@@ -170,7 +170,7 @@ experiments/runs/strategy_acceptance_clock6_v4_control_2022_2025_v1.toml  # comp
 osf-build-labeled-cache \
   --config experiments/runs/build_full_day_clock6_temporal_smoke_20250102_v1.toml
 
-kubectl apply -f \
+hfcli kubectl --cluster research --namespace bizewu apply -f \
   experiments/jobs/build_full_day_clock6_temporal_smoke_20250102_v1_job.yaml
 ```
 
@@ -178,6 +178,10 @@ kubectl apply -f \
 `full_day_label_cache_manifest.json` 必须满足 `causal_timestamp_violations = 0`，最终成功标志为
 `_SUCCESS`。字段口径、午休交易时钟和年度启动步骤见
 [全天分钟级因果 label/cache V1](full_day_temporal_labels_v1.md)。
+
+2025-01-02 smoke 已完成：`21,307,238` 条输入 tick 生成 `1,126,662 × 212` 的 522MiB parquet，
+238 个决策分钟齐全，`5,292,366` 次因果时间戳比较为零违规，耗时约 22 分钟、峰值 RSS 约 76GB。
+按该实测，年度任务必须先按月或交易日分片并行；不要直接提交现有年度单体 Job。
 
 ## 9. 常见故障
 

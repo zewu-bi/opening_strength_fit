@@ -32,6 +32,7 @@ run config、Job manifest、代码 revision、compact evidence 与本日志共�
 | 2026-07-21 | `nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1` | 在 v4 auction-pruned control 上仅新增经去重审查的多分母无量纲特征 | `completed`; 8/8 shards、47,333,122 行预测、pool analysis、四图与 compact evidence 完成 | next `17.1714 bps`；当前 canonical v4 challenger，分期胜率不足仍作为边界记录 |
 | 2026-07-22 | `strategy_acceptance_clock6_v4_control_2022_2025_v1` | 在同一完整候选集上统一比较 capacity-only、realistic no-refill 与因果可见 refill，并复核 overlap/tail | `completed`; 9,690 groups、969 日，compact artifacts/trace 已同步 | refill fill/net `99.9969%/8431.1 bps`，较 no-refill `+1247.5 bps`；但 P95 winsor `-9.33 bps`、overlap/bootstrap 恶化，策略不晋级 |
 | 2026-07-22 | `strategy_acceptance_clock6_v4_multiden_2022_2025_v1` | 用同一工具验收 canonical multiden | `completed`; 9,690 groups、969 日，compact artifacts/trace 已同步 | refill net 比 control 高 `167.6 bps`；P95 gate 仍未通过，策略不晋级 |
+| 2026-07-22 | `build_full_day_clock6_temporal_smoke_20250102_v1` | 将 fixed-clock +6s 口径扩展为全天 238 个因果分钟及 5m/30m/close/next-close labels | `completed`; 1,126,662 行、212 列、522MiB，`_SUCCESS` 与 manifest 已写入 PVC | 5,292,366 次时间戳比较零违规；单日 22 分钟/峰值约 76GB，年度回填必须先分片 |
 
 ## 决策时间线
 
@@ -100,6 +101,7 @@ run config、Job manifest、代码 revision、compact evidence 与本日志共�
 | 07-22 | unified strategy acceptance toolkit | 复用 capacity/realistic 实现，将 visible pre-trade refill、同日 overlap、P95/P99、top contribution、月块 bootstrap 与 leave-one-out 打包成单一 CLI/run kind | `295 passed, 3 skipped`、contracts OK；镜像 source revision `e8902e8`；control/multiden 两个 Job 与 `_SUCCESS` 完成 | 小项目不再独立维护；每个策略候选固定运行同一工具，refill 不能只凭 fill 晋级 |
 | 07-22 | fixed-clock v4 unified downstream acceptance | 1bn capital、10×50m target/day、`turnover_diff_10t` 20%、单 decision symbol 1%、daily symbol 0.5%、ask depth 25%、spread≤50bps、fee8、min child10k、lot100 | control capacity/no-refill/refill net `8989.8/7183.6/8431.1 bps`；refill P95 winsor/trim `-9.33/-56.96 bps`，bootstrap P05 `209.2 bps`，top5 days 后仍 `10.38 bps` net | refill 有经济贡献但 tail/overlap gate 未过；不晋级当前策略，下一主线切到全天因果 label 与完整持仓/现金/退出账本 |
 | 07-22 | canonical multiden switch + tracked four-figure bundle | 用 multiden 替换 control 作为唯一 continuation candidate；control 只保留为 A/B baseline | 四张 SVG、compact CSV、三份 trace 与 SHA-256 manifest 进入 tracked evidence；完整统计差异不改写 | multiden 成为 canonical challenger；选择不等同于稳定 A/B 晋级，opening policy 仍未通过策略 gate |
+| 07-22 | full-day causal label/cache smoke | `09:31-11:29`、`13:01-14:59` 每分钟取目标后 5s 内首条状态，按实际状态 +6s 入场；5m/30m 按交易秒跨午休 | 21,307,238 tick 生成 1,126,662 行；5m/30m valid `94.66%/83.92%`；11:29 的 5m target 为 13:04:06-13:04:11；5,292,366 次因果比较零违规 | 单日口径通过；实测 22 分钟、522MiB、峰值约 76GB，年度单体 Job 不提交，先改月度/日度 indexed shards |
 
 ## 当前决策记录
 

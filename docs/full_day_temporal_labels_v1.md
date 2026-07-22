@@ -58,14 +58,14 @@ osf-render-k8s-job \
   --config experiments/runs/build_full_day_clock6_temporal_smoke_20250102_v1.toml \
   --image "$IMAGE"
 
-kubectl apply -f \
+hfcli kubectl --cluster research --namespace bizewu apply -f \
   experiments/jobs/build_full_day_clock6_temporal_smoke_20250102_v1_job.yaml
 ```
 
-smoke 通过后再提交年度配置：
+smoke 通过后，年度配置必须先按月或按日分片；不要直接运行当前单体年度 Job：
 
 ```bash
-kubectl apply -f experiments/jobs/build_full_day_clock6_temporal_2025_v1_job.yaml
+experiments/runs/build_full_day_clock6_temporal_2025_v1.toml
 ```
 
 验收时至少检查：Job 为 `Complete`、cache root 有 `_SUCCESS`、manifest 因果违规为 `0`、238 个目标分钟
@@ -78,4 +78,35 @@ kubectl apply -f experiments/jobs/build_full_day_clock6_temporal_2025_v1_job.yam
 - 镜像：`registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260722-full-day-label-v1`；
 - digest：`sha256:1b2be789f5e17fe5f725a6389d4d30866f01793bd67384660dbb8d4ea5bb3bb1`；
 - 本地验证：v4 回归、午休、收盘、PIT、分片续跑测试通过；全套 `303 passed, 3 skipped`，contracts/audit OK；
-- 集群状态：smoke 与 2025 年度配置为 `queued`，必须先完成一日 smoke gate，不能直接启动年度构建。
+- 集群状态：2025-01-02 smoke `Complete`；2025 年度配置保留为 `queued`，等待分片后再启动。
+
+## 2025-01-02 集群 smoke 结果
+
+Job `os-full-day-label-smoke-v1` 于 2026-07-22 完成，约耗时 22 分钟，进程观测峰值 RSS 约 76GB。
+ClickHouse 输入为 `21,307,238` 行，交易所时间戳无重复；PVC 产物为：
+
+```text
+/mnt/output/opening_strength_fit/cache/full_day_clock6_temporal_v1/smoke_2025-01-02/
+  date=2025-01-02/labels.parquet       # 546,949,645 bytes
+  date=2025-01-02/summary.json
+  full_day_label_cache_manifest.json
+  _SUCCESS
+```
+
+| 检查 | 结果 |
+| --- | ---: |
+| 标签行 / 列 | `1,126,662 / 212` |
+| 股票 / 决策分钟 | `5,105 / 238` |
+| 5m valid | `1,066,551`（`94.66%`） |
+| 30m valid | `945,534`（`83.92%`） |
+| close / next-close valid | 各 `1,102,187`（`97.83%`） |
+| 因果时间戳比较 / 违规 | `5,292,366 / 0` |
+| 决策延迟 P95 / P99 / max | `3s / 5s / 5s` |
+| entry state age P95 / P99 / max | `6s / 6s / 6s` |
+
+`11:29` 决策的 5m target 实际覆盖 `13:04:06-13:04:11`，说明午休交易时钟生效。尾盘 5m/30m
+validity 在退出 VWAP 窗口进入 `14:57-15:00` 收盘集合竞价后降为零，close 标签仍可用；`14:59`
+decision 因连续竞价 status gate 失效，符合当前策略语义。
+
+该 smoke 证明口径、因果性和单日资源可行，但也表明单体年度 Job 约需 3-4 天且单年数据约 120-130GiB。
+下一步应将年度构建改为月度或交易日 indexed shards，再并行回填，不能把年度单体配置直接提交。
