@@ -71,3 +71,11 @@ kubectl apply -f experiments/jobs/build_full_day_clock6_temporal_2025_v1_job.yam
 验收时至少检查：Job 为 `Complete`、cache root 有 `_SUCCESS`、manifest 因果违规为 `0`、238 个目标分钟
 覆盖早盘/午休两侧/尾盘，以及各 horizon 的 valid rows 随收盘临近按预期下降。该 cache 通过后才进入
 全天模型与完整持仓/现金/退出账本阶段。
+
+## 当前实现状态
+
+- 代码 revision：`1e582ce`，成功标志安全修复：`18d109d`；
+- 镜像：`registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260722-full-day-label-v1`；
+- digest：`sha256:1b2be789f5e17fe5f725a6389d4d30866f01793bd67384660dbb8d4ea5bb3bb1`；
+- 本地验证：v4 回归、午休、收盘、PIT、分片续跑测试通过；全套 `303 passed, 3 skipped`，contracts/audit OK；
+- 集群状态：smoke 与 2025 年度配置为 `queued`，必须先完成一日 smoke gate，不能直接启动年度构建。
