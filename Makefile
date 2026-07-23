@@ -1,4 +1,4 @@
-.PHONY: install-dev install-cluster smoke test test-cov lint format contracts ci
+.PHONY: install-dev install-cluster smoke evidence-four-figures test test-cov lint format contracts ci
 
 PYTHON ?= .venv/bin/python
 
@@ -12,6 +12,9 @@ smoke:
 	$(PYTHON) -m opening_strength_fit.commands.experiment_run \
 		--config examples/smoke/ridge.toml \
 		--output-dir output/smoke
+
+evidence-four-figures:
+	$(PYTHON) experiments/scripts/build_four_figure_evidence.py
 
 test:
 	$(PYTHON) -m pytest -q

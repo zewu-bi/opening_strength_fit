@@ -683,6 +683,56 @@ def plot_score_bucket_histograms(
     output_dir: Path,
     variant: str,
 ) -> None:
+    _plot_score_bucket_histograms(
+        histogram,
+        bin_width_bps=bin_width_bps,
+        output_dir=output_dir,
+        variant=variant,
+        output_stem=f"top1000_score_bucket_return_{bin_width_bps}bps_counts",
+        title_suffix="",
+        x_limits=(
+            -TOP1000_RETURN_HISTOGRAM_X_LIMIT_BPS,
+            TOP1000_RETURN_HISTOGRAM_X_LIMIT_BPS,
+        ),
+        y_limits=TOP1000_RETURN_HISTOGRAM_Y_LIMITS,
+    )
+
+
+def plot_score_bucket_histograms_full_scale(
+    histogram: pd.DataFrame,
+    *,
+    bin_width_bps: int,
+    output_dir: Path,
+    variant: str,
+) -> None:
+    nonzero = histogram.loc[histogram["observations"].gt(0)]
+    if nonzero.empty:
+        raise ValueError("histogram must contain at least one non-zero observation")
+    x_extent = float(nonzero["midpoint_bps"].abs().max()) + float(bin_width_bps) / 2.0
+    y_max = float(nonzero["observations"].max())
+    _plot_score_bucket_histograms(
+        histogram,
+        bin_width_bps=bin_width_bps,
+        output_dir=output_dir,
+        variant=variant,
+        output_stem=(f"top1000_score_bucket_return_{bin_width_bps}bps_counts_full_scale"),
+        title_suffix=", full scale",
+        x_limits=(-x_extent, x_extent),
+        y_limits=(0.8, y_max * 1.25),
+    )
+
+
+def _plot_score_bucket_histograms(
+    histogram: pd.DataFrame,
+    *,
+    bin_width_bps: int,
+    output_dir: Path,
+    variant: str,
+    output_stem: str,
+    title_suffix: str,
+    x_limits: tuple[float, float],
+    y_limits: tuple[float, float],
+) -> None:
     required_columns = {"score_bucket", "midpoint_bps", "observations"}
     missing_columns = required_columns.difference(histogram.columns)
     if missing_columns:
@@ -714,13 +764,10 @@ def plot_score_bucket_histograms(
         )
     ax.axvline(0.0, color="black", linewidth=1, alpha=0.65)
     ax.set_yscale("log")
-    ax.set_xlim(
-        -TOP1000_RETURN_HISTOGRAM_X_LIMIT_BPS,
-        TOP1000_RETURN_HISTOGRAM_X_LIMIT_BPS,
-    )
-    ax.set_ylim(*TOP1000_RETURN_HISTOGRAM_Y_LIMITS)
+    ax.set_xlim(*x_limits)
+    ax.set_ylim(*y_limits)
     ax.set_title(
-        f"{variant} Top1000 return distributions ({bin_width_bps} bps intervals)",
+        (f"{variant} Top1000 return distributions ({bin_width_bps} bps intervals{title_suffix})"),
         loc="left",
         fontweight="bold",
     )
@@ -731,7 +778,7 @@ def plot_score_bucket_histograms(
     fig.tight_layout()
     for extension in ("svg", "png"):
         fig.savefig(
-            output_dir / f"top1000_score_bucket_return_{bin_width_bps}bps_counts.{extension}",
+            output_dir / f"{output_stem}.{extension}",
             dpi=140,
         )
     plt.close(fig)
@@ -830,6 +877,12 @@ def run_top1000_bucket_return_histogram(
     ms.write_frame(output_dir / "top1000_score_bucket_distribution_summary.csv", summary)
     ms.write_frame(output_dir / "top1000_abs_4000bps_observations.csv", extremes)
     plot_score_bucket_histograms(
+        histogram,
+        bin_width_bps=bin_width_bps,
+        output_dir=output_dir,
+        variant=variant,
+    )
+    plot_score_bucket_histograms_full_scale(
         histogram,
         bin_width_bps=bin_width_bps,
         output_dir=output_dir,
