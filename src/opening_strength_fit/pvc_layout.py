@@ -9,8 +9,13 @@ PVC_LAYOUT_V2 = "v2"
 SUPPORTED_LAYOUTS = {LEGACY_LAYOUT, PVC_LAYOUT_V2}
 DEFAULT_MOUNT_PATH = "/mnt/output"
 PROJECT_DIRNAME = "opening_strength_fit"
-MODEL_RUN_KINDS = {"experiment", "exploration"}
-DATA_RUN_KINDS = {"cache_transform", "labeled_cache", "next_close_label_cache"}
+MODEL_RUN_KINDS = {"experiment", "exploration", "temporal_nn"}
+DATA_RUN_KINDS = {
+    "cache_transform",
+    "daily_return_label_cache",
+    "labeled_cache",
+    "next_close_label_cache",
+}
 MODEL_FAMILIES = {
     "clock_segment_lightgbm": "lightgbm",
     "gbm": "gbm",

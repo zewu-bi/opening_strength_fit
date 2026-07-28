@@ -1,0 +1,3 @@
+universe,days,mean_n,daily_rank_ic,top100_return_bps,base_return_bps,top100_excess_bps,positive_days,positive_months,median_daily_excess_bps,p05_daily_excess_bps,p95_daily_excess_bps,cap95_excess_bps,cap99_excess_bps
+all_a,969,4992.3,0.091529276,98.0582,4.4901,93.5681,850,48,83.5183,-38.2274,252.5275,35.1177,84.5695
+pool_l,969,3391.8,0.066973252,54.4089,11.9154,42.4935,760,47,37.4757,-41.9590,144.7119,18.2711,36.9290

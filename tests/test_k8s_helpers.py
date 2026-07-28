@@ -263,6 +263,11 @@ class K8sHelperTest(unittest.TestCase):
 
         self.assertEqual(training_command(config), "osf-build-next-close-labels")
 
+    def test_daily_return_label_cache_uses_cache_builder_script(self) -> None:
+        config = {"run": {"kind": "daily_return_label_cache"}}
+
+        self.assertEqual(training_command(config), "osf-build-daily-return-labels")
+
     def test_strategy_acceptance_uses_unified_audit_script(self) -> None:
         config = {"run": {"kind": "strategy_acceptance"}}
 

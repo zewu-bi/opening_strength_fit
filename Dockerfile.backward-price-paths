@@ -1,0 +1,11 @@
+FROM registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:8a16ba894e9b9a6496ad487313116770e3bd3ae5357bb1258d1a80da5974bc91
+
+COPY src/opening_strength_fit/backward_price_paths.py /app/opening_strength_fit/src/opening_strength_fit/backward_price_paths.py
+COPY src/opening_strength_fit/commands/backward_price_path_cache.py /app/opening_strength_fit/src/opening_strength_fit/commands/backward_price_path_cache.py
+COPY experiments/runs/build_full_day_backward_price_paths_2019_2025_v1.toml /app/opening_strength_fit/experiments/runs/build_full_day_backward_price_paths_2019_2025_v1.toml
+COPY experiments/runs/temporal_nn_36m_2022_2025_all_a_rank_backward_1m_tcn_mse_v1.toml /app/opening_strength_fit/experiments/runs/temporal_nn_36m_2022_2025_all_a_rank_backward_1m_tcn_mse_v1.toml
+
+ENV PYTHONPATH=/app/opening_strength_fit/src
+
+ARG SOURCE_REVISION=workspace-20260728
+LABEL org.opencontainers.image.revision="${SOURCE_REVISION}"

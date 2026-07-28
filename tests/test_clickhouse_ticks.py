@@ -9,11 +9,35 @@ import pandas as pd
 from opening_strength_fit.clickhouse_ticks import (
     deduplicate_tick_timestamps,
     normalize_clickhouse_ticks,
+    tick_day_window_sql,
 )
 from opening_strength_fit.labels import build_trade_labels
 
 
 class ClickHouseTicksTest(unittest.TestCase):
+    def test_tick_day_window_sql_can_project_label_only_columns(self) -> None:
+        sql = tick_day_window_sql(
+            columns=[
+                "TradingDay",
+                "Symbol",
+                "LocalTimeStamp",
+                "AskPrice1",
+                "Volume",
+                "Turnover",
+            ],
+            collapse_local_timestamp=True,
+        )
+
+        self.assertIn(
+            (
+                "select TradingDay, Symbol, "
+                "arrayMax(mapValues(LocalTimeStamp)) AS LocalTimeStamp, "
+                "AskPrice1, Volume, Turnover"
+            ),
+            sql,
+        )
+        self.assertNotIn("select *", sql)
+
     def test_normalize_clickhouse_ticks_serializes_numpy_scalars_in_objects(
         self,
     ) -> None:

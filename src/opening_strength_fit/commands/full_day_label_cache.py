@@ -30,7 +30,10 @@ from opening_strength_fit.config import (
     config_str,
     config_value,
 )
-from opening_strength_fit.full_day_labels import build_full_day_temporal_labels
+from opening_strength_fit.full_day_labels import (
+    build_full_day_narrow_labels,
+    build_full_day_temporal_labels,
+)
 from opening_strength_fit.horizon_clickhouse_labels import (
     DEFAULT_CLOSE_LOOKBACK_SECONDS,
     DEFAULT_CLOSE_OFFSET_US,
@@ -40,6 +43,7 @@ from opening_strength_fit.horizon_clickhouse_labels import (
 from opening_strength_fit.horizons import horizon_specs, label_column_name
 from opening_strength_fit.io import read_frame, write_frame_atomic, write_json
 from opening_strength_fit.reports import print_mapping
+from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns
 from opening_strength_fit.universe import (
     DEFAULT_A_SHARE_SYMBOL_REGEX,
     filter_symbol_universe,
@@ -51,6 +55,26 @@ FULL_DAY_END_OFFSET_US = 54_000_000_000
 DEFAULT_DECISION_RANGES = (
     "09:31:00..11:29:00",
     "13:01:00..14:59:00",
+)
+LABEL_ONLY_CLICKHOUSE_COLUMNS = (
+    "TradingDay",
+    "Symbol",
+    "ExchTimeOffsetUs",
+    "LocalTimeStamp",
+    "TradeNum",
+    "Volume",
+    "Turnover",
+    "AskPrice1",
+    "Status",
+)
+LABEL_ONLY_BASE_COLUMNS = (
+    "date",
+    "symbol",
+    "timestamp",
+    "ask_price_1",
+    "volume",
+    "turnover",
+    "status",
 )
 
 
@@ -82,6 +106,39 @@ def _date_bounds(config: dict) -> tuple[str, str]:
     return str(pd.Timestamp(start).date()), str(pd.Timestamp(end).date())
 
 
+def _labels_only(config: dict) -> bool:
+    mode = config_str(config, "full_day_labels", "output_mode", "audit").strip().lower()
+    if mode not in {"audit", "labels_only"}:
+        raise SystemExit("[full_day_labels].output_mode must be 'audit' or 'labels_only'")
+    return mode == "labels_only"
+
+
+def _project_output(
+    frame: pd.DataFrame,
+    *,
+    horizons: list[str],
+    labels_only: bool,
+) -> pd.DataFrame:
+    if not labels_only:
+        return frame
+    output_columns = [
+        "date",
+        "symbol",
+        "decision_target_timestamp",
+        *(label_column_name(horizon) for horizon in horizons),
+    ]
+    missing = [column for column in output_columns if column not in frame]
+    if missing:
+        raise RuntimeError(f"labels-only full-day output missing columns: {missing}")
+    out = frame.loc[:, output_columns].copy()
+    for horizon in horizons:
+        label_col = label_column_name(horizon)
+        valid_col = f"valid_{label_col}"
+        if valid_col in frame:
+            out.loc[~frame[valid_col].fillna(False).astype(bool), label_col] = float("nan")
+    return out
+
+
 def _daily_summary(frame: pd.DataFrame, horizons: list[str]) -> dict[str, object]:
     summary: dict[str, object] = {
         "rows": int(len(frame)),
@@ -98,7 +155,8 @@ def _daily_summary(frame: pd.DataFrame, horizons: list[str]) -> dict[str, object
         valid_col = f"valid_{label_column_name(horizon)}"
         if valid_col in frame:
             valid_counts[horizon] = int(frame[valid_col].fillna(False).sum())
-    summary["valid_rows"] = valid_counts
+    audit = frame.attrs.get("full_day_audit", {})
+    summary["valid_rows"] = valid_counts or dict(audit.get("valid_rows", {}))
 
     comparisons = [("entry_source_timestamp", "entry_timestamp")]
     for horizon in horizons:
@@ -124,8 +182,12 @@ def _daily_summary(frame: pd.DataFrame, horizons: list[str]) -> dict[str, object
         comparable = source.notna() & target.notna()
         compared += int(comparable.sum())
         violations += int((comparable & source.gt(target)).sum())
-    summary["causal_timestamp_comparisons"] = compared
-    summary["causal_timestamp_violations"] = violations
+    summary["causal_timestamp_comparisons"] = compared or int(
+        audit.get("causal_timestamp_comparisons", 0)
+    )
+    summary["causal_timestamp_violations"] = violations or int(
+        audit.get("causal_timestamp_violations", 0)
+    )
     return summary
 
 
@@ -178,7 +240,10 @@ def _attach_close_labels(
 
 
 def _prepare_ticks(ticks: pd.DataFrame, config: dict) -> pd.DataFrame:
-    out = normalize_clickhouse_ticks(ticks)
+    if _labels_only(config):
+        out = ensure_timestamp_columns(standardize_columns(ticks))
+    else:
+        out = normalize_clickhouse_ticks(ticks)
     deduplication = config_str(config, "data", "tick_timestamp_deduplication", "").strip()
     if deduplication:
         out = deduplicate_tick_timestamps(out, mode=deduplication)
@@ -192,6 +257,13 @@ def _prepare_ticks(ticks: pd.DataFrame, config: dict) -> pd.DataFrame:
             ),
             symbols=load_symbol_list(symbols_file) if symbols_file else None,
         )
+    if _labels_only(config):
+        required = set(LABEL_ONLY_BASE_COLUMNS) - {"status"}
+        missing = sorted(required - set(out.columns))
+        if missing:
+            raise SystemExit(f"labels-only full-day ticks missing columns: {missing}")
+        columns = [column for column in LABEL_ONLY_BASE_COLUMNS if column in out.columns]
+        out = out.loc[:, columns].copy()
     return out
 
 
@@ -200,39 +272,53 @@ def _build_day(ticks: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, list[st
     timed_horizons = [spec.name for spec in horizon_specs(horizons) if spec.seconds is not None]
     close_horizons = [name for name in horizons if name in {"close", "next_close"}]
     max_lag = config_value(config, "sample", "decision_max_lag_seconds", 5)
-    frame = build_full_day_temporal_labels(
-        ticks,
-        decision_times=config_clock_list(
+    builder = (
+        build_full_day_narrow_labels if _labels_only(config) else build_full_day_temporal_labels
+    )
+    builder_kwargs = {
+        "ticks": ticks,
+        "decision_times": config_clock_list(
             config,
             "full_day_labels",
             "decision_ranges",
             DEFAULT_DECISION_RANGES,
         ),
-        horizons=timed_horizons,
-        sessions=config_list(
+        "horizons": timed_horizons,
+        "sessions": config_list(
             config,
             "full_day_labels",
             "sessions",
             ["09:30:00-11:30:00", "13:00:00-15:00:00"],
         ),
-        decision_max_lag_seconds=None if max_lag in (None, "") else int(max_lag),
-        entry_clock_delay_seconds=config_int(config, "labels", "entry_clock_delay_seconds", 6),
-        entry_tick_delay_audit=config_int(config, "labels", "entry_tick_delay", 2),
-        sell_window_trading_seconds=config_int(config, "labels", "sell_window_seconds", 60),
-        buy_price_col=config_str(config, "labels", "buy_price_col", "ask_price_1"),
-        volume_col=config_str(config, "labels", "volume_col", "volume"),
-        turnover_col=config_str(config, "labels", "turnover_col", "turnover"),
-        volume_unit_multiplier=config_float(config, "labels", "volume_unit_multiplier", 1.0),
-        fee_bps=config_float(config, "labels", "fee_bps", 0.0),
-        include_preopen=config_bool(config, "features", "include_preopen", True),
-        preopen_price_mode=config_str(
-            config, "features", "preopen_price_mode", "legacy_last_price"
-        ),
-        preopen_match_time=config_str(config, "features", "preopen_match_time", "09:25:00"),
-        tradable_statuses=config_list(config, "filters", "tradable_statuses", []),
-        require_cross_section_ready_entry=config_bool(
+        "decision_max_lag_seconds": None if max_lag in (None, "") else int(max_lag),
+        "entry_clock_delay_seconds": config_int(config, "labels", "entry_clock_delay_seconds", 6),
+        "sell_window_trading_seconds": config_int(config, "labels", "sell_window_seconds", 60),
+        "buy_price_col": config_str(config, "labels", "buy_price_col", "ask_price_1"),
+        "volume_col": config_str(config, "labels", "volume_col", "volume"),
+        "turnover_col": config_str(config, "labels", "turnover_col", "turnover"),
+        "volume_unit_multiplier": config_float(config, "labels", "volume_unit_multiplier", 1.0),
+        "fee_bps": config_float(config, "labels", "fee_bps", 0.0),
+        "tradable_statuses": config_list(config, "filters", "tradable_statuses", []),
+        "require_cross_section_ready_entry": config_bool(
             config, "labels", "require_entry_after_cross_section_ready", True
         ),
+    }
+    if not _labels_only(config):
+        builder_kwargs.update(
+            {
+                "entry_tick_delay_audit": config_int(config, "labels", "entry_tick_delay", 2),
+                "include_preopen": config_bool(config, "features", "include_preopen", True),
+                "preopen_price_mode": config_str(
+                    config, "features", "preopen_price_mode", "legacy_last_price"
+                ),
+                "preopen_match_time": config_str(
+                    config, "features", "preopen_match_time", "09:25:00"
+                ),
+                "build_features": True,
+            }
+        )
+    frame = builder(
+        **builder_kwargs,
     )
     return frame, close_horizons
 
@@ -355,6 +441,8 @@ def run(args, config: dict, *, run_name: str, output_dir: Path) -> None:
                     ),
                     symbol_regex=symbol_regex,
                     symbols=symbols,
+                    columns=(LABEL_ONLY_CLICKHOUSE_COLUMNS if _labels_only(config) else None),
+                    collapse_local_timestamp=_labels_only(config),
                 )
                 yield date, ticks, client
 
@@ -426,7 +514,14 @@ def run(args, config: dict, *, run_name: str, output_dir: Path) -> None:
         summary = {"date": date, "action": "built", **_daily_summary(labeled, horizons)}
         if summary["causal_timestamp_violations"]:
             raise RuntimeError(f"causal timestamp violation detected on {date}: {summary}")
-        write_frame_atomic(labeled, shard)
+        output_frame = _project_output(
+            labeled,
+            horizons=horizons,
+            labels_only=_labels_only(config),
+        )
+        summary["columns"] = int(len(output_frame.columns))
+        summary["output_columns"] = list(output_frame.columns)
+        write_frame_atomic(output_frame, shard)
         write_json(summary_path, summary, atomic=True)
         daily_summaries.append(summary)
         print_mapping(f"full_day_cache[{date}]", summary)

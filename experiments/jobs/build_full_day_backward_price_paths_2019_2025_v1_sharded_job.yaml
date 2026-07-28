@@ -1,0 +1,65 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-backward-price-paths-v1
+  namespace: bizewu
+spec:
+  completionMode: Indexed
+  completions: 7
+  parallelism: 4
+  backoffLimitPerIndex: 0
+  maxFailedIndexes: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      volumes:
+        - name: opening-strength-output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                      - node7
+                      - node8
+      containers:
+        - name: opening-strength-fit
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:128aa51a0db962496dc292b301b845f335c9aef1057b55f0c64d13c0b295bf13
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: opening-strength-clickhouse
+            - secretRef:
+                name: xy-fit-ceph-credentials
+          workingDir: /app/opening_strength_fit
+          command:
+            - /bin/bash
+            - -lc
+            - |
+              set -euo pipefail
+              LABEL_SUCCESS=/mnt/output/opening_strength_fit/cache/daily_close_to_next_close_labels_v1/_SUCCESS
+              if [ ! -f "${LABEL_SUCCESS}" ]; then
+                echo "missing daily label dependency: ${LABEL_SUCCESS}" >&2
+                exit 1
+              fi
+              # Packaged entrypoint: osf-build-backward-price-paths
+              exec python -m opening_strength_fit.commands.backward_price_path_cache \
+                --config experiments/runs/build_full_day_backward_price_paths_2019_2025_v1.toml \
+                --output-dir /mnt/output/opening_strength_fit/cache_builds/build_full_day_backward_price_paths_2019_2025_v1
+          volumeMounts:
+            - name: opening-strength-output
+              mountPath: /mnt/output
+          resources:
+            requests:
+              cpu: "4"
+              memory: 16Gi
+            limits:
+              cpu: "8"
+              memory: 32Gi

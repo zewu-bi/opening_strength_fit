@@ -6,7 +6,10 @@ import pandas as pd
 
 from opening_strength_fit.commands.full_day_label_cache import run
 from opening_strength_fit.dataset import build_labeled_feature_frame
-from opening_strength_fit.full_day_labels import build_full_day_temporal_labels
+from opening_strength_fit.full_day_labels import (
+    build_full_day_narrow_labels,
+    build_full_day_temporal_labels,
+)
 
 
 def _ticks(times: list[str], *, date: str = "2025-01-02") -> pd.DataFrame:
@@ -127,6 +130,42 @@ def test_horizon_past_market_close_is_explicitly_invalid() -> None:
     assert not bool(out["valid_alpha_return_30m"])
 
 
+def test_narrow_builder_matches_audit_builder_for_timed_horizons() -> None:
+    ticks = _ticks(
+        [
+            "11:28:58",
+            "11:29:02",
+            "11:29:08",
+            "11:30:00",
+            "13:00:00",
+            "13:01:08",
+            "13:02:08",
+            "13:10:08",
+            "13:11:08",
+            "14:00:08",
+            "14:01:08",
+        ]
+    )
+    audit = build_full_day_temporal_labels(
+        ticks,
+        decision_times=["11:29:00"],
+        horizons=["1m", "10m", "60m"],
+        include_preopen=False,
+        tradable_statuses=["TRADE"],
+    ).iloc[0]
+    narrow = build_full_day_narrow_labels(
+        ticks,
+        decision_times=["11:29:00"],
+        horizons=["1m", "10m", "60m"],
+        tradable_statuses=["TRADE"],
+    ).iloc[0]
+
+    for horizon in ("1m", "10m", "60m"):
+        label_col = f"alpha_return_{horizon}"
+        assert np.isclose(narrow[label_col], audit[label_col])
+        assert bool(narrow[f"valid_{label_col}"]) == bool(audit[f"valid_{label_col}"])
+
+
 def test_full_day_cache_writes_resumable_daily_shards(tmp_path) -> None:
     tick_path = tmp_path / "ticks.parquet"
     _ticks(
@@ -171,3 +210,60 @@ def test_full_day_cache_writes_resumable_daily_shards(tmp_path) -> None:
     assert manifest["total_rows"] == 1
     assert manifest["causal_timestamp_violations"] == 0
     assert manifest["days"][0]["action"] == "resumed"
+
+
+def test_full_day_cache_labels_only_writes_keys_and_requested_horizons(tmp_path) -> None:
+    tick_path = tmp_path / "ticks.parquet"
+    _ticks(
+        [
+            "09:30:58",
+            "09:31:02",
+            "09:31:08",
+            "09:32:08",
+            "09:33:08",
+            "09:41:08",
+            "09:42:08",
+            "10:31:08",
+            "10:32:08",
+        ]
+    ).to_parquet(tick_path, index=False)
+    cache_root = tmp_path / "cache"
+    config = {
+        "data": {"source": "path"},
+        "cache": {"path": str(cache_root), "schema_version": "labels_only_test_v1"},
+        "full_day_labels": {
+            "enabled": True,
+            "output_mode": "labels_only",
+            "decision_ranges": ["09:31:00"],
+            "horizons": ["1m", "10m", "60m"],
+        },
+        "labels": {
+            "entry_clock_delay_seconds": 6,
+            "entry_tick_delay": 2,
+            "sell_window_seconds": 60,
+            "require_entry_after_cross_section_ready": True,
+        },
+        "features": {"include_preopen": False},
+        "filters": {"tradable_statuses": ["TRADE"]},
+    }
+
+    run(
+        Namespace(input=str(tick_path)),
+        config,
+        run_name="labels_only_test",
+        output_dir=tmp_path / "artifacts",
+    )
+
+    shard = pd.read_parquet(cache_root / "date=2025-01-02" / "labels.parquet")
+    assert list(shard.columns) == [
+        "date",
+        "symbol",
+        "decision_target_timestamp",
+        "alpha_return_1m",
+        "alpha_return_10m",
+        "alpha_return_60m",
+    ]
+    assert len(shard) == 1
+    assert shard["alpha_return_1m"].notna().all()
+    assert shard["alpha_return_10m"].notna().all()
+    assert shard["alpha_return_60m"].notna().all()

@@ -1,0 +1,46 @@
+[run]
+id = "build_full_day_backward_price_paths_2019_2025_v1"
+kind = "temporal_price_path_cache"
+description = "Build endpoint-aligned backward-looking LastPrice returns P(t)/P(t-h)-1 for 1m, 10m, and 60m trading horizons."
+status = "completed"
+
+[backward_price_paths]
+sequence_root = "/mnt/output/opening_strength_fit/cache/full_day_backward_price_paths_sequence_v1"
+label_root = "/mnt/output/opening_strength_fit/cache/daily_close_to_next_close_labels_v1"
+start_year = 2019
+end_year = 2025
+valid_statuses = ["T0", "20", "TRADE", "O0", "10", "OCALL"]
+
+[clickhouse]
+host = "ch.db.prod.highfortfunds.com"
+port = 8123
+table = "stock.tick"
+
+[universe]
+symbol_regex = "^(?:(?:00|30)[0-9]{4}\\.SZ|(?:60|68)[0-9]{4}\\.SH)$"
+
+[stock_pool]
+enabled = true
+name = "pool_L"
+path = "lml.bzw@ssd/data/pool_L.parquet"
+date_lag_sessions = 0
+
+[output]
+layout = "v2"
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-backward-price-paths-v1"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+shard_job_mode = "indexed"
+shard_parallelism = 4
+backoff_limit_per_index = 0
+avoid_nodes = ["node7", "node8"]
+
+[k8s.resources]
+cpu_request = "4"
+cpu_limit = "8"
+memory_request = "16Gi"
+memory_limit = "32Gi"

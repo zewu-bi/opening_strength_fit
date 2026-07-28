@@ -137,8 +137,27 @@ def tick_day_window_sql(
     *,
     use_symbols: bool = False,
     use_symbol_regex: bool = True,
+    columns: Sequence[str] | None = None,
+    collapse_local_timestamp: bool = False,
 ) -> str:
     table = _validate_table_name(table)
+    if columns is None:
+        select_list = "*"
+    else:
+        if not columns:
+            raise ValueError("tick day query columns cannot be empty")
+        invalid = [column for column in columns if not _IDENTIFIER_RE.fullmatch(column)]
+        if invalid:
+            raise ValueError(f"invalid ClickHouse column names: {invalid}")
+        selected = list(dict.fromkeys(columns))
+        select_list = ", ".join(
+            (
+                "arrayMax(mapValues(LocalTimeStamp)) AS LocalTimeStamp"
+                if collapse_local_timestamp and column == "LocalTimeStamp"
+                else column
+            )
+            for column in selected
+        )
     clauses = [
         "TradingDay = {trading_day:String}",
         "ExchTimeOffsetUs >= {start_offset_us:UInt64}",
@@ -149,7 +168,7 @@ def tick_day_window_sql(
     if use_symbol_regex:
         clauses.append("match(Symbol, {symbol_regex:String})")
     where = "\n    and ".join(clauses)
-    return f"""select *
+    return f"""select {select_list}
 from {table}
 where (
     {where}
@@ -186,6 +205,8 @@ def query_tick_day_window(
     end_offset_us: int = DEFAULT_TICK_END_OFFSET_US,
     symbol_regex: str | None = DEFAULT_A_SHARE_SYMBOL_REGEX,
     symbols: list[str] | None = None,
+    columns: Sequence[str] | None = None,
+    collapse_local_timestamp: bool = False,
 ) -> pd.DataFrame:
     parameters = {
         "trading_day": trading_day,
@@ -201,6 +222,8 @@ def query_tick_day_window(
             table,
             use_symbols=bool(symbols),
             use_symbol_regex=bool(symbol_regex),
+            columns=columns,
+            collapse_local_timestamp=collapse_local_timestamp,
         ),
         parameters=parameters,
     )

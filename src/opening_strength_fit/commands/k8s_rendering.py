@@ -37,6 +37,29 @@ from opening_strength_fit.pvc_layout import (
 )
 
 DEFAULT_IMAGE_ENV = "OPENING_STRENGTH_IMAGE"
+_RUN_KIND_COMMANDS = {
+    "alpha_conditioned_rolling_validation": "osf-run-alpha-conditioned-rolling-validation",
+    "ask_level_attribution": "osf-ask-level-attribution",
+    "cache_transform": "osf-build-target-label-cache",
+    "capacity_acceptance": "osf-analyze-capacity-acceptance",
+    "capacity_audit": "osf-audit-capacity",
+    "clickhouse_labeled_cache": "osf-build-labeled-cache",
+    "daily_return_label_cache": "osf-build-daily-return-labels",
+    "execution_context": "osf-extract-execution-context",
+    "exposure_audit": "osf-audit-exposure",
+    "exposure_input": "osf-build-exposure-input",
+    "feature_audit": "osf-audit-feature-dependence",
+    "feature_hygiene": "osf-audit-feature-hygiene",
+    "gap_risk_attribution": "osf-run-gap-risk-attribution",
+    "labeled_cache": "osf-build-labeled-cache",
+    "learned_risk_layer": "osf-run-learned-risk-layer",
+    "next_close_label_cache": "osf-build-next-close-labels",
+    "score_risk_sweep": "osf-run-score-risk-sweep",
+    "strategy_acceptance": "osf-audit-strategy-acceptance",
+    "target_cache": "osf-build-target-label-cache",
+    "temporal_nn": "osf-train-temporal-nn",
+    "temporal_no_model_analysis": "osf-analyze-full-day-temporal",
+}
 
 
 def load_config(path: Path) -> dict:
@@ -58,38 +81,9 @@ def resolve_render_image(image: str, *, allow_mutable: bool = False) -> str:
 
 def training_command(config: dict) -> str:
     run_kind = str(get(config, "run", "kind", "experiment")).strip().lower()
-    if run_kind == "capacity_acceptance":
-        return "osf-analyze-capacity-acceptance"
-    if run_kind == "capacity_audit":
-        return "osf-audit-capacity"
-    if run_kind == "strategy_acceptance":
-        return "osf-audit-strategy-acceptance"
-    if run_kind == "ask_level_attribution":
-        return "osf-ask-level-attribution"
-    if run_kind == "execution_context":
-        return "osf-extract-execution-context"
-    if run_kind == "exposure_input":
-        return "osf-build-exposure-input"
-    if run_kind == "exposure_audit":
-        return "osf-audit-exposure"
-    if run_kind == "feature_audit":
-        return "osf-audit-feature-dependence"
-    if run_kind == "feature_hygiene":
-        return "osf-audit-feature-hygiene"
-    if run_kind in {"cache_transform", "target_cache"}:
-        return "osf-build-target-label-cache"
-    if run_kind == "next_close_label_cache":
-        return "osf-build-next-close-labels"
-    if run_kind in {"labeled_cache", "clickhouse_labeled_cache"}:
-        return "osf-build-labeled-cache"
-    if run_kind == "learned_risk_layer":
-        return "osf-run-learned-risk-layer"
-    if run_kind == "alpha_conditioned_rolling_validation":
-        return "osf-run-alpha-conditioned-rolling-validation"
-    if run_kind == "gap_risk_attribution":
-        return "osf-run-gap-risk-attribution"
-    if run_kind == "score_risk_sweep":
-        return "osf-run-score-risk-sweep"
+    command = _RUN_KIND_COMMANDS.get(run_kind)
+    if command:
+        return command
     if run_kind not in {"experiment", "exploration"}:
         raise SystemExit(f"Unsupported run.kind for k8s rendering: {run_kind}")
     model_name = str(get(config, "model", "name", "ridge")).strip().lower()
@@ -134,7 +128,7 @@ def _rolling_completion_files(config: dict, command: str) -> list[str]:
         return ["feature_audit_trace.json", "feature_audit_metrics.csv"]
     if run_kind == "feature_hygiene":
         return ["feature_hygiene_trace.json", "feature_hygiene.csv"]
-    if command == "osf-train":
+    if command in {"osf-train", "osf-train-temporal-nn"}:
         return ["_SUCCESS", "metrics_by_year.csv", "predictions.parquet"]
     return ["metrics_by_year.csv"]
 
