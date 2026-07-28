@@ -7,15 +7,16 @@ import pandas as pd
 from run_top1000_rank_bucket_diagnostics import (
     TOP1000_RETURN_HISTOGRAM_BIN_WIDTH_BPS,
     plot_score_bucket_histograms,
+    plot_score_bucket_histograms_full_scale,
 )
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Render the canonical Top1000 score-bucket return-distribution acceptance plot. "
-            "The display contract is fixed at x=[-3000, 3000] bps and y=[1e2, 3e5] on a "
-            "log scale."
+            "Render the canonical focused and full-scale Top1000 score-bucket "
+            "return-distribution plots. The focused display contract is fixed at "
+            "x=[-3000, 3000] bps and y=[1e2, 3e5] on a log scale."
         )
     )
     parser.add_argument("--histogram-csv", type=Path, required=True)
@@ -35,11 +36,21 @@ def main() -> None:
         output_dir=output_dir,
         variant=args.variant,
     )
-    print(
-        output_dir
-        / f"top1000_score_bucket_return_{TOP1000_RETURN_HISTOGRAM_BIN_WIDTH_BPS}bps_counts.svg",
-        flush=True,
+    plot_score_bucket_histograms_full_scale(
+        histogram,
+        bin_width_bps=TOP1000_RETURN_HISTOGRAM_BIN_WIDTH_BPS,
+        output_dir=output_dir,
+        variant=args.variant,
     )
+    for suffix in ("", "_full_scale"):
+        print(
+            output_dir
+            / (
+                "top1000_score_bucket_return_"
+                f"{TOP1000_RETURN_HISTOGRAM_BIN_WIDTH_BPS}bps_counts{suffix}.svg"
+            ),
+            flush=True,
+        )
 
 
 if __name__ == "__main__":

@@ -58,11 +58,27 @@ osf-probe-clickhouse-data --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD>
 osf-build-labeled-cache --config experiments/runs/<cache_run_id>.toml
 osf-build-target-label-cache --config experiments/runs/<target_run_id>.toml
 osf-build-next-close-labels --config experiments/runs/<next_close_run_id>.toml
+osf-build-daily-return-labels --config experiments/runs/<daily_return_run_id>.toml
 ```
 
 新的 fixed-clock lineage 使用 `entry_alignment = "clock_state"`、显式 clock delay 和完整
 cross-section readiness。旧物理 tick-delay 配置只为历史复现保留。大型 cache 仅在 PVC；Git 中保留构建
 代码、run config、Job、schema/fingerprint 语义和关键 trace。
+
+全天路径转日频 feature 时，主监督目标使用以 D 为 feature date、D+1 为 target date 的
+`alpha_return_close_to_next_close`。其交易语义是 D 收盘集合竞价买入、D+1 收盘卖出；label 使用
+`ClosePrice(D+1) / PreClosePrice(D+1) - 1`，以消除除权除息的机械缺口。它只持久化
+`date/symbol/target_date/label` 四列；下一交易日必须由交易日历映射，不允许自然日 `+1`。
+
+对应正式 cache 为：
+
+```text
+/mnt/output/opening_strength_fit/cache/daily_close_to_next_close_labels_v1/
+```
+
+同日收盘下单的 feature 必须在下单前完成。第一版固定 `14:50` 截止；按现有采样/退出定义，1m、10m、
+60m 路径的最晚目标分钟分别约为 `14:47`、`14:38`、`13:48`。旧
+`alpha_return_next_session_open_close` cache 只作诊断，不作现金股票 T+1 的可执行主目标。
 
 ## 5. 镜像与 Job
 
@@ -129,7 +145,7 @@ make evidence-four-figures
 ```
 
 目标目录为 `experiments/evidence/backtests/<multiden-run-id>/`。control 只在前两图中保留为 ablation
-baseline，不作为下一阶段 candidate。
+baseline；multiden 是当前 opening policy/incumbent。
 
 ## 7. 容量与策略验收
 
@@ -150,8 +166,10 @@ realistic_no_refill
 visible_pretrade_refill
 ```
 
-refill 只有在成本后资本收益提升，且 tail、overlap、集中度不恶化时才晋级。fill ratio 或单一 P95/P99
-缩尾指标不能独立决定结论；同时检查 top day/symbol、leave-one-out 和月块 bootstrap。
+当前 policy 晋级以同一因果 OOS lineage 下的成本后资本收益、容量约束和执行可行性为主。单边 P95/P99
+upper-tail cap、trim、top day/symbol、leave-one-out、月块 bootstrap、overlap 和集中度必须保留在
+evidence 中，但只作为收益来源与风险诊断，不设置自动通过/否决阈值。单边 cap 尤其不能替代双边异常值
+敏感性或真实成交 haircut。multiden 的 visible pre-trade refill 已按此口径随当前 opening policy 晋级。
 
 可复用配置：
 
@@ -162,16 +180,15 @@ experiments/runs/strategy_acceptance_clock6_v4_control_2022_2025_v1.toml  # comp
 
 ## 8. 全天分钟级因果 label/cache
 
-全天 V1 继续使用 `osf-build-labeled-cache`；当配置包含
-`[full_day_labels].enabled = true` 时，入口自动切换到按交易日分片的构建器。先运行一日 smoke，再启动年度
-任务：
+全天窄标签继续使用 `osf-build-labeled-cache`；`output_mode = "labels_only"` 时只查询必要 tick 字段，
+并写出键加 1m/10m/60m 三个收益列。先运行一日 smoke，再启动年度任务：
 
 ```bash
 osf-build-labeled-cache \
-  --config experiments/runs/build_full_day_clock6_temporal_smoke_20250102_v1.toml
+  --config experiments/runs/build_full_day_clock6_narrow_labels_smoke_20250102_v2.toml
 
 hfcli kubectl --cluster research --namespace bizewu apply -f \
-  experiments/jobs/build_full_day_clock6_temporal_smoke_20250102_v1_job.yaml
+  experiments/jobs/build_full_day_clock6_narrow_labels_smoke_20250102_v2_job.yaml
 ```
 
 逐日输出为 `date=YYYY-MM-DD/labels.parquet` 和 `summary.json`；两者都存在时自动断点复用。根目录的
@@ -179,9 +196,9 @@ hfcli kubectl --cluster research --namespace bizewu apply -f \
 `_SUCCESS`。字段口径、午休交易时钟和年度启动步骤见
 [全天分钟级因果 label/cache V1](full_day_temporal_labels_v1.md)。
 
-2025-01-02 smoke 已完成：`21,307,238` 条输入 tick 生成 `1,126,662 × 212` 的 522MiB parquet，
-238 个决策分钟齐全，`5,292,366` 次因果时间戳比较为零违规，耗时约 22 分钟、峰值 RSS 约 76GB。
-按该实测，年度任务必须先按月或交易日分片并行；不要直接提交现有年度单体 Job。
+2025-01-02 窄表 smoke 已完成：`20,941,373` 条输入 tick 生成 `1,136,863 × 6`，240 个决策分钟齐全，
+`7,270,214` 次因果时间戳比较为零违规，耗时 `5m21s`、峰值约 16GB。2019–2025 七个年度 Job
+按年度并行运行，每年内部按日写分片并可断点续跑。
 
 ## 9. 常见故障
 

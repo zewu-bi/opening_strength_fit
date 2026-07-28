@@ -2,7 +2,7 @@
 
 `opening_strength_fit` 是 A 股开盘阶段分钟级 overlay 信号研究工具。它把 tick 数据变成
 `date × symbol × decision_time` 样本，只使用决策时点及以前的信息，在既定股票池内部完成训练、排序、
-容量分配、执行约束和尾部稳健性验收。
+容量分配、执行约束和尾部/集中度诊断。
 
 这不是可直接交易的完整策略。当前实现覆盖开盘 `09:31-09:40` 的研究链路；完整日内持仓、退出、现金复用、
 滑点和市场冲击账本仍是下一阶段工作。
@@ -16,14 +16,20 @@ tick / labeled input
   -> rolling OOS 训练与预测
   -> pool_L 内 TopN 排序
   -> capacity allocation
-  -> execution / refill / overlap / tail acceptance
+  -> execution / refill / overlap / tail diagnostics
 ```
 
 当前信号候选已收束到 fixed-clock +6 秒语义。多分母 auction-pruned 模型以 `17.1714 bps` 的
-`pool_L` next excess 作为 canonical challenger；简单 control 的 `16.8024 bps` 结果保留为单变量对照。
-multiden 的 visible refill 提升资金利用率和累计收益，但缩尾后收益仍为负，当前策略不晋级。完整数字、边界
-和决策见 [project brief](docs/project_brief.md)、[四图验收包](experiments/evidence/backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/)
+`pool_L` next excess 晋级为当前 opening policy/incumbent；简单 control 的 `16.8024 bps` 结果保留为
+单变量对照。multiden 的 visible refill 将 fill 提高到 `99.9970%`，并取得 `8598.7 bps` 的成本后累计
+资金净收益。单边 P95/P99 upper-tail cap、trim、bootstrap、overlap 和集中度继续作为收益结构与风险诊断，
+不再作为自动晋级门槛。完整数字、边界和决策见 [project brief](docs/project_brief.md)、[四图验收包](experiments/evidence/backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/)
 与 [experiment log](docs/experiment_log.md)。
+
+全天 all-A 1m TCN 的表面 Top100 excess 为 `93.57 bps`，但逐行归因显示约 `89.6%` 的原始 Top100
+return 来自 D 日已经涨停的股票。该 run 已重新定性为涨停延续/尾盘已有持仓诊断，不作为广义强势延续
+或收盘新开仓策略。详见 [全天时序说明](docs/full_day_temporal_labels_v1.md) 和
+[诊断证据](experiments/evidence/backtests/temporal_nn_36m_2022_2025_all_a_rank_1m_tcn_mse_v1/)。
 
 ## 可复现范围
 

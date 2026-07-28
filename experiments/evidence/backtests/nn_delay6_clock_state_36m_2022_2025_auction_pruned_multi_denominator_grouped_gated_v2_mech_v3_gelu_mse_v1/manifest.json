@@ -42,6 +42,16 @@
       "sha256": "82426be2b19822cad085ff6397c4a864089b650b1c8a35e0a855cc2bc5032f9f",
       "source": "experiments/results/backtests/top1000_rank_bucket_diag_auction_multiden_2022_2025_v1/rank_bucket/top1000_bucket_returns.svg"
     },
+    "03b_full_pool_bucket_curve.csv": {
+      "bytes": 6347,
+      "sha256": "82713034ced4d4cdbb297c6b2bf6d73ec29f314d47ebed3e54c1e0ad706c2b37",
+      "source": "experiments/results/backtests/top1000_rank_bucket_diag_auction_multiden_2022_2025_v1/rank_bucket/bucket_curve_plot_data.csv"
+    },
+    "03b_full_pool_bucket_curve.svg": {
+      "bytes": 52906,
+      "sha256": "6d81a4e3325029b3afbb84b3b60300573ef0721fde04d1c8698d1913d3cf258e",
+      "source": "experiments/results/backtests/top1000_rank_bucket_diag_auction_multiden_2022_2025_v1/rank_bucket/pool_L_bucket_returns.svg"
+    },
     "04_top1000_return_distribution.csv": {
       "bytes": 74435,
       "sha256": "7abe8a60d7ba13e93de0bf737687ee6a58c107af3033bbd7529100da56d017aa",
@@ -51,6 +61,26 @@
       "bytes": 170768,
       "sha256": "852bdcd06391efedf12c72900c401c5f7426778c4640ac81dc8cd64bc26a642c",
       "source": "experiments/results/backtests/top1000_score_bucket_return_histogram_auction_multiden_2022_2025_v1/top1000_score_bucket_return_100bps_counts.svg"
+    },
+    "04b_top1000_return_distribution_full_scale.svg": {
+      "bytes": 205003,
+      "sha256": "67632b234814894d7aaeab89d4f13414b1914b8ac04c1c356c4466c1abdb9c3e",
+      "source": "experiments/results/backtests/top1000_score_bucket_return_histogram_auction_multiden_2022_2025_v1/top1000_score_bucket_return_100bps_counts_full_scale.svg"
+    },
+    "05_model_journey_cumulative.csv": {
+      "bytes": 374405,
+      "sha256": "ef37856e238c88ea86ec7196e4a71ca1e2c84893b523e38446c4f2c31af02bbf",
+      "source": "experiments/results/backtests/optimization_overlay_acceptance_lgbm328_mlp_base_gated_multiden_2022_2025/optimization_directions_net_alpha_cumulative_plot_data.csv"
+    },
+    "05_model_journey_cumulative.svg": {
+      "bytes": 132324,
+      "sha256": "1d5020c78266a2a7f903d0dda8567c7c0ce4afcb82268c12840f5a442e4934ad",
+      "source": "experiments/results/backtests/optimization_overlay_acceptance_lgbm328_mlp_base_gated_multiden_2022_2025/optimization_directions_net_alpha_cumulative.svg"
+    },
+    "trace_model_journey.json": {
+      "bytes": 8620,
+      "sha256": "c01002639006a5c7e210d8b92596b807c5b78da805de4312f5bb76cbb885398d",
+      "source": "experiments/results/backtests/optimization_overlay_acceptance_lgbm328_mlp_base_gated_multiden_2022_2025/optimization_directions_trace.json"
     },
     "trace_optimization.json": {
       "bytes": 7971,
@@ -68,5 +98,7 @@
       "source": "experiments/results/backtests/top1000_score_bucket_return_histogram_auction_multiden_2022_2025_v1/trace.json"
     }
   },
+  "full_pool_bucket_rows": 80,
+  "journey_cumulative_rows": 5814,
   "schema_version": 1
 }
