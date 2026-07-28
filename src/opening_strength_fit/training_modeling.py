@@ -205,6 +205,7 @@ def fit_single_prediction_model(
             max_depth=config_int(config, "model", "max_depth", -1),
             min_child_samples=config_int(config, "model", "min_child_samples", 200),
             subsample=config_float(config, "model", "subsample", 1.0),
+            subsample_freq=config_int(config, "model", "subsample_freq", 0),
             colsample_bytree=config_float(config, "model", "colsample_bytree", 1.0),
             reg_alpha=config_float(config, "model", "reg_alpha", 0.0),
             reg_lambda=config_float(config, "model", "reg_lambda", 0.0),
@@ -213,6 +214,44 @@ def fit_single_prediction_model(
             device_type=config_str(config, "model", "device_type", "cpu"),
             max_bin=config_optional_int(config, "model", "max_bin", None),
             gpu_use_dp=config_bool(config, "model", "gpu_use_dp", False),
+            feature_value_transform=config_str(
+                config,
+                "features",
+                "feature_value_transform",
+                "none",
+            ),
+            feature_value_transform_output=config_str(
+                config,
+                "features",
+                "feature_value_transform_output",
+                "replace",
+            ),
+            feature_value_transform_prefix=config_str(
+                config,
+                "features",
+                "feature_value_transform_prefix",
+                "mech_v3_",
+            ),
+            feature_value_transform_group_cols=tuple(
+                config_list(
+                    config,
+                    "features",
+                    "feature_value_transform_group_cols",
+                    ["date", "decision_target_timestamp"],
+                )
+            ),
+            feature_value_transform_rank_method=config_str(
+                config,
+                "features",
+                "feature_value_transform_rank_method",
+                "average",
+            ),
+            feature_value_transform_tick_size=config_float(
+                config,
+                "features",
+                "feature_value_transform_tick_size",
+                0.01,
+            ),
         )
     if model_name in {"torch_mlp", "mlp", "nn"}:
         hidden_layers = tuple(
@@ -520,6 +559,7 @@ def model_config_payload(config: dict, alpha: float) -> dict[str, object]:
             "max_depth": config_int(config, "model", "max_depth", -1),
             "min_child_samples": config_int(config, "model", "min_child_samples", 200),
             "subsample": config_float(config, "model", "subsample", 1.0),
+            "subsample_freq": config_int(config, "model", "subsample_freq", 0),
             "colsample_bytree": config_float(config, "model", "colsample_bytree", 1.0),
             "reg_alpha": config_float(config, "model", "reg_alpha", 0.0),
             "reg_lambda": config_float(config, "model", "reg_lambda", 0.0),
@@ -528,6 +568,25 @@ def model_config_payload(config: dict, alpha: float) -> dict[str, object]:
             "max_bin": config_optional_int(config, "model", "max_bin", None),
             "gpu_use_dp": config_bool(config, "model", "gpu_use_dp", False),
             "sample_weight_col": config_str(config, "model", "sample_weight_col", ""),
+            "missing_value_policy": "lightgbm_native",
+            "feature_value_transform": config_str(
+                config,
+                "features",
+                "feature_value_transform",
+                "none",
+            ),
+            "feature_value_transform_output": config_str(
+                config,
+                "features",
+                "feature_value_transform_output",
+                "replace",
+            ),
+            "feature_value_transform_prefix": config_str(
+                config,
+                "features",
+                "feature_value_transform_prefix",
+                "mech_v3_",
+            ),
         }
     if model_name in {"torch_mlp", "mlp", "nn"}:
         return {

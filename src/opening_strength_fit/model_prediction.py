@@ -5,6 +5,7 @@ import pandas as pd
 
 from opening_strength_fit.evaluation import resolve_group_cols
 from opening_strength_fit.feature_utils import safe_divide
+from opening_strength_fit.model_preprocessing import lightgbm_feature_value_frame
 from opening_strength_fit.model_types import (
     PREDICTION_CONTEXT_COLUMNS,
     ClockSegmentPredictionModel,
@@ -33,12 +34,28 @@ def _normalized_weights(weights: list[float], size: int) -> np.ndarray:
 def _model_score(
     model: RidgePredictionModel | TorchMLPPredictionModel, frame: pd.DataFrame
 ) -> np.ndarray:
-    missing = set(model.features) - set(frame.columns)
+    if isinstance(model, TorchMLPPredictionModel):
+        missing = set(model.features) - set(frame.columns)
+        if missing:
+            raise SystemExit(f"prediction frame is missing features: {sorted(missing)[:5]}")
+        return _torch_mlp_score(model, frame)
+    source_features = model.source_features or model.features
+    missing = set(source_features) - set(frame.columns)
     if missing:
         raise SystemExit(f"prediction frame is missing features: {sorted(missing)[:5]}")
-    if isinstance(model, TorchMLPPredictionModel):
-        return _torch_mlp_score(model, frame)
-    x = frame[model.features].replace([np.inf, -np.inf], np.nan)
+    score_frame, score_features = lightgbm_feature_value_frame(
+        frame,
+        source_features,
+        feature_value_transform=model.feature_value_transform,
+        feature_value_transform_output=model.feature_value_transform_output,
+        feature_value_transform_prefix=model.feature_value_transform_prefix,
+        group_cols=model.feature_value_transform_group_cols,
+        rank_method=model.feature_value_transform_rank_method,
+        tick_size=model.feature_value_transform_tick_size,
+    )
+    if score_features != model.features:
+        raise SystemExit("prediction feature transform does not match fitted model features")
+    x = score_frame[model.features].replace([np.inf, -np.inf], np.nan)
     return np.asarray(model.pipeline.predict(x), dtype="float64")
 
 
@@ -138,10 +155,6 @@ def predict_frame(
     ),
     frame: pd.DataFrame,
 ) -> pd.DataFrame:
-    missing = set(model.features) - set(frame.columns)
-    if missing:
-        raise SystemExit(f"prediction frame is missing features: {sorted(missing)[:5]}")
-
     columns = [
         column
         for column in (

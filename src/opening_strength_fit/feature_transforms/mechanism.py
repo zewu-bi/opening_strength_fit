@@ -419,6 +419,28 @@ def _is_raw_price_name(name: str) -> bool:
     return False
 
 
+def mechanismized_v3_changed_feature_columns(columns: tuple[str, ...]) -> tuple[str, ...]:
+    """Return columns whose values are materially rewritten by the v3 transform."""
+
+    changed: list[str] = []
+    for column in dict.fromkeys(str(column) for column in columns):
+        name = column.lower()
+        if _is_dimensionless_name(name) or _is_historical_ratio_name(name):
+            continue
+        if (
+            name in {"exch_time_offset_us", "postopen_minutes_since_0930", "spread_abs"}
+            or _is_raw_price_name(name)
+            or _is_book_level_share_name(name)
+            or _is_book_depth_name(name)
+            or _is_trade_share_volume_name(name)
+            or _is_share_volume_name(name)
+            or _is_notional_name(name)
+            or _is_count_name(name)
+        ):
+            changed.append(column)
+    return tuple(changed)
+
+
 def _mechanismized_feature_series(
     frame: pd.DataFrame,
     column: str,
@@ -785,6 +807,7 @@ def transform_mechanismized_v3_feature_values(
 
 
 __all__ = [
+    "mechanismized_v3_changed_feature_columns",
     "mechanismized_feature_value_reference_columns",
     "transform_mechanismized_feature_values",
     "transform_mechanismized_v2_feature_values",

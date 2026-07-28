@@ -9,6 +9,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from opening_strength_fit.model_features import _clean_xy, feature_columns
+from opening_strength_fit.model_preprocessing import lightgbm_feature_value_frame
 from opening_strength_fit.model_types import RidgePredictionModel
 
 
@@ -118,6 +119,7 @@ def fit_lightgbm_frame(
     max_depth: int = -1,
     min_child_samples: int = 200,
     subsample: float = 1.0,
+    subsample_freq: int = 0,
     colsample_bytree: float = 1.0,
     reg_alpha: float = 0.0,
     reg_lambda: float = 0.0,
@@ -126,6 +128,15 @@ def fit_lightgbm_frame(
     device_type: str = "cpu",
     max_bin: int | None = None,
     gpu_use_dp: bool = False,
+    feature_value_transform: str = "none",
+    feature_value_transform_output: str = "replace",
+    feature_value_transform_prefix: str = "mech_v3_",
+    feature_value_transform_group_cols: tuple[str, ...] = (
+        "date",
+        "decision_target_timestamp",
+    ),
+    feature_value_transform_rank_method: str = "average",
+    feature_value_transform_tick_size: float = 0.01,
 ) -> tuple[RidgePredictionModel, dict[str, int]]:
     try:
         from lightgbm import LGBMRegressor
@@ -135,11 +146,25 @@ def fit_lightgbm_frame(
             "Install project dependencies or rebuild the training image."
         ) from exc
 
-    features = feature_columns(train, feature_limit, **(feature_filters or {}))
-    if not features:
+    source_features = feature_columns(train, feature_limit, **(feature_filters or {}))
+    if not source_features:
         raise SystemExit("no numeric feature columns found")
 
-    x, y = _clean_xy(train, features, target_col=target_col)
+    extra_columns = tuple(
+        column for column in (target_col, "valid_label", sample_weight_col) if column
+    )
+    model_input, features = lightgbm_feature_value_frame(
+        train,
+        source_features,
+        feature_value_transform=feature_value_transform,
+        feature_value_transform_output=feature_value_transform_output,
+        feature_value_transform_prefix=feature_value_transform_prefix,
+        group_cols=feature_value_transform_group_cols,
+        rank_method=feature_value_transform_rank_method,
+        tick_size=feature_value_transform_tick_size,
+        extra_columns=extra_columns,
+    )
+    x, y = _clean_xy(model_input, features, target_col=target_col)
     sample_weight = None
     if sample_weight_col:
         if sample_weight_col not in train.columns:
@@ -158,6 +183,7 @@ def fit_lightgbm_frame(
         "max_depth": int(max_depth),
         "min_child_samples": int(min_child_samples),
         "subsample": float(subsample),
+        "subsample_freq": int(subsample_freq),
         "colsample_bytree": float(colsample_bytree),
         "reg_alpha": float(reg_alpha),
         "reg_lambda": float(reg_lambda),
@@ -175,7 +201,6 @@ def fit_lightgbm_frame(
 
     pipeline = Pipeline(
         steps=[
-            ("imputer", SimpleImputer(strategy="constant", fill_value=0.0)),
             ("lightgbm", LGBMRegressor(**lightgbm_params)),
         ]
     )
@@ -201,6 +226,13 @@ def fit_lightgbm_frame(
             pipeline=pipeline,
             model_name=f"lightgbm_{device_type or 'cpu'}",
             target_col=target_col,
+            source_features=source_features,
+            feature_value_transform=feature_value_transform,
+            feature_value_transform_output=feature_value_transform_output,
+            feature_value_transform_prefix=feature_value_transform_prefix,
+            feature_value_transform_group_cols=feature_value_transform_group_cols,
+            feature_value_transform_rank_method=feature_value_transform_rank_method,
+            feature_value_transform_tick_size=feature_value_transform_tick_size,
         ),
         stats,
     )

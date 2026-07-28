@@ -133,6 +133,16 @@ class RidgePredictionModel:
     pipeline: Pipeline
     model_name: str = "ridge"
     target_col: str = "label"
+    source_features: list[str] | None = None
+    feature_value_transform: str = "none"
+    feature_value_transform_output: str = "replace"
+    feature_value_transform_prefix: str = "mech_v3_"
+    feature_value_transform_group_cols: tuple[str, ...] = (
+        "date",
+        "decision_target_timestamp",
+    )
+    feature_value_transform_rank_method: str = "average"
+    feature_value_transform_tick_size: float = 0.01
 
 
 @dataclass
