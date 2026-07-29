@@ -1,7 +1,7 @@
 # Experiment Log
 
-> Last reconciled: 2026-07-28
-> Coverage: 2026-05-20 through 2026-07-28
+> Last reconciled: 2026-07-29
+> Coverage: 2026-05-20 through 2026-07-29
 
 本文件是人工维护的实验事实账本，严格按发生时间升序记录假设、口径、结果、状态和决策。当前研究
 方向见 [project_brief.md](project_brief.md)，命令见 [runbook.md](runbook.md)。旧版逐日长记录已从 HEAD
@@ -32,14 +32,8 @@ run config、Job manifest、代码 revision、compact evidence 与本日志共�
 | 2026-07-21 | `nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1` | 在 v4 auction-pruned control 上仅新增经去重审查的多分母无量纲特征 | `completed`; 8/8 shards、47,333,122 行预测、pool analysis、四图与 compact evidence 完成 | next `17.1714 bps`；2026-07-23 晋级为当前 opening policy/incumbent |
 | 2026-07-22 | `strategy_acceptance_clock6_v4_control_2022_2025_v1` | 在同一完整候选集上统一比较 capacity-only、realistic no-refill 与因果可见 refill，并复核 overlap/tail | `completed`; 9,690 groups、969 日，compact artifacts/trace 已同步 | refill fill/net `99.9969%/8431.1 bps`，较 no-refill `+1247.5 bps`；保留为 multiden 的 ablation baseline |
 | 2026-07-22 | `strategy_acceptance_clock6_v4_multiden_2022_2025_v1` | 用同一工具验收 canonical multiden | `completed`; 9,690 groups、969 日，compact artifacts/trace 已同步 | refill fill/net `99.9970%/8598.7 bps`；随 multiden 晋级当前 opening policy |
-| 2026-07-22 | `build_full_day_clock6_temporal_smoke_20250102_v1` | 将 fixed-clock +6s 口径扩展为全天 238 个因果分钟及 5m/30m/close/next-close labels | `completed`; 1,126,662 行、212 列、522MiB，`_SUCCESS` 与 manifest 已写入 PVC | 5,292,366 次时间戳比较零违规；单日 22 分钟/峰值约 76GB，年度回填必须先分片 |
 | 2026-07-23 | decision: multiden promotion | 重新区分因果成本后收益 gate 与收益结构诊断 | 文档口径已统一；compact evidence 与原始数值不变 | 取消单边 P95/P99 cap、trim、分期胜率、bootstrap、overlap 的自动否决含义；multiden 晋级 opening policy/incumbent |
-| 2026-07-23 | `build_full_day_clock6_narrow_labels_{2019..2025}_v1` | 保持 v4 label 语义，只把决策面扩为全天 240 分钟，并输出 1m/10m/60m 三列 | `completed`: 2019–2025 共 1,699 日、1,645,990,902 行；七个年度 `_SUCCESS` 完整 | 212 列 temporal 宽表不做年度回填；PVC 窄表成为全天 feature 原料 lineage |
-| 2026-07-23 | `build_daily_next_session_open_close_labels_2019_2025_v1` | 按 D 键控构造 D+1 open→close 纯收益 | `completed`: 7 个年度分片、7,748,196 行、4 列、2m24s | 保留为诊断 cache；现金股票 D+1 新买不能 D+1 卖，不作为可执行主目标 |
-| 2026-07-24 | `build_daily_close_to_next_close_labels_2019_2025_v1` | 用收盘前日内路径预测 D 收盘→D+1 收盘收益，并以 D+1 `PreClosePrice` 处理除权除息 | `completed`: 7 个年度分片、7,746,340 行、4 列、64,799,533 bytes、2m40s、零重启；重复键/日期因果违规均为 0 | 晋级为日频时序 feature 路线的主监督目标；后续 feature 固定 `14:50` 截止后再连接 |
-| 2026-07-24 | `full_day_temporal_no_model_2019_2025_v1` | 不拟合模型，逐日检查 240 clocks × 3 horizons 对调整后 D→D+1 close return 的 IC、Top100 和头尾差，并物化复用序列 | `completed`: 1,699 日、2,446,560 条日级指标、1,440 条时钟汇总；序列 cache `_SUCCESS` 完整 | pool_L 60m@09:30 Top100 超额均值 `23.58 bps`，2020–2025 各年为正，但 Rank IC `-0.00418`；确认是 head selector |
-| 2026-07-24 | `temporal_nn_36m_2022_2025_pool_rank_{tcn_mse,tcn_attention_mse,tcn_attention_head10}_v1` | 固定 pool_L、截面 rank 输入、36m→6m OOS，只比较时序 attention 和 selector-aligned Top10% BCE | 三个 Indexed Job 均已提交；各 8 folds、`parallelism=1`、单 fold 单 GPU | 等 OOS 结果后选择模型；最终只作为 incumbent pool_L 的 score tilt/overlay，不另立全 A 策略 |
-| 2026-07-28 | `temporal_nn_36m_2022_2025_all_a_rank_1m_tcn_mse_v1` attribution audit | 复核 8-fold OOS prediction 的日期对齐、raw/base/excess 口径和 D 日涨停状态贡献 | `completed`: 4,837,650 行、969 日、无 date-symbol 重复；Top100 return/base/excess `98.06/4.49/93.57 bps`；涨停附近占 Top100 `33.58%` 并贡献 `87.82 bps` | 重新定性为涨停延续/尾盘已有持仓诊断；不作为广义强势延续或收盘新开仓策略，下一步提前决策、实际 ask 入场并在可交易池内重训 |
+| 2026-07-29 | decision: archive full-day temporal route | 确认“全天序列→隔夜日频目标→TCN”源于需求理解偏差 | 2026-07-22 至 07-29 的 run/job、实现、测试、证据和未提交变体整体移入 `experiments/archive/full_day_temporal_2026-07-22_2026-07-29/` | 路线终止；回到既有 `09:31-09:40` 实验范式，只换另外 2–3 个固定日内窗口，比较同口径 OOS 选股能力衰减 |
 
 ## 决策时间线
 
@@ -108,12 +102,8 @@ run config、Job manifest、代码 revision、compact evidence 与本日志共�
 | 07-22 | unified strategy acceptance toolkit | 复用 capacity/realistic 实现，将 visible pre-trade refill、同日 overlap、P95/P99、top contribution、月块 bootstrap 与 leave-one-out 打包成单一 CLI/run kind | `295 passed, 3 skipped`、contracts OK；镜像 source revision `e8902e8`；control/multiden 两个 Job 与 `_SUCCESS` 完成 | 小项目不再独立维护；指标统一输出，其中尾部、bootstrap、overlap 和集中度只作诊断 |
 | 07-22 | fixed-clock v4 unified downstream acceptance | 1bn capital、10×50m target/day、`turnover_diff_10t` 20%、单 decision symbol 1%、daily symbol 0.5%、ask depth 25%、spread≤50bps、fee8、min child10k、lot100 | control capacity/no-refill/refill net `8989.8/7183.6/8431.1 bps`；refill P95 upper-tail cap/trim `-9.33/-56.96 bps`，bootstrap P05 `209.2 bps`，top5 days 后仍 `10.38 bps` net | refill 成本后收益与资金利用率改善；尾部与 overlap 记为风险画像，原“未晋级”判断由 07-23 决策 supersede |
 | 07-22 | canonical multiden switch + tracked four-figure bundle | 用 multiden 替换 control 作为唯一 continuation candidate；control 只保留为 A/B baseline | 四张 SVG、compact CSV、三份 trace 与 SHA-256 manifest 进入 tracked evidence；完整统计差异不改写 | multiden 成为 canonical continuation candidate，并于 07-23 正式晋级 opening policy/incumbent |
-| 07-22 | full-day causal label/cache smoke | `09:31-11:29`、`13:01-14:59` 每分钟取目标后 5s 内首条状态，按实际状态 +6s 入场；5m/30m 按交易秒跨午休 | 21,307,238 tick 生成 1,126,662 行；5m/30m valid `94.66%/83.92%`；11:29 的 5m target 为 13:04:06-13:04:11；5,292,366 次因果比较零违规 | 单日口径通过；实测 22 分钟、522MiB、峰值约 76GB，年度单体 Job 不提交，先改月度/日度 indexed shards |
 | 07-23 | multiden promotion policy revision | 将一般稳健性与单边正尾归因分开；不改任何回测数值 | multiden next `17.1714 bps`；visible refill fill/net `99.9970%/8598.7 bps`；相对 no-refill `+1165.3 bps` | 单边 P95/P99 cap、trim、分期胜率、bootstrap、overlap 不再是自动 gate；multiden 晋级当前 opening policy/incumbent |
-| 07-23 | full-day narrow label submission | 取消 feature/audit 宽表落盘；ClickHouse 只取 9 个必要字段，向量化决策采样、clock-state 对齐和午休交易时钟；标签为 1m/10m/60m 持有后 60s VWAP | 2025-01-02: 20,941,373 tick → 1,136,863×6；valid `1,096,316/1,051,899/812,736`；7,270,214 次因果比较零违规；5m21s | 2019–2025 七个年度 Job 使用 v4 镜像并行提交到 PVC；预计约 20–24 小时完成，按日断点续跑 |
-| 07-23 | next-session daily target build | 使用 `stock.daily_bar_jy` 的下一交易日 `OpenPrice/ClosePrice`，按 D 键控构造纯 `open→close` 收益；不含旧 `0.30 × next_close` | smoke `5,123×4`；正式 Job `2m24s` 完成 `7,748,196×4`、7 个年度分片、63,932,858 bytes，重复键/因果违规 `0/0` | PVC cache 已发布；后续与全天路径 pivot 后按 `date,symbol` 连接 |
-| 07-24 | close-to-next-close daily target build | 以 D 收盘集合竞价买入、D+1 收盘卖出为交易语义；label 使用 D+1 `ClosePrice/PreClosePrice-1`，并要求 D 入场收盘价有效 | 除息日 smoke `5,150×4`，`000001.SZ` 从错误 raw `-1.4346%` 修正为 `+1.6536%`；正式 Job 完成 `7,746,340×4`、7 分片、64,799,533 bytes，重复键/因果违规 `0/0` | 新 cache 发布到 `daily_close_to_next_close_labels_v1` 并取代 open→close 作为主目标；D 收盘模型的 feature 截止固定为 `14:50` |
-| 07-28 | all-A 1m TCN limit-up attribution | 严格按前一交易日 target 识别 D 日涨停附近状态，并复算全 A / `pool_L` 原始收益与池内超额 | 全 A 涨停附近 `58,705` 股票—日，D+1 pooled/daily-equal return `201.59/186.57 bps`；Top100 选中 `32,542`，该组 D+1 `261.51 bps`；剔除并补足后，相对原池 excess `10.48/-1.82 bps`，相对同过滤池 excess `12.76/≈0.00 bps` | 未发现日期错位或直接 target 泄漏；确认模型使用全天路径和 mask 学到涨停捷径。当前 run 只作涨停延续、已有持仓留仓和 late-information 上界；普通强势路线须在训练前过滤并提前入场 |
+| 07-29 | archive mis-scoped full-day temporal work | mentor 原意是复用既有实验，只把十分钟决策窗口移到日内另外 2–3 个时段 | 全天 cache、隔夜 label、sequence/TCN、backward/cross-mask 变体及 compact evidence 已移入独立 archive；当前入口和契约移除 | 终止该路线；后续一次只改 `[sample]` 窗口和对应 cache lineage，按同一 rolling OOS/`pool_L` 口径测选股能力衰减 |
 
 ## 当前决策记录
 
@@ -279,9 +269,9 @@ Decision（2026-07-23 supersede）：refill、overlap 和 tail 都保留为统�
 不再拆成单独小项目。单边 P95/P99 cap 与 trim 只衡量正尾依赖，不是一般稳健性检验；分期胜率、bootstrap
 下界、overlap 和集中度也不设置自动否决阈值。multiden visible refill 的因果成本后资本收益为正，fill
 为 `99.9970%`，相对 no-refill 增加 `1165.3 bps` 累计资金净收益，因此 multiden 晋级为当前 opening
-policy/incumbent。下一步以该 policy 扩展全天分钟级、因果可见的时序 label/score，并建立完整持仓、
-退出、现金复用和冲击账本。opening policy 晋级不等同于完成该全天账本或批准实盘部署。完成实例与
-lineage：
+policy/incumbent。2026-07-29 将下一步修正为：保持该 policy 的研究口径，只把十分钟决策窗口移到
+另外 2–3 个日内时段，比较 OOS 选股能力衰减。opening policy 晋级不等同于完成持仓账本或批准实盘部署。
+完成实例与 lineage：
 
 ```text
 experiments/runs/strategy_acceptance_clock6_v4_control_2022_2025_v1.toml

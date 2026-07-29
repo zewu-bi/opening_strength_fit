@@ -36,8 +36,26 @@ def _latest_clocks(config: dict) -> dict[str, str]:
     return latest
 
 
-def _metrics_by_period(predictions: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    work = predictions.loc[predictions["stock_pool_member"].eq(1)].copy()
+def _raw_scales(config: dict) -> dict[str, float]:
+    configured = config_value(config, "temporal_features", "raw_scales", {})
+    if not isinstance(configured, dict):
+        raise SystemExit("[temporal_features].raw_scales must be a TOML table")
+    return {str(key): float(value) for key, value in configured.items()}
+
+
+def _metrics_by_period(
+    predictions: pd.DataFrame,
+    *,
+    evaluation_universe: str,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    normalized = str(evaluation_universe).strip().lower()
+    eligible = predictions["evaluation_eligible"].eq(1)
+    if normalized == "all_a":
+        work = predictions.loc[eligible].copy()
+    elif normalized == "pool_l":
+        work = predictions.loc[eligible & predictions["stock_pool_member"].eq(1)].copy()
+    else:
+        raise ValueError(f"unsupported evaluation_universe={evaluation_universe!r}")
     work["year"] = work["date"].astype(str).str[:4].astype(int)
     work["month"] = work["date"].astype(str).str[:7]
 
@@ -94,6 +112,20 @@ def main() -> None:
     sequence_root = Path(config_str(config, "temporal_data", "sequence_root", ""))
     if not (sequence_root / "_SUCCESS").exists():
         raise SystemExit(f"temporal sequence cache is incomplete: {sequence_root}")
+    input_mask_root_raw = config_str(
+        config,
+        "temporal_data",
+        "input_mask_sequence_root",
+        "",
+    ).strip()
+    input_mask_sequence_root = Path(input_mask_root_raw) if input_mask_root_raw else None
+    if (
+        input_mask_sequence_root is not None
+        and not (input_mask_sequence_root / "_SUCCESS").exists()
+    ):
+        raise SystemExit(
+            f"temporal input mask sequence cache is incomplete: {input_mask_sequence_root}"
+        )
     train_months = args.train_months or config_int(config, "window", "train_months", 36)
     validation_months = config_int(config, "window", "validation_months", 3)
     test_start_month = args.test_start_month or config_str(config, "window", "test_start_month", "")
@@ -130,6 +162,12 @@ def main() -> None:
     if device.startswith("cuda") and not torch.cuda.is_available():
         raise SystemExit("temporal NN requested CUDA but no GPU is available")
     latest_clocks = _latest_clocks(config)
+    evaluation_universe = config_str(
+        config,
+        "training",
+        "evaluation_universe",
+        "pool_l",
+    )
     common = {
         "device": device,
         "batch_size": config_int(config, "training", "batch_size", 1024),
@@ -141,13 +179,11 @@ def main() -> None:
         ),
         "latest_clocks": latest_clocks,
         "raw_scale": config_float(config, "temporal_features", "raw_scale", 0.02),
-        "evaluation_universe": config_str(
-            config,
-            "training",
-            "evaluation_universe",
-            "pool_l",
-        ),
+        "raw_scales": _raw_scales(config),
+        "evaluation_universe": evaluation_universe,
         "top_n": config_int(config, "evaluation", "top_n", 100),
+        "target_mode": config_str(config, "training", "target_mode", "rank"),
+        "input_mask_sequence_root": input_mask_sequence_root,
     }
     model, history, fit_trace = fit_temporal_model(
         train_paths,
@@ -161,6 +197,19 @@ def main() -> None:
         weight_decay=config_float(config, "training", "weight_decay", 0.0001),
         loss_name=config_str(config, "training", "loss", "huber"),
         head_fraction=config_float(config, "training", "head_fraction", 0.10),
+        huber_delta=config_float(config, "training", "huber_delta", 0.25),
+        target_winsor_lower_quantile=config_float(
+            config,
+            "training",
+            "target_winsor_lower_quantile",
+            0.01,
+        ),
+        target_winsor_upper_quantile=config_float(
+            config,
+            "training",
+            "target_winsor_upper_quantile",
+            0.99,
+        ),
         selection_metric=config_str(
             config,
             "training",
@@ -171,13 +220,23 @@ def main() -> None:
         seed=config_int(config, "training", "seed", 20260724),
         **common,
     )
+    target_bounds_raw = fit_trace.get("target_winsor_bounds")
+    target_winsor_bounds = (
+        (float(target_bounds_raw[0]), float(target_bounds_raw[1]))
+        if isinstance(target_bounds_raw, list) and len(target_bounds_raw) == 2
+        else None
+    )
     test_metrics, predictions = evaluate_temporal_model(
         model,
         test_paths,
         include_predictions=True,
+        target_winsor_bounds=target_winsor_bounds,
         **common,
     )
-    yearly, monthly = _metrics_by_period(predictions)
+    yearly, monthly = _metrics_by_period(
+        predictions,
+        evaluation_universe=evaluation_universe,
+    )
     history.to_csv(output_dir / "training_history.csv", index=False)
     write_frame_atomic(predictions, output_dir / "predictions.parquet")
     yearly.to_csv(output_dir / "metrics_by_year.csv", index=False)
@@ -191,6 +250,9 @@ def main() -> None:
         "validation_days": len(validation_paths),
         "test_days": len(test_paths),
         "latest_clocks": latest_clocks,
+        "input_mask_sequence_root": str(input_mask_sequence_root)
+        if input_mask_sequence_root is not None
+        else None,
         "test_metrics": test_metrics,
         **fit_trace,
     }

@@ -63,9 +63,13 @@ def add_path_shape_confirmation_features(
     *,
     windows: tuple[int, ...] = (2, 3, 5),
     prefix: str = "path_shape_",
+    reference_name: str = "open",
 ) -> pd.DataFrame:
     """Add causal post-open path shape and confirmation features."""
 
+    reference_name = reference_name.strip().lower()
+    if reference_name not in {"open", "start"}:
+        raise ValueError("path-shape reference_name must be 'open' or 'start'")
     out = ensure_timestamp_columns(frame)
     time_col = (
         "decision_target_timestamp" if "decision_target_timestamp" in out.columns else "timestamp"
@@ -88,15 +92,18 @@ def add_path_shape_confirmation_features(
         )
         positive_move = mid_move_1_bps.gt(0.0).astype("float64")
 
-        new_columns[f"{prefix}mid_drawdown_from_open_high_bps"] = (
+        new_columns[f"{prefix}mid_drawdown_from_{reference_name}_high_bps"] = (
             safe_divide(mid - expanding_high, expanding_high) * 10_000
         )
-        new_columns[f"{prefix}mid_recovery_from_open_low_bps"] = (
+        new_columns[f"{prefix}mid_recovery_from_{reference_name}_low_bps"] = (
             safe_divide(mid - expanding_low, expanding_low) * 10_000
         )
-        new_columns[f"{prefix}mid_from_first_bps"] = (
-            safe_divide(mid - first_mid, first_mid) * 10_000
+        first_reference_column = (
+            f"{prefix}mid_from_first_bps"
+            if reference_name == "open"
+            else f"{prefix}mid_from_start_bps"
         )
+        new_columns[first_reference_column] = safe_divide(mid - first_mid, first_mid) * 10_000
         new_columns[f"{prefix}mid_new_high_flag"] = mid.ge(expanding_high).astype("int8")
         new_columns[f"{prefix}mid_new_low_flag"] = mid.le(expanding_low).astype("int8")
         new_columns[f"{prefix}return_positive_fraction"] = (

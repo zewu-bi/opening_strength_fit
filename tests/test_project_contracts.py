@@ -104,12 +104,14 @@ def test_experiment_registry_is_aligned() -> None:
 def test_experiment_audit_metrics_status_distinguishes_artifact_runs() -> None:
     artifact = _audit_record(kind="labeled_cache", status="completed")
     local_artifact = _audit_record(kind="realistic_acceptance", status="completed")
+    local_opening_audit = _audit_record(kind="opening_limit_audit", status="completed")
     completed_training = _audit_record(kind="experiment", status="completed")
     queued_training = _audit_record(kind="experiment", status="queued")
 
     assert metrics_status(artifact, has_metrics=False) == "n/a"
     assert metrics_status(artifact, has_metrics=True) == "unexpected"
     assert metrics_status(local_artifact, has_metrics=False) == "n/a"
+    assert metrics_status(local_opening_audit, has_metrics=False) == "n/a"
     assert metrics_status(completed_training, has_metrics=False) == "missing"
     assert metrics_status(queued_training, has_metrics=False) == "pending"
 

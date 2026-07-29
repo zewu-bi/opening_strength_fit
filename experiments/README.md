@@ -11,6 +11,7 @@
 | `config_templates/` | 可复用配置片段 | tracked |
 | `scripts/` | 正式或历史诊断入口 | tracked |
 | `evidence/` | compact summary、稳健性表和 trace | tracked |
+| `archive/` | 已终止路线的配置、实现快照与证据；不参与当前入口和契约 | tracked |
 | `results/` | 本地/PVC 结果 mirror | ignored |
 
 cache、prediction、逐行 replay、pickle、模型和大 Parquet 不进入 Git。它们由 run config、Job、manifest、

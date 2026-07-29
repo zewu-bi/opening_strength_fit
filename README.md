@@ -26,10 +26,10 @@ tick / labeled input
 不再作为自动晋级门槛。完整数字、边界和决策见 [project brief](docs/project_brief.md)、[四图验收包](experiments/evidence/backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/)
 与 [experiment log](docs/experiment_log.md)。
 
-全天 all-A 1m TCN 的表面 Top100 excess 为 `93.57 bps`，但逐行归因显示约 `89.6%` 的原始 Top100
-return 来自 D 日已经涨停的股票。该 run 已重新定性为涨停延续/尾盘已有持仓诊断，不作为广义强势延续
-或收盘新开仓策略。详见 [全天时序说明](docs/full_day_temporal_labels_v1.md) 和
-[诊断证据](experiments/evidence/backtests/temporal_nn_36m_2022_2025_all_a_rank_1m_tcn_mse_v1/)。
+2026-07-22 至 2026-07-29 的全天时序/隔夜 TCN 路线源于需求理解偏差，现已
+[封存](experiments/archive/full_day_temporal_2026-07-22_2026-07-29/README.md)，不再属于当前研究主线。
+下一步保持既有实验口径不变，只把 `09:31-09:40` 替换为另外 2–3 个固定日内窗口，比较模型选股能力
+随时段的衰减。
 
 ## 可复现范围
 

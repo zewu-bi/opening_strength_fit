@@ -48,10 +48,7 @@ K8S_JOB_ENTRYPOINTS = (
     "osf-audit-feature-hygiene",
     "osf-audit-strategy-acceptance",
     "osf-analyze-pool-internal-top100",
-    "osf-analyze-full-day-temporal",
-    "osf-build-backward-price-paths",
     "osf-build-exposure-input",
-    "osf-build-daily-return-labels",
     "osf-build-labeled-cache",
     "osf-build-next-close-labels",
     "osf-build-target-label-cache",
@@ -60,7 +57,6 @@ K8S_JOB_ENTRYPOINTS = (
     "osf-run-gap-risk-attribution",
     "osf-run-learned-risk-layer",
     "osf-run-score-risk-sweep",
-    "osf-train-temporal-nn",
     "osf-train",
     "run_top1000_rank_bucket_diagnostics.py",
 )

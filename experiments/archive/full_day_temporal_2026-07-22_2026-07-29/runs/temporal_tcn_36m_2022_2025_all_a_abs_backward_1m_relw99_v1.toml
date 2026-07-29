@@ -1,0 +1,87 @@
+[run]
+id = "temporal_tcn_36m_2022_2025_all_a_abs_backward_1m_relw99_v1"
+kind = "temporal_nn"
+description = "Primary TCN on endpoint-aligned absolute backward 1m returns; all-A continuous market-relative P1/P99-winsor target."
+status = "running"
+
+[temporal_data]
+sequence_root = "/mnt/output/opening_strength_fit/cache/full_day_backward_price_paths_sequence_v1"
+
+[temporal_features]
+value_mode = "raw_tanh"
+raw_scale = 0.005
+
+[temporal_features.raw_scales]
+"1m" = 0.005
+"10m" = 0.020
+"60m" = 0.050
+
+[temporal_features.latest_clocks]
+"1m" = "14:47"
+"10m" = "00:00"
+"60m" = "00:00"
+
+[model]
+name = "temporal_nn"
+architecture = "tcn"
+hidden_width = 64
+dropout = 0.10
+
+[training]
+device = "cuda"
+train_universe = "all_a"
+evaluation_universe = "all_a"
+batch_size = 1024
+epochs = 8
+learning_rate = 0.001
+weight_decay = 0.0001
+loss = "huber"
+huber_delta = 0.01
+head_fraction = 0.10
+target_mode = "market_relative_winsor"
+target_winsor_lower_quantile = 0.01
+target_winsor_upper_quantile = 0.99
+selection_metric = "loss"
+patience = 2
+seed = 20260728
+
+[evaluation]
+selection_mode = "cross_section"
+ic_mode = "cross_section"
+top_n = 100
+
+[window]
+mode = "rolling_monthly"
+train_months = 36
+validation_months = 3
+test_months = 6
+test_stride_months = 6
+test_start_month = "2022-01"
+test_end_month = "2025-12"
+
+[output]
+layout = "v2"
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-bw-tcn-abs1m-w99-v1"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+shard_job_mode = "indexed"
+shard_parallelism = 2
+backoff_limit_per_index = 0
+wait_for_paths = [
+  "/mnt/output/opening_strength_fit/cache/full_day_backward_price_paths_sequence_v1/_SUCCESS",
+]
+only_nodes = ["node10", "node16", "node22"]
+
+[k8s.node_selector]
+has_gpu = "true"
+
+[k8s.resources]
+cpu_request = "8"
+cpu_limit = "16"
+memory_request = "48Gi"
+memory_limit = "96Gi"
+gpu_limit = "1"

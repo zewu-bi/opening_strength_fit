@@ -92,6 +92,18 @@ class PostopenV2FeatureTest(unittest.TestCase):
         self.assertTrue(pd.isna(out.loc[1, "postopen_v2_ask_volume_1_diff_1m"]))
         self.assertAlmostEqual(out.loc[1, "postopen_v2_ask_volume_1_diff_2m"], 20.0)
 
+    def test_start_reference_uses_explicit_from_start_names(self) -> None:
+        out = add_postopen_v2_decision_features(
+            _decision_rows(),
+            windows=(1,),
+            depth_levels=(3, 10),
+            reference_name="start",
+        )
+
+        self.assertNotIn("postopen_v2_ask_volume_1_from_open_diff", out.columns)
+        self.assertAlmostEqual(out.loc[0, "postopen_v2_ask_volume_1_from_start_diff"], 0.0)
+        self.assertAlmostEqual(out.loc[2, "postopen_v2_ask_volume_1_from_start_diff"], 20.0)
+
 
 if __name__ == "__main__":
     unittest.main()

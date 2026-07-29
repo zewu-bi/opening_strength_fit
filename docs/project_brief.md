@@ -1,6 +1,6 @@
 # Project Brief
 
-> Last reviewed: 2026-07-28
+> Last reviewed: 2026-07-29
 
 ## 目标
 
@@ -8,10 +8,9 @@
 执行限制后仍稳定的可交易超额。模型可以使用全 A 股训练，但只评价既定股池内部的增量，不把它包装成独立
 universe 策略。
 
-当前 `09:31-09:40` 信号阶段已经收束。全天 1m/10m/60m 路径和 D→D+1 label 已完成，首个 all-A
-1m TCN 暴露出明确的涨停捷径：模型主要识别信号时已经涨停的股票，而不是一般意义上的可交易强势延续。
-下一阶段因此拆为两条路线：更早决策时点的可交易强势延续/后续涨停预测，以及 `14:47` 已有持仓的
-隔夜留仓判断；执行层继续建立完整的持仓、退出、现金复用、成本和市场冲击账本。
+当前 `09:31-09:40` 信号阶段已经收束。下一阶段研究同一选股问题在日内的衰减：沿用既有样本、label、
+feature、模型、股池、rolling OOS 和验收口径，仅将十分钟决策窗口替换为另外 2–3 个预先固定的日内窗口。
+2026-07-22 至 2026-07-29 的全天序列/隔夜 TCN 尝试源于需求理解偏差，已整体封存并停止。
 
 ## 固定研究口径
 
@@ -47,14 +46,6 @@ multiden 的 capacity-only、realistic no-refill、visible pre-trade refill fill
 结果见[四图验收包](../experiments/evidence/backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/)
 和 [strategy evidence](../experiments/evidence/backtests/strategy_acceptance_clock6_v4_multiden_2022_2025_v1/)。
 
-全天 all-A 1m TCN 的表面 Top100 return/base/excess 为 `98.06/4.49/93.57 bps`，但 Top100
-平均 `33.58%` 是 D 日涨停附近股票，该组贡献 `87.82 bps`，占原始 Top100 return 约 `89.6%`。
-事后剔除并补足 100 只后，相对未过滤原池的全 A / `pool_L` excess 为 `10.48/-1.82 bps`；
-若基准同步改成相同非涨停过滤池，则池内 excess 为 `12.76/≈0.00 bps`。前者是固定原 benchmark
-的压力测试，后者才是重新定义候选池后的池内选股超额。
-该结果保留为涨停延续/尾盘已有持仓诊断，不作为广义强势延续或收盘新开仓策略晋级证据。详见
-[all-A 1m TCN evidence](../experiments/evidence/backtests/temporal_nn_36m_2022_2025_all_a_rank_1m_tcn_mse_v1/)。
-
 ## 验收逻辑
 
 信号层依次检查：
@@ -80,23 +71,20 @@ multiden 的 capacity-only、realistic no-refill、visible pre-trade refill fill
 - visible refill 是决策前过滤后的重新分配，不是收到真实订单失败回报后的二次下单；
 - overlap 当前假设各开盘切片持有至 next close，没有通用现金复用账本；
 - ask2-10 深度在现有输入中无有效信息；
-- all-A 1m TCN 训练只要求当天任意时刻存在有效路径，日频 target 只要求 D、D+1 收盘价有效，
-  没有要求 `14:47`/收盘时仍有卖盘或可成交；
-- 旧 `09:31-09:40` opening policy 也可能遇到集合竞价已涨停或开盘数分钟内涨停的股票；现有 ask1、
-  status、spread、depth 约束比全天日频 target 更接近执行，但仍需补做信号时涨停状态和收益贡献审计；
+- 旧 `09:31-09:40` opening policy 的点时涨停审计已完成：Top100 在决策时封板仅
+  `1/969,000`，实际 `clock+6s` 入场无卖一为 `0`；距涨停 `100 bps` 内占 Top100
+  `0.130%`，剔除重选只改变 `-0.025 bps` excess，不是当前不可买涨停驱动；
+  但模型会显著选中随后在 D 日收盘涨停的股票（Top100 `4.677%`，`6.05x` 富集），
+  该组贡献 `38.85 bps`，需与“信号时已封板”严格区分；
 - GPU NN 复跑依赖 run/job 中记录的集群镜像和外部 cache。
 
-全天 1m/10m/60m 因果窄标签和 `close→next-close` 日频主 label 均已完成 2019–2025 全量回填。
-无模型分析确认 pool_L 的短期路径更像 head selector：`60m@09:30` Top100 超额在 2020–2025 各年为正，
-但全截面 Rank IC 近零偏负。日级序列 cache 已发布到 PVC。后续不再把临近收盘 path-only Top100
-直接解释为新开仓收益，而按以下顺序推进：
+后续按以下顺序推进：
 
-1. 审计 opening Top100 在 `09:31-09:40` 的“已封死 / 有卖盘 / 后续才涨停 / 未涨停”贡献；
-2. 在更早的多个决策时点要求实际 ask/status/depth 可入场，并以实际入场价构造 D+1 目标；
-3. 信号时已封死股票从普通强势候选池移出，信号后才涨停的股票保留为预测成功；
-4. 在过滤后的 universe 内重算 target rank 并完整重训，不能用事后过滤代替；
-5. 涨停延续另建排队/封单/后续卖出成交量模型，未成交资金必须留现金；
-6. `14:47` 模型只在已有持仓的隔夜留仓/减仓场景下单独验收。
+1. 预先固定另外 2–3 个互不重叠的十分钟日内窗口，避开午休边界；具体时钟在提交实验前写入 run config；
+2. 使用与 incumbent 相同的 cache 构建、特征、目标、模型、训练 universe、`pool_L` 选择和 rolling OOS；
+3. 每个窗口独立生成所需的分钟样本并完整重训，只允许 `[sample]` 时钟和相应数据 lineage 变化；
+4. 用同一套 Rank IC、Top100 excess、分期稳定性、容量和执行指标与 `09:31-09:40` 基准比较；
+5. 汇总“窗口时点/距开盘时间 → OOS 选股能力”，回答衰减速度和是否存在午后残余信号。
 
-非目标包括继续宽扫普通 MLP、使用收盘后才完成的数据预测 D 收盘入场、把 Top100 等权收益当作容量收益，
-或把公司日频 API 当作分钟策略回测器。
+非目标包括改变现有 target、继续宽扫普通 MLP、把 Top100 等权收益当作容量收益，或把公司日频 API
+当作分钟策略回测器。

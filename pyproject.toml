@@ -34,7 +34,6 @@ cluster = [
 [project.scripts]
 osf-analyze-capacity-acceptance = "opening_strength_fit.commands.capacity_acceptance_analysis:main"
 osf-analyze-pool-internal-top100 = "opening_strength_fit.commands.pool_internal_analysis:main"
-osf-analyze-full-day-temporal = "opening_strength_fit.commands.temporal_analysis:main"
 osf-analyze-realistic-acceptance = "opening_strength_fit.commands.realistic_acceptance_analysis:main"
 osf-ask-level-attribution = "opening_strength_fit.commands.ask_level_attribution:main"
 osf-audit-capacity = "opening_strength_fit.commands.capacity_audit:main"
@@ -44,8 +43,6 @@ osf-audit-feature-dependence = "opening_strength_fit.commands.feature_dependence
 osf-audit-feature-hygiene = "opening_strength_fit.commands.feature_hygiene_audit:main"
 osf-audit-strategy-acceptance = "opening_strength_fit.commands.strategy_acceptance:main"
 osf-build-labeled-cache = "opening_strength_fit.commands.labeled_cache_build:main"
-osf-build-backward-price-paths = "opening_strength_fit.commands.backward_price_path_cache:main"
-osf-build-daily-return-labels = "opening_strength_fit.commands.daily_return_label_cache:main"
 osf-build-exposure-input = "opening_strength_fit.commands.exposure_input_build:main"
 osf-build-next-close-labels = "opening_strength_fit.commands.next_close_label_cache:main"
 osf-build-target-label-cache = "opening_strength_fit.commands.target_label_cache:main"
@@ -69,7 +66,6 @@ osf-run-score-risk-sweep = "opening_strength_fit.commands.score_risk_sweep:main"
 osf-run-score-tail-guards = "opening_strength_fit.commands.score_tail_guards:main"
 osf-summarize-opening-results = "opening_strength_fit.commands.opening_result_summary:main"
 osf-sync-experiment-artifacts = "opening_strength_fit.commands.artifact_sync:main"
-osf-train-temporal-nn = "opening_strength_fit.commands.temporal_nn:main"
 osf-train = "opening_strength_fit.commands.experiment_run:main"
 
 [tool.setuptools.packages.find]
@@ -90,6 +86,7 @@ skip_covered = true
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+exclude = ["experiments/archive"]
 
 [tool.ruff.lint]
 select = ["B", "E", "F", "I", "UP"]

@@ -10,3 +10,7 @@
 git log --all -- docs/archive
 git show <revision>:docs/archive/<historical-file>
 ```
+
+2026-07-22 至 2026-07-29 的全天分钟路径、隔夜日频目标和 TCN 路线因需求理解偏差而终止；其完整
+配置、实现快照和证据保存在
+[`experiments/archive/full_day_temporal_2026-07-22_2026-07-29/`](../../experiments/archive/full_day_temporal_2026-07-22_2026-07-29/)。

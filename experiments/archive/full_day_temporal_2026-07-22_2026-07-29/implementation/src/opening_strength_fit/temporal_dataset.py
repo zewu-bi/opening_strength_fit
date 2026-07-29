@@ -44,14 +44,58 @@ def load_sequence(path: Path) -> dict[str, np.ndarray]:
         return {key: loaded[key] for key in loaded.files}
 
 
+def aligned_sequence_validity(
+    primary: Mapping[str, np.ndarray],
+    mask_source: Mapping[str, np.ndarray],
+) -> np.ndarray:
+    """Align another sequence's native validity by symbol and trading-minute slot."""
+
+    primary_values = np.asarray(primary["values"])
+    mask_values = np.asarray(mask_source["values"])
+    if primary_values.ndim != 3 or mask_values.ndim != 3:
+        raise ValueError("temporal values must have shape [symbols, channels, clocks]")
+    if primary_values.shape[1:] != mask_values.shape[1:]:
+        raise ValueError(
+            "input mask sequence must match the primary channel and trading-minute slot counts"
+        )
+
+    primary_symbols = pd.Index(np.asarray(primary["symbols"]).astype(str))
+    mask_symbols = pd.Index(np.asarray(mask_source["symbols"]).astype(str))
+    if primary_symbols.has_duplicates or mask_symbols.has_duplicates:
+        raise ValueError("temporal sequence symbols must be unique")
+    mask_indices = mask_symbols.get_indexer(primary_symbols)
+    matched = mask_indices >= 0
+    aligned = np.zeros(primary_values.shape, dtype=bool)
+    if matched.any():
+        native_valid_source = mask_source.get("valid")
+        native_valid = (
+            np.asarray(native_valid_source, dtype=bool)
+            if native_valid_source is not None
+            else np.isfinite(mask_values)
+        )
+        aligned[matched] = native_valid[mask_indices[matched]]
+    return aligned
+
+
+def sequence_mask_path(primary_path: Path, mask_sequence_root: Path) -> Path:
+    """Resolve the same year/date shard below another sequence root."""
+
+    date_dir = primary_path.parent.name
+    year_dir = primary_path.parent.parent.name
+    if not date_dir.startswith("date=") or not year_dir.startswith("year="):
+        raise ValueError(f"unexpected temporal sequence path layout: {primary_path}")
+    return mask_sequence_root / year_dir / date_dir / primary_path.name
+
+
 def eligible_feature_mask(
     arrays: Mapping[str, np.ndarray],
     *,
     latest_clocks: Mapping[str, str] | None = None,
+    valid_override: np.ndarray | None = None,
 ) -> np.ndarray:
     latest = dict(DEFAULT_LATEST_CLOCKS)
     latest.update(latest_clocks or {})
-    valid_source = arrays.get("valid")
+    valid_source = valid_override if valid_override is not None else arrays.get("valid")
     valid = (
         np.asarray(valid_source, dtype=bool).copy()
         if valid_source is not None
@@ -73,30 +117,67 @@ def prepare_day_inputs(
     value_mode: str,
     latest_clocks: Mapping[str, str] | None = None,
     raw_scale: float = 0.02,
+    raw_scales: Mapping[str, float] | None = None,
+    input_valid_override: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     values = np.asarray(arrays["values"], dtype=np.float32)
-    valid = eligible_feature_mask(arrays, latest_clocks=latest_clocks)
+    value_valid = eligible_feature_mask(arrays, latest_clocks=latest_clocks)
+    input_valid = (
+        value_valid
+        if input_valid_override is None
+        else eligible_feature_mask(
+            arrays,
+            latest_clocks=latest_clocks,
+            valid_override=input_valid_override,
+        )
+    )
     normalized_mode = str(value_mode).strip().lower()
     if normalized_mode == "cross_section_rank":
         cached_rank = arrays.get("rank_values")
         transformed = (
             np.asarray(cached_rank, dtype=np.float32).copy()
             if cached_rank is not None
-            else cross_section_rank_values(values, valid)
+            else cross_section_rank_values(values, value_valid)
         )
-        transformed[~valid] = 0.0
-    elif normalized_mode == "raw_tanh":
-        if raw_scale <= 0:
-            raise ValueError("raw_scale must be positive")
-        transformed = np.tanh(values / float(raw_scale)).astype(np.float32)
-        transformed[~valid] = 0.0
+        transformed[~value_valid] = 0.0
+    elif normalized_mode in {"raw_tanh", "relative_tanh"}:
+        configured_scales = {
+            str(key).removeprefix("alpha_return_"): float(value)
+            for key, value in (raw_scales or {}).items()
+        }
+        channel_scales = np.asarray(
+            [
+                configured_scales.get(
+                    feature.removeprefix("alpha_return_"),
+                    float(raw_scale),
+                )
+                for feature in FEATURE_COLUMNS
+            ],
+            dtype=np.float32,
+        )
+        if not np.isfinite(channel_scales).all() or (channel_scales <= 0).any():
+            raise ValueError("raw scales must be finite and positive")
+        source = values
+        if normalized_mode == "relative_tanh":
+            valid_values = np.where(value_valid, values, np.nan)
+            counts = value_valid.sum(axis=0)
+            sums = np.nansum(valid_values, axis=0)
+            means = np.divide(
+                sums,
+                counts,
+                out=np.zeros_like(sums, dtype=np.float32),
+                where=counts > 0,
+            )
+            source = values - means[None, :, :]
+        transformed = np.tanh(source / channel_scales[None, :, None]).astype(np.float32)
+        transformed[~value_valid] = 0.0
     else:
         raise ValueError(
             f"unsupported temporal value_mode={value_mode!r}; "
-            "expected cross_section_rank or raw_tanh"
+            "expected cross_section_rank, raw_tanh, or relative_tanh"
         )
-    inputs = np.concatenate([transformed, valid.astype(np.float32)], axis=1)
-    time_valid = valid.any(axis=1)
+    inputs = np.concatenate([transformed, input_valid.astype(np.float32)], axis=1)
+    time_valid = input_valid.any(axis=1)
     return inputs, time_valid
 
 
@@ -112,6 +193,44 @@ def target_rank(
         count = int(eligible.sum())
         denominator = (count - 1.0) / 2.0 if count > 1 else 1.0
         out[eligible] = (ranked.to_numpy(dtype=np.float32) - (count + 1.0) / 2.0) / denominator
+    return out
+
+
+def target_values(
+    target: np.ndarray,
+    *,
+    universe_mask: np.ndarray,
+    mode: str,
+    winsor_bounds: tuple[float, float] | None = None,
+) -> np.ndarray:
+    """Transform one day's target without changing its cross-sectional membership."""
+
+    values = np.asarray(target, dtype=np.float32)
+    eligible = np.isfinite(values) & np.asarray(universe_mask, dtype=bool)
+    normalized = str(mode).strip().lower()
+    if normalized == "rank":
+        return target_rank(values, universe_mask=eligible)
+
+    out = np.full(len(values), np.nan, dtype=np.float32)
+    if not eligible.any():
+        return out
+    if normalized in {"raw", "raw_winsor"}:
+        transformed = values[eligible].astype(np.float32, copy=True)
+    elif normalized in {"market_relative", "market_relative_winsor"}:
+        transformed = values[eligible] - float(np.mean(values[eligible], dtype=np.float64))
+    else:
+        raise ValueError(
+            f"unsupported target mode={mode!r}; expected rank, raw, raw_winsor, "
+            "market_relative, or market_relative_winsor"
+        )
+    if normalized.endswith("_winsor"):
+        if winsor_bounds is None:
+            raise ValueError(f"target mode {mode!r} requires winsor_bounds")
+        lower, upper = (float(value) for value in winsor_bounds)
+        if not np.isfinite([lower, upper]).all() or lower >= upper:
+            raise ValueError("winsor bounds must be finite and strictly increasing")
+        transformed = np.clip(transformed, lower, upper)
+    out[eligible] = transformed
     return out
 
 

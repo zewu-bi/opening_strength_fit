@@ -214,7 +214,7 @@ excess 恒为 0。
 
 该 run 现定性为“涨停延续/尾盘已有持仓留仓诊断”，不是收盘新开仓策略，也不是 opening-strength
 延续证据。完整数字和口径见
-[对应 evidence](../experiments/evidence/backtests/temporal_nn_36m_2022_2025_all_a_rank_1m_tcn_mse_v1/)。
+[对应 evidence](../evidence/temporal_nn_36m_2022_2025_all_a_rank_1m_tcn_mse_v1/)。
 
 普通强势延续必须在训练前完成资格修正：信号时已经封死的股票移出主候选池，在剩余可交易股票内重算
 target rank 并重训；信号后才涨停的股票仍保留为预测成功。若目标是获取日内上涨至涨停的收益，决策时点

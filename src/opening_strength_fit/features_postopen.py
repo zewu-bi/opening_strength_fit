@@ -403,13 +403,17 @@ def _add_trajectory_features(
     builder: _PostOpenV2Builder,
     *,
     windows: tuple[int, ...],
+    reference_name: str,
 ) -> None:
+    reference_name = reference_name.strip().lower()
+    if reference_name not in {"open", "start"}:
+        raise ValueError("post-open trajectory reference_name must be 'open' or 'start'")
     for column in _trajectory_columns(builder):
         values = builder.numeric(column)
         first = builder.first(column)
-        builder.add(f"postopen_v2_{column}_from_open_diff", values - first)
+        builder.add(f"postopen_v2_{column}_from_{reference_name}_diff", values - first)
         builder.add(
-            f"postopen_v2_{column}_from_open_rel",
+            f"postopen_v2_{column}_from_{reference_name}_rel",
             safe_divide(values - first, first.abs()),
         )
         for window in windows:
@@ -485,6 +489,7 @@ def add_postopen_v2_decision_features(
     *,
     windows: tuple[int, ...] = (1, 2, 3, 5),
     depth_levels: tuple[int, ...] = (3, 5, 10),
+    reference_name: str = "open",
 ) -> pd.DataFrame:
     """Add richer post-open state, trajectory, and trade-impact features.
 
@@ -497,6 +502,10 @@ def add_postopen_v2_decision_features(
     _add_depth_concentration_features(builder)
     _add_gap_shape_features(builder, depth_levels=depth_levels)
     _add_trade_impact_features(builder)
-    _add_trajectory_features(builder, windows=windows)
+    _add_trajectory_features(
+        builder,
+        windows=windows,
+        reference_name=reference_name,
+    )
     _add_queue_response_features(builder)
     return builder.finish()

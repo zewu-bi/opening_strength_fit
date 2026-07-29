@@ -18,7 +18,7 @@ ACTIVE_STATUSES = {"queued", "running"}
 COMPLETED_STATUS = "completed"
 INACTIVE_STATUSES = {"canceled", "superseded"}
 KNOWN_STATUSES = {*ACTIVE_STATUSES, COMPLETED_STATUS, *INACTIVE_STATUSES}
-LOCAL_ONLY_RUN_KINDS = {"realistic_acceptance"}
+LOCAL_ONLY_RUN_KINDS = {"opening_limit_audit", "realistic_acceptance"}
 METRICS_SUFFIX = "_metrics_by_year.csv"
 REQUIRED_RUN_FIELDS = ("id", "kind", "description", "status")
 REQUIRED_METRICS_COLUMNS = ("run_id", "test_year", "model_name", "rows")
@@ -139,6 +139,7 @@ def is_artifact_run(record: RunRecord) -> bool:
         "labeled_cache",
         "clickhouse_labeled_cache",
         "next_close_label_cache",
+        "opening_limit_audit",
         "target_cache",
         "score_risk_sweep",
         "alpha_conditioned_rolling_validation",

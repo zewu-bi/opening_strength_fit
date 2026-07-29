@@ -159,6 +159,12 @@ def _apply_feature_transforms_from_config(
                 "postopen_v2_depth_levels",
                 (3, 5, 10),
             ),
+            reference_name=config_str(
+                config,
+                "features",
+                "postopen_v2_reference_name",
+                "open",
+            ),
         )
     if config_bool(config, "features", "include_path_shape_confirmation", False):
         labeled = add_path_shape_confirmation_features(
@@ -174,6 +180,12 @@ def _apply_feature_transforms_from_config(
                 "features",
                 "path_shape_prefix",
                 "path_shape_",
+            ),
+            reference_name=config_str(
+                config,
+                "features",
+                "path_shape_reference_name",
+                "open",
             ),
         )
     if config_bool(config, "features", "include_price_scale_features", False):

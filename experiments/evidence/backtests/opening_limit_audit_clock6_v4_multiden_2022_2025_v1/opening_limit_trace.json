@@ -1,0 +1,109 @@
+{
+  "predictions": "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1",
+  "labeled_cache": "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v4_clock6_state_unique_mixed_w030_mcap_lag1",
+  "next_labels": "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1",
+  "pool": "L",
+  "pool_date_lag_sessions": 0,
+  "top_n": 100,
+  "scopes": {
+    "published_top100": "Exact published evaluation eligibility: prediction, one-minute execution label, and next-close label are all finite.",
+    "scoreable_pool": "Persisted model-score universe: prediction and next-close evaluation label are finite; one-minute label is not explicitly used here. In these artifacts every persisted pool-L prediction already has a valid one-minute label, so this scope is identical to published_top100 and is not a counterfactual inference pass over invalid-label rows."
+  },
+  "definitions": {
+    "decision_offer": "Decision-snapshot ask1 price and volume are positive and status is tradable.",
+    "entry_offer": "Clock+6s entry ask1 price and volume are positive and entry status is tradable.",
+    "upper_limit_price": "ST=5%, ChiNext/STAR=20%, other supported A shares=10%, rounded to one fen; overridden by exact daily close when UpdownLimitStatus=1. Nonstandard IPO/relisting rows are marked unknown.",
+    "at_limit": "State or executable entry price equals upper limit within half a tick.",
+    "touched_limit_by_decision": "Cumulative intraday high observed at the decision snapshot has reached the upper limit."
+  },
+  "files": [
+    {
+      "prediction_file": "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/month_2022-01/predictions.parquet",
+      "start_date": "2022-01-04",
+      "end_date": "2022-06-30",
+      "prediction_rows": 3575331,
+      "snapshot_missing_rows": 0,
+      "next_label_missing_rows": 0,
+      "upper_limit_missing_rows": 0,
+      "published_eligible_rows": 3575331,
+      "scoreable_rows": 3575331
+    },
+    {
+      "prediction_file": "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/month_2022-07/predictions.parquet",
+      "start_date": "2022-07-01",
+      "end_date": "2022-12-30",
+      "prediction_rows": 3989993,
+      "snapshot_missing_rows": 0,
+      "next_label_missing_rows": 0,
+      "upper_limit_missing_rows": 0,
+      "published_eligible_rows": 3989993,
+      "scoreable_rows": 3989993
+    },
+    {
+      "prediction_file": "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/month_2023-01/predictions.parquet",
+      "start_date": "2023-01-03",
+      "end_date": "2023-06-30",
+      "prediction_rows": 3884019,
+      "snapshot_missing_rows": 0,
+      "next_label_missing_rows": 0,
+      "upper_limit_missing_rows": 0,
+      "published_eligible_rows": 3884019,
+      "scoreable_rows": 3884019
+    },
+    {
+      "prediction_file": "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/month_2023-07/predictions.parquet",
+      "start_date": "2023-07-03",
+      "end_date": "2023-12-29",
+      "prediction_rows": 4218941,
+      "snapshot_missing_rows": 0,
+      "next_label_missing_rows": 0,
+      "upper_limit_missing_rows": 0,
+      "published_eligible_rows": 4218941,
+      "scoreable_rows": 4218941
+    },
+    {
+      "prediction_file": "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/month_2024-01/predictions.parquet",
+      "start_date": "2024-01-02",
+      "end_date": "2024-06-28",
+      "prediction_rows": 4012610,
+      "snapshot_missing_rows": 0,
+      "next_label_missing_rows": 0,
+      "upper_limit_missing_rows": 0,
+      "published_eligible_rows": 4012610,
+      "scoreable_rows": 4012610
+    },
+    {
+      "prediction_file": "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/month_2024-07/predictions.parquet",
+      "start_date": "2024-07-01",
+      "end_date": "2024-12-31",
+      "prediction_rows": 4248847,
+      "snapshot_missing_rows": 0,
+      "next_label_missing_rows": 0,
+      "upper_limit_missing_rows": 0,
+      "published_eligible_rows": 4248847,
+      "scoreable_rows": 4248847
+    },
+    {
+      "prediction_file": "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/month_2025-01/predictions.parquet",
+      "start_date": "2025-01-02",
+      "end_date": "2025-06-30",
+      "prediction_rows": 4024849,
+      "snapshot_missing_rows": 0,
+      "next_label_missing_rows": 0,
+      "upper_limit_missing_rows": 40,
+      "published_eligible_rows": 4024849,
+      "scoreable_rows": 4024849
+    },
+    {
+      "prediction_file": "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/month_2025-07/predictions.parquet",
+      "start_date": "2025-07-01",
+      "end_date": "2025-12-31",
+      "prediction_rows": 4350847,
+      "snapshot_missing_rows": 0,
+      "next_label_missing_rows": 0,
+      "upper_limit_missing_rows": 0,
+      "published_eligible_rows": 4350847,
+      "scoreable_rows": 4350847
+    }
+  ]
+}

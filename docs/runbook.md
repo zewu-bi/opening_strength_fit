@@ -58,27 +58,11 @@ osf-probe-clickhouse-data --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD>
 osf-build-labeled-cache --config experiments/runs/<cache_run_id>.toml
 osf-build-target-label-cache --config experiments/runs/<target_run_id>.toml
 osf-build-next-close-labels --config experiments/runs/<next_close_run_id>.toml
-osf-build-daily-return-labels --config experiments/runs/<daily_return_run_id>.toml
 ```
 
 新的 fixed-clock lineage 使用 `entry_alignment = "clock_state"`、显式 clock delay 和完整
 cross-section readiness。旧物理 tick-delay 配置只为历史复现保留。大型 cache 仅在 PVC；Git 中保留构建
 代码、run config、Job、schema/fingerprint 语义和关键 trace。
-
-全天路径转日频 feature 时，主监督目标使用以 D 为 feature date、D+1 为 target date 的
-`alpha_return_close_to_next_close`。其交易语义是 D 收盘集合竞价买入、D+1 收盘卖出；label 使用
-`ClosePrice(D+1) / PreClosePrice(D+1) - 1`，以消除除权除息的机械缺口。它只持久化
-`date/symbol/target_date/label` 四列；下一交易日必须由交易日历映射，不允许自然日 `+1`。
-
-对应正式 cache 为：
-
-```text
-/mnt/output/opening_strength_fit/cache/daily_close_to_next_close_labels_v1/
-```
-
-同日收盘下单的 feature 必须在下单前完成。第一版固定 `14:50` 截止；按现有采样/退出定义，1m、10m、
-60m 路径的最晚目标分钟分别约为 `14:47`、`14:38`、`13:48`。旧
-`alpha_return_next_session_open_close` cache 只作诊断，不作现金股票 T+1 的可执行主目标。
 
 ## 5. 镜像与 Job
 
@@ -178,27 +162,15 @@ experiments/runs/strategy_acceptance_clock6_v4_multiden_2022_2025_v1.toml
 experiments/runs/strategy_acceptance_clock6_v4_control_2022_2025_v1.toml  # comparison only
 ```
 
-## 8. 全天分钟级因果 label/cache
+## 8. 日内窗口衰减实验
 
-全天窄标签继续使用 `osf-build-labeled-cache`；`output_mode = "labels_only"` 时只查询必要 tick 字段，
-并写出键加 1m/10m/60m 三个收益列。先运行一日 smoke，再启动年度任务：
+以当前 incumbent run 为唯一模板。为每个预先固定的十分钟窗口新建 cache run 和训练 run，只修改
+`[sample].start_time`、`end_time`、`decision_times` 以及由此变化的 cache lineage；label、feature、
+模型、股池、rolling window、seed 和验收参数保持一致。不要构造全天序列或新的隔夜目标。
 
-```bash
-osf-build-labeled-cache \
-  --config experiments/runs/build_full_day_clock6_narrow_labels_smoke_20250102_v2.toml
-
-hfcli kubectl --cluster research --namespace bizewu apply -f \
-  experiments/jobs/build_full_day_clock6_narrow_labels_smoke_20250102_v2_job.yaml
-```
-
-逐日输出为 `date=YYYY-MM-DD/labels.parquet` 和 `summary.json`；两者都存在时自动断点复用。根目录的
-`full_day_label_cache_manifest.json` 必须满足 `causal_timestamp_violations = 0`，最终成功标志为
-`_SUCCESS`。字段口径、午休交易时钟和年度启动步骤见
-[全天分钟级因果 label/cache V1](full_day_temporal_labels_v1.md)。
-
-2025-01-02 窄表 smoke 已完成：`20,941,373` 条输入 tick 生成 `1,136,863 × 6`，240 个决策分钟齐全，
-`7,270,214` 次因果时间戳比较为零违规，耗时 `5m21s`、峰值约 16GB。2019–2025 七个年度 Job
-按年度并行运行，每年内部按日写分片并可断点续跑。
+每个窗口独立完成 cache smoke、全量 cache、8-fold OOS、pool-internal 和同口径 acceptance，再把
+`09:31-09:40` 与另外 2–3 个窗口按时点排序，报告 Rank IC、Top100 next excess、正半年/月比例、
+容量和成本后结果的衰减。窗口的具体时钟在第一个 run config 提交前统一确定，避免看结果后移动窗口。
 
 ## 9. 常见故障
 

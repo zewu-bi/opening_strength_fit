@@ -10,10 +10,13 @@ import numpy as np
 import pandas as pd
 
 from opening_strength_fit.temporal_dataset import (
+    aligned_sequence_validity,
     daily_rank_ic,
     load_sequence,
     prepare_day_inputs,
+    sequence_mask_path,
     target_rank,
+    target_values,
     top_n_excess,
     universe_mask,
 )
@@ -43,6 +46,17 @@ def build_temporal_model(
                 nn.GELU(),
                 nn.Dropout(dropout),
                 nn.Linear(hidden_width // 2, 1),
+            )
+
+        def forward(self, values, time_valid=None):
+            return self.network(values).squeeze(-1)
+
+    class LinearPath(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.network = nn.Sequential(
+                nn.Flatten(),
+                nn.Linear(input_channels * sequence_length, 1),
             )
 
         def forward(self, values, time_valid=None):
@@ -112,6 +126,8 @@ def build_temporal_model(
             return self.head(pooled).squeeze(-1)
 
     normalized = str(architecture).strip().lower()
+    if normalized == "linear":
+        return LinearPath()
     if normalized == "mlp":
         return FlatMLP()
     if normalized == "tcn":
@@ -119,11 +135,18 @@ def build_temporal_model(
     if normalized == "tcn_attention":
         return TemporalConvNet(attention=True)
     raise ValueError(
-        f"unsupported temporal architecture={architecture!r}; expected mlp, tcn, or tcn_attention"
+        f"unsupported temporal architecture={architecture!r}; "
+        "expected linear, mlp, tcn, or tcn_attention"
     )
 
 
-def _loss_function(name: str, *, head_fraction: float, device: str):
+def _loss_function(
+    name: str,
+    *,
+    head_fraction: float,
+    huber_delta: float,
+    device: str,
+):
     import torch
     from torch import nn
 
@@ -131,7 +154,9 @@ def _loss_function(name: str, *, head_fraction: float, device: str):
     if normalized == "mse":
         return nn.MSELoss()
     if normalized == "huber":
-        return nn.HuberLoss(delta=0.25)
+        if huber_delta <= 0:
+            raise ValueError("huber_delta must be positive")
+        return nn.HuberLoss(delta=float(huber_delta))
     if normalized == "head_bce":
         if not 0 < head_fraction < 0.5:
             raise ValueError("head_fraction must be in (0, 0.5) for head_bce")
@@ -185,6 +210,68 @@ def _model_scores(model, inputs, time_valid, *, device: str, batch_size: int) ->
     return output
 
 
+def _load_sequence_inputs(
+    path: Path,
+    *,
+    value_mode: str,
+    latest_clocks: Mapping[str, str],
+    raw_scale: float,
+    raw_scales: Mapping[str, float] | None,
+    input_mask_sequence_root: Path | None,
+) -> tuple[dict[str, np.ndarray], np.ndarray, np.ndarray]:
+    arrays = load_sequence(path)
+    input_valid_override = None
+    if input_mask_sequence_root is not None:
+        mask_path = sequence_mask_path(path, input_mask_sequence_root)
+        if not mask_path.exists():
+            raise SystemExit(f"input mask sequence shard is missing: {mask_path}")
+        input_valid_override = aligned_sequence_validity(arrays, load_sequence(mask_path))
+    inputs, time_valid = prepare_day_inputs(
+        arrays,
+        value_mode=value_mode,
+        latest_clocks=latest_clocks,
+        raw_scale=raw_scale,
+        raw_scales=raw_scales,
+        input_valid_override=input_valid_override,
+    )
+    return arrays, inputs, time_valid
+
+
+def _fit_target_winsor_bounds(
+    paths: Sequence[Path],
+    *,
+    train_universe: str,
+    target_mode: str,
+    lower_quantile: float,
+    upper_quantile: float,
+) -> tuple[float, float] | None:
+    normalized = str(target_mode).strip().lower()
+    if not normalized.endswith("_winsor"):
+        return None
+    if not 0 <= lower_quantile < upper_quantile <= 1:
+        raise ValueError("target winsor quantiles must satisfy 0 <= lower < upper <= 1")
+    base_mode = normalized.removesuffix("_winsor")
+    parts: list[np.ndarray] = []
+    for path in paths:
+        arrays = load_sequence(path)
+        mask = universe_mask(arrays, train_universe)
+        transformed = target_values(
+            np.asarray(arrays["target"], dtype=np.float32),
+            universe_mask=mask,
+            mode=base_mode,
+        )
+        finite = transformed[np.isfinite(transformed)]
+        if len(finite):
+            parts.append(finite)
+    if not parts:
+        raise SystemExit("cannot estimate target winsor bounds from an empty training target")
+    pooled = np.concatenate(parts).astype(np.float64, copy=False)
+    lower, upper = np.quantile(pooled, [lower_quantile, upper_quantile])
+    if not np.isfinite([lower, upper]).all() or lower >= upper:
+        raise SystemExit(f"invalid fitted target winsor bounds: {lower}, {upper}")
+    return float(lower), float(upper)
+
+
 def evaluate_temporal_model(
     model,
     paths: Sequence[Path],
@@ -197,18 +284,23 @@ def evaluate_temporal_model(
     evaluation_universe: str,
     top_n: int,
     include_predictions: bool,
+    raw_scales: Mapping[str, float] | None = None,
+    target_mode: str = "rank",
+    target_winsor_bounds: tuple[float, float] | None = None,
+    input_mask_sequence_root: Path | None = None,
 ) -> tuple[dict[str, float], pd.DataFrame]:
     losses: list[float] = []
     rank_ics: list[float] = []
     top_excesses: list[float] = []
     prediction_parts: list[pd.DataFrame] = []
     for path in paths:
-        arrays = load_sequence(path)
-        inputs, time_valid = prepare_day_inputs(
-            arrays,
+        arrays, inputs, time_valid = _load_sequence_inputs(
+            path,
             value_mode=value_mode,
             latest_clocks=latest_clocks,
             raw_scale=raw_scale,
+            raw_scales=raw_scales,
+            input_mask_sequence_root=input_mask_sequence_root,
         )
         scores = _model_scores(
             model,
@@ -220,9 +312,15 @@ def evaluate_temporal_model(
         raw_target = np.asarray(arrays["target"], dtype=np.float32)
         eval_mask = universe_mask(arrays, evaluation_universe)
         ranked_target = target_rank(raw_target, universe_mask=eval_mask)
-        eligible = eval_mask & np.isfinite(ranked_target)
+        model_target = target_values(
+            raw_target,
+            universe_mask=eval_mask,
+            mode=target_mode,
+            winsor_bounds=target_winsor_bounds,
+        )
+        eligible = eval_mask & np.isfinite(model_target)
         if eligible.any():
-            losses.append(float(np.mean((scores[eligible] - ranked_target[eligible]) ** 2)))
+            losses.append(float(np.mean((scores[eligible] - model_target[eligible]) ** 2)))
         rank_ics.append(daily_rank_ic(scores, raw_target, eligible))
         top_excesses.append(top_n_excess(scores, raw_target, eligible, top_n=top_n))
         if include_predictions:
@@ -234,6 +332,8 @@ def evaluate_temporal_model(
                         "score": scores,
                         "target": raw_target,
                         "target_rank": ranked_target,
+                        "model_target": model_target,
+                        "evaluation_eligible": eligible.astype(np.int8),
                         "stock_pool_member": arrays["pool_member"].astype(np.int8),
                     }
                 )
@@ -276,6 +376,12 @@ def fit_temporal_model(
     patience: int,
     top_n: int,
     seed: int,
+    raw_scales: Mapping[str, float] | None = None,
+    huber_delta: float = 0.25,
+    target_mode: str = "rank",
+    target_winsor_lower_quantile: float = 0.01,
+    target_winsor_upper_quantile: float = 0.99,
+    input_mask_sequence_root: Path | None = None,
 ) -> tuple[object, pd.DataFrame, dict[str, object]]:
     import torch
 
@@ -288,12 +394,13 @@ def fit_temporal_model(
     torch.manual_seed(seed)
     if device.startswith("cuda"):
         torch.cuda.manual_seed_all(seed)
-    first = load_sequence(train_paths[0])
-    sample_inputs, _ = prepare_day_inputs(
-        first,
+    _, sample_inputs, _ = _load_sequence_inputs(
+        train_paths[0],
         value_mode=value_mode,
         latest_clocks=latest_clocks,
         raw_scale=raw_scale,
+        raw_scales=raw_scales,
+        input_mask_sequence_root=input_mask_sequence_root,
     )
     model = build_temporal_model(
         architecture,
@@ -310,15 +417,24 @@ def fit_temporal_model(
     criterion = _loss_function(
         loss_name,
         head_fraction=head_fraction,
+        huber_delta=huber_delta,
         device=device,
     )
     scaler = torch.amp.GradScaler("cuda", enabled=device.startswith("cuda"))
     history: list[dict[str, float | int]] = []
     best_state = copy.deepcopy(model.state_dict())
     normalized_selection_metric = str(selection_metric).strip().lower()
-    if normalized_selection_metric not in {"daily_rank_ic", "top_n_excess"}:
-        raise ValueError("selection_metric must be daily_rank_ic or top_n_excess")
-    best_value = -np.inf
+    if normalized_selection_metric not in {"loss", "daily_rank_ic", "top_n_excess"}:
+        raise ValueError("selection_metric must be loss, daily_rank_ic, or top_n_excess")
+    target_winsor_bounds = _fit_target_winsor_bounds(
+        train_paths,
+        train_universe=train_universe,
+        target_mode=target_mode,
+        lower_quantile=target_winsor_lower_quantile,
+        upper_quantile=target_winsor_upper_quantile,
+    )
+    minimize_selection = normalized_selection_metric == "loss"
+    best_value = np.inf if minimize_selection else -np.inf
     stale_epochs = 0
     started = time.monotonic()
 
@@ -329,20 +445,23 @@ def fit_temporal_model(
         epoch_loss_sum = 0.0
         epoch_samples = 0
         for path in path_order:
-            arrays = load_sequence(path)
-            inputs, time_valid = prepare_day_inputs(
-                arrays,
+            arrays, inputs, time_valid = _load_sequence_inputs(
+                path,
                 value_mode=value_mode,
                 latest_clocks=latest_clocks,
                 raw_scale=raw_scale,
+                raw_scales=raw_scales,
+                input_mask_sequence_root=input_mask_sequence_root,
             )
             train_mask = universe_mask(arrays, train_universe)
-            ranked_target = target_rank(
+            transformed_target = target_values(
                 np.asarray(arrays["target"], dtype=np.float32),
                 universe_mask=train_mask,
+                mode=target_mode,
+                winsor_bounds=target_winsor_bounds,
             )
             training_target = _training_target(
-                ranked_target,
+                transformed_target,
                 loss_name=loss_name,
                 head_fraction=head_fraction,
             )
@@ -385,9 +504,13 @@ def fit_temporal_model(
             value_mode=value_mode,
             latest_clocks=latest_clocks,
             raw_scale=raw_scale,
+            raw_scales=raw_scales,
             evaluation_universe=evaluation_universe,
             top_n=top_n,
             include_predictions=False,
+            target_mode=target_mode,
+            target_winsor_bounds=target_winsor_bounds,
+            input_mask_sequence_root=input_mask_sequence_root,
         )
         record: dict[str, float | int] = {
             "epoch": epoch,
@@ -407,7 +530,10 @@ def fit_temporal_model(
             flush=True,
         )
         selection_value = float(validation[normalized_selection_metric])
-        if np.isfinite(selection_value) and selection_value > best_value:
+        improved = (
+            selection_value < best_value if minimize_selection else selection_value > best_value
+        )
+        if np.isfinite(selection_value) and improved:
             best_value = selection_value
             best_state = copy.deepcopy(model.state_dict())
             stale_epochs = 0
@@ -422,6 +548,10 @@ def fit_temporal_model(
         {
             "selection_metric": normalized_selection_metric,
             "best_validation_selection_value": float(best_value),
+            "target_mode": str(target_mode).strip().lower(),
+            "target_winsor_bounds": list(target_winsor_bounds)
+            if target_winsor_bounds is not None
+            else None,
             "epochs_completed": len(history),
             "parameter_count": int(sum(parameter.numel() for parameter in model.parameters())),
         },

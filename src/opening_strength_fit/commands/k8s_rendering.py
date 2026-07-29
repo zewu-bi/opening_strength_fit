@@ -44,7 +44,6 @@ _RUN_KIND_COMMANDS = {
     "capacity_acceptance": "osf-analyze-capacity-acceptance",
     "capacity_audit": "osf-audit-capacity",
     "clickhouse_labeled_cache": "osf-build-labeled-cache",
-    "daily_return_label_cache": "osf-build-daily-return-labels",
     "execution_context": "osf-extract-execution-context",
     "exposure_audit": "osf-audit-exposure",
     "exposure_input": "osf-build-exposure-input",
@@ -57,8 +56,6 @@ _RUN_KIND_COMMANDS = {
     "score_risk_sweep": "osf-run-score-risk-sweep",
     "strategy_acceptance": "osf-audit-strategy-acceptance",
     "target_cache": "osf-build-target-label-cache",
-    "temporal_nn": "osf-train-temporal-nn",
-    "temporal_no_model_analysis": "osf-analyze-full-day-temporal",
 }
 
 
@@ -128,7 +125,7 @@ def _rolling_completion_files(config: dict, command: str) -> list[str]:
         return ["feature_audit_trace.json", "feature_audit_metrics.csv"]
     if run_kind == "feature_hygiene":
         return ["feature_hygiene_trace.json", "feature_hygiene.csv"]
-    if command in {"osf-train", "osf-train-temporal-nn"}:
+    if command == "osf-train":
         return ["_SUCCESS", "metrics_by_year.csv", "predictions.parquet"]
     return ["metrics_by_year.csv"]
 

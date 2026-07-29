@@ -1,0 +1,17 @@
+[run]
+id = "opening_limit_audit_clock6_v4_multiden_2022_2025_v1"
+kind = "opening_limit_audit"
+description = "Audit whether the canonical 09:31-09:40 multi-denominator opening model selects stocks already sealed or near their upper limit at the decision and clock+6-second entry snapshots."
+status = "completed"
+
+[opening_limit_audit]
+predictions = "/mnt/output/opening_strength_fit/nn/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1"
+labeled_cache = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v4_clock6_state_unique_mixed_w030_mcap_lag1"
+next_labels = "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1"
+pool = "L"
+pool_date_lag_sessions = 0
+top_n = 100
+
+[output]
+local_dir = "output/artifacts/opening_limit_audit_clock6_v4_multiden_2022_2025_v1"
+evidence_dir = "experiments/evidence/backtests/opening_limit_audit_clock6_v4_multiden_2022_2025_v1"
