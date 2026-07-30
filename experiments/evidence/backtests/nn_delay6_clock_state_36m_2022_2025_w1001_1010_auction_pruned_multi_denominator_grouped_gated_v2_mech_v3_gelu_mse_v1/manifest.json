@@ -1,0 +1,88 @@
+{
+  "baseline_run_id": "nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1",
+  "candidate_run_id": "nn_delay6_clock_state_36m_2022_2025_w1001_1010_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1",
+  "comparison": "09:31-09:40 versus 10:01-10:10 intraday-window decay",
+  "cumulative_compact_columns": [
+    "pool",
+    "pool_label",
+    "week_start",
+    "variant",
+    "next_cumulative_net_return_bps",
+    "next_cumulative_alpha_vs_market_bps"
+  ],
+  "cumulative_rows": 3876,
+  "decision": "completed decay checkpoint; does not replace the 09:31 opening policy",
+  "files": {
+    "01_signal_acceptance.csv": {
+      "bytes": 2099,
+      "sha256": "3dba073051dceef1b2b17432d1d6e8a25a8bc2a571879356a77f59f9e7c6cc5c",
+      "source": "experiments/results/backtests/window_acceptance_w1001_1010_2022_2025_v1/01_short_ic_next_excess.csv"
+    },
+    "01_signal_acceptance.svg": {
+      "bytes": 30375,
+      "sha256": "4aa5befdea25065c6fb11f18bb582fbbc2e996e864a4aa74c4eab989a0b8922d",
+      "source": "experiments/results/backtests/window_acceptance_w1001_1010_2022_2025_v1/01_short_ic_next_excess.svg"
+    },
+    "02_top100_cumulative.csv": {
+      "bytes": 257159,
+      "sha256": "6dd9b71583fec10c5651de917552aa7352649578d2d806a9f1e41b6c13109a7e",
+      "source": "experiments/results/backtests/window_acceptance_w1001_1010_2022_2025_v1/02_top100_cumulative.csv"
+    },
+    "02_top100_cumulative.svg": {
+      "bytes": 96205,
+      "sha256": "ad8154f53db8acb59ffeebd0f2e3549610d60c36048e84a55d2f32d21113646f",
+      "source": "experiments/results/backtests/window_acceptance_w1001_1010_2022_2025_v1/02_top100_cumulative.svg"
+    },
+    "03_top1000_bucket_curve.csv": {
+      "bytes": 13149,
+      "sha256": "926e0f1b5b535c6439a3ba817e2ca0682e79a71dd136a9477f860ac08c4b78b3",
+      "source": "experiments/results/backtests/window_acceptance_w1001_1010_2022_2025_v1/03_top1000_bucket_returns.csv"
+    },
+    "03_top1000_bucket_curve.svg": {
+      "bytes": 53500,
+      "sha256": "4cd93cde6818f93ed4c312a08fd28251451bee4cef260fdff3cae7c78e2aaa30",
+      "source": "experiments/results/backtests/window_acceptance_w1001_1010_2022_2025_v1/03_top1000_bucket_returns.svg"
+    },
+    "04_top1000_return_distribution.csv": {
+      "bytes": 71798,
+      "sha256": "ae08c17e6075cad3f89fa3069becad2de7c7e8c53c74c79d55f62a581c7b60a0",
+      "source": "experiments/results/backtests/window_acceptance_w1001_1010_2022_2025_v1/04_top1000_return_distribution.csv"
+    },
+    "04_top1000_return_distribution.svg": {
+      "bytes": 168411,
+      "sha256": "455bd76bf1c9edb8266a52d3313166eabc545ed3bd522e28987d27bffe3de876",
+      "source": "experiments/results/backtests/window_acceptance_w1001_1010_2022_2025_v1/04_top1000_return_distribution.svg"
+    },
+    "pool_internal_halfyear_summary.csv": {
+      "bytes": 1612,
+      "sha256": "52a702ae2f208aeccdef2b0c14437a9fde4b628b67b072f577b2836d0a2ea896",
+      "source": "experiments/results/backtests/nn_delay6_clock_state_36m_2022_2025_w1001_1010_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/pool_internal_halfyear_summary.csv"
+    },
+    "pool_internal_summary.csv": {
+      "bytes": 1079,
+      "sha256": "051f51e16f0baaf3a41d8423ed174d64ca5070107d19e08cfc303700ff9793ae",
+      "source": "experiments/results/backtests/nn_delay6_clock_state_36m_2022_2025_w1001_1010_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/pool_internal_summary.csv"
+    },
+    "top1000_distribution_summary.csv": {
+      "bytes": 944,
+      "sha256": "a06cb68bbd309b305e0a4592c17711c17e377d600524a74ec3fa353e4ab17fda",
+      "source": "experiments/results/backtests/top1000_score_bucket_return_histogram_w1001_1010_multiden_2022_2025_v3/top1000_score_bucket_distribution_summary.csv"
+    },
+    "trace_optimization.json": {
+      "bytes": 6814,
+      "sha256": "d263cb05d6b55f083d4bd2d4d735c5e3f90c32f6fc9fceea0fa1c4df61056c30",
+      "source": "experiments/results/backtests/window_acceptance_w1001_1010_2022_2025_v1/01_short_ic_next_excess_trace.json"
+    },
+    "trace_top1000_bucket.json": {
+      "bytes": 2978,
+      "sha256": "6d8bb908e7ae217f3d059b2cb9baa57029c3e45da98a178b4a78437a07f82d92",
+      "source": "experiments/results/backtests/window_acceptance_w1001_1010_2022_2025_v1/03_rank_bucket_trace.json"
+    },
+    "trace_top1000_distribution.json": {
+      "bytes": 3634,
+      "sha256": "4eaa4b297e97a0652b2ea186bfe153cc47178a3b1007573c80af48f50670cdb3",
+      "source": "experiments/results/backtests/window_acceptance_w1001_1010_2022_2025_v1/04_top1000_return_distribution_trace.json"
+    }
+  },
+  "schema_version": 1
+}

@@ -1,0 +1,49 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-cache-decision-state-w0930-smoke-v1
+  namespace: bizewu
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      volumes:
+        - name: opening-strength-output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+        - name: run-config
+          configMap:
+            name: os-cache-decision-state-w0930-smoke-v1
+      containers:
+        - name: opening-strength-fit
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260730-decision-clock-state-v1
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: opening-strength-clickhouse
+          workingDir: /app/opening_strength_fit
+          command:
+            - /bin/bash
+            - -lc
+            - |
+              set -euo pipefail
+              exec osf-build-labeled-cache \
+                --config /mnt/config/build_delay6_decision_clock_state_0930_0940_smoke_20250102_v1.toml \
+                --output-dir /mnt/output/opening_strength_fit/cache_builds/build_delay6_decision_clock_state_0930_0940_smoke_20250102_v1
+          volumeMounts:
+            - name: opening-strength-output
+              mountPath: /mnt/output
+            - name: run-config
+              mountPath: /mnt/config
+              readOnly: true
+          resources:
+            requests:
+              cpu: "8"
+              memory: 16Gi
+            limits:
+              cpu: "16"
+              memory: 64Gi

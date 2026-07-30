@@ -613,6 +613,12 @@ def build_labeled_frame_from_config(
         "decision_max_lag_seconds",
         5,
     )
+    max_decision_state_age = config_value(
+        config,
+        "sample",
+        "decision_max_state_age_seconds",
+        None,
+    )
     labeled = build_labeled_feature_frame(
         ticks,
         buy_price_col=config_str(config, "labels", "buy_price_col", "ask_price_1"),
@@ -689,6 +695,15 @@ def build_labeled_frame_from_config(
         ),
         decision_max_lag_seconds=(
             None if max_decision_lag in (None, "") else int(max_decision_lag)
+        ),
+        decision_alignment=config_str(
+            config,
+            "sample",
+            "decision_alignment",
+            "next_tick",
+        ),
+        decision_max_state_age_seconds=(
+            None if max_decision_state_age in (None, "") else int(max_decision_state_age)
         ),
         require_cross_section_ready_entry=config_bool(
             config,

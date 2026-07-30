@@ -1,0 +1,101 @@
+{
+  "created_at_utc": "2026-07-30T06:49:22.827462+00:00",
+  "prediction_root": "/mnt/output/opening_strength_fit/nn",
+  "next_label_root": "/tmp/next-close-labels",
+  "pool_path": "lml.bzw@ssd/data/pool_L.parquet",
+  "variant": "w1001_1010_multiden",
+  "run_id": "nn_delay6_clock_state_36m_2022_2025_w1001_1010_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1",
+  "months": {
+    "2022-01": {
+      "prediction_pool_rows": 3356614,
+      "joined_rows": 3356614,
+      "groups": 1170,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "pool_group_size_min": 2663,
+      "pool_groups_total": 1170,
+      "pool_groups_with_top_n": 1170,
+      "pool_groups_below_top_n": 0
+    },
+    "2022-07": {
+      "prediction_pool_rows": 3759076,
+      "joined_rows": 3759076,
+      "groups": 1250,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "pool_group_size_min": 83,
+      "pool_groups_total": 1250,
+      "pool_groups_with_top_n": 1248,
+      "pool_groups_below_top_n": 2
+    },
+    "2023-01": {
+      "prediction_pool_rows": 3664162,
+      "joined_rows": 3664162,
+      "groups": 1180,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "pool_group_size_min": 2863,
+      "pool_groups_total": 1180,
+      "pool_groups_with_top_n": 1180,
+      "pool_groups_below_top_n": 0
+    },
+    "2023-07": {
+      "prediction_pool_rows": 4029563,
+      "joined_rows": 4029563,
+      "groups": 1240,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "pool_group_size_min": 2997,
+      "pool_groups_total": 1240,
+      "pool_groups_with_top_n": 1240,
+      "pool_groups_below_top_n": 0
+    },
+    "2024-01": {
+      "prediction_pool_rows": 3846773,
+      "joined_rows": 3846773,
+      "groups": 1170,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "pool_group_size_min": 2936,
+      "pool_groups_total": 1170,
+      "pool_groups_with_top_n": 1170,
+      "pool_groups_below_top_n": 0
+    },
+    "2024-07": {
+      "prediction_pool_rows": 4028381,
+      "joined_rows": 4028381,
+      "groups": 1250,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "pool_group_size_min": 2847,
+      "pool_groups_total": 1250,
+      "pool_groups_with_top_n": 1250,
+      "pool_groups_below_top_n": 0
+    },
+    "2025-01": {
+      "prediction_pool_rows": 3850327,
+      "joined_rows": 3850327,
+      "groups": 1170,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "pool_group_size_min": 3079,
+      "pool_groups_total": 1170,
+      "pool_groups_with_top_n": 1170,
+      "pool_groups_below_top_n": 0
+    },
+    "2025-07": {
+      "prediction_pool_rows": 4218658,
+      "joined_rows": 4218658,
+      "groups": 1260,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "pool_group_size_min": 3200,
+      "pool_groups_total": 1260,
+      "pool_groups_with_top_n": 1260,
+      "pool_groups_below_top_n": 0
+    }
+  },
+  "top_n": 1000,
+  "inference_unit": "trading_day",
+  "hac": "Bartlett/Newey-West, maximum lag 5"
+}

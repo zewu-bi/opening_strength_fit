@@ -1,0 +1,83 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-cache-decision-state-w0930-0940-v1
+  namespace: bizewu
+  labels:
+    app: os-cache-decision-state-w0930-0940-v1
+spec:
+  backoffLimit: 1
+  completionMode: Indexed
+  completions: 7
+  parallelism: 7
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: os-cache-decision-state-w0930-0940-v1
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      volumes:
+        - name: opening-strength-output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                      - node7
+                      - node8
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: os-cache-decision-state-w0930-0940-v1
+      containers:
+        - name: opening-strength-fit
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260730-decision-clock-state-v1
+          imagePullPolicy: Always
+          envFrom:
+            - secretRef:
+                name: opening-strength-clickhouse
+          env:
+            - name: JOB_COMPLETION_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.annotations['batch.kubernetes.io/job-completion-index']"
+          workingDir: /app/opening_strength_fit
+          command:
+            - /bin/bash
+            - -lc
+            - |
+              set -euo pipefail
+              YEARS=(2019 2020 2021 2022 2023 2024 2025)
+              INDEX="${JOB_COMPLETION_INDEX:-}"
+              if [ -z "${INDEX}" ] || [ "${INDEX}" -lt 0 ] || [ "${INDEX}" -ge "${#YEARS[@]}" ]; then
+                echo "invalid JOB_COMPLETION_INDEX=${INDEX}" >&2
+                exit 1
+              fi
+              YEAR="${YEARS[$INDEX]}"
+              OUT="/mnt/output/opening_strength_fit/cache_builds/build_delay6_decision_clock_state_0930_0940_cache_v1/year=${YEAR}"
+              mkdir -p "${OUT}"
+              exec osf-build-labeled-cache \
+                --config experiments/runs/build_delay6_decision_clock_state_0930_0940_cache_v1.toml \
+                --output-dir "${OUT}"
+          volumeMounts:
+            - name: opening-strength-output
+              mountPath: /mnt/output
+          resources:
+            requests:
+              cpu: "8"
+              memory: 32Gi
+            limits:
+              cpu: "16"
+              memory: 256Gi

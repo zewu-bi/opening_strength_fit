@@ -60,9 +60,18 @@ osf-build-target-label-cache --config experiments/runs/<target_run_id>.toml
 osf-build-next-close-labels --config experiments/runs/<next_close_run_id>.toml
 ```
 
-新的 fixed-clock lineage 使用 `entry_alignment = "clock_state"`、显式 clock delay 和完整
-cross-section readiness。旧物理 tick-delay 配置只为历史复现保留。大型 cache 仅在 PVC；Git 中保留构建
-代码、run config、Job、schema/fingerprint 语义和关键 trace。
+决策特征与 label 边界必须分别声明对齐语义：
+
+- `sample.decision_alignment = "clock_state"`：在每个逻辑决策时钟读取此前最后已知状态，并记录
+  `decision_source_timestamp` 和 `decision_state_age_seconds`；无新物理 tick 不等于状态缺失。
+- `sample.decision_alignment = "next_tick"` 加 `decision_max_lag_seconds = 5`：历史兼容口径，只保留
+  目标时刻后 5 秒内出现新 tick 的股票分钟。
+- `labels.entry_alignment = "clock_state"` 只控制入场边界，不能替代 decision alignment。corrected
+  fixed-clock cache 的 entry 必须锚定 `decision_target_timestamp + entry_clock_delay_seconds`，而不是
+  source tick 加 delay。
+
+旧物理 tick-delay 和 forward-5s 配置只为历史复现与已生成的日内窗口对照保留。大型 cache 仅在 PVC；
+Git 中保留构建代码、run config、Job、schema/fingerprint 语义和关键 trace。
 
 ## 5. 镜像与 Job
 
@@ -171,6 +180,11 @@ experiments/runs/strategy_acceptance_clock6_v4_control_2022_2025_v1.toml  # comp
 每个窗口独立完成 cache smoke、全量 cache、8-fold OOS、pool-internal 和同口径 acceptance，再把
 `09:31-09:40` 与另外 2–3 个窗口按时点排序，报告 Rank IC、Top100 next excess、正半年/月比例、
 容量和成本后结果的衰减。窗口的具体时钟在第一个 run config 提交前统一确定，避免看结果后移动窗口。
+
+每个完成窗口都以对应训练 run id 写入 tracked evidence，至少保留固定四图、compact CSV、trace、
+pool summary 和 SHA-256 manifest。固定四图已经显示 next excess、分期稳定性和 fee8 累和明显衰减的
+窗口可以在信号层归档，不强制继续跑 downstream capacity/realistic promotion audit；该停止规则必须在
+experiment log 中明确记录，不能解释为模型训练失败。
 
 ## 9. 常见故障
 

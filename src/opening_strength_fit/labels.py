@@ -142,6 +142,7 @@ def _clock_state_values(
     group_columns: Sequence[str] = ("date", "symbol"),
     timestamp_col: str = "timestamp",
     target_timestamp_col: str | None = None,
+    state_frame: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Read the last known state at a fixed wall-clock target.
 
@@ -154,6 +155,7 @@ def _clock_state_values(
         raise SystemExit("clock-state alignment seconds must be non-negative")
 
     target_col = target_timestamp_col or timestamp_col
+    state = frame if state_frame is None else ensure_timestamp_columns(state_frame)
     out = pd.DataFrame(index=frame.index)
     out[f"target_timestamp_{suffix}"] = pd.NaT
     out[f"timestamp_{suffix}"] = pd.NaT
@@ -165,8 +167,11 @@ def _clock_state_values(
     for column in value_columns:
         out[f"{column}_{suffix}"] = pd.Series(pd.NA, index=frame.index, dtype="object")
 
+    state_groups = {
+        key: group for key, group in state.groupby(list(group_columns), sort=False, observed=True)
+    }
     aligned_parts = []
-    for _, group in frame.groupby(list(group_columns), sort=False, observed=True):
+    for key, group in frame.groupby(list(group_columns), sort=False, observed=True):
         group = group.sort_values(timestamp_col, kind="mergesort")
         left = pd.DataFrame(
             {
@@ -174,8 +179,11 @@ def _clock_state_values(
                 "_target_ts": group[target_col] + pd.to_timedelta(seconds, unit="s"),
             }
         ).dropna(subset=["_target_ts"])
+        state_group = state_groups.get(key)
+        if state_group is None:
+            continue
         right = (
-            group[[timestamp_col, *value_columns]]
+            state_group[[timestamp_col, *value_columns]]
             .dropna(subset=[timestamp_col])
             .rename(columns={timestamp_col: "_source_ts"})
             .sort_values("_source_ts", kind="mergesort")
@@ -309,6 +317,8 @@ def build_trade_labels(
     future_alignment: str = "next_tick",
     max_future_gap_seconds: int | None = None,
     tradable_statuses: Sequence[str] | None = None,
+    state_ticks: pd.DataFrame | None = None,
+    entry_target_timestamp_col: str | None = None,
 ) -> pd.DataFrame:
     missing = [
         column
@@ -320,6 +330,8 @@ def build_trade_labels(
 
     work = ensure_timestamp_columns(ticks)
     work = work.sort_values(["date", "symbol", "timestamp"]).reset_index(drop=True)
+    state_work = work if state_ticks is None else ensure_timestamp_columns(state_ticks)
+    state_work = state_work.sort_values(["date", "symbol", "timestamp"]).reset_index(drop=True)
 
     normalized_entry_alignment = str(entry_alignment).strip().lower().replace("-", "_")
     if normalized_entry_alignment not in {"tick_offset", "clock_state"}:
@@ -355,6 +367,8 @@ def build_trade_labels(
             seconds=int(entry_clock_delay_seconds),
             value_columns=entry_value_columns,
             suffix="entry",
+            target_timestamp_col=entry_target_timestamp_col,
+            state_frame=state_work,
         )
         work["entry_timestamp"] = pd.to_datetime(
             entry["target_timestamp_entry"],
@@ -435,7 +449,7 @@ def build_trade_labels(
         suffix="sell_start",
         target_timestamp_col="entry_timestamp",
         **(
-            {}
+            {"state_frame": state_work}
             if normalized_future_alignment == "clock_state"
             else {"max_gap_seconds": max_future_gap_seconds}
         ),
@@ -447,7 +461,7 @@ def build_trade_labels(
         suffix="sell_end",
         target_timestamp_col="entry_timestamp",
         **(
-            {}
+            {"state_frame": state_work}
             if normalized_future_alignment == "clock_state"
             else {"max_gap_seconds": max_future_gap_seconds}
         ),
@@ -505,9 +519,13 @@ def build_trade_labels(
         if "entry_status" in work.columns:
             work["valid_label"] &= work["entry_status"].astype(str).str.upper().isin(allowed)
 
+    filter_timestamp_col = (
+        "decision_target_timestamp" if "decision_target_timestamp" in work.columns else "timestamp"
+    )
     return filter_time_range(
         work,
         sample_start_time,
         sample_end_time,
+        timestamp_col=filter_timestamp_col,
         include_end=True,
     )

@@ -18,6 +18,8 @@ NON_FEATURE_COLUMNS = {
     "timestamp",
     "decision_time",
     "decision_target_timestamp",
+    "decision_source_timestamp",
+    "decision_state_age_seconds",
     "decision_lag_seconds",
     "entry_timestamp",
     "entry_source_timestamp",
@@ -77,6 +79,8 @@ ENTRY_ASK_CONTEXT_COLUMNS = tuple(
 
 PREDICTION_CONTEXT_COLUMNS = (
     "status",
+    "decision_source_timestamp",
+    "decision_state_age_seconds",
     "entry_status",
     "entry_timestamp",
     "entry_source_timestamp",

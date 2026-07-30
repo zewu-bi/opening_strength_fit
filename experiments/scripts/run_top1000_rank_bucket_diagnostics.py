@@ -825,6 +825,20 @@ def run_top1000_bucket_return_histogram(
             labels=labels[year],
             pool=pool,
         )
+        group_sizes = frame.groupby(ms.GROUP_COLS, observed=True)["group_size"].first()
+        complete_groups = group_sizes.loc[group_sizes.ge(1000)]
+        shard_trace["pool_group_size_min"] = int(group_sizes.min())
+        shard_trace["pool_groups_total"] = int(len(group_sizes))
+        shard_trace["pool_groups_with_top_n"] = int(len(complete_groups))
+        shard_trace["pool_groups_below_top_n"] = int(len(group_sizes) - len(complete_groups))
+        if complete_groups.empty:
+            raise ValueError("no pool group has at least Top1000 rows")
+        if len(complete_groups) != len(group_sizes):
+            complete_index = pd.MultiIndex.from_frame(
+                complete_groups.index.to_frame(index=False)[ms.GROUP_COLS]
+            )
+            frame_index = pd.MultiIndex.from_frame(frame[ms.GROUP_COLS])
+            frame = frame.loc[frame_index.isin(complete_index)].copy()
         top = frame.loc[frame["score_rank"] <= 1000].copy()
         top["score_bucket"] = ((top["score_rank"] - 1) // 100 + 1).astype(int)
         value_parts.append(top[["score_bucket", "excess_bps"]])
@@ -936,8 +950,20 @@ def run_rank_bucket(
             labels=labels[year],
             pool=pool,
         )
-        if int(frame["group_size"].min()) < top_n:
-            raise ValueError(f"pool group smaller than Top{top_n}")
+        group_sizes = frame.groupby(ms.GROUP_COLS, observed=True)["group_size"].first()
+        complete_groups = group_sizes.loc[group_sizes.ge(top_n)]
+        shard_trace["pool_group_size_min"] = int(group_sizes.min())
+        shard_trace["pool_groups_total"] = int(len(group_sizes))
+        shard_trace["pool_groups_with_top_n"] = int(len(complete_groups))
+        shard_trace["pool_groups_below_top_n"] = int(len(group_sizes) - len(complete_groups))
+        if complete_groups.empty:
+            raise ValueError(f"no pool group has at least Top{top_n} rows")
+        if len(complete_groups) != len(group_sizes):
+            complete_index = pd.MultiIndex.from_frame(
+                complete_groups.index.to_frame(index=False)[ms.GROUP_COLS]
+            )
+            frame_index = pd.MultiIndex.from_frame(frame[ms.GROUP_COLS])
+            frame = frame.loc[frame_index.isin(complete_index)].copy()
         group_parts.append(build_group_ic(frame, variant=variant, top_n=top_n))
         bucket_ic, curve_part = rb.build_bucket_diagnostics(frame, variant=variant)
         bucket_parts.append(bucket_ic)

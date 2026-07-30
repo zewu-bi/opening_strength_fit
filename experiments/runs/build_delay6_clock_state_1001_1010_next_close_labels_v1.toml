@@ -1,0 +1,56 @@
+[run]
+id = "build_delay6_clock_state_1001_1010_next_close_labels_v1"
+kind = "next_close_label_cache"
+description = "Build seven annual next-close labels from each 10:01-10:10 clock+6s buy price, matching the canonical v4 long-target definition at the new decision clocks."
+status = "completed"
+
+[next_close_labels]
+input_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v5_clock6_1001_1010_from_start_auction_reuse_mcap_lag1/opening_2019_label_v5_clock6_1001_1010_from_start_auction_reuse_mcap_lag1.parquet"
+output_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_next_close_labels_clock6_1001_1010_v1/opening_2019_next_close_labels_clock6_1001_1010_v1.parquet"
+buy_price_col = "buy_price"
+decision_times = [
+  "10:01:00",
+  "10:02:00",
+  "10:03:00",
+  "10:04:00",
+  "10:05:00",
+  "10:06:00",
+  "10:07:00",
+  "10:08:00",
+  "10:09:00",
+  "10:10:00",
+]
+close_offset_us = 54000000000
+close_lookback_seconds = 1800
+calendar_days_after = 14
+fee_bps = 0.0
+
+[next_close_label_shards]
+years = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+input_path_template = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v5_clock6_1001_1010_from_start_auction_reuse_mcap_lag1/opening_{year}_label_v5_clock6_1001_1010_from_start_auction_reuse_mcap_lag1.parquet"
+output_path_template = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_next_close_labels_clock6_1001_1010_v1/opening_{year}_next_close_labels_clock6_1001_1010_v1.parquet"
+
+[clickhouse]
+host = "ch.db.prod.highfortfunds.com"
+port = 8123
+table = "stock.tick"
+
+[output]
+local_dir = "output/artifacts/cache_builds/build_delay6_clock_state_1001_1010_next_close_labels_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/cache_builds/build_delay6_clock_state_1001_1010_next_close_labels_v1"
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-nextclose-clock6-w1001-1010-v1"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+clickhouse_secret = "opening-strength-clickhouse"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260717-clock-state-delay6-v4"
+shard_parallelism = 7
+
+[k8s.resources]
+cpu_request = "4"
+cpu_limit = "8"
+memory_request = "64Gi"
+memory_limit = "128Gi"

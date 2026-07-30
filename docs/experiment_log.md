@@ -1,7 +1,7 @@
 # Experiment Log
 
-> Last reconciled: 2026-07-29
-> Coverage: 2026-05-20 through 2026-07-29
+> Last reconciled: 2026-07-30
+> Coverage: 2026-05-20 through 2026-07-30
 
 本文件是人工维护的实验事实账本，严格按发生时间升序记录假设、口径、结果、状态和决策。当前研究
 方向见 [project_brief.md](project_brief.md)，命令见 [runbook.md](runbook.md)。旧版逐日长记录已从 HEAD
@@ -34,6 +34,8 @@ run config、Job manifest、代码 revision、compact evidence 与本日志共�
 | 2026-07-22 | `strategy_acceptance_clock6_v4_multiden_2022_2025_v1` | 用同一工具验收 canonical multiden | `completed`; 9,690 groups、969 日，compact artifacts/trace 已同步 | refill fill/net `99.9970%/8598.7 bps`；随 multiden 晋级当前 opening policy |
 | 2026-07-23 | decision: multiden promotion | 重新区分因果成本后收益 gate 与收益结构诊断 | 文档口径已统一；compact evidence 与原始数值不变 | 取消单边 P95/P99 cap、trim、分期胜率、bootstrap、overlap 的自动否决含义；multiden 晋级 opening policy/incumbent |
 | 2026-07-29 | decision: archive full-day temporal route | 确认“全天序列→隔夜日频目标→TCN”源于需求理解偏差 | 2026-07-22 至 07-29 的 run/job、实现、测试、证据和未提交变体整体移入 `experiments/archive/full_day_temporal_2026-07-22_2026-07-29/` | 路线终止；回到既有 `09:31-09:40` 实验范式，只换另外 2–3 个固定日内窗口，比较同口径 OOS 选股能力衰减 |
+| 2026-07-30 | `build_delay6_decision_clock_state_0930_0940_cache_v1` | 将 decision sampling 也改为目标时刻此前最后已知状态，并把 entry 严格锚定 decision clock `+6s` | 单日 smoke 为 `5105 × 11 = 56,155` 行，所有时点各 5,105 只；decision source 无穿越，entry 时钟断言全通过，short label valid `99.2165%`；7 个年度 shard 已启动 | 建立 corrected decision-state lineage；既有 09:31 v4 和 10/11/14 点 forward-5s cache 继续作为历史同口径衰减数据集，不覆盖 |
+| 2026-07-30 | `nn_delay6_clock_state_36m_2022_2025_w1001_1010_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1` | 保持 incumbent 的 feature、target、模型、股池与 rolling OOS，只把十分钟窗口及其 cache/label lineage 移到 `10:01-10:10` | `completed`; 8/8 shards、44,993,233 行 prediction/label 全量 join、9,690 groups、固定四图与 compact evidence 已归档 | `pool_L` next excess `6.5491 bps`、Top100 fee8 累和 `2708.5 bps`，较 09:31 的 `17.1714/9891.7` 明显衰减；作为首个日内衰减 checkpoint，不替换 opening policy |
 
 ## 决策时间线
 
@@ -104,8 +106,40 @@ run config、Job manifest、代码 revision、compact evidence 与本日志共�
 | 07-22 | canonical multiden switch + tracked four-figure bundle | 用 multiden 替换 control 作为唯一 continuation candidate；control 只保留为 A/B baseline | 四张 SVG、compact CSV、三份 trace 与 SHA-256 manifest 进入 tracked evidence；完整统计差异不改写 | multiden 成为 canonical continuation candidate，并于 07-23 正式晋级 opening policy/incumbent |
 | 07-23 | multiden promotion policy revision | 将一般稳健性与单边正尾归因分开；不改任何回测数值 | multiden next `17.1714 bps`；visible refill fill/net `99.9970%/8598.7 bps`；相对 no-refill `+1165.3 bps` | 单边 P95/P99 cap、trim、分期胜率、bootstrap、overlap 不再是自动 gate；multiden 晋级当前 opening policy/incumbent |
 | 07-29 | archive mis-scoped full-day temporal work | mentor 原意是复用既有实验，只把十分钟决策窗口移到日内另外 2–3 个时段 | 全天 cache、隔夜 label、sequence/TCN、backward/cross-mask 变体及 compact evidence 已移入独立 archive；当前入口和契约移除 | 终止该路线；后续一次只改 `[sample]` 窗口和对应 cache lineage，按同一 rolling OOS/`pool_L` 口径测选股能力衰减 |
+| 07-30 | first intraday decay checkpoint | 只把 canonical multiden 的决策窗口从 `09:31-09:40` 移到 `10:01-10:10` 并完整重训 | short universe Rank IC `0.253118`，但 `pool_L` next excess 降至 `6.5491 bps`、正月降至 `29/48`、fee8 累和降至 `2708.5 bps`；四图/CSV/trace/manifest 已归档 | 证明“短期截面可预测性增强”不等于“隔夜 Top100 收益延续”；10:01 不晋级，继续按预先声明的 11:01/14:01 窗口测衰减 |
 
 ## 当前决策记录
+
+### 10:01-10:10 日内窗口衰减（2026-07-30，已完成）
+
+本轮以 09:31 canonical multiden 为唯一模板，只修改十分钟决策窗口和对应 cache/label lineage。训练读取
+`10:01-10:10` mixed-w030 cache；pool analysis 读取同窗口 next-close label。44,993,233 行 prediction
+全部匹配 label，因此不存在训练特征/label 窗口错配，也不存在分析 join 缺失。
+
+| metric | 09:31-09:40 | 10:01-10:10 | change |
+| --- | ---: | ---: | ---: |
+| universe short Rank IC | 0.156418 | **0.253118** | +0.096700 |
+| `pool_L` short Rank IC | 0.142410 | **0.242669** | +0.100259 |
+| `pool_L` short Top100 excess | **11.3773 bps** | 7.6759 bps | -3.7014 bps |
+| `pool_L` next Rank IC | **0.007140** | 0.001836 | -0.005304 |
+| `pool_L` next Top100 excess | **17.1714 bps** | 6.5491 bps | -10.6223 bps |
+| positive next months / half-years | **37/48; 8/8** | 29/48; 6/8 | -8 months; -2 half-years |
+| Top100 fee8 cumulative | **9891.7 bps** | 2708.5 bps | -7183.2 bps |
+| cumulative alpha versus market | **8715.2 bps** | 1532.0 bps | -7183.2 bps |
+| Top1000 first/last 100-name bucket | **17.17/0.29 bps** | 6.55/0.99 bps | head separation 收窄 |
+
+10:01 的 short Rank IC 显著更高，但 short Top100 excess 已下降，隔夜 next Rank IC、Top100 excess、分期
+稳定性和费后累和同时大幅下降。说明稍晚窗口更容易预测“紧接着的截面方向”，却不能把这种排序强度转换成
+同等的隔夜 head payoff；opening edge 的可交易部分在半小时内已经明显衰减。
+
+Top1000 图使用 `9,688/9,690` 个完整截面；2022H2 有两个 `pool_L` 截面少于 1,000 只，只从
+Top1000 诊断剔除，Top100 主验收仍使用全部 9,690 个截面。最终固定四图为 short IC + next excess、
+Top100 fee8 累和、Top1000 平滑分桶、Top1000 十组 100 bps 收益分布。归档位置为
+`experiments/evidence/backtests/nn_delay6_clock_state_36m_2022_2025_w1001_1010_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/`。
+
+Decision：10:01 作为 completed decay checkpoint 保留，不替换 09:31 opening policy。由于信号层与费用后
+曲线均明显落后，不继续做该窗口的 downstream capacity/realistic promotion audit；继续完成提交前已固定的
+11:01 与 14:01 窗口，形成完整时点衰减曲线。
 
 ### Ordinary 328 mech v3 cap-cache（2026-07-21，已完成）
 

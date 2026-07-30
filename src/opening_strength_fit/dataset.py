@@ -9,6 +9,7 @@ from opening_strength_fit.io import read_frame
 from opening_strength_fit.labels import build_trade_labels
 from opening_strength_fit.sampling import (
     DEFAULT_DECISION_TIMES,
+    normalize_decision_alignment,
     require_entry_after_cross_section_ready,
     sample_labeled_frame,
 )
@@ -75,6 +76,8 @@ def build_labeled_feature_frame(
     sample_mode: str = "all_ticks",
     decision_times: list[str] | tuple[str, ...] = DEFAULT_DECISION_TIMES,
     decision_max_lag_seconds: int | None = 5,
+    decision_alignment: str = "next_tick",
+    decision_max_state_age_seconds: int | None = None,
     require_cross_section_ready_entry: bool = False,
 ) -> pd.DataFrame:
     if universe_regex or universe_symbols:
@@ -93,36 +96,70 @@ def build_labeled_feature_frame(
         preopen_price_mode=preopen_price_mode,
         preopen_match_time=preopen_match_time,
     )
-    label_sample_end_time = (
-        _add_clock_seconds(sample_end_time, decision_max_lag_seconds)
-        if _is_decision_point_mode(sample_mode)
-        else sample_end_time
-    )
-    labeled = build_trade_labels(
-        features,
-        buy_price_col=buy_price_col,
-        volume_col=volume_col,
-        turnover_col=turnover_col,
-        hold_seconds=hold_seconds,
-        sell_window_seconds=sell_window_seconds,
-        volume_unit_multiplier=volume_unit_multiplier,
-        fee_bps=fee_bps,
-        entry_tick_delay=entry_tick_delay,
-        entry_alignment=entry_alignment,
-        entry_clock_delay_seconds=entry_clock_delay_seconds,
-        entry_max_gap_seconds=entry_max_gap_seconds,
-        sample_start_time=sample_start_time,
-        sample_end_time=label_sample_end_time,
-        future_alignment=future_alignment,
-        max_future_gap_seconds=max_future_gap_seconds,
-        tradable_statuses=tradable_statuses,
-    )
-    sampled = sample_labeled_frame(
-        labeled,
-        mode=sample_mode,
-        decision_times=decision_times,
-        max_lag_seconds=decision_max_lag_seconds,
-    )
+    normalized_decision_alignment = normalize_decision_alignment(decision_alignment)
+    if _is_decision_point_mode(sample_mode) and normalized_decision_alignment == "clock_state":
+        sampled_features = sample_labeled_frame(
+            features,
+            mode=sample_mode,
+            decision_times=decision_times,
+            max_lag_seconds=decision_max_lag_seconds,
+            alignment=decision_alignment,
+            max_state_age_seconds=decision_max_state_age_seconds,
+        )
+        sampled = build_trade_labels(
+            sampled_features,
+            buy_price_col=buy_price_col,
+            volume_col=volume_col,
+            turnover_col=turnover_col,
+            hold_seconds=hold_seconds,
+            sell_window_seconds=sell_window_seconds,
+            volume_unit_multiplier=volume_unit_multiplier,
+            fee_bps=fee_bps,
+            entry_tick_delay=entry_tick_delay,
+            entry_alignment=entry_alignment,
+            entry_clock_delay_seconds=entry_clock_delay_seconds,
+            entry_max_gap_seconds=entry_max_gap_seconds,
+            sample_start_time=sample_start_time,
+            sample_end_time=sample_end_time,
+            future_alignment=future_alignment,
+            max_future_gap_seconds=max_future_gap_seconds,
+            tradable_statuses=tradable_statuses,
+            state_ticks=features,
+            entry_target_timestamp_col="decision_target_timestamp",
+        )
+    else:
+        label_sample_end_time = (
+            _add_clock_seconds(sample_end_time, decision_max_lag_seconds)
+            if _is_decision_point_mode(sample_mode)
+            else sample_end_time
+        )
+        labeled = build_trade_labels(
+            features,
+            buy_price_col=buy_price_col,
+            volume_col=volume_col,
+            turnover_col=turnover_col,
+            hold_seconds=hold_seconds,
+            sell_window_seconds=sell_window_seconds,
+            volume_unit_multiplier=volume_unit_multiplier,
+            fee_bps=fee_bps,
+            entry_tick_delay=entry_tick_delay,
+            entry_alignment=entry_alignment,
+            entry_clock_delay_seconds=entry_clock_delay_seconds,
+            entry_max_gap_seconds=entry_max_gap_seconds,
+            sample_start_time=sample_start_time,
+            sample_end_time=label_sample_end_time,
+            future_alignment=future_alignment,
+            max_future_gap_seconds=max_future_gap_seconds,
+            tradable_statuses=tradable_statuses,
+        )
+        sampled = sample_labeled_frame(
+            labeled,
+            mode=sample_mode,
+            decision_times=decision_times,
+            max_lag_seconds=decision_max_lag_seconds,
+            alignment=decision_alignment,
+            max_state_age_seconds=decision_max_state_age_seconds,
+        )
     if require_cross_section_ready_entry:
         sampled = require_entry_after_cross_section_ready(sampled)
     return sampled

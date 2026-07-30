@@ -23,6 +23,21 @@ def minute_decision_times(
 DEFAULT_DECISION_TIMES = minute_decision_times()
 
 
+def normalize_decision_alignment(value: str) -> str:
+    normalized = str(value).strip().lower().replace("-", "_")
+    aliases = {
+        "forward": "next_tick",
+        "first_tick": "next_tick",
+        "first_tick_after": "next_tick",
+        "backward": "clock_state",
+        "last_known_state": "clock_state",
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized not in {"next_tick", "clock_state"}:
+        raise SystemExit(f"unknown decision alignment {value!r}; expected next_tick or clock_state")
+    return normalized
+
+
 def _expand_clock_token(token: str) -> list[str]:
     token = token.strip()
     for separator in ("..", "-"):
@@ -51,18 +66,35 @@ def select_decision_points(
     *,
     decision_times: Iterable[str] = DEFAULT_DECISION_TIMES,
     max_lag_seconds: int | None = 5,
+    alignment: str = "next_tick",
+    max_state_age_seconds: int | None = None,
 ) -> pd.DataFrame:
-    """Select the first sample tick at or after each configured clock time."""
+    """Select one auditable market state for every configured decision clock.
+
+    ``next_tick`` preserves the historical sampling rule: use the first physical
+    row at or after the target, optionally bounded by ``max_lag_seconds``.
+    ``clock_state`` uses the last physical row at or before the target because
+    ``stock.tick`` omits unchanged snapshots.  The logical target, physical
+    source timestamp, and carried-state age are retained separately.
+    """
 
     times = parse_clock_times(decision_times)
     if not times:
         raise SystemExit("decision point sampling needs at least one decision time")
 
+    normalized_alignment = normalize_decision_alignment(alignment)
+
     work = ensure_timestamp_columns(frame)
     if work.empty:
         return work.copy()
 
-    tolerance = pd.Timedelta(seconds=max_lag_seconds) if max_lag_seconds is not None else None
+    if normalized_alignment == "clock_state":
+        tolerance_seconds = max_state_age_seconds
+        direction = "backward"
+    else:
+        tolerance_seconds = max_lag_seconds
+        direction = "forward"
+    tolerance = pd.Timedelta(seconds=tolerance_seconds) if tolerance_seconds is not None else None
     selected_parts = []
     base_dates = work[["date"]].drop_duplicates().sort_values("date")
 
@@ -89,7 +121,7 @@ def select_decision_points(
                 right,
                 left_on="_target_ts",
                 right_on="timestamp",
-                direction="forward",
+                direction=direction,
                 tolerance=tolerance,
             ).dropna(subset=["_source_index"])
             if merged.empty:
@@ -97,9 +129,17 @@ def select_decision_points(
             chosen = work.loc[merged["_source_index"].astype(int).to_numpy()].copy()
             chosen["decision_time"] = merged["decision_time"].to_numpy()
             chosen["decision_target_timestamp"] = merged["_target_ts"].to_numpy()
-            chosen["decision_lag_seconds"] = (
-                chosen["timestamp"].to_numpy() - chosen["decision_target_timestamp"]
-            ) / pd.Timedelta(seconds=1)
+            if normalized_alignment == "clock_state":
+                chosen["decision_source_timestamp"] = chosen["timestamp"].to_numpy()
+                chosen["decision_state_age_seconds"] = (
+                    chosen["decision_target_timestamp"].to_numpy()
+                    - chosen["decision_source_timestamp"].to_numpy()
+                ) / pd.Timedelta(seconds=1)
+                chosen["decision_lag_seconds"] = 0.0
+            else:
+                chosen["decision_lag_seconds"] = (
+                    chosen["timestamp"].to_numpy() - chosen["decision_target_timestamp"]
+                ) / pd.Timedelta(seconds=1)
             chosen["symbol"] = str(symbol)
             selected_parts.append(chosen)
 
@@ -107,7 +147,10 @@ def select_decision_points(
         return work.iloc[:0].copy()
 
     selected = pd.concat(selected_parts, ignore_index=True)
-    return selected.sort_values(["date", "symbol", "timestamp"]).reset_index(drop=True)
+    return selected.sort_values(
+        ["date", "symbol", "decision_target_timestamp"],
+        kind="mergesort",
+    ).reset_index(drop=True)
 
 
 def sample_labeled_frame(
@@ -116,6 +159,8 @@ def sample_labeled_frame(
     mode: str = "decision_points",
     decision_times: Iterable[str] = DEFAULT_DECISION_TIMES,
     max_lag_seconds: int | None = 5,
+    alignment: str = "next_tick",
+    max_state_age_seconds: int | None = None,
 ) -> pd.DataFrame:
     normalized_mode = str(mode).strip().lower()
     if normalized_mode in {"", "all", "all_ticks", "tick"}:
@@ -125,6 +170,8 @@ def sample_labeled_frame(
             frame,
             decision_times=decision_times,
             max_lag_seconds=max_lag_seconds,
+            alignment=alignment,
+            max_state_age_seconds=max_state_age_seconds,
         )
     valid = "all_ticks, decision_points"
     raise SystemExit(f"unknown sample mode {mode!r}; expected one of: {valid}")

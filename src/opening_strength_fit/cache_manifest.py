@@ -132,6 +132,7 @@ def build_cache_manifest(
     timing_summary: dict[str, object] = {}
     for column in (
         "decision_lag_seconds",
+        "decision_state_age_seconds",
         "entry_delay_ticks",
         "entry_delay_seconds",
         "entry_max_tick_gap_seconds",

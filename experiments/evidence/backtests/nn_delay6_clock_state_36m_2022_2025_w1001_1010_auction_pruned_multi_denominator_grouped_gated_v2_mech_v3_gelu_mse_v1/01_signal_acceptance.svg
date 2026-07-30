@@ -1,0 +1,199 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+<rect width="1600" height="900" fill="#fbfaf7"/>
+<text x="800.0" y="42.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="34" font-weight="800" fill="#222222">2022-2025 intraday window decay rank IC / pool_L超额</text>
+<rect x="607.1" y="68.0" width="34" height="18" fill="#1f2937"/>
+<text x="653.1" y="83.0" text-anchor="start" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#262626">09:31-09:40</text>
+<rect x="800.0" y="68.0" width="34" height="18" fill="#1f77b4"/>
+<text x="846.0" y="83.0" text-anchor="start" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#262626">10:01-10:10</text>
+<text x="86.0" y="123.0" text-anchor="start" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="28" font-weight="800" fill="#222222">short universe rank IC</text>
+<line x1="86.0" y1="455.0" x2="1562.0" y2="455.0" stroke="#dedbd4" stroke-width="1.0"/>
+<text x="72.0" y="460.0" text-anchor="end" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="16" font-weight="400" fill="#3a3a3a">0.100</text>
+<line x1="86.0" y1="393.0" x2="1562.0" y2="393.0" stroke="#dedbd4" stroke-width="1.0"/>
+<text x="72.0" y="398.0" text-anchor="end" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="16" font-weight="400" fill="#3a3a3a">0.150</text>
+<line x1="86.0" y1="331.0" x2="1562.0" y2="331.0" stroke="#dedbd4" stroke-width="1.0"/>
+<text x="72.0" y="336.0" text-anchor="end" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="16" font-weight="400" fill="#3a3a3a">0.200</text>
+<line x1="86.0" y1="269.0" x2="1562.0" y2="269.0" stroke="#dedbd4" stroke-width="1.0"/>
+<text x="72.0" y="274.0" text-anchor="end" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="16" font-weight="400" fill="#3a3a3a">0.250</text>
+<line x1="86.0" y1="207.0" x2="1562.0" y2="207.0" stroke="#dedbd4" stroke-width="1.0"/>
+<text x="72.0" y="212.0" text-anchor="end" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="16" font-weight="400" fill="#3a3a3a">0.300</text>
+<line x1="86.0" y1="145.0" x2="1562.0" y2="145.0" stroke="#dedbd4" stroke-width="1.0"/>
+<text x="72.0" y="150.0" text-anchor="end" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="16" font-weight="400" fill="#3a3a3a">0.350</text>
+<line x1="86.0" y1="145.0" x2="86.0" y2="455.0" stroke="#928d84" stroke-width="1"/>
+<line x1="86.0" y1="455.0" x2="1562.0" y2="455.0" stroke="#928d84" stroke-width="1"/>
+<text x="24.0" y="306.0" text-anchor="start" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="18" font-weight="400" fill="#222222">Rank IC</text>
+<line x1="1475.2" y1="145.0" x2="1475.2" y2="455.0" stroke="#bdb7ad" stroke-width="1.2" stroke-dasharray="6 7"/>
+<rect x="98.2" y="359.9" width="29.1" height="95.1" fill="#1f2937"/>
+<text x="112.7" y="352.9" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+0.177</text>
+<rect x="131.6" y="294.4" width="29.1" height="160.6" fill="#1f77b4"/>
+<text x="146.1" y="287.4" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.230</text>
+<rect x="185.0" y="347.2" width="29.1" height="107.8" fill="#1f2937"/>
+<text x="199.5" y="340.2" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+0.187</text>
+<rect x="218.4" y="282.2" width="29.1" height="172.8" fill="#1f77b4"/>
+<text x="232.9" y="275.2" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.239</text>
+<rect x="271.8" y="367.9" width="29.1" height="87.1" fill="#1f2937"/>
+<text x="286.3" y="360.9" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+0.170</text>
+<rect x="305.2" y="259.0" width="29.1" height="196.0" fill="#1f77b4"/>
+<text x="319.8" y="252.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.258</text>
+<rect x="358.6" y="381.4" width="29.1" height="73.6" fill="#1f2937"/>
+<text x="373.2" y="374.4" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+0.159</text>
+<rect x="392.1" y="265.8" width="29.1" height="189.2" fill="#1f77b4"/>
+<text x="406.6" y="258.8" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.253</text>
+<rect x="445.4" y="365.7" width="29.1" height="89.3" fill="#1f2937"/>
+<text x="460.0" y="358.7" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+0.172</text>
+<rect x="478.9" y="232.3" width="29.1" height="222.7" fill="#1f77b4"/>
+<text x="493.4" y="225.3" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.280</text>
+<rect x="532.3" y="385.0" width="29.1" height="70.0" fill="#1f2937"/>
+<text x="546.8" y="378.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+0.156</text>
+<rect x="565.7" y="279.2" width="29.1" height="175.8" fill="#1f77b4"/>
+<text x="580.2" y="272.2" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.242</text>
+<rect x="619.1" y="386.9" width="29.1" height="68.1" fill="#1f2937"/>
+<text x="633.6" y="379.9" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+0.155</text>
+<rect x="652.5" y="276.0" width="29.1" height="179.0" fill="#1f77b4"/>
+<text x="667.1" y="269.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.244</text>
+<rect x="705.9" y="389.1" width="29.1" height="65.9" fill="#1f2937"/>
+<text x="720.5" y="382.1" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+0.153</text>
+<rect x="739.3" y="249.5" width="29.1" height="205.5" fill="#1f77b4"/>
+<text x="753.9" y="242.5" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.266</text>
+<rect x="792.7" y="391.4" width="29.1" height="63.6" fill="#1f2937"/>
+<text x="807.3" y="384.4" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+0.151</text>
+<rect x="826.2" y="264.6" width="29.1" height="190.4" fill="#1f77b4"/>
+<text x="840.7" y="257.6" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.254</text>
+<rect x="879.6" y="376.9" width="29.1" height="78.1" fill="#1f2937"/>
+<text x="894.1" y="369.9" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+0.163</text>
+<rect x="913.0" y="233.7" width="29.1" height="221.3" fill="#1f77b4"/>
+<text x="927.5" y="226.7" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.278</text>
+<rect x="966.4" y="342.5" width="29.1" height="112.5" fill="#1f2937"/>
+<text x="980.9" y="335.5" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+0.191</text>
+<rect x="999.8" y="212.9" width="29.1" height="242.1" fill="#1f77b4"/>
+<text x="1014.4" y="205.9" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.295</text>
+<rect x="1053.2" y="411.5" width="29.1" height="43.5" fill="#1f2937"/>
+<text x="1067.8" y="404.5" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+0.135</text>
+<rect x="1086.6" y="291.7" width="29.1" height="163.3" fill="#1f77b4"/>
+<text x="1101.2" y="284.7" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.232</text>
+<rect x="1140.0" y="416.4" width="29.1" height="38.6" fill="#1f2937"/>
+<text x="1154.6" y="409.4" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+0.131</text>
+<rect x="1173.5" y="262.3" width="29.1" height="192.7" fill="#1f77b4"/>
+<text x="1188.0" y="255.3" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.255</text>
+<rect x="1226.9" y="415.2" width="29.1" height="39.8" fill="#1f2937"/>
+<text x="1241.4" y="408.2" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+0.132</text>
+<rect x="1260.3" y="245.5" width="29.1" height="209.5" fill="#1f77b4"/>
+<text x="1274.8" y="238.5" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.269</text>
+<rect x="1313.7" y="404.1" width="29.1" height="50.9" fill="#1f2937"/>
+<text x="1328.2" y="397.1" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+0.141</text>
+<rect x="1347.1" y="286.1" width="29.1" height="168.9" fill="#1f77b4"/>
+<text x="1361.7" y="279.1" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.236</text>
+<rect x="1400.5" y="421.2" width="29.1" height="33.8" fill="#1f2937"/>
+<text x="1415.1" y="414.2" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+0.127</text>
+<rect x="1433.9" y="307.9" width="29.1" height="147.1" fill="#1f77b4"/>
+<text x="1448.5" y="300.9" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.219</text>
+<rect x="1487.3" y="385.1" width="29.1" height="69.9" fill="#1f2937"/>
+<text x="1501.9" y="378.1" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+0.156</text>
+<rect x="1520.8" y="265.2" width="29.1" height="189.8" fill="#1f77b4"/>
+<text x="1535.3" y="258.2" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.253</text>
+<text x="86.0" y="528.0" text-anchor="start" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="28" font-weight="800" fill="#222222">next pool_L Top100 excess</text>
+<line x1="86.0" y1="860.0" x2="1562.0" y2="860.0" stroke="#dedbd4" stroke-width="1.0"/>
+<text x="72.0" y="865.0" text-anchor="end" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="16" font-weight="400" fill="#3a3a3a">-20</text>
+<line x1="86.0" y1="815.7" x2="1562.0" y2="815.7" stroke="#dedbd4" stroke-width="1.0"/>
+<text x="72.0" y="820.7" text-anchor="end" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="16" font-weight="400" fill="#3a3a3a">-10</text>
+<line x1="86.0" y1="771.4" x2="1562.0" y2="771.4" stroke="#b8b2a8" stroke-width="1.3"/>
+<text x="72.0" y="776.4" text-anchor="end" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="16" font-weight="400" fill="#3a3a3a">0</text>
+<line x1="86.0" y1="727.1" x2="1562.0" y2="727.1" stroke="#dedbd4" stroke-width="1.0"/>
+<text x="72.0" y="732.1" text-anchor="end" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="16" font-weight="400" fill="#3a3a3a">10</text>
+<line x1="86.0" y1="682.9" x2="1562.0" y2="682.9" stroke="#dedbd4" stroke-width="1.0"/>
+<text x="72.0" y="687.9" text-anchor="end" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="16" font-weight="400" fill="#3a3a3a">20</text>
+<line x1="86.0" y1="638.6" x2="1562.0" y2="638.6" stroke="#dedbd4" stroke-width="1.0"/>
+<text x="72.0" y="643.6" text-anchor="end" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="16" font-weight="400" fill="#3a3a3a">30</text>
+<line x1="86.0" y1="594.3" x2="1562.0" y2="594.3" stroke="#dedbd4" stroke-width="1.0"/>
+<text x="72.0" y="599.3" text-anchor="end" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="16" font-weight="400" fill="#3a3a3a">40</text>
+<line x1="86.0" y1="550.0" x2="1562.0" y2="550.0" stroke="#dedbd4" stroke-width="1.0"/>
+<text x="72.0" y="555.0" text-anchor="end" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="16" font-weight="400" fill="#3a3a3a">50</text>
+<line x1="86.0" y1="550.0" x2="86.0" y2="860.0" stroke="#928d84" stroke-width="1"/>
+<line x1="86.0" y1="860.0" x2="1562.0" y2="860.0" stroke="#928d84" stroke-width="1"/>
+<text x="24.0" y="711.0" text-anchor="start" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="18" font-weight="400" fill="#222222">bps</text>
+<line x1="1475.2" y1="550.0" x2="1475.2" y2="860.0" stroke="#bdb7ad" stroke-width="1.2" stroke-dasharray="6 7"/>
+<text x="129.4" y="895.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#3a3a3a">2022Q1</text>
+<rect x="98.2" y="605.6" width="29.1" height="165.8" fill="#1f2937"/>
+<text x="112.7" y="598.6" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+37.4</text>
+<rect x="131.6" y="718.3" width="29.1" height="53.1" fill="#1f77b4"/>
+<text x="146.1" y="711.3" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+12.0</text>
+<text x="216.2" y="895.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#3a3a3a">2022Q2</text>
+<rect x="185.0" y="691.0" width="29.1" height="80.4" fill="#1f2937"/>
+<text x="199.5" y="684.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+18.2</text>
+<rect x="218.4" y="731.3" width="29.1" height="40.2" fill="#1f77b4"/>
+<text x="232.9" y="724.3" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+9.1</text>
+<text x="303.1" y="895.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#3a3a3a">2022Q3</text>
+<rect x="271.8" y="709.1" width="29.1" height="62.3" fill="#1f2937"/>
+<text x="286.3" y="702.1" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+14.1</text>
+<rect x="305.2" y="771.4" width="29.1" height="14.8" fill="#1f77b4"/>
+<text x="319.8" y="800.3" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">-3.3</text>
+<text x="389.9" y="895.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#3a3a3a">2022Q4</text>
+<rect x="358.6" y="752.6" width="29.1" height="18.8" fill="#1f2937"/>
+<text x="373.2" y="745.6" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+4.3</text>
+<rect x="392.1" y="771.1" width="29.1" height="1.2" fill="#1f77b4"/>
+<text x="406.6" y="764.1" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.1</text>
+<text x="476.7" y="895.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#3a3a3a">2023Q1</text>
+<rect x="445.4" y="675.3" width="29.1" height="96.2" fill="#1f2937"/>
+<text x="460.0" y="668.3" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+21.7</text>
+<rect x="478.9" y="711.7" width="29.1" height="59.7" fill="#1f77b4"/>
+<text x="493.4" y="704.7" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+13.5</text>
+<text x="563.5" y="895.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#3a3a3a">2023Q2</text>
+<rect x="532.3" y="573.2" width="29.1" height="198.3" fill="#1f2937"/>
+<text x="546.8" y="566.2" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+44.8</text>
+<rect x="565.7" y="667.4" width="29.1" height="104.0" fill="#1f77b4"/>
+<text x="580.2" y="660.4" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+23.5</text>
+<text x="650.4" y="895.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#3a3a3a">2023Q3</text>
+<rect x="619.1" y="721.2" width="29.1" height="50.2" fill="#1f2937"/>
+<text x="633.6" y="714.2" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+11.3</text>
+<rect x="652.5" y="771.4" width="29.1" height="10.4" fill="#1f77b4"/>
+<text x="667.1" y="795.8" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">-2.3</text>
+<text x="737.2" y="895.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#3a3a3a">2023Q4</text>
+<rect x="705.9" y="733.1" width="29.1" height="38.4" fill="#1f2937"/>
+<text x="720.5" y="726.1" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+8.7</text>
+<rect x="739.3" y="771.4" width="29.1" height="32.5" fill="#1f77b4"/>
+<text x="753.9" y="817.9" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">-7.3</text>
+<text x="824.0" y="895.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#3a3a3a">2024Q1</text>
+<rect x="792.7" y="658.7" width="29.1" height="112.7" fill="#1f2937"/>
+<text x="807.3" y="651.7" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+25.4</text>
+<rect x="826.2" y="698.6" width="29.1" height="72.8" fill="#1f77b4"/>
+<text x="840.7" y="691.6" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+16.4</text>
+<text x="910.8" y="895.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#3a3a3a">2024Q2</text>
+<rect x="879.6" y="715.3" width="29.1" height="56.1" fill="#1f2937"/>
+<text x="894.1" y="708.3" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+12.7</text>
+<rect x="913.0" y="744.5" width="29.1" height="26.9" fill="#1f77b4"/>
+<text x="927.5" y="737.5" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+6.1</text>
+<text x="997.6" y="895.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#3a3a3a">2024Q3</text>
+<rect x="966.4" y="753.2" width="29.1" height="18.2" fill="#1f2937"/>
+<text x="980.9" y="746.2" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+4.1</text>
+<rect x="999.8" y="733.3" width="29.1" height="38.1" fill="#1f77b4"/>
+<text x="1014.4" y="726.3" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+8.6</text>
+<text x="1084.5" y="895.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#3a3a3a">2024Q4</text>
+<rect x="1053.2" y="698.1" width="29.1" height="73.3" fill="#1f2937"/>
+<text x="1067.8" y="691.1" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+16.6</text>
+<rect x="1086.6" y="768.9" width="29.1" height="2.6" fill="#1f77b4"/>
+<text x="1101.2" y="761.9" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+0.6</text>
+<text x="1171.3" y="895.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#3a3a3a">2025Q1</text>
+<rect x="1140.0" y="686.6" width="29.1" height="84.8" fill="#1f2937"/>
+<text x="1154.6" y="679.6" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+19.2</text>
+<rect x="1173.5" y="720.1" width="29.1" height="51.3" fill="#1f77b4"/>
+<text x="1188.0" y="713.1" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+11.6</text>
+<text x="1258.1" y="895.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#3a3a3a">2025Q2</text>
+<rect x="1226.9" y="724.7" width="29.1" height="46.7" fill="#1f2937"/>
+<text x="1241.4" y="717.7" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+10.5</text>
+<rect x="1260.3" y="771.4" width="29.1" height="18.0" fill="#1f77b4"/>
+<text x="1274.8" y="803.5" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">-4.1</text>
+<text x="1344.9" y="895.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#3a3a3a">2025Q3</text>
+<rect x="1313.7" y="688.0" width="29.1" height="83.4" fill="#1f2937"/>
+<text x="1328.2" y="681.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+18.8</text>
+<rect x="1347.1" y="713.1" width="29.1" height="58.3" fill="#1f77b4"/>
+<text x="1361.7" y="706.1" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+13.2</text>
+<text x="1431.8" y="895.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#3a3a3a">2025Q4</text>
+<rect x="1400.5" y="727.6" width="29.1" height="43.9" fill="#1f2937"/>
+<text x="1415.1" y="720.6" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+9.9</text>
+<rect x="1433.9" y="730.6" width="29.1" height="40.9" fill="#1f77b4"/>
+<text x="1448.5" y="723.6" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+9.2</text>
+<text x="1518.6" y="895.0" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="19" font-weight="400" fill="#3a3a3a">Mean</text>
+<rect x="1487.3" y="694.6" width="29.1" height="76.8" fill="#1f2937"/>
+<text x="1501.9" y="687.6" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f2937">+17.4</text>
+<rect x="1520.8" y="741.9" width="29.1" height="29.5" fill="#1f77b4"/>
+<text x="1535.3" y="734.9" text-anchor="middle" font-family="Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', Arial, sans-serif" font-size="12" font-weight="700" fill="#1f77b4">+6.7</text>
+</svg>

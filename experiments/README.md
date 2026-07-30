@@ -68,5 +68,9 @@ canonical multiden 额外保留 short IC + next excess、Top100 累和、Top1000
 收益分布四图，以及每图的 compact CSV/trace。已有本地 mirror 时运行 `make evidence-four-figures` 刷新；
 control 只作为前两图的 ablation baseline。
 
+日内窗口衰减实验也沿用同一四图契约；每个完成窗口使用训练 run id 建独立 evidence 目录，并额外保留
+pool summary 与 SHA-256 manifest。明显落后于 09:31 基准的窗口归档为 diagnostic checkpoint，不进入
+canonical evidence，也不替换 opening policy。
+
 PVC 布局和故障处理见 [runbook](../docs/runbook.md)，当前研究判断见
 [project brief](../docs/project_brief.md)。

@@ -33,12 +33,31 @@ def test_clock_state_cache_uses_fixed_wall_clock_boundaries() -> None:
         )
         assert config["data"]["source"] == "clickhouse"
         assert config["data"]["tick_timestamp_deduplication"] == ("latest_local_timestamp")
+        assert config["sample"].get("decision_alignment", "next_tick") == "next_tick"
         assert config["labels"]["entry_alignment"] == "clock_state"
         assert config["labels"]["entry_clock_delay_seconds"] == 6
         assert config["labels"]["future_alignment"] == "clock_state"
         assert config["labels"]["require_entry_after_cross_section_ready"] is True
         assert "entry_max_gap_seconds" not in config["labels"]
         assert "max_future_gap_seconds" not in config["labels"]
+
+
+def test_corrected_decision_clock_state_cache_has_distinct_lineage() -> None:
+    corrected = _load(RUNS / "build_delay6_decision_clock_state_0930_0940_cache_v1.toml")
+    assert corrected["cache"]["schema_version"] == (
+        "label_v6_decision_clock_state_clock6_unique_base_mcap_lag1"
+    )
+    assert corrected["sample"]["decision_alignment"] == "clock_state"
+    assert "decision_max_lag_seconds" not in corrected["sample"]
+    assert corrected["labels"]["entry_alignment"] == "clock_state"
+    assert corrected["labels"]["entry_clock_delay_seconds"] == 6
+    assert corrected["labels"]["future_alignment"] == "clock_state"
+
+    for window in ("1001_1010", "1101_1110", "1401_1410"):
+        historical = _load(RUNS / f"build_delay6_clock_state_{window}_from_start_cache_v1.toml")
+        assert historical["sample"].get("decision_alignment", "next_tick") == "next_tick"
+        assert historical["sample"]["decision_max_lag_seconds"] == 5
+        assert "label_v5_clock6_state_window_start" in historical["cache"]["schema_version"]
 
 
 def test_clock_state_target_and_model_only_read_new_lineage() -> None:
