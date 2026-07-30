@@ -120,20 +120,30 @@ run config、Job manifest、代码 revision、compact evidence 与本日志共�
 | --- | ---: | ---: | ---: |
 | universe short Rank IC | 0.156418 | **0.253118** | +0.096700 |
 | `pool_L` short Rank IC | 0.142410 | **0.242669** | +0.100259 |
+| `pool_L` short background return | -8.1968 bps | -7.5606 bps | +0.6362 bps |
+| `pool_L` short Top100 absolute return | **3.1805 bps** | 0.1153 bps | -3.0652 bps |
 | `pool_L` short Top100 excess | **11.3773 bps** | 7.6759 bps | -3.7014 bps |
+| positive short Top100 absolute months / days | **41/48; 648/969** | 23/48; 503/969 | -18 months; -145 days |
+| positive short Top100 excess months / days | 48/48; 946/969 | **48/48; 968/969** | unchanged months; +22 days |
 | `pool_L` next Rank IC | **0.007140** | 0.001836 | -0.005304 |
 | `pool_L` next Top100 excess | **17.1714 bps** | 6.5491 bps | -10.6223 bps |
 | positive next months / half-years | **37/48; 8/8** | 29/48; 6/8 | -8 months; -2 half-years |
 | Top100 fee8 cumulative | **9891.7 bps** | 2708.5 bps | -7183.2 bps |
-| cumulative alpha versus market | **8715.2 bps** | 1532.0 bps | -7183.2 bps |
+| cumulative net excess versus each window's matching `pool_L` | **4828.6 bps** | -317.9 bps | -5146.5 bps |
 | Top1000 first/last 100-name bucket | **17.17/0.29 bps** | 6.55/0.99 bps | head separation 收窄 |
 
-10:01 的 short Rank IC 显著更高，但 short Top100 excess 已下降，隔夜 next Rank IC、Top100 excess、分期
-稳定性和费后累和同时大幅下降。说明稍晚窗口更容易预测“紧接着的截面方向”，却不能把这种排序强度转换成
-同等的隔夜 head payoff；opening edge 的可交易部分在半小时内已经明显衰减。
+10:01 的 short Rank IC 显著更高，short Top100 excess 也保持 48/48 月、968/969 日为正；但 Top100
+短期绝对收益已从 `3.1805 bps` 降至接近零的 `0.1153 bps`，正收益月份从 41 降到 23。结合
+`pool_L` short background 为 `-7.5606 bps`，更准确的解释是稍晚窗口稳定识别“跌得更少”的股票，
+而不是继续捕获正向短期头部收益。与此同时，隔夜 next Rank IC、Top100 excess、分期稳定性和费后累和
+均大幅下降；10:01 费用后累和相对同窗口 `pool_L` 已为负，opening edge 的可交易部分在半小时内明显衰减。
+
+固定图 1 上方面板比较 short universe Rank IC，下方面板比较 `pool_L` short Top100 excess。累和图
+上方面板同时画出两个窗口各自的 `pool_L`，下方面板固定使用 `pool_l` 模式：每条模型线减去对应窗口的
+`pool_L`，并省略两条 `pool_L=0` 零信息线。
 
 Top1000 图使用 `9,688/9,690` 个完整截面；2022H2 有两个 `pool_L` 截面少于 1,000 只，只从
-Top1000 诊断剔除，Top100 主验收仍使用全部 9,690 个截面。最终固定四图为 short IC + next excess、
+Top1000 诊断剔除，Top100 主验收仍使用全部 9,690 个截面。最终固定四图为 short IC + short Top100 excess、
 Top100 fee8 累和、Top1000 平滑分桶、Top1000 十组 100 bps 收益分布。归档位置为
 `experiments/evidence/backtests/nn_delay6_clock_state_36m_2022_2025_w1001_1010_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/`。
 

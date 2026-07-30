@@ -13,6 +13,8 @@ from opening_strength_fit.optimization_acceptance_plots import (
     CUMULATIVE_RELATIVE_MODE_MARKET,
     CUMULATIVE_RELATIVE_MODES,
     DEFAULT_PLOT_DIRECTION_KEYS,
+    OVERLAY_EXCESS_HORIZON_NEXT,
+    OVERLAY_EXCESS_HORIZONS,
     default_plot_directions,
 )
 from opening_strength_fit.optimization_acceptance_workflow import write_optimization_direction_plots
@@ -156,6 +158,12 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--overlay-excess-horizon",
+        choices=OVERLAY_EXCESS_HORIZONS,
+        default=OVERLAY_EXCESS_HORIZON_NEXT,
+        help="Pool TopN excess horizon shown in the lower panel of the overlay figure.",
+    )
+    parser.add_argument(
         "--capacity-baseline-run-id",
         default="",
         help="Capacity acceptance backtest directory for the baseline model in capacity mode.",
@@ -237,6 +245,7 @@ def main(argv: list[str] | None = None) -> None:
         realistic_run_ids=dict(args.realistic_direction or []),
         title_prefix=args.title_prefix,
         top_n=args.top_n,
+        overlay_excess_horizon=args.overlay_excess_horizon,
     )
     print("optimization_direction_comparison_outputs:")
     for key, value in outputs.items():

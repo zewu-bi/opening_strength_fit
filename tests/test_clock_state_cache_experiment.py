@@ -60,6 +60,36 @@ def test_corrected_decision_clock_state_cache_has_distinct_lineage() -> None:
         assert "label_v5_clock6_state_window_start" in historical["cache"]["schema_version"]
 
 
+def test_corrected_later_window_caches_use_decision_clock_state() -> None:
+    expected = {
+        "1001_1010": ("10:00:00", "10:10:00", 35_400_000_000, 36_740_000_000),
+        "1401_1410": ("14:00:00", "14:10:00", 49_800_000_000, 51_140_000_000),
+    }
+    for window, (start, end, start_offset, end_offset) in expected.items():
+        corrected = _load(
+            RUNS / f"build_delay6_decision_clock_state_{window}_cache_v1.toml"
+        )
+        assert corrected["cache"]["schema_version"].startswith(
+            f"label_v6_decision_clock_state_clock6_{window}"
+        )
+        assert corrected["sample"]["decision_alignment"] == "clock_state"
+        assert corrected["sample"]["decision_times"][0] == start
+        assert corrected["sample"]["decision_times"][-1] == end
+        assert "decision_max_lag_seconds" not in corrected["sample"]
+        assert corrected["clickhouse"]["start_offset_us"] == start_offset
+        assert corrected["clickhouse"]["end_offset_us"] == end_offset
+        assert BASE_ROOT in corrected["cache_shards"]["reuse_labeled_path_template"]
+        assert corrected["features"]["reuse_feature_prefixes"] == [
+            "preopen_",
+            "auction_",
+        ]
+        assert corrected["features"]["reuse_require_constant"] is True
+        assert corrected["labels"]["entry_alignment"] == "clock_state"
+        assert corrected["labels"]["entry_clock_delay_seconds"] == 6
+        assert corrected["labels"]["future_alignment"] == "clock_state"
+        assert corrected["k8s"]["shard_parallelism"] == 7
+
+
 def test_clock_state_target_and_model_only_read_new_lineage() -> None:
     for year in range(2019, 2026):
         config = _load(RUNS / f"build_delay6_clock_state_{year}_cap_mixed_w030_target_v1.toml")

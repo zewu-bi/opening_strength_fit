@@ -8,7 +8,8 @@
   "realized_fee_bps": 8.0,
   "top_n": 100,
   "cumulative_mode": "top100",
-  "cumulative_relative_mode": "market",
+  "cumulative_relative_mode": "pool_l",
+  "overlay_excess_horizon": "short",
   "capacity_total_notional": null,
   "capacity_decision_notional": null,
   "capacity_baseline_run_id": null,
@@ -22,9 +23,9 @@
     "figure_title": "2022-2025 intraday window decay rank IC / pool_L\u8d85\u989d",
     "panels": [
       "short universe rank IC",
-      "next pool_L Top100 excess"
+      "short pool_L Top100 excess"
     ],
-    "reason": "short pool excess is omitted because A-share T+1 makes short-horizon cash PnL non-tradable; next IC is omitted because this model is not trained to rank next-day returns directly",
+    "reason": "short pool excess is shown to diagnose whether stronger short-horizon cross-sectional ordering reaches the selected TopN head",
     "baseline_run_id": "nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1",
     "baseline_label": "09:31-09:40"
   },
@@ -57,20 +58,19 @@
     "cumulative_top": [
       "market",
       "background",
+      "w1001_1010_pool_l",
       "baseline_pool_l",
       "w1001_1010"
     ],
     "cumulative_relative": [
-      "background",
       "baseline_pool_l",
       "w1001_1010"
     ],
-    "cumulative_market_alpha": [
-      "background",
+    "cumulative_market_alpha": [],
+    "cumulative_pool_l_excess": [
       "baseline_pool_l",
       "w1001_1010"
-    ],
-    "cumulative_pool_l_excess": []
+    ]
   },
   "figures": {
     "overlay_acceptance": "experiments/results/backtests/window_decay_acceptance_w0931_vs_w1001_2022_2025_v1/optimization_directions_overlay_acceptance.svg",
@@ -84,10 +84,10 @@
     "figure_title": "2022-2025 intraday window decay fee 8bps \u6c60\u5185Top100\u9694\u591c\u51c0\u6536\u76ca\u7d2f\u548c",
     "panels": [
       "\u6263\u9664\u624b\u7eed\u8d39\u7d2f\u548c\u6536\u76ca",
-      "\u5bf9\u6bd4\u5168A\u80a1\u5e02\u573a\u5e73\u5747alpha"
+      "\u76f8\u5bf9 pool_L \u7d2f\u548c\u8d85\u989d"
     ],
     "market_series": "full A-share market average overnight return",
-    "background_series": "pool_L background overnight return after pool_fee_bps is always drawn in the top panel; it is omitted as a zero line in pool_l relative mode and drawn relative to market in market mode",
+    "background_series": "pool_L background overnight return after pool_fee_bps is drawn in the top panel. In pool_l relative mode, one pool_L curve is drawn for each decision window and each model is compared with its matching curve; the resulting pool_L zero lines are omitted from the bottom panel. In market mode, the single baseline pool_L curve is drawn relative to market",
     "reason": "short cumulative is omitted because this workflow cannot trade T+0",
     "unit": "%",
     "source_unit": "bps",
@@ -96,11 +96,11 @@
     "absolute_definition": "top panel plots market, pool background, baseline selected TopN, and comparison selected TopN cumulative next-close returns. Pool/model lines subtract their realized fee before dividing by next_close_capital_divisor and cumulative summation; market uses universe pool_next_mean_bps without a trading fee. Figure axis displays cumulative bps divided by 100 as percent",
     "background_definition": "pool_L background overnight return minus pool_fee_bps; pool fee uses equal-weight stock-pool membership turnover when available",
     "pool_turnover_source": "see pool_turnover_source column in cumulative plot data",
-    "relative_mode": "market",
-    "relative_column": "next_cumulative_alpha_vs_market_pct",
-    "relative_definition": "bottom panel plots pool/background and model capital-adjusted cumulative net bps minus full-market capital-adjusted cumulative bps, displayed as percent",
-    "market_alpha_definition": "bottom panel plots pool/background and model capital-adjusted cumulative net bps minus full-market capital-adjusted cumulative bps, displayed as percent",
-    "pool_l_excess_definition": null,
+    "relative_mode": "pool_l",
+    "relative_column": "next_cumulative_alpha_pct",
+    "relative_definition": "bottom panel plots each model's capital-adjusted cumulative net return minus its matching window-specific pool_L capital-adjusted cumulative net return, displayed as percent; every matching pool_L curve is visible in the top panel, while their zero lines are omitted from the bottom panel; model and pool_L fees are included",
+    "market_alpha_definition": null,
+    "pool_l_excess_definition": "bottom panel plots each model's capital-adjusted cumulative net return minus its matching window-specific pool_L capital-adjusted cumulative net return, displayed as percent; every matching pool_L curve is visible in the top panel, while their zero lines are omitted from the bottom panel; model and pool_L fees are included",
     "accumulation_definition": "capital-adjusted cumulative net bps = cumsum(daily_net_bps * daily_capital_fraction)"
   },
   "source_files": {

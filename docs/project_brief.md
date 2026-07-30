@@ -11,8 +11,9 @@ universe 策略。
 当前 `09:31-09:40` 信号阶段已经收束。下一阶段研究同一选股问题在日内的衰减：沿用既有样本、label、
 feature、模型、股池、rolling OOS 和验收口径，仅将十分钟决策窗口替换为另外 2–3 个预先固定的日内窗口。
 2026-07-22 至 2026-07-29 的全天序列/隔夜 TCN 尝试源于需求理解偏差，已整体封存并停止。
-首个 `10:01-10:10` 窗口已于 2026-07-30 完成：short Rank IC 上升，但隔夜 Top100 超额与费用后累和
-显著下降，确认 opening edge 的可交易部分在开盘后半小时内已经明显衰减。
+首个 `10:01-10:10` 窗口已于 2026-07-30 完成：short Rank IC 上升，但 `pool_L` short Top100
+绝对收益由 `3.1805 bps` 降至 `0.1153 bps`，隔夜 Top100 超额与费用后累和也显著下降。稍晚窗口更像
+稳定识别“少跌”股票，而非继续捕获正向头部收益；opening edge 的可交易部分在开盘后半小时内已经明显衰减。
 
 ## 固定研究口径
 
@@ -55,7 +56,7 @@ multiden 的 capacity-only、realistic no-refill、visible pre-trade refill fill
 
 信号层依次检查：
 
-1. `pool_L` Top100 next internal excess 与 market-relative alpha；
+1. `pool_L` Top100 next internal excess 与相对各窗口匹配 `pool_L` 的 fee-adjusted cumulative excess；
 2. 年、半年、月和 decision clock 稳定性；
 3. universe short Rank IC 与 Top1000 score-bucket 形状；
 4. capacity、exposure 与费用后的累计曲线。

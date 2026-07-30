@@ -7,8 +7,8 @@ changes the ten-minute decision window and its cache/label lineage from `09:31-0
 
 | Figure | Acceptance question | Compact data | Trace |
 | --- | --- | --- | --- |
-| 1. Signal acceptance | How do short universe Rank IC and `pool_L` Top100 next excess decay versus 09:31? | [CSV](01_signal_acceptance.csv) | [optimization trace](trace_optimization.json) |
-| 2. Top100 cumulative | How much fee-adjusted cumulative return and market-relative alpha survive at 10:01? | [CSV](02_top100_cumulative.csv) | [optimization trace](trace_optimization.json) |
+| 1. Signal acceptance | How do short universe Rank IC and `pool_L` Top100 short excess change versus 09:31? | [CSV](01_signal_acceptance.csv) | [optimization trace](trace_optimization.json) |
+| 2. Top100 cumulative | How much fee-adjusted cumulative return and `pool_L`-relative cumulative excess survive at 10:01? | [CSV](02_top100_cumulative.csv) | [optimization trace](trace_optimization.json) |
 | 3. Top1000 bucket curve | Does later-window score ordering retain a smooth head-to-tail shape? | [CSV](03_top1000_bucket_curve.csv) | [bucket trace](trace_top1000_bucket.json) |
 | 4. Top1000 distribution | How do the ten 100-name score buckets differ across fixed 100 bps return intervals? | [CSV](04_top1000_return_distribution.csv) | [distribution trace](trace_top1000_distribution.json) |
 
@@ -26,13 +26,17 @@ The full-sample comparison is:
 | --- | ---: | ---: | ---: |
 | universe short Rank IC | 0.156418 | 0.253118 | +0.096700 |
 | `pool_L` short Rank IC | 0.142410 | 0.242669 | +0.100259 |
+| `pool_L` short background return | -8.1968 bps | -7.5606 bps | +0.6362 bps |
+| `pool_L` short Top100 absolute return | 3.1805 bps | 0.1153 bps | -3.0652 bps |
 | `pool_L` short Top100 excess | 11.3773 bps | 7.6759 bps | -3.7014 bps |
+| positive short Top100 absolute months / days | 41/48; 648/969 | 23/48; 503/969 | -18 months; -145 days |
+| positive short Top100 excess months / days | 48/48; 946/969 | 48/48; 968/969 | unchanged months; +22 days |
 | `pool_L` next Rank IC | 0.007140 | 0.001836 | -0.005304 |
 | `pool_L` next Top100 excess | 17.1714 bps | 6.5491 bps | -10.6223 bps |
 | positive next months | 37/48 | 29/48 | -8 months |
 | positive next half-years | 8/8 | 6/8 | -2 half-years |
 | Top100 fee-8 cumulative return | 9891.7 bps | 2708.5 bps | -7183.2 bps |
-| cumulative alpha versus market | 8715.2 bps | 1532.0 bps | -7183.2 bps |
+| cumulative net excess versus each window's matching `pool_L` | **4828.6 bps** | -317.9 bps | -5146.5 bps |
 | Top1000 first/last 100-name bucket | 17.17/0.29 bps | 6.55/0.99 bps | weaker head separation |
 
 Training used the dedicated `10:01-10:10` mixed-w030 cache. Pool analysis used the matching
@@ -45,6 +49,16 @@ Decision: archive as a completed decay checkpoint, not as a replacement for the 
 policy. Later-window short cross-sectional ordering is stronger, but the tradable overnight head
 effect, monthly/half-year stability, fee-adjusted cumulative return, and Top1000 head separation all
 decay materially. No downstream capacity/realistic promotion audit is warranted for this window.
+
+The short-horizon result is also weaker economically than Rank IC alone suggests. At 10:01,
+Top100 short absolute return is only `0.1153 bps` even though its pool-relative excess remains
+positive in 48/48 months and 968/969 days. Against a `-7.5606 bps` pool background, the model is
+primarily identifying stocks that fall less rather than a positive-return head.
+
+The cumulative figure keeps market and both window-specific `pool_L` curves in the upper
+absolute-return panel. Its lower panel subtracts each model's matching-window `pool_L`; the two
+zero-information `pool_L=0` lines are not drawn. Therefore the 10:01 endpoint is
+`2708.5 - 3026.5 = -317.9 bps`.
 
 Aggregate pool summaries are retained in [pool_internal_summary.csv](pool_internal_summary.csv) and
 [pool_internal_halfyear_summary.csv](pool_internal_halfyear_summary.csv). Distribution bucket

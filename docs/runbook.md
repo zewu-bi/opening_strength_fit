@@ -127,8 +127,10 @@ osf-check-project-contracts
 tracked `experiments/evidence/`。策略验收只记录 summary、bootstrap、leave-one-out、trace 和成功标记，
 不记录逐日/逐决策表。
 
-正式信号比较固定检查：short IC 与 next excess、费用后累计曲线、Top1000 平滑分桶、Top1000 收益区间
-分布。对应入口为 `osf-plot-optimization-direction-comparison` 和
+正式信号比较固定检查：图 1 上 panel 为 short universe Rank IC、下 panel 为 `pool_L` short Top100
+excess；图 2 上 panel 同时保留各决策窗口匹配的 `pool_L`，下 panel 为各模型减去自身窗口
+`pool_L`，不画重合的零线；图 3/4 分别检查 Top1000 平滑分桶与收益区间分布。对应入口为
+`osf-plot-optimization-direction-comparison` 和
 `experiments/scripts/run_top1000_rank_bucket_diagnostics.py`。
 
 当前 canonical multiden 的四图、compact plot data 和 trace 可从本地 ignored mirror 统一刷新：

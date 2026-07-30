@@ -1,0 +1,112 @@
+[run]
+id = "build_delay6_decision_clock_state_1001_1010_cache_v1"
+kind = "labeled_cache"
+description = "Build a corrected 2019-2025 10:00-10:10 cache: 10:00 is the from-start context row, each logical decision clock carries forward the last known state, and entry is anchored to decision clock +6s."
+status = "running"
+
+[data]
+source = "clickhouse"
+tick_path = ""
+input_kind = "raw_ticks"
+feature_limit = 0
+tick_timestamp_deduplication = "latest_local_timestamp"
+
+[cache]
+enabled = true
+read = true
+write = true
+require_manifest = true
+schema_version = "label_v6_decision_clock_state_clock6_1001_1010_from_start_auction_reuse_mcap_lag1"
+lock_timeout_seconds = 21600
+
+[cache_shards]
+years = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+cache_path_template = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v6_decision_clock_state_clock6_1001_1010_from_start_auction_reuse_mcap_lag1/opening_{year}_label_v6_decision_clock_state_clock6_1001_1010_from_start_auction_reuse_mcap_lag1.parquet"
+# Only constant preopen_/auction_ columns are reused. Decision, entry, and
+# future states are rebuilt from raw ticks under this corrected lineage.
+reuse_labeled_path_template = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v4_clock6_state_unique_base_mcap_lag1/opening_{year}_label_v4_clock6_state_unique_base_mcap_lag1.parquet"
+
+[clickhouse]
+host = "ch.db.prod.highfortfunds.com"
+port = 8123
+table = "stock.tick"
+# Bounded raw-tick buffer for lag/path features and the complete label horizon.
+start_offset_us = 35400000000
+end_offset_us = 36740000000
+
+[daily_market_reference]
+enabled = true
+table = "stock.daily_bar_jy"
+lag_sessions = 1
+market_cap_unit_multiplier = 10000.0
+share_unit_multiplier = 10000.0
+
+[universe]
+enabled = true
+symbol_regex = "^(?:(?:00|30)\\d{4}\\.SZ|(?:60|68)\\d{4}\\.SH)$"
+symbols_file = ""
+
+[sample]
+start_time = "10:00:00"
+end_time = "10:10:00"
+mode = "decision_points"
+decision_alignment = "clock_state"
+decision_times = ["10:00:00", "10:01:00", "10:02:00", "10:03:00", "10:04:00", "10:05:00", "10:06:00", "10:07:00", "10:08:00", "10:09:00", "10:10:00"]
+
+[labels]
+buy_price_col = "ask_price_1"
+volume_col = "volume"
+turnover_col = "turnover"
+hold_seconds = 60
+sell_window_seconds = 60
+volume_unit_multiplier = 1.0
+fee_bps = 0.0
+entry_tick_delay = 2
+entry_alignment = "clock_state"
+entry_clock_delay_seconds = 6
+future_alignment = "clock_state"
+require_entry_after_cross_section_ready = true
+
+[features]
+include_preopen = false
+reuse_feature_prefixes = ["preopen_", "auction_"]
+reuse_key_columns = ["date", "symbol"]
+reuse_join = "inner"
+reuse_require_constant = true
+postopen_v2_reference_name = "start"
+path_shape_reference_name = "start"
+
+[filters]
+tradable_statuses = ["T0", "20", "TRADE"]
+
+[window]
+mode = "chronological"
+train_fraction = 0.8
+
+[evaluation]
+score_bins = 10
+bucket_mode = "cross_section"
+selection_mode = "cross_section"
+ic_mode = "cross_section"
+top_n = 100
+
+[output]
+local_dir = "output/artifacts/cache_builds/build_delay6_decision_clock_state_1001_1010_cache_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/cache_builds/build_delay6_decision_clock_state_1001_1010_cache_v1"
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-cache-decision-state-w1001-1010-v1"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+clickhouse_secret = "opening-strength-clickhouse"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260730-decision-clock-state-v1"
+avoid_nodes = ["node7", "node8"]
+shard_parallelism = 7
+
+[k8s.resources]
+cpu_request = "8"
+cpu_limit = "16"
+memory_request = "32Gi"
+memory_limit = "256Gi"

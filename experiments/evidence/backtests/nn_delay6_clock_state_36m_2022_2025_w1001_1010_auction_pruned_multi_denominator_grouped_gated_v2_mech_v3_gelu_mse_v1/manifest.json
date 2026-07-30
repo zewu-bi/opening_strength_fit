@@ -8,29 +8,29 @@
     "week_start",
     "variant",
     "next_cumulative_net_return_bps",
-    "next_cumulative_alpha_vs_market_bps"
+    "next_cumulative_alpha_bps"
   ],
-  "cumulative_rows": 3876,
+  "cumulative_rows": 4845,
   "decision": "completed decay checkpoint; does not replace the 09:31 opening policy",
   "files": {
     "01_signal_acceptance.csv": {
-      "bytes": 2099,
-      "sha256": "3dba073051dceef1b2b17432d1d6e8a25a8bc2a571879356a77f59f9e7c6cc5c",
+      "bytes": 2088,
+      "sha256": "34d9f9d54cd83694f7570547e6e3a43eda65308cd12ad2b07b0a006aca80ad3d",
       "source": "experiments/results/backtests/window_acceptance_w1001_1010_2022_2025_v1/01_short_ic_next_excess.csv"
     },
     "01_signal_acceptance.svg": {
-      "bytes": 30375,
-      "sha256": "4aa5befdea25065c6fb11f18bb582fbbc2e996e864a4aa74c4eab989a0b8922d",
+      "bytes": 29783,
+      "sha256": "71a066f5d8e4fb6ce41bc80aa2eb544f918762d1989515be02ee5310ebea9a59",
       "source": "experiments/results/backtests/window_acceptance_w1001_1010_2022_2025_v1/01_short_ic_next_excess.svg"
     },
     "02_top100_cumulative.csv": {
-      "bytes": 257159,
-      "sha256": "6dd9b71583fec10c5651de917552aa7352649578d2d806a9f1e41b6c13109a7e",
+      "bytes": 338163,
+      "sha256": "3117f3c99649b2027065b3ccbe270da13d709461b65bbd5f2cc6772b8fc48f02",
       "source": "experiments/results/backtests/window_acceptance_w1001_1010_2022_2025_v1/02_top100_cumulative.csv"
     },
     "02_top100_cumulative.svg": {
-      "bytes": 96205,
-      "sha256": "ad8154f53db8acb59ffeebd0f2e3549610d60c36048e84a55d2f32d21113646f",
+      "bytes": 95984,
+      "sha256": "56963f8ab8b89c2bfc77501bf9562d127568ace9c2d7925f5fe13f7dadfe1775",
       "source": "experiments/results/backtests/window_acceptance_w1001_1010_2022_2025_v1/02_top100_cumulative.svg"
     },
     "03_top1000_bucket_curve.csv": {
@@ -69,9 +69,9 @@
       "source": "experiments/results/backtests/top1000_score_bucket_return_histogram_w1001_1010_multiden_2022_2025_v3/top1000_score_bucket_distribution_summary.csv"
     },
     "trace_optimization.json": {
-      "bytes": 6814,
-      "sha256": "d263cb05d6b55f083d4bd2d4d735c5e3f90c32f6fc9fceea0fa1c4df61056c30",
-      "source": "experiments/results/backtests/window_acceptance_w1001_1010_2022_2025_v1/01_short_ic_next_excess_trace.json"
+      "bytes": 7278,
+      "sha256": "94c3560cef90627ec1c2ee1dbbac34343bf0a30194356b70c114c5a2ebb9e3bf",
+      "source": "experiments/results/backtests/window_acceptance_w1001_1010_2022_2025_v1/02_top100_cumulative_trace.json"
     },
     "trace_top1000_bucket.json": {
       "bytes": 2978,

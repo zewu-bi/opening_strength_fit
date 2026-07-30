@@ -22,6 +22,7 @@ from opening_strength_fit.optimization_acceptance_plots import (
     apply_display_labels,
     capacity_label,
     combine_net_alpha_cumulative_data,
+    combine_overlay_acceptance_data,
     cumulative_plot_series,
     default_plot_directions,
     ensure_plot_colors,
@@ -67,6 +68,26 @@ def test_hist_path_display_labels_use_deviation_language() -> None:
     assert out["variant"].tolist() == out["pool_label"].tolist()
 
 
+def test_overlay_acceptance_can_plot_short_pool_head_excess() -> None:
+    keys = {
+        "test_month": ["2022Q1"],
+        "variant": ["model"],
+        "pool": ["model"],
+        "pool_label": ["model"],
+    }
+    short_universe = pd.DataFrame({**keys, "short_rank_ic": [0.25]})
+    short_pool = pd.DataFrame({**keys, "short_internal_excess_bps": [7.5]})
+
+    out = combine_overlay_acceptance_data(
+        short_universe,
+        short_pool,
+        excess_column="short_internal_excess_bps",
+    )
+
+    assert out["short_rank_ic"].tolist() == pytest.approx([0.25])
+    assert out["short_internal_excess_bps"].tolist() == pytest.approx([7.5])
+
+
 def test_default_realized_fee_and_pool_fee_mode_match_acceptance_assumptions() -> None:
     assert DEFAULT_REALIZED_FEE_BPS == 8.0
     assert DEFAULT_POOL_FEE_MODE == "stock_pool_membership"
@@ -95,13 +116,17 @@ def test_validate_plot_directions_rejects_bad_counts_and_reserved_keys() -> None
 
 def test_cumulative_plot_series_keeps_pool_on_top_and_only_when_informative_below() -> None:
     models = ("baseline_pool_l", "dimensionless", "multi_denominator")
+    pool_references = ("dimensionless_pool_l", "multi_denominator_pool_l")
 
-    pool_top, pool_relative = cumulative_plot_series(models, relative_mode="pool_l")
+    pool_top, pool_relative = cumulative_plot_series(
+        models,
+        relative_mode="pool_l",
+        pool_reference_series=pool_references,
+    )
     market_top, market_relative = cumulative_plot_series(models, relative_mode="market")
 
-    expected_top = ("market", "background", *models)
-    assert pool_top == expected_top
-    assert market_top == expected_top
+    assert pool_top == ("market", "background", *pool_references, *models)
+    assert market_top == ("market", "background", *models)
     assert pool_relative == models
     assert market_relative == ("background", *models)
 
@@ -174,6 +199,17 @@ def test_realized_cumulative_uses_capital_adjusted_cumsum_and_round_trip_pool_fe
         first["pool_next_cumulative_net_return_bps"]
     )
     assert background["next_cumulative_internal_excess_return_bps"] == pytest.approx(0.0)
+
+    with_named_background = add_background_cumulative_data(
+        cumulative,
+        baseline_key="baseline_pool_l",
+        background_key="later_pool_l",
+        background_label="pool 10:01-10:10",
+    )
+    named_background = with_named_background.loc[
+        with_named_background["pool"].eq("later_pool_l")
+    ].iloc[0]
+    assert named_background["pool_label"] == "pool 10:01-10:10"
 
 
 def test_capacity_cumulative_uses_capacity_weighted_acceptance_summary(

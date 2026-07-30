@@ -16,6 +16,8 @@ from opening_strength_fit.optimization_acceptance_plots import (
     CUMULATIVE_RELATIVE_MODE_MARKET,
     CUMULATIVE_RELATIVE_MODE_POOL_L,
     CUMULATIVE_RELATIVE_MODES,
+    OVERLAY_EXCESS_HORIZON_NEXT,
+    OVERLAY_EXCESS_HORIZONS,
     _attach_capacity_fraction_to_market_source,
     _panel_values,
     _replace_capacity_pool_source,
@@ -77,6 +79,7 @@ def write_optimization_direction_plots(
     realistic_run_ids: dict[str, str] | None = None,
     title_prefix: str = "2022-2025",
     top_n: int = 100,
+    overlay_excess_horizon: str = OVERLAY_EXCESS_HORIZON_NEXT,
 ) -> dict[str, str]:
     if cumulative_mode not in CUMULATIVE_MODES:
         raise ValueError(
@@ -87,6 +90,11 @@ def write_optimization_direction_plots(
             "unknown cumulative_relative_mode "
             f"{cumulative_relative_mode!r}; expected {CUMULATIVE_RELATIVE_MODES}"
         )
+    if overlay_excess_horizon not in OVERLAY_EXCESS_HORIZONS:
+        raise ValueError(
+            f"unknown overlay_excess_horizon {overlay_excess_horizon!r}; "
+            f"expected {OVERLAY_EXCESS_HORIZONS}"
+        )
     if directions is None:
         plot_directions = default_plot_directions()
     else:
@@ -96,9 +104,15 @@ def write_optimization_direction_plots(
 
     series = tuple(direction.key for direction in plot_directions)
     model_cumulative_series = ("baseline_pool_l", *series)
+    comparison_pool_cumulative_series = (
+        tuple(f"{key}_pool_l" for key in series)
+        if cumulative_relative_mode == CUMULATIVE_RELATIVE_MODE_POOL_L
+        else ()
+    )
     top_cumulative_series, relative_cumulative_series = cumulative_plot_series(
         model_cumulative_series,
         relative_mode=cumulative_relative_mode,
+        pool_reference_series=comparison_pool_cumulative_series,
     )
     market_relative_series = ("background", *model_cumulative_series)
     acceptance_directions = (
@@ -116,12 +130,12 @@ def write_optimization_direction_plots(
             horizon="short",
         )
     )
-    next_pool_data = apply_display_labels(
+    overlay_pool_data = apply_display_labels(
         load_horizon_plot_data(
             backtests_root=backtests_root,
             directions=acceptance_directions,
             pool=pool,
-            horizon="next",
+            horizon=overlay_excess_horizon,
         )
     )
     if cumulative_mode in {CUMULATIVE_MODE_CAPACITY, CUMULATIVE_MODE_REALISTIC}:
@@ -224,7 +238,8 @@ def write_optimization_direction_plots(
     )
     overlay_acceptance_data = combine_overlay_acceptance_data(
         short_universe_data,
-        next_pool_data,
+        overlay_pool_data,
+        excess_column=f"{overlay_excess_horizon}_internal_excess_bps",
     )
     net_alpha_cumulative_data = combine_net_alpha_cumulative_data(
         realized_cumulative_output,
@@ -237,7 +252,20 @@ def write_optimization_direction_plots(
     net_alpha_cumulative_data = add_background_cumulative_data(
         net_alpha_cumulative_data,
         baseline_key="baseline_pool_l",
+        background_label=(f"pool {baseline_label}" if comparison_pool_cumulative_series else None),
     )
+    if comparison_pool_cumulative_series:
+        for direction, background_key in zip(
+            plot_directions,
+            comparison_pool_cumulative_series,
+            strict=True,
+        ):
+            net_alpha_cumulative_data = add_background_cumulative_data(
+                net_alpha_cumulative_data,
+                baseline_key=direction.key,
+                background_key=background_key,
+                background_label=f"pool {direction.label}",
+            )
     net_alpha_cumulative_data = add_market_cumulative_data(net_alpha_cumulative_data)
     net_alpha_cumulative_data = add_cumulative_market_relative_data(
         net_alpha_cumulative_data,
@@ -253,11 +281,12 @@ def write_optimization_direction_plots(
     net_alpha_cumulative_svg = output_dir / "optimization_directions_net_alpha_cumulative.svg"
     trace_path = output_dir / "optimization_directions_trace.json"
     top_n_label = f"Top{top_n}"
-    next_excess_panel_title = (
-        f"next {pool} excess"
+    overlay_excess_panel_title = (
+        f"{overlay_excess_horizon} {pool} excess"
         if cumulative_mode in {CUMULATIVE_MODE_CAPACITY, CUMULATIVE_MODE_REALISTIC}
-        else f"next {pool} {top_n_label} excess"
+        else f"{overlay_excess_horizon} {pool} {top_n_label} excess"
     )
+    overlay_excess_column = f"{overlay_excess_horizon}_internal_excess_bps"
     if cumulative_mode == CUMULATIVE_MODE_CAPACITY:
         cumulative_capacity_definition = (
             "In capacity mode, model lines are read from capacity_acceptance_daily_summary.csv. "
@@ -325,9 +354,9 @@ def write_optimization_direction_plots(
                 "min_tick_step": 0.005,
             },
             {
-                "title": next_excess_panel_title,
+                "title": overlay_excess_panel_title,
                 "ylabel": "bps",
-                "column": "next_internal_excess_bps",
+                "column": overlay_excess_column,
                 "default_ylim": (0.0, 12.0),
                 "tick_step": 2.0,
                 "tick_decimals": None,
@@ -369,8 +398,10 @@ def write_optimization_direction_plots(
         cumulative_relative_column = "next_cumulative_alpha_pct"
         cumulative_relative_definition = (
             "bottom panel plots each model's capital-adjusted cumulative net return minus "
-            "its own pool_L capital-adjusted cumulative net return, displayed as percent; "
-            "both model and pool_L fees are included"
+            "its matching window-specific pool_L capital-adjusted cumulative net return, "
+            "displayed as percent; every matching pool_L curve is visible in the top panel, "
+            "while their zero lines are omitted from the bottom panel; model and pool_L "
+            "fees are included"
         )
     else:
         cumulative_relative_title = CUMULATIVE_MARKET_ALPHA_PANEL_TITLE
@@ -426,6 +457,7 @@ def write_optimization_direction_plots(
         "top_n": top_n,
         "cumulative_mode": cumulative_mode,
         "cumulative_relative_mode": cumulative_relative_mode,
+        "overlay_excess_horizon": overlay_excess_horizon,
         "capacity_total_notional": capacity_total_notional,
         "capacity_decision_notional": capacity_decision_notional,
         "capacity_baseline_run_id": capacity_baseline_run_id,
@@ -444,10 +476,13 @@ def write_optimization_direction_plots(
             "figure_title": f"{title_prefix} rank IC / pool_L超额",
             "panels": [
                 "short universe rank IC",
-                next_excess_panel_title,
+                overlay_excess_panel_title,
             ],
             "reason": (
-                "short pool excess is omitted because A-share T+1 makes short-horizon "
+                "short pool excess is shown to diagnose whether stronger short-horizon "
+                "cross-sectional ordering reaches the selected TopN head"
+                if overlay_excess_horizon == "short"
+                else "short pool excess is omitted because A-share T+1 makes short-horizon "
                 "cash PnL non-tradable; next IC is omitted because this model is not "
                 "trained to rank next-day returns directly"
             ),
@@ -506,9 +541,11 @@ def write_optimization_direction_plots(
             ],
             "market_series": "full A-share market average overnight return",
             "background_series": (
-                "pool_L background overnight return after pool_fee_bps is always drawn in the "
-                "top panel; it is omitted as a zero line in pool_l relative mode and drawn "
-                "relative to market in market mode"
+                "pool_L background overnight return after pool_fee_bps is drawn in the top "
+                "panel. In pool_l relative mode, one pool_L curve is drawn for each decision "
+                "window and each model is compared with its matching curve; the resulting "
+                "pool_L zero lines are omitted from the bottom panel. In market mode, the "
+                "single baseline pool_L curve is drawn relative to market"
             ),
             "reason": "short cumulative is omitted because this workflow cannot trade T+0",
             "unit": "%",

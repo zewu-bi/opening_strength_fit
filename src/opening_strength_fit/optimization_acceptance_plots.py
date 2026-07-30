@@ -71,6 +71,12 @@ CUMULATIVE_RELATIVE_MODES = (
     CUMULATIVE_RELATIVE_MODE_MARKET,
     CUMULATIVE_RELATIVE_MODE_POOL_L,
 )
+OVERLAY_EXCESS_HORIZON_SHORT = "short"
+OVERLAY_EXCESS_HORIZON_NEXT = "next"
+OVERLAY_EXCESS_HORIZONS = (
+    OVERLAY_EXCESS_HORIZON_SHORT,
+    OVERLAY_EXCESS_HORIZON_NEXT,
+)
 
 
 def default_plot_directions(
@@ -110,10 +116,11 @@ def cumulative_plot_series(
     model_series: tuple[str, ...],
     *,
     relative_mode: str,
+    pool_reference_series: tuple[str, ...] = (),
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Return the fixed top-panel series and mode-specific lower-panel series."""
 
-    top_series = ("market", "background", *model_series)
+    top_series = ("market", "background", *pool_reference_series, *model_series)
     if relative_mode == CUMULATIVE_RELATIVE_MODE_POOL_L:
         return top_series, model_series
     if relative_mode == CUMULATIVE_RELATIVE_MODE_MARKET:
@@ -125,11 +132,13 @@ def cumulative_plot_series(
 
 def combine_overlay_acceptance_data(
     short_universe_data: pd.DataFrame,
-    next_pool_data: pd.DataFrame,
+    pool_data: pd.DataFrame,
+    *,
+    excess_column: str = "next_internal_excess_bps",
 ) -> pd.DataFrame:
     key_columns = ["test_month", "variant", "pool", "pool_label"]
     return short_universe_data[key_columns + ["short_rank_ic"]].merge(
-        next_pool_data[key_columns + ["next_internal_excess_bps"]],
+        pool_data[key_columns + [excess_column]],
         on=key_columns,
         how="inner",
     )
@@ -201,6 +210,8 @@ def combine_net_alpha_cumulative_data(
 def add_cumulative_percent_display_columns(cumulative_data: pd.DataFrame) -> pd.DataFrame:
     data = cumulative_data.copy()
     for source, target in CUMULATIVE_PERCENT_DISPLAY_COLUMNS.items():
+        if source not in data.columns:
+            continue
         data[target] = pd.to_numeric(data[source], errors="coerce") / BPS_PER_PERCENT
     return data
 
@@ -209,6 +220,8 @@ def add_background_cumulative_data(
     cumulative_data: pd.DataFrame,
     *,
     baseline_key: str,
+    background_key: str = "background",
+    background_label: str | None = None,
 ) -> pd.DataFrame:
     baseline = cumulative_data.loc[cumulative_data["pool"].astype(str).eq(baseline_key)].copy()
     if baseline.empty:
@@ -216,8 +229,8 @@ def add_background_cumulative_data(
     baseline["week_start"] = pd.to_datetime(baseline["week_start"], errors="coerce")
     baseline = baseline.dropna(subset=["week_start"]).sort_values("week_start")
     background = baseline.copy()
-    background_label = DISPLAY_LABELS.get("background", "background")
-    background["pool"] = "background"
+    background_label = background_label or DISPLAY_LABELS.get("background", "background")
+    background["pool"] = background_key
     background["pool_label"] = background_label
     background["variant"] = background_label
     background["selected_next_mean_bps"] = pd.NA
