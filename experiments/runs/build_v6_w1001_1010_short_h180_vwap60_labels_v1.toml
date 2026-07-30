@@ -2,7 +2,7 @@
 id = "build_v6_w1001_1010_short_h180_vwap60_labels_v1"
 kind = "short_label_cache"
 description = "Build standalone 10:01-10:10 short labels: clock+6s entry, hold 180s, then sell over the following 60s cumulative-volume VWAP window."
-status = "queued"
+status = "running"
 
 [short_labels]
 input_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v6_decision_clock_state_clock6_1001_1010_from_start_auction_reuse_mcap_lag1/opening_2019_label_v6_decision_clock_state_clock6_1001_1010_from_start_auction_reuse_mcap_lag1.parquet"
