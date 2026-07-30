@@ -54,6 +54,7 @@ _RUN_KIND_COMMANDS = {
     "learned_risk_layer": "osf-run-learned-risk-layer",
     "next_close_label_cache": "osf-build-next-close-labels",
     "score_risk_sweep": "osf-run-score-risk-sweep",
+    "short_label_cache": "osf-build-short-labels",
     "strategy_acceptance": "osf-audit-strategy-acceptance",
     "target_cache": "osf-build-target-label-cache",
 }

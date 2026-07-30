@@ -51,6 +51,7 @@ K8S_JOB_ENTRYPOINTS = (
     "osf-build-exposure-input",
     "osf-build-labeled-cache",
     "osf-build-next-close-labels",
+    "osf-build-short-labels",
     "osf-build-target-label-cache",
     "osf-extract-execution-context",
     "osf-run-alpha-conditioned-rolling-validation",

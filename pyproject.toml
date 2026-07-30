@@ -45,6 +45,7 @@ osf-audit-strategy-acceptance = "opening_strength_fit.commands.strategy_acceptan
 osf-build-labeled-cache = "opening_strength_fit.commands.labeled_cache_build:main"
 osf-build-exposure-input = "opening_strength_fit.commands.exposure_input_build:main"
 osf-build-next-close-labels = "opening_strength_fit.commands.next_close_label_cache:main"
+osf-build-short-labels = "opening_strength_fit.commands.short_label_cache:main"
 osf-build-target-label-cache = "opening_strength_fit.commands.target_label_cache:main"
 osf-check-project-contracts = "opening_strength_fit.commands.project_contracts:main"
 osf-compare-opening-results = "opening_strength_fit.commands.result_comparison:main"

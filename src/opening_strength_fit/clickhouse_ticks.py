@@ -206,6 +206,62 @@ def query_tick_day_window(
     )
 
 
+def tick_trade_state_day_window_sql(
+    table: str = DEFAULT_CLICKHOUSE_TICK_TABLE,
+) -> str:
+    """Return the minimal raw state needed for cumulative-volume VWAP labels."""
+
+    table = _validate_table_name(table)
+    return f"""select
+    TradingDay,
+    Symbol,
+    ExchTimeOffsetUs,
+    LocalTimeStamp,
+    TradeNum,
+    Volume,
+    Turnover
+from {table}
+where (
+    TradingDay = {{trading_day:String}}
+    and Symbol in {{symbols:Array(String)}}
+    and ExchTimeOffsetUs >= {{start_offset_us:UInt64}}
+    and ExchTimeOffsetUs <= {{end_offset_us:UInt64}}
+)
+order by Symbol, ExchTimeOffsetUs"""
+
+
+def query_tick_trade_state_day_window(
+    client,
+    *,
+    trading_day: str,
+    symbols: list[str],
+    table: str = DEFAULT_CLICKHOUSE_TICK_TABLE,
+    start_offset_us: int,
+    end_offset_us: int,
+) -> pd.DataFrame:
+    if not symbols:
+        return pd.DataFrame(
+            columns=[
+                "TradingDay",
+                "Symbol",
+                "ExchTimeOffsetUs",
+                "LocalTimeStamp",
+                "TradeNum",
+                "Volume",
+                "Turnover",
+            ]
+        )
+    return client.query_df(
+        tick_trade_state_day_window_sql(table),
+        parameters={
+            "trading_day": str(trading_day),
+            "symbols": [str(symbol) for symbol in symbols],
+            "start_offset_us": int(start_offset_us),
+            "end_offset_us": int(end_offset_us),
+        },
+    )
+
+
 def _json_default(value: object) -> object:
     if isinstance(value, np.generic):
         return value.item()

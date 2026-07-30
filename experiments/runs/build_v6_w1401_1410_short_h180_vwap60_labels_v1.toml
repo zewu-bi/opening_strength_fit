@@ -1,0 +1,51 @@
+[run]
+id = "build_v6_w1401_1410_short_h180_vwap60_labels_v1"
+kind = "short_label_cache"
+description = "Build standalone 14:01-14:10 short labels: clock+6s entry, hold 180s, then sell over the following 60s cumulative-volume VWAP window."
+status = "queued"
+
+[short_labels]
+input_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v6_decision_clock_state_clock6_1401_1410_from_start_auction_reuse_mcap_lag1/opening_2019_label_v6_decision_clock_state_clock6_1401_1410_from_start_auction_reuse_mcap_lag1.parquet"
+output_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_short_label_v6_clock6_1401_1410_h180_vwap60_v1/opening_2019_short_label_v6_clock6_1401_1410_h180_vwap60_v1.parquet"
+schema_version = "short_label_v6_clock6_1401_1410_h180_vwap60_v1"
+expected_source_schema_version = "label_v6_decision_clock_state_clock6_1401_1410_from_start_auction_reuse_mcap_lag1"
+require_source_manifest = true
+decision_times = ["14:01:00", "14:02:00", "14:03:00", "14:04:00", "14:05:00", "14:06:00", "14:07:00", "14:08:00", "14:09:00", "14:10:00"]
+expected_entry_delay_seconds = 6
+hold_seconds = 180
+sell_window_seconds = 60
+query_start_offset_us = 49800000000
+volume_unit_multiplier = 1.0
+fee_bps = 0.0
+tradable_statuses = ["T0", "20", "TRADE"]
+
+[short_label_shards]
+years = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+input_path_template = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v6_decision_clock_state_clock6_1401_1410_from_start_auction_reuse_mcap_lag1/opening_{year}_label_v6_decision_clock_state_clock6_1401_1410_from_start_auction_reuse_mcap_lag1.parquet"
+output_path_template = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_short_label_v6_clock6_1401_1410_h180_vwap60_v1/opening_{year}_short_label_v6_clock6_1401_1410_h180_vwap60_v1.parquet"
+
+[clickhouse]
+host = "ch.db.prod.highfortfunds.com"
+port = 8123
+table = "stock.tick"
+
+[output]
+local_dir = "output/artifacts/cache_builds/build_v6_w1401_1410_short_h180_vwap60_labels_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/cache_builds/build_v6_w1401_1410_short_h180_vwap60_labels_v1"
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-short3m-v6-w1401-1410-v1"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+clickhouse_secret = "opening-strength-clickhouse"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260730-short3m-label-v1"
+avoid_nodes = ["node7", "node8"]
+shard_parallelism = 2
+
+[k8s.resources]
+cpu_request = "2"
+cpu_limit = "8"
+memory_request = "16Gi"
+memory_limit = "96Gi"
