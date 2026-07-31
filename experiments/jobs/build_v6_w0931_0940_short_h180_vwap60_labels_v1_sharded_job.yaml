@@ -9,7 +9,7 @@ spec:
   backoffLimit: 1
   completionMode: Indexed
   completions: 7
-  parallelism: 2
+  parallelism: 7
   ttlSecondsAfterFinished: 86400
   template:
     metadata:
