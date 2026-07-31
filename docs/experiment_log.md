@@ -1,7 +1,7 @@
 # Experiment Log
 
-> Last reconciled: 2026-07-30
-> Coverage: 2026-05-20 through 2026-07-30
+> Last reconciled: 2026-07-31
+> Coverage: 2026-05-20 through 2026-07-31
 
 本文件是人工维护的实验事实账本，严格按发生时间升序记录假设、口径、结果、状态和决策。当前研究
 方向见 [project_brief.md](project_brief.md)，命令见 [runbook.md](runbook.md)。旧版逐日长记录已从 HEAD
@@ -37,6 +37,8 @@ run config、Job manifest、代码 revision、compact evidence 与本日志共�
 | 2026-07-30 | `build_delay6_decision_clock_state_0930_0940_cache_v1` | 将 decision sampling 也改为目标时刻此前最后已知状态，并把 entry 严格锚定 decision clock `+6s` | 单日 smoke 为 `5105 × 11 = 56,155` 行，所有时点各 5,105 只；decision source 无穿越，entry 时钟断言全通过，short label valid `99.2165%`；7 个年度 shard 已启动 | 建立 corrected decision-state lineage；既有 09:31 v4 和 10/11/14 点 forward-5s cache 继续作为历史同口径衰减数据集，不覆盖 |
 | 2026-07-30 | `nn_delay6_clock_state_36m_2022_2025_w1001_1010_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1` | 保持 incumbent 的 feature、target、模型、股池与 rolling OOS，只把十分钟窗口及其 cache/label lineage 移到 `10:01-10:10` | `completed`; 8/8 shards、44,993,233 行 prediction/label 全量 join、9,690 groups、固定四图与 compact evidence 已归档 | `pool_L` next excess `6.5491 bps`、Top100 fee8 累和 `2708.5 bps`，较 09:31 的 `17.1714/9891.7` 明显衰减；作为首个日内衰减 checkpoint，不替换 opening policy |
 | 2026-07-30 | `build_v6_w{0931_0940,1001_1010,1401_1410}_short_h180_vwap60_labels_v1` | 复用 corrected v6 的 `clock+6s` entry/buy price，只新增持有 180 秒后用随后 60 秒累计成交 VWAP 卖出的 standalone short label | `running`; 3 个 indexed Job 各 7 个年度 shard，逐 shard 等待对应 v6 parquet 与 manifest 后自动启动；真实 2025-01-02 smoke 为 51,050 行、50,604 个 valid label，key、时钟、无穿越与 VWAP/return 恒等式全部通过 | 只生成三组稍长 short label，不重算 feature、不生成新 target、不扩展到其他窗口 |
+| 2026-07-31 | `build_delay6_decision_clock_state_0930_0940_cache_v1` | 完成 corrected v6 09:30-09:40 base cache | `completed`; 7/7 年度 shard、parquet/manifest/ready marker 全部一致，总计 85,086,966 行、31.78 GiB、82,897,689 valid labels | v6 base 完整可消费；仍需独立 mixed-w030 target，不能直接供 incumbent 训练 |
+| 2026-07-31 | `build_v6_decision_clock_state_0931_0940_mixed_w030_target_v1` / `nn_delay6_v6_decision_clock_state_36m_2022_2025_w0931_0940_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1` | 用 corrected v6 cache 严格重跑 v4 canonical 09:31-09:40 multiden incumbent；target、feature、model、pool、rolling OOS 和 seed 不变 | `running`; 7 个 mixed target shard 与 8 个 GPU 半年 fold 已分别按 parallelism 7/8 全量提交，训练 Job 等待 mixed cache 后自动启动 | 单变量检验 decision-state correction 对 opening policy 的影响；不覆盖 v4 产物 |
 
 ## 决策时间线
 
