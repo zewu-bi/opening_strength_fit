@@ -1,6 +1,6 @@
 # Project Brief
 
-> Last reviewed: 2026-07-30
+> Last reviewed: 2026-07-31
 
 ## 目标
 
@@ -14,6 +14,10 @@ feature、模型、股池、rolling OOS 和验收口径，仅将十分钟决策�
 首个 `10:01-10:10` 窗口已于 2026-07-30 完成：short Rank IC 上升，但 `pool_L` short Top100
 绝对收益由 `3.1805 bps` 降至 `0.1153 bps`，隔夜 Top100 超额与费用后累和也显著下降。稍晚窗口更像
 稳定识别“少跌”股票，而非继续捕获正向头部收益；opening edge 的可交易部分在开盘后半小时内已经明显衰减。
+2026-07-31 完成 corrected decision-state `09:31-09:40` 单变量复跑：decision sampling 改为目标时刻
+已经可见的最后状态后，`pool_L` next excess 从旧基准的 `17.1714` 小幅提高到 `17.7934 bps`。该结果
+现命名为 `opening_model`，并作为最新信号/模型基准；对应训练 cache 命名为 `opening_cache`。旧 v4 的
+统一容量/refill 证据只作为策略层历史参考，等待在 `opening_model` 上重跑。
 
 ## 固定研究口径
 
@@ -26,7 +30,10 @@ feature、模型、股池、rolling OOS 和验收口径，仅将十分钟决策�
 | 选择 universe | `pool_L`；S/M/universe 只作诊断 |
 | 目标 | `xs_norm(short_return) + 0.30 × xs_norm(next_close_return)` |
 | 验证 | `36m train -> next 6m` rolling OOS，覆盖 2022-2025 |
-| opening policy / incumbent | fixed-clock v4 auction-pruned multi-denominator |
+| canonical base cache | `opening_base` |
+| canonical training cache | `opening_cache` |
+| latest signal/model baseline | `opening_model` |
+| downstream strategy reference | archived v4 multiden；待在 `opening_model` 上重跑 |
 | ablation baseline | fixed-clock v4 auction-pruned control |
 | historical overlay baseline | `grouped_gated_v2_mech328_v2_robust_zscore_gelu_mse` |
 
@@ -39,18 +46,23 @@ rolling OOS 可用于模型和特征选择，因此不是 untouched final test�
 | --- | ---: | --- |
 | mech328 v2 | `14.3174 bps`（fixed-clock 重算） | historical overlay baseline |
 | fixed-clock v4 control | `16.8024 bps` | 单变量 ablation baseline |
-| fixed-clock v4 multi-denominator | `17.1714 bps` | 晋级为当前 opening policy/incumbent |
+| fixed-clock v4 multi-denominator | `17.1714 bps` | archived previous baseline |
+| `opening_model` | **`17.7934 bps`** | 最新信号/模型基准；策略层待重跑 |
 | 10:01-10:10 multi-denominator | `6.5491 bps` | completed decay checkpoint；不晋级 |
 
-multiden 的 capacity-only、realistic no-refill、visible pre-trade refill fill 分别为
+旧 v4 multiden 的 capacity-only、realistic no-refill、visible pre-trade refill fill 分别为
 `100%/81.3916%/99.9970%`，累计资金净收益为 `9217.9/7433.4/8598.7 bps`。refill 相对 no-refill
-增加 `1165.3 bps` 累计资金净收益，且成本后结果为正，因此随 multiden 一并纳入当前 opening policy。
+增加 `1165.3 bps` 累计资金净收益，且成本后结果为正；这是旧 v4 当时晋级的依据，现在只作
+`opening_model` 重跑前的 downstream 历史参考。
 单边 P95 upper-tail cap 后的 `-8.59 bps` 只说明收益依赖可观测的正尾幅度；该口径保留为收益来源诊断，
-不再作为晋级 gate。分期胜率、bootstrap、overlap 与集中度同样保留为风险画像，不自动否决候选。可审阅
-结果见[四图验收包](../experiments/evidence/backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/)
-和 [strategy evidence](../experiments/evidence/backtests/strategy_acceptance_clock6_v4_multiden_2022_2025_v1/)。
+不再作为晋级 gate。分期胜率、bootstrap、overlap 与集中度同样保留为风险画像，不自动否决候选。
+`opening_model` 的当前入口见
+[baseline evidence](../experiments/evidence/baselines/opening_model/)；旧 v4 策略层参考见
+[strategy evidence](../experiments/evidence/backtests/strategy_acceptance_clock6_v4_multiden_2022_2025_v1/)。
 10:01 窗口的可审阅结果见
 [日内衰减验收包](../experiments/evidence/backtests/nn_delay6_clock_state_36m_2022_2025_w1001_1010_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/)。
+短名、cache 口径和不可变来源映射见
+[canonical registry](../experiments/canonical/opening.toml)。
 
 ## 验收逻辑
 
@@ -86,12 +98,14 @@ multiden 的 capacity-only、realistic no-refill、visible pre-trade refill fill
 
 后续按以下顺序推进：
 
-1. `10:01-10:10` 已完成；继续完成提交前已固定的 `11:01-11:10` 与 `14:01-14:10`；
-2. 使用与 incumbent 相同的 cache 构建、特征、目标、模型、训练 universe、`pool_L` 选择和 rolling OOS；
-3. 每个窗口独立生成所需的分钟样本并完整重训，只允许 `[sample]` 时钟和相应数据 lineage 变化；
-4. 先用固定四图比较 Rank IC、Top100 excess、分期稳定性和费用后曲线；只有保留足够信号的窗口再进入
+1. 在 `opening_model` 上重跑 unified capacity/no-refill/visible-refill 策略验收；
+2. `10:01-10:10` 已完成；继续完成提交前已固定的 `11:01-11:10` 与 `14:01-14:10`；
+3. 使用与 `opening_model` 相同的 cache 构建、特征、目标、模型、训练 universe、`pool_L` 选择和
+   rolling OOS；
+4. 每个窗口独立生成所需的分钟样本并完整重训，只允许 `[sample]` 时钟和相应数据 lineage 变化；
+5. 先用固定四图比较 Rank IC、Top100 excess、分期稳定性和费用后曲线；只有保留足够信号的窗口再进入
    capacity/realistic promotion audit；
-5. 汇总“窗口时点/距开盘时间 → OOS 选股能力”，回答衰减速度和是否存在午后残余信号。
+6. 汇总“窗口时点/距开盘时间 → OOS 选股能力”，回答衰减速度和是否存在午后残余信号。
 
 非目标包括改变现有 target、继续宽扫普通 MLP、把 Top100 等权收益当作容量收益，或把公司日频 API
 当作分钟策略回测器。

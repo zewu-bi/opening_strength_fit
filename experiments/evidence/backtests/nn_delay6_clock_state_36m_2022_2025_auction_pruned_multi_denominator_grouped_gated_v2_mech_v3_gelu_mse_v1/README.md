@@ -1,8 +1,9 @@
 # Fixed-clock v4 multiden four-figure acceptance
 
-This is the tracked presentation and review bundle for the promoted opening policy/incumbent,
-`clock6_v4_multiden`. The simpler control remains in figures 1 and 2 as the single-change ablation
-baseline.
+This is the archived presentation and review bundle for the previous signal baseline,
+`clock6_v4_multiden`. It was the promoted opening policy at the time; `opening_model` superseded it
+as the signal/model baseline on 2026-07-31. The simpler control remains in figures 1 and 2 as the
+single-change ablation baseline.
 
 | Figure | Acceptance question | Compact data | Trace |
 | --- | --- | --- | --- |
@@ -34,8 +35,8 @@ Companion views retain the core four-figure contract while exposing its wider co
 ![LGBM-to-multiden model journey cumulative](05_model_journey_cumulative.svg)
 
 The signal comparison reports `pool_L` next excess of `14.3174/16.8024/17.1714 bps` for the
-historical baseline/control/multiden lines. Multiden is promoted as the current opening policy on
-the causal OOS signal, capacity, execution, and cost-adjusted capital results. The weaker
+historical baseline/control/multiden lines. Multiden was promoted on the causal OOS signal,
+capacity, execution, and cost-adjusted capital results. The weaker
 period-by-period A/B win rate and the negative one-sided P95 upper-tail-cap result remain documented
 risk diagnostics; neither is an automatic promotion veto. This promotion selects the opening-window
 policy and does not by itself claim completion of the full intraday cash, holding, exit, and impact
@@ -45,7 +46,7 @@ The bundle is deterministic and records source paths, sizes, and SHA-256 digests
 [manifest.json](manifest.json). Rebuild it from the ignored local mirror with:
 
 ```bash
-make evidence-four-figures
+make evidence-v4-four-figures
 ```
 
 The model definition is the matching [run TOML](../../../runs/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1.toml).

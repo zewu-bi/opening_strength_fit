@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | `runs/<run_id>.toml` | 完整参数、状态、输入/输出 lineage | tracked |
 | `jobs/<run_id>*_job.yaml` | 渲染后的镜像、命令、资源和挂载 trace | tracked |
+| `canonical/opening.toml` | 当前 `opening_base`、`opening_cache`、`opening_model` 短名与不可变来源映射 | tracked |
 | `config_templates/` | 可复用配置片段 | tracked |
 | `scripts/` | 正式或历史诊断入口 | tracked |
 | `evidence/` | compact summary、稳健性表和 trace | tracked |
@@ -37,8 +38,11 @@ queued -> running -> completed
 queued/completed -> superseded
 ```
 
-run id 应包含模型、窗口、期间、唯一变量和版本。影响数据、label、特征或训练语义的变化必须创建新 run，
-不得覆盖历史配置。
+历史 run id 保持原样，不能为了美化名称改写已完成 Job、trace 或 PVC lineage。2026-07-31 起，新文件和
+任务使用 `opening_<window>_<semantic_change>` 短名；固定在 baseline 中的模型、feature、期间和 seed
+不重复写入名称，也不再追加无信息量的 `v1/v2/v6`。例如 `opening_model_1001`、
+`opening_model_longhold`。发生语义变化必须创建新 run，不得覆盖历史配置；名称冲突时追加真实变化或
+实验日期，而不是数字版本。完整规则见 [canonical README](canonical/README.md)。
 
 ## 完成条件
 
@@ -64,9 +68,10 @@ osf-sync-experiment-artifacts \
 默认 tracked 目标为 `experiments/evidence/`。单文件上限 1MB，禁止 Parquet、pickle 和模型二进制；需要
 审阅的大表应先聚合。每个 `evidence/backtests/<run_id>/` 必须存在同名 run TOML。
 
-canonical multiden 额外保留 short IC + next excess、Top100 累和、Top1000 平滑分桶和 Top1000 十组
-收益分布四图，以及每图的 compact CSV/trace。已有本地 mirror 时运行 `make evidence-four-figures` 刷新；
-control 只作为前两图的 ablation baseline。
+`opening_model` 额外保留 short IC + next excess、Top100 累和、Top1000 平滑分桶和 Top1000 十组
+收益分布四图，以及每图的 compact CSV/trace。已有本地 mirror 时运行 `make evidence-four-figures`
+刷新；源 run 的长 ID 只保留在 archived bundle 和 trace 中。旧 v4 bundle 可用
+`make evidence-v4-four-figures` 单独复画。
 
 日内窗口衰减实验也沿用同一四图契约；每个完成窗口使用训练 run id 建独立 evidence 目录，并额外保留
 pool summary 与 SHA-256 manifest。明显落后于 09:31 基准的窗口归档为 diagnostic checkpoint，不进入

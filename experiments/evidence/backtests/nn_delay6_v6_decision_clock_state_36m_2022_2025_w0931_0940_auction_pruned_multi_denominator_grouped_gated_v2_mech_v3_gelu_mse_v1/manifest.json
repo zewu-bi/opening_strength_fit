@@ -1,0 +1,90 @@
+{
+  "baseline_name": "opening_model",
+  "baseline_run_id": "nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1",
+  "cache_name": "opening_cache",
+  "candidate_run_id": "nn_delay6_v6_decision_clock_state_36m_2022_2025_w0931_0940_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1",
+  "comparison": "09:31-09:40 v4 forward-5s decision sampling versus corrected v6 last-known clock-state sampling",
+  "cumulative_compact_columns": [
+    "pool",
+    "pool_label",
+    "week_start",
+    "variant",
+    "next_cumulative_net_return_bps",
+    "next_cumulative_alpha_bps"
+  ],
+  "cumulative_rows": 4845,
+  "files": {
+    "01_signal_acceptance.csv": {
+      "bytes": 2339,
+      "sha256": "3046d38541adfd7a52876e8f0ccad50d595dc4cfd80d31de671fdec95f82c4ae",
+      "source": "experiments/results/backtests/v6_decision_state_acceptance_w0931_vs_v4_2022_2025_v1/optimization_directions_overlay_acceptance_plot_data.csv"
+    },
+    "01_signal_acceptance.svg": {
+      "bytes": 29821,
+      "sha256": "e2b8c1b55297ba887db821d067725c867a07ede1e38c9857e14e636ebeae8f03",
+      "source": "experiments/results/backtests/v6_decision_state_acceptance_w0931_vs_v4_2022_2025_v1/optimization_directions_overlay_acceptance.svg"
+    },
+    "02_top100_cumulative.csv": {
+      "bytes": 363957,
+      "sha256": "85ecd2afb2e446ae3a6db3ddc7626b9d709cee7401fd92d73e673ac2c72bbae4",
+      "source": "experiments/results/backtests/v6_decision_state_acceptance_w0931_vs_v4_2022_2025_v1/optimization_directions_net_alpha_cumulative_plot_data.csv"
+    },
+    "02_top100_cumulative.svg": {
+      "bytes": 95705,
+      "sha256": "8d5d95be397f20ad3a3fd113caac9ddd9e910faf89e1f371a9caefa2d72d7fa1",
+      "source": "experiments/results/backtests/v6_decision_state_acceptance_w0931_vs_v4_2022_2025_v1/optimization_directions_net_alpha_cumulative.svg"
+    },
+    "03_top1000_bucket_curve.csv": {
+      "bytes": 13648,
+      "sha256": "689a2383ef0a61389423c9e9c6b29281b6063876a124fe359bfef26fe12e3d54",
+      "source": "experiments/results/backtests/top1000_rank_bucket_diag_v6_w0931_0940_multiden_2022_2025_v1/rank_bucket/bucket_curve_plot_data.csv"
+    },
+    "03_top1000_bucket_curve.svg": {
+      "bytes": 55106,
+      "sha256": "68e7a1149928c2a8c64a492ccd68fb7401190286439b1d9dfbe4036ae43393da",
+      "source": "experiments/results/backtests/top1000_rank_bucket_diag_v6_w0931_0940_multiden_2022_2025_v1/rank_bucket/top1000_bucket_returns.svg"
+    },
+    "04_top1000_return_distribution.csv": {
+      "bytes": 74476,
+      "sha256": "95703fb949c30d91c3befa11d7bea2a05fd5bf08ac53fc53073417a6548845d6",
+      "source": "experiments/results/backtests/top1000_score_bucket_return_histogram_v6_w0931_0940_multiden_2022_2025_v1/top1000_score_bucket_return_100bps_counts.csv"
+    },
+    "04_top1000_return_distribution.svg": {
+      "bytes": 172183,
+      "sha256": "e31d3a64c2de8055a1f2086ad4f7d8b65274b07a3728b386f3654c1d555c071f",
+      "source": "experiments/results/backtests/top1000_score_bucket_return_histogram_v6_w0931_0940_multiden_2022_2025_v1/top1000_score_bucket_return_100bps_counts.svg"
+    },
+    "pool_internal_halfyear_summary.csv": {
+      "bytes": 1599,
+      "sha256": "ec0b45a0a30d7ba4e12dbb594cec472edcc52b971a8ae1c64b06cbf01313c221",
+      "source": "experiments/results/backtests/nn_delay6_v6_decision_clock_state_36m_2022_2025_w0931_0940_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/pool_internal_halfyear_summary.csv"
+    },
+    "pool_internal_summary.csv": {
+      "bytes": 1077,
+      "sha256": "56345a32a401f5e0ee7bead7afdea8e960768b33dfdb3902bf9f9e6135ddf5a9",
+      "source": "experiments/results/backtests/nn_delay6_v6_decision_clock_state_36m_2022_2025_w0931_0940_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/pool_internal_summary.csv"
+    },
+    "top1000_distribution_summary.csv": {
+      "bytes": 940,
+      "sha256": "63912fdadedadddbf87153995e3f5654e2b1c789d0cb99dcd9bd60c0b6f63dcd",
+      "source": "experiments/results/backtests/top1000_score_bucket_return_histogram_v6_w0931_0940_multiden_2022_2025_v1/top1000_score_bucket_distribution_summary.csv"
+    },
+    "trace_optimization.json": {
+      "bytes": 7462,
+      "sha256": "9f704f473d7a1965364cce5c67d3c197de267d28d47d55a62785fffb86d916c5",
+      "source": "experiments/results/backtests/v6_decision_state_acceptance_w0931_vs_v4_2022_2025_v1/optimization_directions_trace.json"
+    },
+    "trace_top1000_bucket.json": {
+      "bytes": 3050,
+      "sha256": "ac6bb8095c4b4f88eef92dcca414e74e37666c5ea2e5b9db778fe2b0773ceb95",
+      "source": "experiments/results/backtests/top1000_rank_bucket_diag_v6_w0931_0940_multiden_2022_2025_v1/rank_bucket/trace.json"
+    },
+    "trace_top1000_distribution.json": {
+      "bytes": 3706,
+      "sha256": "0952299d2a2af8c9ae46d9bc7325865cc43cb902ca75a737776b45ecfab1bc8c",
+      "source": "experiments/results/backtests/top1000_score_bucket_return_histogram_v6_w0931_0940_multiden_2022_2025_v1/trace.json"
+    }
+  },
+  "schema_version": 1,
+  "source_run_id": "nn_delay6_v6_decision_clock_state_36m_2022_2025_w0931_0940_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1"
+}

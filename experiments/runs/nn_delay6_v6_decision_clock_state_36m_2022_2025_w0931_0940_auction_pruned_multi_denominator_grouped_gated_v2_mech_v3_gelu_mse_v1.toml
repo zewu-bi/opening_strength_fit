@@ -2,7 +2,7 @@
 id = "nn_delay6_v6_decision_clock_state_36m_2022_2025_w0931_0940_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1"
 kind = "exploration"
 description = "Controlled rerun of the canonical v4 09:31-09:40 multiden incumbent on the corrected v6 decision-clock-state cache; target, features, model, pools, rolling OOS windows, and seed remain fixed."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"

@@ -1,4 +1,4 @@
-.PHONY: install-dev install-cluster smoke evidence-four-figures test test-cov lint format contracts ci
+.PHONY: install-dev install-cluster smoke evidence-four-figures evidence-v4-four-figures test test-cov lint format contracts ci
 
 PYTHON ?= .venv/bin/python
 
@@ -14,6 +14,9 @@ smoke:
 		--output-dir output/smoke
 
 evidence-four-figures:
+	$(PYTHON) experiments/scripts/build_opening_model_evidence.py
+
+evidence-v4-four-figures:
 	$(PYTHON) experiments/scripts/build_four_figure_evidence.py
 
 test:

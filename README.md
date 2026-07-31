@@ -19,12 +19,13 @@ tick / labeled input
   -> execution / refill / overlap / tail diagnostics
 ```
 
-当前信号候选已收束到 fixed-clock +6 秒语义。多分母 auction-pruned 模型以 `17.1714 bps` 的
-`pool_L` next excess 晋级为当前 opening policy/incumbent；简单 control 的 `16.8024 bps` 结果保留为
-单变量对照。multiden 的 visible refill 将 fill 提高到 `99.9970%`，并取得 `8598.7 bps` 的成本后累计
-资金净收益。单边 P95/P99 upper-tail cap、trim、bootstrap、overlap 和集中度继续作为收益结构与风险诊断，
-不再作为自动晋级门槛。完整数字、边界和决策见 [project brief](docs/project_brief.md)、[四图验收包](experiments/evidence/backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/)
-与 [experiment log](docs/experiment_log.md)。
+当前信号基准是 `opening_model`，训练输入是 `opening_cache`。两者采用严格 clock-state 语义：每个决策
+时钟读取当时已经可见的最后状态，entry 固定为 decision clock `+6s`。`opening_model` 的 `pool_L`
+next excess 为 `17.7934 bps`，Top100 fee8 累和为 `10193.0 bps`，略高于旧 v4 基准的
+`17.1714/9891.7 bps`。旧 v4 的 capacity/refill 结果保留为策略层历史参考，等待在 `opening_model`
+上重跑。完整数字、边界和决策见 [project brief](docs/project_brief.md)、
+[opening_model evidence](experiments/evidence/baselines/opening_model/)、
+[canonical registry](experiments/canonical/opening.toml) 与 [experiment log](docs/experiment_log.md)。
 
 2026-07-22 至 2026-07-29 的全天时序/隔夜 TCN 路线源于需求理解偏差，现已
 [封存](experiments/archive/full_day_temporal_2026-07-22_2026-07-29/README.md)，不再属于当前研究主线。
@@ -65,6 +66,7 @@ tests/                     单元、回归、边界与 smoke 测试
 examples/smoke/            无私有数据的最小复现样例
 experiments/runs/          人工维护的实验定义
 experiments/jobs/          渲染后的实际执行 trace
+experiments/canonical/     当前短名、cache/model 标准与不可变来源映射
 experiments/evidence/      Git 跟踪的摘要、稳健性结果和 trace
 experiments/results/       本地结果镜像，忽略
 docs/                      当前研究口径、操作与代码地图

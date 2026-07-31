@@ -12,6 +12,7 @@
 | `examples/smoke/` | 无私有数据的最小训练例 | tracked |
 | `experiments/runs/` | 实验意图与完整参数 | tracked |
 | `experiments/jobs/` | 实际执行 manifest | tracked |
+| `experiments/canonical/` | 当前短名、cache/model 标准与不可变来源映射 | tracked |
 | `experiments/evidence/` | compact 结果与 trace | tracked |
 | `experiments/results/` | 本地结果 mirror | ignored |
 | `output/` | cache、prediction、模型和 debug | ignored |
@@ -79,6 +80,8 @@ raw tick or labeled frame
 ## 边界规则
 
 - run id、TOML、Job、入口和输出目录必须对齐；
+- 当前入口只使用 `opening_base`、`opening_cache`、`opening_model` 及其语义化派生名；历史长 ID
+  只作为不可变 lineage；
 - 代码 revision、配置、镜像和 compact trace 进 Git，cache/prediction/model 不进 Git；
 - 新实验不能覆盖旧 run；状态只用 `queued/running/completed/canceled/superseded`；
 - `experiments/evidence/` 单文件不超过 1MB，禁止 Parquet、pickle 和模型二进制；

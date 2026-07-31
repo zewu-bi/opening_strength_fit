@@ -34,7 +34,8 @@ prediction、模型文件或 cache。
 数据契约：
 
 - 样本键为 `date × symbol × decision_target_timestamp`；
-- `clock_state` entry 保存逻辑执行时钟和此前最后可见状态，并记录 state age；
+- canonical `opening_cache` 在每个 decision clock 读取此前最后可见状态，保存逻辑执行时钟和 state age；
+- entry 固定为 decision clock `+6s`，entry/future 边界也读取此前最后可见状态；
 - 日频市值/股本 enrichment 必须严格使用上一交易日；
 - 股票池默认只过滤 selection，训练仍使用 full universe；严格敏感性可用前一交易日 membership；
 - cache 发布必须同时具备 parquet、manifest 和 ready marker；临时文件或 lock 不代表完成。
@@ -42,7 +43,8 @@ prediction、模型文件或 cache。
 ## 3. 正式实验闭环
 
 1. 复制最接近的 `experiments/runs/<run_id>.toml`，只改变待验证变量。
-2. 更新 `run.id`、description、status、输入 lineage 和输出目录。
+2. 从 `experiments/canonical/opening.toml` 读取 `opening_cache`/`opening_model` 来源，更新
+   `run.id`、description、status、输入 lineage 和输出目录。
 3. 根据代码 revision 构建不可变镜像，渲染并保存 Job manifest。
 4. dry-run、提交、观察直到所有 shard 和 `_SUCCESS` 完成。
 5. 运行 pool-internal 或对应 audit/acceptance。
@@ -50,6 +52,10 @@ prediction、模型文件或 cache。
 7. 运行 contracts，核对 trace，更新 experiment log。
 
 失败和负面实验也保留配置，并使用 `canceled` 或 `superseded`，不要删除或覆盖。
+
+新文件、run id、Job 和输出目录统一使用 `opening_<window>_<semantic_change>`。不要把 baseline 已固定的
+模型结构、feature 数、训练期间和 seed 塞回名称，也不要使用 `v1/v2/v6` 作为区分。当前标准短名是
+`opening_base`、`opening_cache`、`opening_model`；历史长名只从 canonical registry 解析，不手工复制。
 
 ## 4. Cache 与 label
 
@@ -70,7 +76,9 @@ osf-build-next-close-labels --config experiments/runs/<next_close_run_id>.toml
   fixed-clock cache 的 entry 必须锚定 `decision_target_timestamp + entry_clock_delay_seconds`，而不是
   source tick 加 delay。
 
-旧物理 tick-delay 和 forward-5s 配置只为历史复现与已生成的日内窗口对照保留。大型 cache 仅在 PVC；
+旧物理 tick-delay 和 forward-5s 配置只为历史复现与已生成的日内窗口对照保留。后续所有 cache 默认继承
+`opening_cache` 的 `decision_alignment/entry_alignment/future_alignment = clock_state` 和
+`entry_clock_delay_seconds = 6`；偏离时必须在 semantic change 中明确写出。大型 cache 仅在 PVC；
 Git 中保留构建代码、run config、Job、schema/fingerprint 语义和关键 trace。
 
 ## 5. 镜像与 Job
@@ -133,14 +141,14 @@ excess；图 2 上 panel 同时保留各决策窗口匹配的 `pool_L`，下 pan
 `osf-plot-optimization-direction-comparison` 和
 `experiments/scripts/run_top1000_rank_bucket_diagnostics.py`。
 
-当前 canonical multiden 的四图、compact plot data 和 trace 可从本地 ignored mirror 统一刷新：
+当前 `opening_model` 的四图、compact plot data 和 trace 可从本地 ignored mirror 统一刷新：
 
 ```bash
 make evidence-four-figures
 ```
 
-目标目录为 `experiments/evidence/backtests/<multiden-run-id>/`。control 只在前两图中保留为 ablation
-baseline；multiden 是当前 opening policy/incumbent。
+不可变 source bundle 位于 `experiments/evidence/backtests/<source-run-id>/`，短入口为
+`experiments/evidence/baselines/opening_model/`。v4 只作为图中历史对照，不再是当前信号基准。
 
 ## 7. 容量与策略验收
 
@@ -164,9 +172,10 @@ visible_pretrade_refill
 当前 policy 晋级以同一因果 OOS lineage 下的成本后资本收益、容量约束和执行可行性为主。单边 P95/P99
 upper-tail cap、trim、top day/symbol、leave-one-out、月块 bootstrap、overlap 和集中度必须保留在
 evidence 中，但只作为收益来源与风险诊断，不设置自动通过/否决阈值。单边 cap 尤其不能替代双边异常值
-敏感性或真实成交 haircut。multiden 的 visible pre-trade refill 已按此口径随当前 opening policy 晋级。
+敏感性或真实成交 haircut。旧 v4 multiden 的 visible pre-trade refill 结果只作为 downstream 历史
+参考；`opening_model` 必须独立重跑后才能更新策略层结论。
 
-可复用配置：
+下列 v4 配置只作为历史 downstream 参考；下一次策略验收必须读取 `opening_model`：
 
 ```text
 experiments/runs/strategy_acceptance_clock6_v4_multiden_2022_2025_v1.toml
@@ -175,7 +184,7 @@ experiments/runs/strategy_acceptance_clock6_v4_control_2022_2025_v1.toml  # comp
 
 ## 8. 日内窗口衰减实验
 
-以当前 incumbent run 为唯一模板。为每个预先固定的十分钟窗口新建 cache run 和训练 run，只修改
+以 `opening_model` 为唯一模板。为每个预先固定的十分钟窗口新建 cache run 和训练 run，只修改
 `[sample].start_time`、`end_time`、`decision_times` 以及由此变化的 cache lineage；label、feature、
 模型、股池、rolling window、seed 和验收参数保持一致。不要构造全天序列或新的隔夜目标。
 

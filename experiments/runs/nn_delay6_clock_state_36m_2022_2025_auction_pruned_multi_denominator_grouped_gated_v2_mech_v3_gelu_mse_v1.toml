@@ -2,7 +2,7 @@
 id = "nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1"
 kind = "exploration"
 description = "Fixed-wall-clock auction-pruned mech-v3 challenger with 25 additive, audited multi-denominator activity/liquidity ratios; all target, window, model, and causal timing settings match the auction-pruned control."
-status = "completed"
+status = "superseded"
 
 [data]
 source = "labeled_pvc"

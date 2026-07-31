@@ -1,0 +1,48 @@
+schema_version = 1
+
+[baseline]
+name = "opening_model"
+status = "canonical"
+promoted_at = "2026-07-31"
+source_run_id = "nn_delay6_v6_decision_clock_state_36m_2022_2025_w0931_0940_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1"
+evidence = "experiments/evidence/baselines/opening_model"
+pool = "L"
+top_n = 100
+fee_bps = 8
+next_excess_bps = 17.79335027416647
+top100_cumulative_net_bps = 10192.992063
+
+[cache]
+base_name = "opening_base"
+name = "opening_cache"
+source_base_run_id = "build_delay6_decision_clock_state_0930_0940_cache_v1"
+source_target_run_id = "build_v6_decision_clock_state_0931_0940_mixed_w030_target_v1"
+base_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v6_decision_clock_state_clock6_unique_base_mcap_lag1"
+path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v6_decision_clock_state_clock6_unique_mixed_w030_mcap_lag1"
+base_schema_version = "label_v6_decision_clock_state_clock6_unique_base_mcap_lag1"
+decision_alignment = "clock_state"
+entry_alignment = "clock_state"
+entry_clock_delay_seconds = 6
+future_alignment = "clock_state"
+target = "xs_norm(short_return) + 0.30 * xs_norm(next_close_return)"
+window = "09:31-09:40"
+years = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+
+[model]
+name = "opening_model"
+source_run_id = "nn_delay6_v6_decision_clock_state_36m_2022_2025_w0931_0940_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1"
+path = "/mnt/output/opening_strength_fit/nn/nn_delay6_v6_decision_clock_state_36m_2022_2025_w0931_0940_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1"
+architecture = "grouped_gated_v2"
+feature_count = 350
+feature_transform = "mechanismized_v3_dimensionless_328"
+loss = "mse"
+seed = 31
+train_months = 36
+test_months = 6
+test_start_month = "2022-01"
+test_end_month = "2025-12"
+
+[naming]
+new_file_prefix = "opening"
+generic_version_suffixes_allowed = false
+rule = "Use opening_<window>_<semantic_change>; omit fixed baseline parameters and generic v1/v2/v6 suffixes."
