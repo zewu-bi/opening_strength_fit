@@ -2,7 +2,7 @@
 id = "opening_0931_0940_next_close_clock6_rebuild"
 kind = "next_close_label_cache"
 description = "Rebuild 2019-2025 next-close returns from the corrected 09:31-09:40 decision-clock-state cache and each row's clock+6s buy price."
-status = "running"
+status = "completed"
 
 [next_close_labels]
 input_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v6_decision_clock_state_clock6_unique_base_mcap_lag1/opening_2019_label_v6_decision_clock_state_clock6_unique_base_mcap_lag1.parquet"

@@ -1,0 +1,81 @@
+from __future__ import annotations
+
+import tomllib
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+RUNS = ROOT / "experiments" / "runs"
+JOBS = ROOT / "experiments" / "jobs"
+CANONICAL = RUNS / (
+    "nn_delay6_v6_decision_clock_state_36m_2022_2025_w0931_0940_"
+    "auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1.toml"
+)
+TRAINING_CONFIGS = tuple(
+    sorted(RUNS.glob("nn_v6_*_corrected_nextclose_36m_grouped_gated_v2_mse.toml"))
+)
+TARGET_CONFIGS = tuple(sorted(RUNS.glob("build_target_v6_*_corrected_nextclose.toml")))
+
+
+def _load(path: Path) -> dict:
+    with path.open("rb") as handle:
+        return tomllib.load(handle)
+
+
+def test_four_training_configs_preserve_latest_v6_training_contract() -> None:
+    canonical = _load(CANONICAL)
+    assert len(TRAINING_CONFIGS) == 4
+
+    expected = {
+        "nn_v6_w0931_0940_short1m": ("09:31:00", "09:40:00", 60),
+        "nn_v6_w0931_0940_short3m": ("09:31:00", "09:40:00", 180),
+        "nn_v6_w1001_1010_short3m": ("10:01:00", "10:10:00", 180),
+        "nn_v6_w1401_1410_short3m": ("14:01:00", "14:10:00", 180),
+    }
+    for path in TRAINING_CONFIGS:
+        config = _load(path)
+        run_id = config["run"]["id"]
+        prefix = next(prefix for prefix in expected if run_id.startswith(prefix))
+        start, end, hold = expected[prefix]
+        assert config["run"]["status"] == "running"
+        assert config["sample"]["start_time"] == start
+        assert config["sample"]["end_time"] == end
+        assert config["labels"]["hold_seconds"] == hold
+        assert config["data"]["labeled_path"].endswith("corrected_nextclose")
+        assert "opening_2013_2025_next_close_labels_v1" not in str(config)
+        assert len(config["k8s"]["wait_for_paths"]) == 14
+        for section in ("universe", "features", "filters", "window", "model", "evaluation"):
+            assert config[section] == canonical[section]
+        for key in ("avoid_nodes", "shard_parallelism"):
+            assert config["k8s"][key] == canonical["k8s"][key]
+        assert config["k8s"]["resources"] == canonical["k8s"]["resources"]
+        assert config["k8s"]["node_selector"] == canonical["k8s"]["node_selector"]
+
+
+def test_target_matrix_has_one_1m_and_three_3m_corrected_mixed_targets() -> None:
+    assert len(TARGET_CONFIGS) == 4
+    one_minute = 0
+    three_minute = 0
+    for path in TARGET_CONFIGS:
+        config = _load(path)
+        target = config["target_cache"]
+        assert target["mode"] == "mixed"
+        assert target["long_label_weight"] == 0.30
+        assert "next_close_decision_clock_state_clock6" in target["long_label_input"]
+        assert "opening_2013_2025_next_close_labels_v1" not in str(config)
+        if "short_label_input" in target:
+            three_minute += 1
+            assert "h180_vwap60" in target["short_label_input"]
+            assert target["short_label_col"] == "label"
+            assert target["short_valid_col"] == "valid_label"
+        else:
+            one_minute += 1
+            assert "w0931_0940_short1m" in config["run"]["id"]
+        job = JOBS / f"{config['run']['id']}_sharded_job.yaml"
+        manifest = job.read_text(encoding="utf-8")
+        assert "completionMode: Indexed" in manifest
+        assert "completions: 7" in manifest
+        assert "--long-label-input" in manifest
+        if "short_label_input" in target:
+            assert "--short-label-input" in manifest
+            assert "SHORT_TRACE=" in manifest
+    assert (one_minute, three_minute) == (1, 3)

@@ -40,6 +40,35 @@ feature、模型、股池、rolling OOS 和验收口径，仅将十分钟决策�
 rolling OOS 可用于模型和特征选择，因此不是 untouched final test。配置中的 `test_*` 表示 fold 内不参与拟合
 的时间窗，不代表最终冻结测试集。
 
+## 最新数据源合同
+
+后续新实验只使用下列 corrected v6 数据血缘。三类产物都是最新权威来源，但不表示每个实验同时把三类
+都作为训练 label：v6 base 始终提供因果 feature 与 1 分钟 short baseline；独立 3 分钟 short label
+只在明确比较或替换 short component 的实验中按样本键 join；corrected next-close label 用于 mixed target
+的 long component 和对应评估。所有路径均位于
+`/mnt/output/opening_strength_fit/cache/`，年度文件以 `{year}` 分片。
+
+| 决策窗口 | v6 base cache（feature + 1m short） | standalone 3m short label | corrected next-close label |
+| --- | --- | --- | --- |
+| `09:31-09:40` | `opening_2019_2025_label_v6_decision_clock_state_clock6_unique_base_mcap_lag1` | `opening_2019_2025_short_label_v6_clock6_0931_0940_h180_vwap60_v1` | `opening_2019_2025_next_close_decision_clock_state_clock6_0931_0940` |
+| `10:01-10:10` | `opening_2019_2025_label_v6_decision_clock_state_clock6_1001_1010_from_start_auction_reuse_mcap_lag1` | `opening_2019_2025_short_label_v6_clock6_1001_1010_h180_vwap60_v1` | `opening_2019_2025_next_close_decision_clock_state_clock6_1001_1010` |
+| `14:01-14:10` | `opening_2019_2025_label_v6_decision_clock_state_clock6_1401_1410_from_start_auction_reuse_mcap_lag1` | `opening_2019_2025_short_label_v6_clock6_1401_1410_h180_vwap60_v1` | `opening_2019_2025_next_close_decision_clock_state_clock6_1401_1410` |
+
+共同口径如下：
+
+- 样本键为 `date × symbol × decision_target_timestamp`，decision state 取逻辑时钟当时或此前最后可见状态，
+  entry 使用 `decision_target_timestamp + 6s` 的最后可见盘口状态及其 `buy_price`；
+- base 内置 1m short label：entry 后持有 `60s`，再以随后 `60s` 累计成交量/成交额差计算卖出 VWAP；
+- standalone 3m short label：entry 后持有 `180s`，再以随后 `60s` 的成交 VWAP 卖出；
+- corrected next-close label：使用同一 v6 base 行的 `clock+6s buy_price` 计算下一交易日收盘收益，不再读取
+  legacy `opening_2013_2025_next_close_labels_v1`；
+- `10:00` 和 `14:00` 只作为对应 later-window cache 的 from-start context，正式实验样本仍从
+  `10:01` 和 `14:01` 开始；
+- base 与 corrected next-close 三个窗口均为 `7/7 completed`；3m 是当前仍在构建的独立产物，只有对应
+  年度 parquet、base/3m manifest、构建 trace、成功标记和 key/覆盖率检查全部通过后才允许消费；
+- mixed target 必须从所选 short label 与同窗口 corrected next-close label 重新生成。旧 mixed target、
+  已完成模型和历史评估不会因新 label 产出而自动更新，也不得作为新实验的数据输入模板。
+
 ## 当前结论
 
 | 候选 | `pool_L` next excess | 决策 |

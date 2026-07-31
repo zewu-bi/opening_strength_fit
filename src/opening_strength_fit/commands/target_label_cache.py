@@ -3,6 +3,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+
 from opening_strength_fit.commands.arguments import CommandArguments
 from opening_strength_fit.config import (
     config_float_mapping,
@@ -11,7 +14,7 @@ from opening_strength_fit.config import (
     load_toml,
     run_id,
 )
-from opening_strength_fit.io import read_frame, write_frame_atomic, write_json
+from opening_strength_fit.io import frame_columns, read_frame, write_frame_atomic, write_json
 from opening_strength_fit.labels import normalize_return_label_frame
 from opening_strength_fit.reports import print_mapping
 from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns
@@ -22,6 +25,21 @@ from opening_strength_fit.targets import (
 )
 
 KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
+SHORT_LABEL_OUTCOME_COLUMNS = (
+    "gross_label",
+    "sell_start_target_timestamp",
+    "sell_start_source_timestamp",
+    "sell_start_state_age_seconds",
+    "sell_end_target_timestamp",
+    "sell_end_source_timestamp",
+    "sell_end_state_age_seconds",
+    "sell_volume",
+    "sell_turnover",
+    "sell_vwap",
+    "hold_seconds",
+    "sell_window_seconds",
+    "fee_bps",
+)
 
 
 def _normalize_key_columns(frame):
@@ -45,7 +63,95 @@ def _merge_long_label_input(frame, path: Path, *, label_col: str):
     out = _normalize_key_columns(frame)
     if label_col in out.columns:
         out = out.drop(columns=[label_col])
-    return out.merge(labels, on=list(KEY_COLUMNS), how="left")
+    return out.merge(labels, on=list(KEY_COLUMNS), how="left", validate="one_to_one")
+
+
+def _normalize_sidecar_keys(frame: pd.DataFrame, *, source_name: str) -> pd.DataFrame:
+    out = standardize_columns(frame).copy()
+    missing = [column for column in KEY_COLUMNS if column not in out.columns]
+    if missing:
+        raise SystemExit(f"{source_name} missing key columns: {missing}")
+    out["date"] = pd.to_datetime(out["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    out["symbol"] = out["symbol"].astype(str)
+    out["decision_target_timestamp"] = pd.to_datetime(
+        out["decision_target_timestamp"],
+        errors="coerce",
+    ).dt.tz_localize(None)
+    missing_keys = out[list(KEY_COLUMNS)].isna().any(axis=1)
+    if missing_keys.any():
+        raise SystemExit(
+            f"{source_name} has {int(missing_keys.sum())} rows with missing keys"
+        )
+    duplicate_keys = out.duplicated(list(KEY_COLUMNS), keep=False)
+    if duplicate_keys.any():
+        raise SystemExit(
+            f"{source_name} keys are not unique: "
+            f"{int(duplicate_keys.sum())} duplicate rows"
+        )
+    return out
+
+
+def _merge_short_label_input(
+    frame: pd.DataFrame,
+    path: Path,
+    *,
+    label_col: str,
+    source_label_col: str,
+    source_valid_col: str,
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    """Replace the base cache's short outcome with one strict keyed sidecar."""
+    available = frame_columns(path)
+    required = {*KEY_COLUMNS, source_label_col, source_valid_col}
+    missing = sorted(required - available)
+    if missing:
+        raise SystemExit(f"short label input missing columns: {missing}")
+    optional = [column for column in SHORT_LABEL_OUTCOME_COLUMNS if column in available]
+    columns = [*KEY_COLUMNS, source_label_col, source_valid_col, *optional]
+    labels = _normalize_sidecar_keys(
+        read_frame(path, columns=columns),
+        source_name="short label input",
+    )
+    labels[source_label_col] = pd.to_numeric(
+        labels[source_label_col],
+        errors="coerce",
+    ).replace([np.inf, -np.inf], np.nan)
+    labels[source_valid_col] = (
+        labels[source_valid_col].fillna(False).astype(bool)
+        & labels[source_label_col].notna()
+    )
+
+    source_to_destination = {
+        source_label_col: label_col,
+        source_valid_col: "valid_label",
+        **{column: column for column in optional},
+    }
+    renamed = {
+        source: f"__short_{destination}"
+        for source, destination in source_to_destination.items()
+    }
+    labels = labels.rename(columns=renamed)
+    labels["__short_sidecar_matched"] = True
+
+    out = _normalize_key_columns(frame)
+    destinations = list(dict.fromkeys(source_to_destination.values()))
+    existing = [column for column in destinations if column in out.columns]
+    if existing:
+        out = out.drop(columns=existing)
+    out = out.merge(labels, on=list(KEY_COLUMNS), how="left", validate="one_to_one")
+    for destination in destinations:
+        out[destination] = out.pop(f"__short_{destination}")
+    out["valid_label"] = out["valid_label"].fillna(False).astype(bool)
+    out["valid_label"] &= out[label_col].notna()
+    matched = out.pop("__short_sidecar_matched").fillna(False).astype(bool)
+    stats = {
+        "sidecar_rows": int(len(labels)),
+        "matched_rows": int(matched.sum()),
+        "valid_rows": int(out["valid_label"].sum()),
+        "base_rows_without_sidecar": int((~matched).sum()),
+    }
+    if stats["matched_rows"] == 0:
+        raise SystemExit("short label input did not match any base-cache rows")
+    return out, stats
 
 
 def main() -> None:
@@ -91,6 +197,9 @@ def main() -> None:
     parser.add_argument("--guard-rank-method", default="")
     parser.add_argument("--guard-risk-lambda", type=float, default=None)
     parser.add_argument("--guard-risk-normalization", default="")
+    parser.add_argument("--short-label-input", default="")
+    parser.add_argument("--short-label-col", default="")
+    parser.add_argument("--short-valid-col", default="")
     parser.add_argument("--long-label-input", default="")
     parser.add_argument("--long-label-col", default="")
     parser.add_argument("--long-label-weight", type=float, default=None)
@@ -172,6 +281,9 @@ def main() -> None:
     guard_rank_method = arguments.string("guard_rank_method", "average")
     guard_risk_lambda = arguments.float("guard_risk_lambda", 1.0)
     guard_risk_normalization = arguments.string("guard_risk_normalization", "mean")
+    short_label_input = arguments.string("short_label_input")
+    short_label_col = arguments.string("short_label_col", "label")
+    short_valid_col = arguments.string("short_valid_col", "valid_label")
     long_label_input = arguments.string("long_label_input")
     long_label_col = arguments.string("long_label_col", "alpha_return_next_close")
     long_label_weight = arguments.float("long_label_weight", 0.10)
@@ -223,6 +335,9 @@ def main() -> None:
             "guard_rank_method": guard_rank_method,
             "guard_risk_lambda": guard_risk_lambda,
             "guard_risk_normalization": guard_risk_normalization,
+            "short_label_input": short_label_input,
+            "short_label_col": short_label_col,
+            "short_valid_col": short_valid_col,
             "long_label_input": long_label_input,
             "long_label_col": long_label_col,
             "long_label_weight": long_label_weight,
@@ -238,6 +353,15 @@ def main() -> None:
     )
 
     frame = read_frame(input_path)
+    short_label_stats: dict[str, int] = {}
+    if short_label_input:
+        frame, short_label_stats = _merge_short_label_input(
+            frame,
+            Path(short_label_input),
+            label_col=label_col,
+            source_label_col=short_label_col,
+            source_valid_col=short_valid_col,
+        )
     if long_label_input:
         frame = _merge_long_label_input(
             frame,
@@ -299,6 +423,10 @@ def main() -> None:
         "guard_rank_method": guard_rank_method,
         "guard_risk_lambda": guard_risk_lambda,
         "guard_risk_normalization": guard_risk_normalization,
+        "short_label_input": short_label_input,
+        "short_label_col": short_label_col,
+        "short_valid_col": short_valid_col,
+        "short_label_stats": short_label_stats,
         "long_label_input": long_label_input,
         "long_label_col": long_label_col,
         "long_label_weight": long_label_weight,

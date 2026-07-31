@@ -1,0 +1,243 @@
+[run]
+id = "nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse"
+kind = "exploration"
+description = "Canonical v6 10:01:00-10:10:00 training with short3m short component and corrected same-window next-close long component; all feature, model, rolling OOS, pool, resource, and seed settings match the latest v6 incumbent."
+status = "running"
+
+[data]
+source = "labeled_pvc"
+labeled_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose"
+tick_path = ""
+input_kind = "labeled"
+feature_limit = 0
+downcast_float32 = true
+
+[universe]
+enabled = true
+symbol_regex = "^(?:(?:00|30)\\d{4}\\.SZ|(?:60|68)\\d{4}\\.SH)$"
+symbols_file = ""
+
+[sample]
+start_time = "10:01:00"
+end_time = "10:10:00"
+mode = "decision_points"
+decision_alignment = "clock_state"
+decision_times = ["10:01:00", "10:02:00", "10:03:00", "10:04:00", "10:05:00", "10:06:00", "10:07:00", "10:08:00", "10:09:00", "10:10:00"]
+
+[labels]
+buy_price_col = "ask_price_1"
+volume_col = "volume"
+turnover_col = "turnover"
+hold_seconds = 180
+sell_window_seconds = 60
+volume_unit_multiplier = 1.0
+fee_bps = 0.0
+entry_tick_delay = 2
+entry_alignment = "clock_state"
+entry_clock_delay_seconds = 6
+future_alignment = "clock_state"
+require_entry_after_cross_section_ready = true
+
+[features]
+include_preopen = true
+preopen_price_mode = "indicative_quote_v2"
+preopen_match_time = "09:25:00"
+include_postopen_decision = true
+postopen_decision_windows = [1, 3, 5]
+include_postopen_v2 = true
+postopen_v2_windows = [1, 2, 3, 5]
+postopen_v2_depth_levels = [3, 5, 10]
+include_historical_same_minute_surprise = true
+historical_surprise_windows = [20, 60]
+historical_surprise_min_periods = 10
+historical_surprise_modes = ["zscore", "ratio"]
+historical_surprise_columns = ["volume_diff_1t", "volume_diff_3t", "turnover_diff_1t", "turnover_diff_3t", "spread_bps", "ask_depth_10", "bid_depth_10", "depth_imbalance_1", "depth_imbalance_10", "return_vs_open", "return_vs_prev_close", "trade_vwap_1t", "postopen_v2_trade_vwap_vs_ask1_1t_bps", "postopen_v2_trade_turnover_to_depth_notional_1t", "postopen_v2_spread_compression_1m"]
+historical_surprise_prefix = "hist_surprise_"
+include_historical_daily_activity_references = true
+historical_daily_activity_windows = [60]
+historical_daily_activity_min_periods = 10
+historical_daily_activity_prefix = "hist_avg_daily_"
+include_multi_denominator_features = true
+multi_denominator_turnover_columns = ["preopen_turnover", "turnover_diff_1t", "postopen_turnover_diff_1m", "postopen_turnover_diff_3m", "postopen_turnover_diff_5m"]
+multi_denominator_volume_columns = ["preopen_volume", "volume_diff_1t", "postopen_volume_diff_1m", "postopen_volume_diff_3m", "postopen_volume_diff_5m"]
+multi_denominator_depth_columns = ["ask_depth_10", "bid_depth_10"]
+multi_denominator_cross_sectional_median_columns = ["postopen_turnover_diff_1m"]
+multi_denominator_cross_sectional_group_cols = ["date", "decision_target_timestamp"]
+multi_denominator_historical_window = 60
+multi_denominator_prefix = "multi_den_ratio_"
+multi_denominator_min_features = 25
+multi_denominator_max_features = 40
+include_path_shape_confirmation = true
+path_shape_windows = [2, 3, 5]
+path_shape_prefix = "path_shape_"
+drop_feature_columns = [
+  "volume",
+  "turnover",
+  "iopv",
+  "hist_surprise_ask_depth_10_20d_ratio",
+  "hist_surprise_ask_depth_10_60d_ratio",
+  "hist_surprise_ask_depth_10_60d_zscore",
+  "hist_surprise_bid_depth_10_20d_ratio",
+  "hist_surprise_bid_depth_10_20d_zscore",
+  "hist_surprise_bid_depth_10_60d_ratio",
+  "hist_surprise_depth_imbalance_10_20d_zscore",
+  "hist_surprise_depth_imbalance_1_20d_zscore",
+  "hist_surprise_postopen_v2_trade_turnover_to_depth_notional_1t_20d_ratio",
+  "hist_surprise_postopen_v2_trade_turnover_to_depth_notional_1t_60d_ratio",
+  "hist_surprise_postopen_v2_trade_vwap_vs_ask1_1t_bps_20d_zscore",
+  "hist_surprise_turnover_diff_1t_20d_ratio",
+  "hist_surprise_turnover_diff_1t_20d_zscore",
+  "hist_surprise_turnover_diff_1t_60d_ratio",
+  "hist_surprise_turnover_diff_1t_60d_zscore",
+  "hist_surprise_turnover_diff_3t_20d_ratio",
+  "hist_surprise_turnover_diff_3t_20d_zscore",
+  "hist_surprise_turnover_diff_3t_60d_ratio",
+  "hist_surprise_turnover_diff_3t_60d_zscore",
+  "hist_surprise_volume_diff_1t_20d_ratio",
+  "hist_surprise_volume_diff_1t_60d_ratio",
+  "hist_surprise_volume_diff_3t_20d_ratio",
+  "hist_surprise_volume_diff_3t_60d_ratio",
+  "path_shape_return_accel_1m_vs_2m",
+  "path_shape_return_accel_1m_vs_5m",
+  "path_shape_spread_widen_after_upmove",
+]
+exclude_model_feature_columns = [
+  "ask_price_1",
+  "bid_price_1",
+  "spread_abs",
+  "preopen_price_min",
+  "preopen_price_max",
+  "postopen_v2_ask1_queue_replenish_vs_trade_1m",
+  "postopen_v2_bid1_queue_replenish_vs_trade_1m",
+]
+include_feature_columns = ["exch_time_offset_us", "trade_num", "mid_price", "spread_bps", "total_ask_volume", "total_bid_volume", "total_ask_count", "total_bid_count", "avg_ask_price", "avg_bid_price", "auction_price_range_bps", "auction_last_position_in_range", "postopen_v2_queue_ask1_replenish_vs_trade_1m", "postopen_v2_queue_bid1_replenish_vs_trade_1m"]
+include_feature_prefixes = ["preopen_", "ask_volume_", "bid_volume_", "ask_count_", "bid_count_", "ask_depth_", "bid_depth_", "depth_imbalance_", "ask_gap_", "bid_gap_", "volume_diff_", "turnover_diff_", "trade_vwap_", "return_", "postopen_v2_trade_vwap_vs_", "postopen_v2_trade_turnover_to_depth_notional_", "postopen_v2_trade_volume_to_ask_depth10_", "postopen_v2_trade_volume_to_bid_depth10_", "postopen_v2_mid_price_from_open_", "postopen_v2_ask_price_1_from_open_", "postopen_v2_bid_price_1_from_open_", "postopen_v2_depth_imbalance_", "postopen_v2_ask_depth_", "postopen_v2_bid_depth_", "postopen_v2_depth_concentration_", "postopen_v2_ask1_share_depth_", "postopen_v2_bid1_share_depth_", "postopen_v2_ask_gap_curve_", "postopen_v2_bid_gap_curve_", "postopen_v2_ask_gap_max_", "postopen_v2_bid_gap_max_", "postopen_v2_spread_compression_", "postopen_v2_spread_bps_from_open_", "hist_surprise_", "path_shape_", "multi_den_ratio_"]
+include_feature_regexes = ["^postopen_(?!v2_)"]
+feature_value_transform = "mechanismized_v3_dimensionless_328"
+feature_value_transform_group_cols = ["date", "decision_target_timestamp"]
+feature_value_transform_rank_method = "average"
+feature_value_transform_tick_size = 0.01
+
+[filters]
+tradable_statuses = ["T0", "20", "TRADE"]
+
+[window]
+mode = "rolling_monthly"
+train_months = 36
+test_months = 6
+test_stride_months = 6
+test_start_month = "2022-01"
+test_end_month = "2025-12"
+
+[model]
+name = "torch_mlp"
+target_col = "target_label"
+architecture = "grouped_gated_v2"
+hidden_layers = [768, 512, 256, 128]
+group_embedding_dim = 32
+fusion_dim = 256
+block_hidden_dim = 512
+num_blocks = 2
+transformer_heads = 4
+activation = "gelu"
+dropout = 0.10
+batch_size = 32768
+predict_batch_size = 131072
+learning_rate = 0.00025
+weight_decay = 0.0001
+max_epochs = 10
+validation_fraction = 0.01
+validation_max_rows = 250000
+early_stopping_patience = 2
+loss = "mse"
+device = "cuda"
+random_state = 31
+num_workers = 0
+gate_diagnostics_max_rows = 200000
+
+[model.group_embedding_dims]
+preopen_auction = 16
+limit_price_state = 16
+book_depth_level = 48
+book_shape_spread_gap = 48
+book_imbalance_pressure = 32
+trade_activity = 32
+trade_price_impact = 32
+postopen_price_path = 48
+postopen_liquidity_change = 32
+historical_surprise = 48
+path_shape_confirmation = 48
+other = 24
+
+[evaluation]
+score_bins = 10
+bucket_mode = "cross_section"
+selection_mode = "cross_section"
+ic_mode = "cross_section"
+top_n = 100
+
+[output]
+local_dir = "output/artifacts/nn/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse"
+k8s_dir = "/mnt/output/opening_strength_fit/nn/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse"
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-nn-v6-1001-1010-short3m"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+clickhouse_secret = "opening-strength-clickhouse"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260731-corrected-label-matrix"
+avoid_nodes = ["node6", "node7", "node8", "node12", "node17", "node19", "node20", "node22", "node24", "node25", "node26", "node27", "node28"]
+wait_for_paths = [
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2019_target_v6_w1001_1010_short3m_corrected_nextclose.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2020_target_v6_w1001_1010_short3m_corrected_nextclose.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2021_target_v6_w1001_1010_short3m_corrected_nextclose.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2022_target_v6_w1001_1010_short3m_corrected_nextclose.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2023_target_v6_w1001_1010_short3m_corrected_nextclose.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2024_target_v6_w1001_1010_short3m_corrected_nextclose.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2025_target_v6_w1001_1010_short3m_corrected_nextclose.parquet",
+  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2019/_SUCCESS",
+  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2020/_SUCCESS",
+  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2021/_SUCCESS",
+  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2022/_SUCCESS",
+  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2023/_SUCCESS",
+  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2024/_SUCCESS",
+  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2025/_SUCCESS",
+]
+wait_for_path_timeout_seconds = 604800
+wait_for_path_interval_seconds = 120
+shard_parallelism = 8
+
+[k8s.node_selector]
+has_gpu = "true"
+
+[k8s.resources]
+cpu_request = "16"
+cpu_limit = "32"
+memory_request = "608Gi"
+memory_limit = "960Gi"
+gpu_limit = 1
+
+[analysis.pool_internal]
+enabled = true
+job_name = "os-analyze-nn-v6-1001-1010-short3m"
+variant = "nn_v6_w1001_1010_short3m_corrected_nextclose_grouped_gated_v2_mech_v3_gelu_mse"
+plot_prefix = "nn_v6_w1001_1010_short3m_corrected_nextclose_grouped_gated_v2_mech_v3_gelu_mse"
+plot_variant_label = "v6 decision-state 10:01:00-10:10:00 short3m + corrected next-close"
+plot_period = "quarter"
+pools = ["universe", "L"]
+top_n = 100
+next_close_label_input = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_next_close_decision_clock_state_clock6_1001_1010"
+env_secrets = ["opening-strength-clickhouse", "xy-fit-ceph-credentials"]
+wait_for_path_timeout_seconds = 86400
+wait_for_path_interval_seconds = 120
+
+[analysis.pool_internal.resources]
+cpu_request = "8"
+cpu_limit = "16"
+memory_request = "256Gi"
+memory_limit = "384Gi"
+
+[analysis.pool_internal.archive]
+profile = "presentation_core"
