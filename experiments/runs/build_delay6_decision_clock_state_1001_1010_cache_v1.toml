@@ -2,7 +2,7 @@
 id = "build_delay6_decision_clock_state_1001_1010_cache_v1"
 kind = "labeled_cache"
 description = "Build a corrected 2019-2025 10:00-10:10 cache: 10:00 is the from-start context row, each logical decision clock carries forward the last known state, and entry is anchored to decision clock +6s."
-status = "running"
+status = "completed"
 
 [data]
 source = "clickhouse"
