@@ -1,0 +1,116 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-target-v6-w0931-0940-mixed-v1
+  namespace: bizewu
+  labels:
+    app: os-target-v6-w0931-0940-mixed-v1
+spec:
+  backoffLimit: 0
+  completionMode: Indexed
+  completions: 7
+  parallelism: 7
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: os-target-v6-w0931-0940-mixed-v1
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      volumes:
+        - name: opening-strength-output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                      - node7
+                      - node8
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: os-target-v6-w0931-0940-mixed-v1
+      containers:
+        - name: opening-strength-fit
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260731-v6-w0931-rerun-v1
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          env:
+            - name: JOB_COMPLETION_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.annotations['batch.kubernetes.io/job-completion-index']"
+          command:
+            - /bin/bash
+            - -lc
+            - |
+              set -euo pipefail
+              YEARS=(2019 2020 2021 2022 2023 2024 2025)
+              INDEX="${JOB_COMPLETION_INDEX:-}"
+              if [ -z "${INDEX}" ] || [ "${INDEX}" -lt 0 ] || [ "${INDEX}" -ge "${#YEARS[@]}" ]; then
+                echo "invalid JOB_COMPLETION_INDEX=${INDEX}" >&2
+                exit 1
+              fi
+              YEAR="${YEARS[$INDEX]}"
+              INPUT_ROOT="/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v6_decision_clock_state_clock6_unique_base_mcap_lag1"
+              OUTPUT_ROOT="/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v6_decision_clock_state_clock6_unique_mixed_w030_mcap_lag1"
+              LONG_ROOT="/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1"
+              INPUT="${INPUT_ROOT}/opening_${YEAR}_label_v6_decision_clock_state_clock6_unique_base_mcap_lag1.parquet"
+              OUTPUT="${OUTPUT_ROOT}/opening_${YEAR}_label_v6_decision_clock_state_clock6_unique_mixed_w030_mcap_lag1.parquet"
+              LONG_INPUT="${LONG_ROOT}/opening_${YEAR}_next_close_labels_v1.parquet"
+              TRACE_DIR="/mnt/output/opening_strength_fit/cache_builds/build_v6_decision_clock_state_0931_0940_mixed_w030_target_v1/year=${YEAR}"
+              WAIT_STARTED=${SECONDS}
+              for WAIT_PATH in "${INPUT}" "${INPUT}.manifest.json" "${INPUT}.lock.done" "${LONG_INPUT}"; do
+                until [ -f "${WAIT_PATH}" ]; do
+                  if [ $((SECONDS - WAIT_STARTED)) -ge 86400 ]; then
+                    echo "timed out waiting for dependency file: ${WAIT_PATH}" >&2
+                    exit 1
+                  fi
+                  echo "waiting for dependency file: ${WAIT_PATH}"
+                  sleep 120
+                done
+                echo "dependency file is ready: ${WAIT_PATH}"
+              done
+              if [ -f "${OUTPUT}" ] && [ -f "${TRACE_DIR}/target_cache_trace.json" ] && [ -f "${TRACE_DIR}/_SUCCESS" ]; then
+                echo "mixed target shard already complete, skipping: ${OUTPUT}"
+                exit 0
+              fi
+              mkdir -p "${OUTPUT_ROOT}" "${TRACE_DIR}"
+              osf-build-target-label-cache \
+                --input "${INPUT}" \
+                --output "${OUTPUT}" \
+                --output-dir "${TRACE_DIR}" \
+                --mode mixed \
+                --group-cols date decision_target_timestamp \
+                --label-col label \
+                --target-col target_label \
+                --raw-label-col label_raw \
+                --min-group-size 50 \
+                --long-label-input "${LONG_INPUT}" \
+                --long-label-col alpha_return_next_close \
+                --long-label-weight 0.30 \
+                --short-label-transform zscore \
+                --long-label-transform zscore \
+                --overwrite
+              touch "${TRACE_DIR}/_SUCCESS"
+          volumeMounts:
+            - name: opening-strength-output
+              mountPath: /mnt/output
+          resources:
+            requests:
+              cpu: "8"
+              memory: 256Gi
+            limits:
+              cpu: "16"
+              memory: 512Gi
