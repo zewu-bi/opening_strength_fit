@@ -2,7 +2,7 @@
 id = "build_v6_decision_clock_state_0931_0940_mixed_w030_target_v1"
 kind = "cache_transform"
 description = "Build seven annual mixed-w030 target shards from the corrected v6 decision-clock-state cache for the canonical 09:31-09:40 rerun; preserve the v4 target transform and next-close lineage."
-status = "running"
+status = "completed"
 
 [target_cache]
 input_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v6_decision_clock_state_clock6_unique_base_mcap_lag1/opening_2019_label_v6_decision_clock_state_clock6_unique_base_mcap_lag1.parquet"
