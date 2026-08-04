@@ -1,626 +1,196 @@
 # Experiment Log
 
-> Last reconciled: 2026-07-31
-> Coverage: 2026-05-20 through 2026-07-31
+> Last reconciled: 2026-08-04
+>
+> Coverage: 2026-05-20 through 2026-08-04
 
-本文件是人工维护的实验事实账本，严格按发生时间升序记录假设、口径、结果、状态和决策。当前研究
-方向见 [project_brief.md](project_brief.md)，命令见 [runbook.md](runbook.md)。旧版逐日长记录已从 HEAD
-移除；需要时按 [archive README](archive/README.md) 从完整 Git 历史读取。
+本文件是实验事实账本，按时间记录假设、结果、状态和决策。当前研究口径见
+[project_brief.md](project_brief.md)，执行命令见 [runbook.md](runbook.md)，历史长记录见
+[archive README](archive/README.md)。
 
 ## 证据规则
 
-发生冲突时按以下顺序判断事实：
-
-1. `experiments/evidence/` 中的 compact CSV/JSON/trace；
-2. `experiments/runs/<run_id>.toml` 中的实验定义；
-3. 对应 Git commit 与 K8s manifest；
-4. 人工叙述。
-
-`experiments/results/` 和 `output/` 默认不纳入 Git；它们是本地/PVC mirror，不是持久事实源。持久追溯依赖
-run config、Job manifest、代码 revision、compact evidence 与本日志共同完成。完整 run 状态不要手工复制，
-使用 `osf-audit-experiments` 从 TOML 生成。
+事实冲突时依次以 compact evidence、run TOML、Git/K8s trace、人工叙述为准。大型结果位于 PVC 或本地
+mirror，不进入 Git；持久追溯依赖 run config、Job manifest、代码 revision、compact evidence 和本日志。
+run 状态由 `osf-audit-experiments` 从 TOML 审计，不在文档中复制完整索引。
 
 ## 近期实验状态
 
-| date | run | hypothesis | last known status | incumbent impact |
-| --- | --- | --- | --- | --- |
-| 2026-07-16 | `build_delay2_{2019..2025}_conservative_cap_cache_v1` | 在旧 cache 覆盖率语义上只加 T-1 cap/share、基础竞价变换，并让 delay2 跳过同交易所时间戳重复行 | `completed`; 7 个年度 Job 从 ClickHouse 全量重建，单年约 10.5-18 小时 | 作为 tick-count 对照保留；不再作为新 target/model 的输入 |
-| 2026-07-16 | `build_delay2_{2019..2025}_conservative_cap_mixed_w030_target_v1` | 从保守 base 构造既有定义的 mixed-w030 target | `superseded`; 从未提交 | 固定 +6 秒口径确认后取消该下游分支 |
-| 2026-07-17 | `build_delay6_clock_state_{2019..2025}_cap_cache_v1` | entry 固定为特征状态后 6 秒，entry/sell 边界取该逻辑时刻最后已知状态，并保留 source timestamp/state age 审计列 | `completed`; 7 个年度 ClickHouse base 及 manifest/ready marker 均完成 | 新的 canonical label/cache lineage |
-| 2026-07-17 | `build_delay6_clock_state_{2019..2025}_cap_mixed_w030_target_v1` | 从 fixed-clock base 构造既有 mixed-w030 target | `completed`; 7 个年度 mixed-w030 target 均完成并被两组训练消费 | 后续新训练只读该 target lineage |
-| 2026-07-17 | `nn_delay6_clock_state_36m_2022_2025_auction_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1` | 固定模型/特征，只把数据切到 fixed-clock cache | `completed`; 8/8 shards、47,333,122 行预测、pool analysis 和 compact artifact sync 全部完成 | `pool_L` next `16.8024 bps`；保留为 v4 单变量 ablation baseline |
-| 2026-07-21 | `nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1` | 在 v4 auction-pruned control 上仅新增经去重审查的多分母无量纲特征 | 8/8 shards、47,333,122 行预测、pool analysis、四图与 compact evidence 完成；2026-07-31 标记 `superseded` | next `17.1714 bps`；曾于 2026-07-23 晋级，现为 `opening_model` 的 archived previous baseline |
-| 2026-07-22 | `strategy_acceptance_clock6_v4_control_2022_2025_v1` | 在同一完整候选集上统一比较 capacity-only、realistic no-refill 与因果可见 refill，并复核 overlap/tail | `completed`; 9,690 groups、969 日，compact artifacts/trace 已同步 | refill fill/net `99.9969%/8431.1 bps`，较 no-refill `+1247.5 bps`；保留为 multiden 的 ablation baseline |
-| 2026-07-22 | `strategy_acceptance_clock6_v4_multiden_2022_2025_v1` | 用同一工具验收 canonical multiden | `completed`; 9,690 groups、969 日，compact artifacts/trace 已同步 | refill fill/net `99.9970%/8598.7 bps`；现为 `opening_model` 重跑前的 downstream 历史参考 |
-| 2026-07-23 | decision: multiden promotion | 重新区分因果成本后收益 gate 与收益结构诊断 | 文档口径已统一；compact evidence 与原始数值不变 | 当时取消单边尾部等自动否决含义并晋级；2026-07-31 信号基准由 `opening_model` supersede |
-| 2026-07-29 | decision: archive full-day temporal route | 确认“全天序列→隔夜日频目标→TCN”源于需求理解偏差 | 2026-07-22 至 07-29 的 run/job、实现、测试、证据和未提交变体整体移入 `experiments/archive/full_day_temporal_2026-07-22_2026-07-29/` | 路线终止；回到既有 `09:31-09:40` 实验范式，只换另外 2–3 个固定日内窗口，比较同口径 OOS 选股能力衰减 |
-| 2026-07-30 | `build_delay6_decision_clock_state_0930_0940_cache_v1` | 将 decision sampling 也改为目标时刻此前最后已知状态，并把 entry 严格锚定 decision clock `+6s` | 单日 smoke 为 `5105 × 11 = 56,155` 行，所有时点各 5,105 只；decision source 无穿越，entry 时钟断言全通过，short label valid `99.2165%`；7 个年度 shard 已启动 | 建立 corrected decision-state lineage；既有 09:31 v4 和 10/11/14 点 forward-5s cache 继续作为历史同口径衰减数据集，不覆盖 |
-| 2026-07-30 | `nn_delay6_clock_state_36m_2022_2025_w1001_1010_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1` | 保持 incumbent 的 feature、target、模型、股池与 rolling OOS，只把十分钟窗口及其 cache/label lineage 移到 `10:01-10:10` | `completed`; 8/8 shards、44,993,233 行 prediction/label 全量 join、9,690 groups、固定四图与 compact evidence 已归档 | `pool_L` next excess `6.5491 bps`、Top100 fee8 累和 `2708.5 bps`，较 09:31 的 `17.1714/9891.7` 明显衰减；作为首个日内衰减 checkpoint，不替换 opening policy |
-| 2026-07-30 | `build_v6_w{0931_0940,1001_1010,1401_1410}_short_h180_vwap60_labels_v1` | 复用 corrected v6 的 `clock+6s` entry/buy price，只新增持有 180 秒后用随后 60 秒累计成交 VWAP 卖出的 standalone short label | `running`; 3 个 indexed Job 各 7 个年度 shard，逐 shard 等待对应 v6 parquet 与 manifest 后自动启动；真实 2025-01-02 smoke 为 51,050 行、50,604 个 valid label，key、时钟、无穿越与 VWAP/return 恒等式全部通过 | 只生成三组稍长 short label，不重算 feature、不生成新 target、不扩展到其他窗口 |
-| 2026-07-31 | `build_delay6_decision_clock_state_0930_0940_cache_v1` | 完成 corrected v6 09:30-09:40 base cache | `completed`; 7/7 年度 shard、parquet/manifest/ready marker 全部一致，总计 85,086,966 行、31.78 GiB、82,897,689 valid labels | v6 base 完整可消费；仍需独立 mixed-w030 target，不能直接供 incumbent 训练 |
-| 2026-07-31 | `build_v6_decision_clock_state_0931_0940_mixed_w030_target_v1` / `nn_delay6_v6_decision_clock_state_36m_2022_2025_w0931_0940_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1` | 用 corrected v6 cache 严格重跑 v4 canonical 09:31-09:40 multiden incumbent；target、feature、model、pool、rolling OOS 和 seed 不变 | mixed target `completed` 7/7；训练、pool analysis、Top1000 两项诊断和固定四图均 `completed`；8/8 shards、47,333,103 行 prediction/label join、9,690 groups，compact evidence 已归档 | `pool_L` next excess `17.7934 bps`、Top100 fee8 累和 `10193.0 bps`，高于 v4 的 `17.1714/9891.7`；接受为 corrected signal lineage，策略层仍待重跑，不覆盖 v4 downstream evidence |
-| 2026-07-31 | decision: `opening_model` baseline promotion | 将本轮 completed source run 正式归档，并停止在当前名称中混用 cache/model 版本号 | 建立 `opening_base`、`opening_cache`、`opening_model` 三个短 canonical 名称与 machine-readable 来源映射；四图、CSV、trace、manifest 保留原 source run lineage | `opening_model` 成为最新信号/模型基准，`opening_cache` 的 causal clock-state 口径成为后续默认；v4 只保留为历史对照和 downstream 策略参考 |
-| 2026-07-31 | `opening_{0931_0940,1001_1010,1401_1410}_next_close_clock6_rebuild` | 用三个 corrected decision-state cache 各自的 `T+6s` buy price 重建 next-close return，并补齐 v6 key 覆盖 | 三个 indexed Job 均 `7/7 completed`，对应 21 个年度 corrected next-close parquet 全部完成 | 建立独立 corrected long-label lineage，不覆盖 legacy/v5 输出；新 mixed target 必须切换到对应新 root 才能消除旧入场价与缺 key 问题 |
-| 2026-07-31 | `nn_v6_w{0931_0940_short1m,0931_0940_short3m,1001_1010_short3m,1401_1410_short3m}_corrected_nextclose_36m_grouped_gated_v2_mse` | 固定最新 v6 incumbent 的 350 features、grouped-gated-v2、36m→6m rolling、MSE、seed 31 和资源，只比较同窗口 corrected next-close 下的三个时段及 1m/3m short component | 四组 annual mixed-target Job 与四个 8-shard GPU Job 已提交；1m target 可立即构建，三个 3m target 等对应 parquet、manifest、trace `_SUCCESS`，训练再等 7 个 target parquet 与 7 个 `_SUCCESS` 自动启动 | 形成 4 项严格受控 label/window 矩阵；镜像 `20260731-corrected-label-matrix`，digest `sha256:a8f3276f76c90faea04b8c520eb201b3fd2c9ddb7b1835214597017a07b4a0ba` |
+| date | run / decision | status | impact |
+| --- | --- | --- | --- |
+| 2026-07-22 | fixed-clock v4 control / multiden + unified strategy acceptance | `completed` | multiden 曾晋级 opening policy，保留为旧数据链路对照 |
+| 2026-07-30 | `10:01-10:10` 日内窗口重训 | `completed` | next excess `6.5491 bps`，确认较 09:31 明显衰减，不晋级 |
+| 2026-07-31 | corrected `opening_model` 09:31-09:40 | `completed` | next excess `17.7934 bps`，成为最新信号基准；策略层仍需同数据重跑 |
+| 2026-07-31 | corrected next-close 与 1m/3m label matrix | `completed` / 历史输入保留 | 旧实验继续按原输入复现，不与新数据版本混作严格单变量对照 |
+| 2026-08-04 | 三窗口 raw source、350 features、基础 5-label 数据 | `completed` | 原始数据与特征/标签构建分层，combined label 仅作中间产物 |
+| 2026-08-04 | 九组 horizon-split label | `completed`; 9 roots × 7 years | 后续实验从三窗口 × 1m/3m/5m 中选择；新版本为权威训练输入 |
 
 ## 决策时间线
 
 ### 2026-05：建立信号与因果口径
 
-| date | experiment | controlled change | evidence | decision |
-| --- | --- | --- | --- | --- |
-| 05-20 | 3 日 Ridge/GBM 小窗 | 首次 opening feature/model smoke | GBM decision Rank IC `0.1426`，Top20 `+41.92 bps` | short signal 值得扩样本；不解释为可交易结果 |
-| 05-21 | 2021 train → 2022-01 test | 扩到一年训练、次月测试 | GBM Rank IC `0.1831`，Top20 `+34.33 bps` | short 排序成立；仍无 T+1 结论 |
-| 05-22~26 | CPU LightGBM delay0/1/2 | 加真实 entry delay 与 PVC labeled cache | delay2 universe Rank IC `0.1360`，Top20 `+36.75 bps`；越迟越弱 | 固定 delay2 作为保守口径 |
-| 05-26 | horizon decay | 同一 score 对日内、close、next-close horizon | 日内快速衰减，close/next-close 基本消失 | 暂停直接 T+1，先强化可见短期信号 |
-| 05-26~27 | postopen v1/v2、no-preopen、xs-demean | 只改决策前可见盘口/路径特征 | v2 Rank IC `0.1394`，xs-demean `0.1406`；next Top100 仍弱 | 固定 `09:31-09:40` 样本域；保留 postopen v2 |
-| 05-27~28 | heat-neutral、feature core、guards、clean target | 尝试修复 short 正、next 负 | hard guard 可改善 next，但明显损伤 short；模型内 guard/强正则失败 | guard 只作诊断/后处理，不进主模型 |
-| 05-28~29 | learned/conditional risk layer | `alpha_rank - λ × risk_rank` | conditional v1 学成 short proxy；alpha-conditioned v2 才有改善 | 进入跨月验证，不在单月继续调参 |
+| period | controlled change | evidence | decision |
+| --- | --- | --- | --- |
+| 05-20~21 | 小窗 GBM → 一年训练/次月测试 | decision Rank IC `0.1426 → 0.1831` | opening short 排序值得扩样本；不解释为可交易结果 |
+| 05-22~26 | 加真实 entry delay、扩 horizon | delay2 后 short 仍有效，close/next-close 快速衰减 | 固定保守 delay；暂停直接 T+1 主线 |
+| 05-26~27 | postopen、no-preopen、XS 处理 | postopen v2 / xs-demean 改善 short，next 仍弱 | 固定 `09:31-09:40` 样本域 |
+| 05-28~29 | hard guard、learned/conditional risk | guard 改善 next 但损伤 short；两层公式局部有效 | guard 只作诊断，进入跨月验证 |
 
 ### 2026-06：固定 label、扩展 OOS、收敛特征
 
-| date | experiment | controlled change | evidence | decision |
-| --- | --- | --- | --- | --- |
-| 06-02 | alpha-conditioned rolling | 6 个月滚动验证 gap risk penalty | `gap_penalty_030_p80` short/next `+21.20/+7.84 bps`，6/6 next 为正 | 证明两层公式可行，但路线封存；经验转入 single mixed label |
-| 06-03 | mixed label `w=.10/.20/.30` + S/M/L | 只扫 long-label 权重 | `w=.30` 在三池保住 short，并提高 next internal excess | 固定 `w_long=0.30` |
-| 06-04 | 18m feature regroup | 固定 label 后比较 7 组 feature/model | 276-feature `soft_core_reg_light` 唯一稳定晋级 | 固定历史 baseline |
-| 06-04~05 | cache v2 + 36m monthly rolling | 迁移到 3 年训练、月度 OOS | 2024 pool_L short/next `+10.4/+4.4 bps` | 扩展半年 fold 和更长 OOS |
-| 06-05~08 | 36m train → 6m test | 2018-2025 半年 OOS | 2020-24 pool_L `+12.14/+14.34 bps`；2025 `+6.19/+8.19 bps` | pool 内 next 比 universe 更稳，但存在年份降档 |
-| 06-09~11 | 2022-25 baseline + LGBM sweep | 强正则、bagging、删 preopen、特征族、ensemble | baseline pool_L short/next `+8.626/+7.974 bps`；常规方向均无显著增量 | 停止局部 LGBM 调参 |
-| 06-12~17 | fullxs、scale、price regime | 历史同分钟、path、尺度处理 | hist/path 有效；`scale_norm` 综合最好；rank-label IC 高但 Top100 退化 | 转向 hist/path 精确并集与 hygiene |
-| 06-16 | acceptance fee refresh | 只改实现成本 | 默认成本从 5 bps 调整为 8 bps | 后续验收统一 8 bps |
-| 06-18~23 | hist+path exact union | union、rank-centered、zscore | rank-centered union 的 pool_L next 约 `9.45 bps`，本批最高 | 确认历史/路径和尺度是有效方向 |
-| 06-18~23 | feature hygiene | 相关簇与 conservative drop | baseline 276 给 17 个 hard-drop；354 union 给 19 个 sensitivity drop | drop 仅作用模型特征，不物理删 cache 基础字段 |
-| 06-23 | company API bridge | 将 10 分钟 mean score 接日频 API | full-window mean 使用未来 decision points | 定性为 hindsight diagnostic；正式验收回到分钟级因果口径 |
-| 06-25 | `hist_path_pruned_highdup` | 删除 26 个高重复 hist/path 特征 | 328 features；pool_L next `8.8643 bps`，信号基本保留 | 作为干净的 LGBM/NN 输入基线 |
-| 06-25 | exposure audit | core + size/industry | 偏 activity/turnover heat、低 spread、中大市值；电子/电力设备/计算机偏高 | 暴露可解释，未发现新的单一押注 |
-| 06-25 | split20 capacity audit | 10 亿/20、10% `turnover_diff_30t`、1% 单票上限 | `9690/9690` 截面填满；平均 top124、p95 161、max291 | 容量可行，但固定 Top100 不是容量组合 |
-| 06-26 | first NN archive | 同 328 特征换 PyTorch MLP | `mlp_base` next `12.4320 bps`；`mlp_wide_huber` short IC `0.162945` | NN 值得进入结构/损失扫描 |
+| period | controlled change | evidence | decision |
+| --- | --- | --- | --- |
+| 06-02~05 | risk layer → mixed label → 36m rolling | `w_long=.30` 在三池兼顾 short/next | 固定 single mixed label 与 36m→6m OOS |
+| 06-05~11 | 扩 2020-2025 OOS、LGBM sweep | pool 内 next 较稳；常规调参无稳定增量 | 停止局部 LGBM 调参 |
+| 06-12~23 | hist/path、scale、feature hygiene | rank-centered union 较强；重复簇可删 | 保留 hist/path 精确并集，drop 只作用模型输入 |
+| 06-25~26 | 328-feature prune、capacity、首批 NN | 容量截面可填满；MLP next `12.4320 bps` | 328 特征成为干净基线，NN 进入结构扫描 |
 
 ### 2026-07：NN 收敛与执行约束
 
-| date | experiment | controlled change | evidence | decision |
-| --- | --- | --- | --- | --- |
-| 07-02 | NN scan + rankblend | 架构、Huber/正则、NN+LGBM blend | `deep_gelu_huber` short IC `0.164169`；rankblend 未胜 NN | deep Huber 作排序锚；停止 NN+LGBM 主线 |
-| 07-02 | `mlp_base` capacity acceptance | capacity-selected allocation 加 next-close 与 8 bps | final cumulative net `7656.99 bps` | 容量收益必须来自 selected allocation，不复用 Top100 |
-| 07-03 | MSE neighborhood | Huber → MSE 与小型 MLP 邻域 | `deep_gelu_mse` next `12.9610 bps`，capacity net `7916.02 bps` | MSE 更适合 overlay；继续结构化 grouped NN |
-| 07-03 | structured NN submitted | residual/cross/gated/group-token | 同数据、label、328 features，只改网络结构 | 保持实验问题单一 |
-| 07-03 | realistic acceptance v1/v2 | capacity-selected child orders 加日内单票、状态、价差、深度、最小订单与整手约束 | execctx v2：LGBM/MLP mean fill `0.802/0.809`；8 bps cumulative `4705.3/6113.0 bps`，低于简单 capacity acceptance | 执行约束显著削弱收益；作为 first-pass replay 保留 |
-| 07-03 | ask-level attribution | 映射 selected notional 到 ask1-10 | ask1 仅 `37.7%/38.0%`；ask2-10 全 0，约 62% 落入 beyond ask10 | 暴露出上下文字段缺口；不得解释成真实十档可成交性 |
-| 07-07 | grouped residual/cross/gated | 语义分组 encoder 与 fusion | next `13.4939/13.3557/13.8491 bps` | grouped gated 成为收益高度锚 |
-| 07-07~08 | group-token + gated v2 | 更细机制分组与 per-group embedding | transformer `13.6479 bps`；gated v2 `13.2768 bps`、39/48 正月且 IC/暴露更稳 | gated v2 升为稳定性候选；停止扩大复杂结构 |
-| 07-08~09 | symbol z-score | per-symbol train-window 标准化 | short IC 降至 `0.117035`，next `11.6661 bps` | reject；横截面状态被洗掉 |
-| 07-09~10 | in-place XS rank | 同 328 列做截面 rank-centered | short IC `0.161260`，next `13.7351 bps` | short-ranking anchor，不取代 overlay incumbent |
-| 07-09~10 | mech328 v1 | 机制化后统一 rank | short IC `0.160371`，next 降至 `11.7491 bps` | reject；末端 rank 压掉有用幅度 |
-| 07-09~10 | mech328 v2 robust z-score | price tick/bps、volume ratio/share、turnover amount、notional depth、queue share，再做截面 robust z-score | pool_L next `14.3174 bps`；Top100 8 bps cumulative `8508.0 bps`；39/48 正月 | 晋级 overlay incumbent |
-| 07-10 | old-NN multiscale buckets | Top1000 粗桶与桶内 IC | 粗桶递减，但 TopK/桶内 IC 为负 | 信号是 head-region selector，不是稳定细排器；旧模型诊断结束 |
-| 07-10 | mech328 v3 submit | ratio-style histavg activity，无截面 z-score | 当时 8 shards submitted，尚无 metrics；旧尝试后因内存问题停止 | 后续由 T-1 cap/share cache 上的 `mech328_v3_capcache_896` 重跑 supersede，见 07-21 closeout |
-| 07-15 | mech328 v2 rank/bucket re-audit | 原始 prediction、next-close label 与 `pool_L` 重新 join 并交叉实现 Spearman | `pool_L` 全池 / Top1000 单股 Rank IC `+0.008054/-0.016463`；Top1000 10×100 per-decision bucket IC `+0.050524`，汇总曲线 IC `+0.975758`；头尾 pair win `48.07%` | 计算无 sign、tie、label 或 excess 口径错误；定位为 conditional-mean/right-tail head overlay，不作单股细排器 |
-| 07-15 | auction-fresh causal rebuild | 新竞价口径、两自由度价格基底、派生竞价 path、1m queue horizon、严格 tick freshness/截面 readiness、T-1 市值股本 | `248 passed, 3 skipped`；真实 ClickHouse 抽样和 7 个 base Job 首日日志均确认 prior-session reference，覆盖 `99.94%-100%` | 使用独立 v4 base/v3 mixed lineage；base 已先启动，target/model 随后作为 overnight waiting jobs 提交 |
-| 07-16 | conservative cap/unique-tick rebuild | 旧 cache 语义 + T-1 cap/share + indicative-auction；同 `(date,symbol,exchange timestamp)` 只保留一个确定性快照，delay2 继续向后数两个不同时间戳；移除三项严格有效性门 | 2019-04-19 全市场：`2,326,300 -> 1,162,995` unique rows，`38,740/39,115 = 99.0413%` 样本有效；有效 entry 中 `92.51%` 为 6 秒，其余继续读到更后真实 tick；全量 `265 passed, 3 skipped` | 使用独立 v3 base/v2 mixed lineage；先跑 base，完成后按日审计覆盖率再提交 target |
-| 07-17 | auction-fresh pruned acceptance archive | 完成 indexed GPU training、pool-internal analysis、artifact sync，并用 runbook overlay acceptance 对比 mech328 v2 / gated v2 | `pool_L` next excess `16.9692 bps`，高于 mech328 v2 `14.3174` 和 gated v2 `13.2768`；Top100 8bps net cumulative `9893.9 bps`，相对 pool_L cumulative excess `8221.6 bps`；universe short IC `0.150489`，低于 mech328 v2/gated v2 | 通过 Top100 收益验收并归档为 causal-data challenger；因 short IC 退化且未做 capacity/realistic，不替换 mech328 v2 incumbent |
-| 07-17 | auction-fresh downstream acceptance | 同 runbook t10p20 capacity audit/acceptance、execution-context realistic replay、core/size exposure 和右尾 P95/P99 拆解 | capacity fee8bps cumulative `9244.5 bps`；realistic fill `0.8073`、fee8bps cumulative `7323.9 bps`；size exposure 近中性，activity exposure 仍高；P95 upper-tail cap 后 capacity/realistic 分别 `-1.5/-0.3 bps` | execution 后仍强于 LGBM/MLP anchors；右尾结果只作收益来源诊断，该 lineage 后由 fixed-clock v4 supersede |
-| 07-17 | auction-fresh rank/bucket vs mech328 v2 | 对 auction-fresh 补跑 Top1000 rank bucket 与 50/100/200 names-per-bucket multiscale；补跑 mech328 v2 multiscale，并生成 full `pool_L` 与 Top1000 对比曲线 | Top1000 单股 Rank IC：auction `-0.015657`、mech `-0.016463`；Top1000 10 桶前 1/2 桶 auction 高 `+2.65/+2.29 bps`，后 8-10 桶低 `-1.15/-1.59/-0.65 bps`；full `pool_L` 20 桶 0-5% 高 `+3.16 bps`，15%-75% 多数弱于 mech | auction-fresh 更像 head/right-tail selector，mech328 v2 更像中段更平滑的 pool overlay ranker；不做二选一替换，优先做 head-only blend/gate |
-| 07-17 | fixed-clock +6s label patch | 用 event/state 语义替换“向后数两条更新”和 `>5s` freshness 失效：entry 固定 +6s，entry/sell 取边界时刻最后已知状态；同时间戳 revision 仍确定性去重 | 2019-04-19 同一批 2,326,300 ClickHouse 行：conservative `38,740/39,115=99.0413%`，fixed-clock `38,745/39,115=99.0541%`；旧口径 2,901 个有效 entry 晚于 6 秒，新口径全部精确 6 秒，entry state-age P99/max 为 3/6 秒 | 建立独立 delay6-clock-state base/mixed lineage；旧 conservative mixed target superseded；新实验只读新 lineage |
-| 07-17 | auction-fresh head-only blend closeout | 以 mech328 v2 为底座，只对 auction-fresh Top100/200 头部做有限 boost/gate | 最佳 `auction_head200_w20` Top100 next excess `16.5749 bps`，高于 mech328 v2 `14.3174`，低于 auction-only `17.1780`；P95 upper-tail cap `-7.1044 bps` | blend 未超过 auction-only，因此不晋级；右尾依赖只作诊断，不是额外否决理由 |
-| 07-21 | ordinary 328 mech v3 cap-cache closeout | 同一 328 特征与 grouped-gated-v2 结构，用 strict ratio-style v3 替代 v2 robust-zscore；使用 T-1 cap/share cache | 8 个半年 shard 已完成，pool analysis 保留 `44,033,943/44,033,943` 行；`pool_L` short/next excess `11.1004/16.3318 bps`，next 正月 `38/48`，universe short Rank IC `0.151300` | 之前的 `histavg_activity`/`running` 记录已被 `mech328_v3_capcache_896` 完成产物 supersede；信号层强于 mech328 v2，略低于 auction-pruned；cache v4 应对两者分别重跑 |
-| 07-21 | auction-pruned multi-denominator submission | 完整审查 v4 cache 的 211 个原始/上下文列；在 325-feature control 上只追加金额、成交量和聚合深度的简单比例，保持模型/target/window 不变 | 排除价格、收益、imbalance、count 和逐档队列；排除已被 pruned 的同分钟历史 ratios；排除与现有 `postopen_*_rel_*m` 一一等价的“当前流量/当日累计量”。最终新增 25 列，总计 350；真实 2019-01-02 v4 数据和新镜像验证通过；`286 passed, 3 skipped`，contracts OK | 提交 `os-nn-clock6-auction-multiden-v1`；control 并行度 6→4，新任务目标并行度 4，等待同一 2022 mixed target |
-| 07-22 | fixed-clock v4 auction-pruned closeout | 完成 control 与只加 25 个比例的 multi-denominator 两组 8-shard 训练、pool-internal、artifact sync 和三线验收 | control/multi-den `pool_L` next `16.8024/17.1714 bps`，Top100 fee8 累和 `9713.0/9891.7 bps`；多分母相对 control 月/季度胜 `25/48`、`8/16`，next 正月 `37/48 vs 38/48` | 当时保留 control 作 downstream challenger；该选择先由 multiden switch、再由 07-23 正式晋级决策 supersede |
-| 07-22 | fixed four-figure acceptance | 将 short IC + next excess、Top100累和、Top1000平滑分桶、Top1000十组收益分布固化为同一证据包 | 收益分布图固定100 bps档、`x=±3000 bps`、对数`y=10^2~3×10^5`，并提供compact CSV复画脚本 | 后续正式candidate必须保留四图、plot data和trace；探索图不得覆盖标准产物 |
-| 07-22 | unified strategy acceptance toolkit | 复用 capacity/realistic 实现，将 visible pre-trade refill、同日 overlap、P95/P99、top contribution、月块 bootstrap 与 leave-one-out 打包成单一 CLI/run kind | `295 passed, 3 skipped`、contracts OK；镜像 source revision `e8902e8`；control/multiden 两个 Job 与 `_SUCCESS` 完成 | 小项目不再独立维护；指标统一输出，其中尾部、bootstrap、overlap 和集中度只作诊断 |
-| 07-22 | fixed-clock v4 unified downstream acceptance | 1bn capital、10×50m target/day、`turnover_diff_10t` 20%、单 decision symbol 1%、daily symbol 0.5%、ask depth 25%、spread≤50bps、fee8、min child10k、lot100 | control capacity/no-refill/refill net `8989.8/7183.6/8431.1 bps`；refill P95 upper-tail cap/trim `-9.33/-56.96 bps`，bootstrap P05 `209.2 bps`，top5 days 后仍 `10.38 bps` net | refill 成本后收益与资金利用率改善；尾部与 overlap 记为风险画像，原“未晋级”判断由 07-23 决策 supersede |
-| 07-22 | canonical multiden switch + tracked four-figure bundle | 用 multiden 替换 control 作为唯一 continuation candidate；control 只保留为 A/B baseline | 四张 SVG、compact CSV、三份 trace 与 SHA-256 manifest 进入 tracked evidence；完整统计差异不改写 | multiden 成为 canonical continuation candidate，并于 07-23 正式晋级 opening policy/incumbent |
-| 07-23 | multiden promotion policy revision | 将一般稳健性与单边正尾归因分开；不改任何回测数值 | multiden next `17.1714 bps`；visible refill fill/net `99.9970%/8598.7 bps`；相对 no-refill `+1165.3 bps` | 单边 P95/P99 cap、trim、分期胜率、bootstrap、overlap 不再是自动 gate；multiden 晋级当前 opening policy/incumbent |
-| 07-29 | archive mis-scoped full-day temporal work | mentor 原意是复用既有实验，只把十分钟决策窗口移到日内另外 2–3 个时段 | 全天 cache、隔夜 label、sequence/TCN、backward/cross-mask 变体及 compact evidence 已移入独立 archive；当前入口和契约移除 | 终止该路线；后续一次只改 `[sample]` 窗口和对应 cache lineage，按同一 rolling OOS/`pool_L` 口径测选股能力衰减 |
-| 07-30 | first intraday decay checkpoint | 只把 canonical multiden 的决策窗口从 `09:31-09:40` 移到 `10:01-10:10` 并完整重训 | short universe Rank IC `0.253118`，但 `pool_L` next excess 降至 `6.5491 bps`、正月降至 `29/48`、fee8 累和降至 `2708.5 bps`；四图/CSV/trace/manifest 已归档 | 证明“短期截面可预测性增强”不等于“隔夜 Top100 收益延续”；10:01 不晋级，继续按预先声明的 11:01/14:01 窗口测衰减 |
-| 07-31 | corrected v6 09:31 signal acceptance | 只把 v4 决策采样由目标时刻后 5 秒内首条更新，改为目标时刻已经可见的最后状态；target、350 features、模型、seed、股池和 OOS 不变 | v6 universe short IC `0.158330`，`pool_L` next excess `17.7934 bps`，next 正月/半年 `38/48; 8/8`，Top100 fee8 累和 `10193.0 bps`；四图/CSV/trace/manifest 已归档 | v4 结果未被因果修正解释掉；v6 作为 corrected signal lineage 接受，但在重跑 unified capacity/refill 前不继承 v4 的策略晋级结论 |
-| 07-31 | canonical naming reset | 将完成运行与后续逻辑名称分离 | source run/job/PVC 路径保持不可变；当前 registry 固定 `opening_base`、`opening_cache`、`opening_model`，新任务使用 `opening_<window>_<semantic_change>`，禁止无信息量 `v1/v2/v6` | `opening_model` 晋级最新信号/模型基准；后续 cache 默认继承 decision/entry/future clock-state 与 `clock+6s` |
+| period | controlled change | evidence | decision |
+| --- | --- | --- | --- |
+| 07-02~10 | NN 架构、MSE、grouped gated、机制化 | mech328 v2 next `14.3174 bps`；symbol z-score 失败 | grouped-gated + MSE 成为模型主线 |
+| 07-15~17 | auction-fresh、T-1 reference、因果重建 | auction-pruned next `16.9692 bps`，realistic `7323.9 bps` | 通过收益 gate，后由 fixed-clock v4 supersede |
+| 07-17~22 | fixed `clock+6s`、350-feature multiden | v4 multiden next `17.1714 bps`，Top100 fee8 `9891.7 bps` | 接受 fixed-clock 数据口径和 multiden continuation |
+| 07-22~23 | capacity/no-refill/visible-refill 统一验收 | multiden refill fill `99.9970%`，net `8598.7 bps` | 尾部、分期和 overlap 保留为诊断，不设自动否决阈值 |
+| 07-29 | 复核 full-day temporal 路线 | 需求应是固定十分钟窗口横向比较 | 归档全天序列/TCN 路线，回到既有范式 |
+| 07-30 | 10:01-10:10 同口径重训 | short IC 提高，next 和费后收益显著下降 | 作为衰减 checkpoint，不替换 opening policy |
+| 07-31 | corrected decision-state 09:31 重训 | next `17.7934 bps`，8/8 半年为正 | `opening_model` 晋级最新信号基准 |
+| 07-31 | canonical naming reset | source lineage 不变，逻辑入口与长 run id 分离 | 使用 `opening_base/cache/model` 短入口 |
 
 ## 当前决策记录
 
 ### `opening_model` 09:31-09:40 信号验收（2026-07-31，已完成）
 
-`opening_model` 的不可变 source run 严格复用 v4 canonical multi-denominator 的 target、350 个特征、
-模型、seed、`pool_L`、rolling OOS 与 `clock+6s` entry，只修正 decision sampling：v4 读取目标时刻后
-5 秒内首条物理更新，source run 读取目标时刻已经可见的最后状态。8 个训练 shard 和 pool analysis
-均完成，47,333,103 行 OOS prediction 全量匹配 label，覆盖 9,690 个截面和 48 个月。
+唯一变化是 decision sampling：从目标时刻后 5 秒内首条更新，改为目标时刻已可见的最后状态。target、
+350 features、模型、seed、`pool_L`、rolling OOS 与 `clock+6s` entry 均不变；47,333,103 行 OOS
+prediction 全量匹配 label。
 
-| metric | archived v4 | corrected v6 | change |
-| --- | ---: | ---: | ---: |
-| universe short Rank IC | 0.156418 | **0.158330** | +0.001912 |
-| `pool_L` short Rank IC | 0.142410 | **0.144132** | +0.001722 |
-| `pool_L` short Top100 excess | 11.3773 bps | **11.7543 bps** | +0.3770 bps |
-| `pool_L` next Rank IC | 0.007140 | **0.007839** | +0.000699 |
-| `pool_L` next Top100 excess | 17.1714 bps | **17.7934 bps** | +0.6219 bps |
-| positive next months / half-years | 37/48; 8/8 | **38/48; 8/8** | +1 month; unchanged halves |
-| Top100 fee8 cumulative | 9891.7 bps | **10193.0 bps** | +301.3 bps |
-| cumulative net excess versus matching `pool_L` | 4828.6 bps | **5129.9 bps** | +301.3 bps |
-| Top1000 first/last 100-name bucket | 17.17/0.29 bps | **17.79/0.46 bps** | head-tail spread +0.46 bps |
+| metric | archived v4 | corrected v6 |
+| --- | ---: | ---: |
+| universe short Rank IC | 0.156418 | **0.158330** |
+| `pool_L` next Rank IC | 0.007140 | **0.007839** |
+| `pool_L` next Top100 excess | 17.1714 bps | **17.7934 bps** |
+| positive next months / half-years | 37/48; 8/8 | **38/48; 8/8** |
+| Top100 fee8 cumulative | 9891.7 bps | **10193.0 bps** |
 
-`opening_model` 的全样本均值全面小幅提高，8 个半年仍全部为正，因此 decision-state 因果修正没有
-解释掉 v4 结果。但这不是强分期胜利：source run next excess 只赢 `26/48` 个月和 `492/969` 天，
-v4/source-run 月度、日度相关性分别为
-`0.9890/0.9842`。Top1000 十桶顺序 Spearman 两者均为 `0.9879`；v6 的提升集中在前 100 名，十桶平均
-反而从 `4.50` 小降至 `4.38 bps`，收益分布形状和极端尾部数量基本不变。
-
-Decision：本轮结果以短名 `opening_model` 晋级为最新信号/模型基准；对应的 `opening_cache` 成为后续
-标准 cache 口径。当前证据只覆盖信号层；在 `opening_model` 上重跑
-unified capacity/no-refill/visible-refill 验收之前，不机械继承或覆盖 v4 的策略层产物。固定四图、
-compact CSV、三份 trace 和 SHA-256 manifest 归档于
-`experiments/evidence/backtests/nn_delay6_v6_decision_clock_state_36m_2022_2025_w0931_0940_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/`。
-当前短入口为 `experiments/evidence/baselines/opening_model/`，名称与不可变来源映射见
-`experiments/canonical/opening.toml`。
+结果小幅全面提高，但只赢 `26/48` 月，属于同一信号的因果修正，不是强分期胜利。Decision：接受为最新
+信号基准；在其上重跑统一策略验收前，不继承 v4 的策略晋级结论。来源映射见
+[canonical opening registry](../experiments/canonical/opening.toml)。
 
 ### 10:01-10:10 日内窗口衰减（2026-07-30，已完成）
 
-本轮以 09:31 canonical multiden 为唯一模板，只修改十分钟决策窗口和对应 cache/label lineage。训练读取
-`10:01-10:10` mixed-w030 cache；pool analysis 读取同窗口 next-close label。44,993,233 行 prediction
-全部匹配 label，因此不存在训练特征/label 窗口错配，也不存在分析 join 缺失。
+只修改十分钟窗口及对应 cache/label lineage；44,993,233 行 prediction 全量匹配同窗口 label。
 
-| metric | 09:31-09:40 | 10:01-10:10 | change |
-| --- | ---: | ---: | ---: |
-| universe short Rank IC | 0.156418 | **0.253118** | +0.096700 |
-| `pool_L` short Rank IC | 0.142410 | **0.242669** | +0.100259 |
-| `pool_L` short background return | -8.1968 bps | -7.5606 bps | +0.6362 bps |
-| `pool_L` short Top100 absolute return | **3.1805 bps** | 0.1153 bps | -3.0652 bps |
-| `pool_L` short Top100 excess | **11.3773 bps** | 7.6759 bps | -3.7014 bps |
-| positive short Top100 absolute months / days | **41/48; 648/969** | 23/48; 503/969 | -18 months; -145 days |
-| positive short Top100 excess months / days | 48/48; 946/969 | **48/48; 968/969** | unchanged months; +22 days |
-| `pool_L` next Rank IC | **0.007140** | 0.001836 | -0.005304 |
-| `pool_L` next Top100 excess | **17.1714 bps** | 6.5491 bps | -10.6223 bps |
-| positive next months / half-years | **37/48; 8/8** | 29/48; 6/8 | -8 months; -2 half-years |
-| Top100 fee8 cumulative | **9891.7 bps** | 2708.5 bps | -7183.2 bps |
-| cumulative net excess versus each window's matching `pool_L` | **4828.6 bps** | -317.9 bps | -5146.5 bps |
-| Top1000 first/last 100-name bucket | **17.17/0.29 bps** | 6.55/0.99 bps | head separation 收窄 |
+| metric | 09:31-09:40 | 10:01-10:10 |
+| --- | ---: | ---: |
+| universe short Rank IC | 0.156418 | **0.253118** |
+| short Top100 absolute return | **3.1805 bps** | 0.1153 bps |
+| `pool_L` next Top100 excess | **17.1714 bps** | 6.5491 bps |
+| positive next months / half-years | **37/48; 8/8** | 29/48; 6/8 |
+| Top100 fee8 cumulative | **9891.7 bps** | 2708.5 bps |
 
-10:01 的 short Rank IC 显著更高，short Top100 excess 也保持 48/48 月、968/969 日为正；但 Top100
-短期绝对收益已从 `3.1805 bps` 降至接近零的 `0.1153 bps`，正收益月份从 41 降到 23。结合
-`pool_L` short background 为 `-7.5606 bps`，更准确的解释是稍晚窗口稳定识别“跌得更少”的股票，
-而不是继续捕获正向短期头部收益。与此同时，隔夜 next Rank IC、Top100 excess、分期稳定性和费后累和
-均大幅下降；10:01 费用后累和相对同窗口 `pool_L` 已为负，opening edge 的可交易部分在半小时内明显衰减。
-
-固定图 1 上方面板比较 short universe Rank IC，下方面板比较 `pool_L` short Top100 excess。累和图
-上方面板同时画出两个窗口各自的 `pool_L`，下方面板固定使用 `pool_l` 模式：每条模型线减去对应窗口的
-`pool_L`，并省略两条 `pool_L=0` 零信息线。
-
-Top1000 图使用 `9,688/9,690` 个完整截面；2022H2 有两个 `pool_L` 截面少于 1,000 只，只从
-Top1000 诊断剔除，Top100 主验收仍使用全部 9,690 个截面。最终固定四图为 short IC + short Top100 excess、
-Top100 fee8 累和、Top1000 平滑分桶、Top1000 十组 100 bps 收益分布。归档位置为
-`experiments/evidence/backtests/nn_delay6_clock_state_36m_2022_2025_w1001_1010_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/`。
-
-Decision：10:01 作为 completed decay checkpoint 保留，不替换 09:31 opening policy。由于信号层与费用后
-曲线均明显落后，不继续做该窗口的 downstream capacity/realistic promotion audit；继续完成提交前已固定的
-11:01 与 14:01 窗口，形成完整时点衰减曲线。
+10:01 更稳定地识别“跌得较少”的股票，但 opening edge 的隔夜与费后部分明显衰减。Decision：归档为
+completed decay checkpoint，不做 downstream promotion audit，也不替换 09:31 policy。
 
 ### Ordinary 328 mech v3 cap-cache（2026-07-21，已完成）
 
-完成产物对应
-`nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_capcache_896_gelu_mse_v1`，
-而不是此前在文档中仍标记 `running` 的旧 `histavg_activity` 名称。前者是为解决内存问题做的单 shard、
-`1536Gi` 归因性重跑，训练和 pool-internal analysis 均已完成。
+最终完成的是 `mech328_v3_capcache_896` 单 shard 归因性重跑，而非早期 `histavg_activity` 任务：
 
-- `pool_L` short/next internal excess：`11.1004/16.3318 bps`；
-- `pool_L` short/next Rank IC：`0.138516/0.006657`；
-- `pool_L` short/next 正月：`48/48` 与 `38/48`；
-- artifact：
-  `experiments/results/backtests/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_capcache_896_gelu_mse_v1/`；
-- metrics：
-  `experiments/results/metrics/nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_mech328_v3_capcache_896_gelu_mse_v1_metrics_by_{year,month}.csv`。
+- `pool_L` short / next excess：`11.1004 / 16.3318 bps`；
+- short / next Rank IC：`0.138516 / 0.006657`；
+- next 正月：`38/48`。
 
-两个旧-cache 候选的日度/月度 next excess 相关性分别为 `0.987/0.994`，pruned 只平均领先
-`0.6375 bps`，因此 cache v4 先只重跑 auction-pruned 主线。普通 328 v4 保留为条件归因实验：
-只有主线在 fixed-clock +6s label/cache v4 上明显掉档时才补跑。
+它强于 mech328 v2、略低于 auction-pruned。Decision：作为普通 328 对照保留，不再补跑新 cache 主线。
 
 ### Fixed-clock +6s state cache 与 auction-pruned 验收（2026-07-17~22，已完成）
 
-ClickHouse `stock.tick` 在状态未变化时可以不写一条 3 秒快照，因此“下一条物理更新距离超过 5 秒”
-不能直接解释为 stale 或缺失；反过来，取消阈值后继续数两条更新又会把逻辑 +6 秒入场漂移到
-9、12、15 秒甚至更晚。新口径把执行时钟和源状态时间拆开：
+`stock.tick` 只在状态变化时写行，因此“向后数两条更新”不能代表固定 6 秒。新口径把执行时钟与源状态
+时间拆开：
 
 ```toml
 [labels]
-entry_tick_delay = 2                 # 只保留为名义/兼容审计字段
 entry_alignment = "clock_state"
 entry_clock_delay_seconds = 6
 future_alignment = "clock_state"
 require_entry_after_cross_section_ready = true
 ```
 
-- `entry_timestamp` 是固定的逻辑 +6 秒；`entry_source_timestamp` 是该时刻之前最后一条状态，
-  `entry_state_age_seconds` 记录携带时长。
-- sell start/end 同样以逻辑边界做 backward point-in-time state lookup，禁止读取边界之后才出现的 tick。
-- 同 `date × symbol × exchange timestamp` 的 revision 仍先按最新本地接收时间和累计成交状态确定性去重。
-  固定时钟消除了重复行对 entry 时间的影响，但重复 revision 仍会改变盘口值和 row-lag/diff/path 特征。
-- 不再配置 `entry_max_gap_seconds` 或 `max_future_gap_seconds`；真正的数据健康度需要独立 heartbeat、
-  sequence 或接收延迟证据，不能由单股票“多久没变化”代理。
+entry 和 sell 边界均做 backward point-in-time lookup，并记录 source timestamp/state age；同时间戳 revision
+先确定性去重。7 个年度 base、7 个 mixed target 及两组 8-shard 训练均完成。
 
-新缓存从 ClickHouse 原始行重新计算，不原地修改旧 parquet：
+| run | short Rank IC | next Rank IC | next excess bps | next 正月 | fee8 cumulative bps |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| mech328 v2 | 0.154160 | **0.008054** | 14.3174 | **39/48** | 8508.0 |
+| v4 control, 325 features | 0.156070 | 0.006411 | 16.8024 | 38/48 | 9713.0 |
+| v4 multiden, 350 features | **0.156418** | 0.007140 | **17.1714** | 37/48 | **9891.7** |
 
-```text
-base:
-/mnt/output/opening_strength_fit/cache/
-opening_2019_2025_label_v4_clock6_state_unique_base_mcap_lag1/
-
-mixed w030:
-/mnt/output/opening_strength_fit/cache/
-opening_2019_2025_label_v4_clock6_state_unique_mixed_w030_mcap_lag1/
-
-image:
-registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260717-clock-state-delay6-v4
-digest: sha256:4c397a1fb4b505f51c8390c792baae56fa6a57fa3d96927a4348496fef536e75
-```
-
-仅 v4 是正式运行镜像。最初 v1 因既有 `.dockerignore` 未排除本地 `.env`，发现后立即删除全部 7 个
-刚启动的 Job；v2 从干净基础镜像完整重建并通过“容器内无 `.env`”检查，v3 只在干净 v2 上覆盖
-fixed-clock 代码，v4 再加入规范 cache 路径和兼容链接去重，并把 source revision 固定到
-`0a91a582fc2149336405c228e7e7825b1ef808c5`。v1 必须从 registry 删除并轮换其中涉及的凭据；
-不得再次拉取或运行。
-
-2019-04-19 同日 A/B 使用相同 2,326,300 条原始行和 1,162,995 个去重后状态。fixed-clock 有效覆盖率
-为 `38,745/39,115=99.0541%`，conservative tick2 为 `38,740/39,115=99.0413%`；二者
-`valid_both/new_only/old_only/invalid_both` 分别为 `38,732/13/8/362`。新口径所有有效 entry
-都是 6 秒；source state age 的 P50/P95/P99/max 为 `0/0/3/6` 秒。7 个年度 base 和 7 个 mixed target
-均已完成。v4 集群首日 smoke 中，2019-01-02 得到 `36,358` 行、`35,570` 个 valid label，T-1
-reference 为 2018-12-28；两组 auction-pruned 训练随后各完成 8 个半年 shard。
-
-同日完成 PVC cache layout v4 迁移：成品只做同文件系统 rename，最终根目录只保留 7 个规范目录；
-旧失败目录、13 个遗留 heartbeat lock、92 个退化 alias 产物均删除。PVC 不支持可靠 symlink、hard-link
-或 reflink，因此不保留旧路径兼容层，仓库内 run/Job 已统一改写为规范路径。旧 18 个月 mixed-w030
-单文件与 v1 年度分片在 `2020-08-03..2022-01-28` 的 16,748,169 行、184 列及关键键/标签哈希完全
-一致，已删除并释放 7,593,748,386 bytes；对应旧模型配置改读年度规范目录。
-
-两组 pool-internal analysis 都保留 `47,333,122/47,333,122` 行，覆盖 9,690 个 decision groups、
-48 个月和 10 个 clocks。与当时 incumbent 的主 summary 如下：
-
-| run | universe short Rank IC | `pool_L` short Rank IC | `pool_L` next Rank IC | short excess bps | next excess bps | next 正月 | Top100 fee8 net cumulative bps | fee8 net cumulative excess vs `pool_L` bps |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| mech328 v2 | 0.154160 | 0.142022 | **0.008054** | 10.4377 | 14.3174 | **39/48** | 8508.0 | 3445.8 |
-| clock6 v4 control, 325 features | 0.156070 | 0.141574 | 0.006411 | 11.2267 | 16.8024 | 38/48 | 9713.0 | 4649.8 |
-| clock6 v4 multi-den, 350 features | **0.156418** | **0.142410** | 0.007140 | **11.3773** | **17.1714** | 37/48 | **9891.7** | **4828.6** |
-
-半年 `pool_L` next excess 全部为正：
-
-| run | 2022H1 | 2022H2 | 2023H1 | 2023H2 | 2024H1 | 2024H2 | 2025H1 | 2025H2 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| mech328 v2 | 23.09 | **12.44** | 22.95 | 9.83 | 13.82 | 8.26 | 10.40 | 14.99 |
-| clock6 v4 control | 27.31 | 10.42 | 31.06 | 8.33 | 16.91 | **14.16** | 15.08 | **15.46** |
-| clock6 v4 multi-den | **28.49** | 9.77 | **32.29** | 9.58 | **20.97** | 11.81 | **15.93** | 13.90 |
-
-多分母相对 control 的 next excess 均值只增加 `0.3690 bps`；日度相关性 `0.9822`，日度胜
-`475/969` 且 paired median delta 为 `-0.2884 bps`；月度胜 `25/48`、季度胜 `8/16`、半年胜
-`5/8`，增量主要体现在均值和正尾，不能解释为统计上明确的逐期 A/B 胜出；这些分期结果保留为风险画像，
-不作为自动晋级门槛。旧-cache auction-fresh 的 next excess / fee8 累和为 `16.9692/9893.9 bps`：
-v4 control 基本复现而没有明显掉档，多分母的累和也几乎相同。
-
-两张验收图只比较 gated、dimensionless 和 multi denominator。累和图上方面板为 8 bps 净收益，
-下方面板显式使用 `pool_l` 模式，即模型累计净收益减同口径 `pool_L` 累计净收益；两边都包含各自手续费。
-上方面板保留 market 和 `pool_L` 背景线，下方面板不绘制 `pool_L=0` 的橙色零信息线：
-
-```text
-experiments/results/backtests/optimization_overlay_acceptance_clock6_v4_control_multiden_vs_mech328_v2_2022_2025/optimization_directions_overlay_acceptance.svg
-experiments/results/backtests/optimization_overlay_acceptance_clock6_v4_control_multiden_vs_mech328_v2_2022_2025/optimization_directions_net_alpha_cumulative.svg
-experiments/results/backtests/optimization_overlay_acceptance_clock6_v4_control_multiden_vs_mech328_v2_2022_2025/optimization_directions_trace.json
-```
-
-Decision at closeout：两组正式实验与 compact metrics/artifacts 全部归档。v4 control 在主 overlay gate 上
-明显高于 mech328 v2，且相对旧-cache 没有掉档；多分母的微小均值优势没有稳定分期支持。该 closeout
-判断保留为实验事实；随后项目方向选择 multiden 作为唯一 continuation candidate，control 降为 A/B
-baseline。2026-07-23 进一步取消分期胜率和单边尾部诊断的自动 gate，并依据 multiden 的因果 OOS、
-容量、执行与成本后资本收益将其晋级为当前 opening policy/incumbent；mech328 v2 降为历史 overlay
-baseline。
+multiden 相对 control 仅增加 `0.3690 bps`，月度胜 `25/48`，不是稳定逐期 A/B 胜出。Decision：接受
+fixed-clock 因果口径；multiden 作为 continuation candidate，control 保留为单变量基线。
 
 ### Unified strategy acceptance toolkit 与 fixed-clock v4 复核（2026-07-22，已完成）
 
-新命令 `osf-audit-strategy-acceptance` 将原先分散的 capacity/realistic、refill、overlap 和 tail 分析固定
-在同一 prediction/label/pool/constraint lineage。三种 policy 定义为：
+统一工具在同一候选集比较 `capacity_only`、`realistic_no_refill` 和
+`visible_pretrade_refill`。refill 只使用决策时点可见信息继续下探，不观察真实失败后再下单。
 
-1. `capacity_only`：按 score 和 per-decision capacity 分配，不加执行过滤；
-2. `realistic_no_refill`：只回放已选 child orders，被过滤或截断的名义保持现金；
-3. `visible_pretrade_refill`：回到完整候选排名，使用决策时点已经可见的 status、spread、depth、
-   capacity、整手和当日预算状态继续下探。它不是观察到真实成交失败后的瞬时二次下单。
+| run / policy | mean fill | cumulative capital net bps | bootstrap P05 bps |
+| --- | ---: | ---: | ---: |
+| control capacity-only | 100.0000% | 8989.8 | 805.8 |
+| control no-refill | 80.7803% | 7183.6 | 724.9 |
+| control visible refill | 99.9969% | 8431.1 | 209.2 |
+| multiden capacity-only | 100.0000% | 9217.9 | 1067.3 |
+| multiden no-refill | 81.3916% | 7433.4 | 1017.6 |
+| multiden visible refill | 99.9970% | **8598.7** | 497.0 |
 
-固定口径为 10 亿总资本、开盘 10 个 decision points、每点 5,000 万目标（每日目标 5 亿）、
-`turnover_diff_10t` 20% 参与率、单 decision 股票 1%、单日股票 0.5%、ask depth 25%、spread 不超过
-50 bps、8 bps fee、最小 child 1 万、100 股整手。结果覆盖 2022-2025 的 969 日、9,690 groups：
-
-| run / policy | mean fill | mean net bps vs target | cumulative capital net bps | P95 upper cap / trim bps | bootstrap P05 bps | repeated-symbol notional share |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| control capacity-only | 100.0000% | 18.5548 | 8989.8 | -9.91 / -60.61 | 805.8 | 81.39% |
-| control no-refill | 80.7803% | 14.8269 | 7183.6 | -6.98 / -46.51 | 724.9 | 80.95% |
-| control visible refill | 99.9969% | 17.4017 | 8431.1 | -9.33 / -56.96 | 209.2 | 83.32% |
-| multiden capacity-only | 100.0000% | 19.0255 | 9217.9 | -9.07 / -59.33 | 1067.3 | 81.63% |
-| multiden no-refill | 81.3916% | 15.3424 | 7433.4 | -6.27 / -45.73 | 1017.6 | 81.35% |
-| multiden visible refill | 99.9970% | 17.7476 | 8598.7 | -8.59 / -55.67 | 497.0 | 83.52% |
-
-control refill 相对 no-refill 恢复 `19.2166 pp` fill、`+2.5748 bps` mean net 和
-`+1247.5 bps` cumulative capital net；multiden 对应为 `18.6054 pp`、`+2.4052 bps` 和
-`+1165.3 bps`。因此 refill 明显改变结论，不能省略。但 control refill 仍比 capacity-only 少
-`558.7 bps`，且相对 no-refill 的 bootstrap P05 下降 `515.7 bps`、positive probability 下降
-`1.16 pp`；重复单票名义占比增加 `2.37 pp`，相邻分钟 name Jaccard/weighted overlap 也分别增加
-约 `1.19/1.08 pp`。refill 增加 unique/effective symbols，却同时提高跨分钟复用，二者不能互相替代。
-
-尾部与时间诊断给出不同侧面：control refill 的单边 P95 upper-tail cap/trim 为
-`-9.33/-56.96 bps`，48 个月中只有 `20` 个月的 P95 cap 为正，说明广泛正尾决定收益高度；但
-leave-one-month/quarter-out 的最差剩余累和仍为 `5896.2/6378.5 bps`，月块 bootstrap P05 仍为正。
-top 5 dates 占 gross PnL
-`27.82%`，去掉后仍有 `10.38 bps` net；top 5 symbols 只占 `2.50%`。因此收益不是单一股票、日期、
-月份或季度驱动，收益形态是分散在多个时点的 head/right-tail payoff。
-
-multiden 在 refill 下只比 control 多 `167.6 bps`；日度相关 `0.99875`，月/季度胜仅 `25/48`、
-`9/16`。它的 bootstrap 下界略好，仍不构成统计上明确的逐期 A/B 优势；但该不确定性作为风险画像记录，
-不否定 multiden 更高的原始 OOS、capacity 和 refill 成本后收益。
-
-Decision（2026-07-23 supersede）：refill、overlap 和 tail 都保留为统一 acceptance 的必跑诊断项，
-不再拆成单独小项目。单边 P95/P99 cap 与 trim 只衡量正尾依赖，不是一般稳健性检验；分期胜率、bootstrap
-下界、overlap 和集中度也不设置自动否决阈值。multiden visible refill 的因果成本后资本收益为正，fill
-为 `99.9970%`，相对 no-refill 增加 `1165.3 bps` 累计资金净收益，因此 multiden 晋级为当前 opening
-policy/incumbent。2026-07-29 将下一步修正为：保持该 policy 的研究口径，只把十分钟决策窗口移到
-另外 2–3 个日内时段，比较 OOS 选股能力衰减。opening policy 晋级不等同于完成持仓账本或批准实盘部署。
-完成实例与 lineage：
-
-```text
-experiments/runs/strategy_acceptance_clock6_v4_control_2022_2025_v1.toml
-experiments/runs/strategy_acceptance_clock6_v4_multiden_2022_2025_v1.toml
-experiments/evidence/backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/
-experiments/results/backtests/strategy_acceptance_clock6_v4_{control,multiden}_2022_2025_v1/
-image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260722-strategy-acceptance-v1
-digest: sha256:05323ea52c26fc1ef1a6fb1fc774f5c46ff40dbd3dd3c546ac80ff38d0cc590b
-source revision: e8902e8a4bf4d0dd2b52ad76f6dd936c2e31eec8
-```
+Decision（2026-07-23）：refill、overlap、tail 和 bootstrap 都是必跑诊断，但不设置自动否决阈值。
+multiden 成本后收益为正且 refill 相对 no-refill 增加 `1165.3 bps`，因此当时晋级 opening policy；这不等于
+完整持仓账本或实盘批准。
 
 ### Conservative cap + unique-tick cache（2026-07-16，base 已完成、target 已终止）
 
-这条线回答 2019-04-19 的重复 tick 问题，不把重复记录本身判成 label 无效。新配置在进入特征和 label
-构造前，按 `date × symbol × exchange timestamp` 去重；保留行优先取最新本地接收时间，随后以累计成交
-笔数、成交量、成交额和稳定 fingerprint 决定。因而 `entry_tick_delay = 2` 表示向后两个不同的交易所
-时间戳，而不是 DataFrame 中向后两条物理记录。最老 cache 的配置不开此开关，历史结果仍可原样复现。
-
-保守 base 只在旧覆盖率语义上增加：
-
-- `stock.daily_bar_jy` 的严格 T-1 `total/float market cap` 与 `total/float/free-float shares`；
-- `indicative_quote_v2` 和既有基础特征构造；
-- `tick_timestamp_deduplication = "latest_local_timestamp"`。
-
-明确不包含 `entry_max_gap_seconds`、`max_future_gap_seconds` 和
-`require_entry_after_cross_section_ready`。缓存路径与执行镜像为：
-
-```text
-base:
-/mnt/output/opening_strength_fit/cache/
-opening_2019_2025_label_v2_tick2_unique_base_mcap_lag1/
-
-mixed w030（尚未提交）:
-/mnt/output/opening_strength_fit/cache/
-opening_2019_2025_label_v2_tick2_unique_mixed_w030_mcap_lag1/
-
-image:
-registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260716-conservative-cache-v1
-digest: sha256:b9b50bc6ed46a95959e96865fd9ce28750b02cdfeb851571233c9ded0a01f40b
-```
-
-真实 2019-04-19 全市场查询得到 2,326,300 条原始记录和 1,162,995 个唯一时间戳；去重后 39,115
-个分钟决策样本中 38,740 个有效，覆盖率 99.0413%，T-1 reference date 为 2019-04-18。有效样本中
-35,839 个（92.51%）entry delay 为 6 秒；其余样本继续读到 9、12、15 秒等后续真实 tick，并未因超过
-5 秒而失效。七个 base Job 均从 ClickHouse 全量重建完成，耗时约 10.5-18 小时；这不是旧 parquet
-上的快速补丁。首个交易日 reference date 均早于样本日。fixed-clock 口径确认后，这组 base 只保留为
-tick-count 对照；其 mixed target 从未提交，现已标记为 superseded。
+该对照在旧 cache 语义上增加严格 T-1 cap/share、基础竞价变换，并按
+`date × symbol × exchange timestamp` 确定性去重。2019-04-19 的 39,115 个样本中 38,740 个有效，
+其中 `92.51%` 恰为 6 秒，其余会漂移到更晚真实 tick。7 个年度 base 已全量重建；fixed-clock 确认后，
+mixed target 未提交，路线标记为 superseded。
 
 ### Mech328 v3 cap-cache challenger（2026-07-16 重提记录；07-21 已完成）
 
-本轮 v3 当时只作为 `mech328_v2_robust_zscore` 的 targeted challenger，不改变当时 incumbent。实验固定使用
-同一批 328 个模型输入特征名，核心配置为：
-
-```toml
-[features]
-feature_value_transform = "mechanismized_v3_dimensionless_328"
-include_historical_daily_activity_references = false
-
-[model]
-name = "torch_mlp"
-architecture = "grouped_gated_v2"
-loss = "mse"
-# feature_standardization 未显式覆盖，Torch NN 入口默认 global_zscore。
-
-[k8s]
-shard_parallelism = 2
-
-[k8s.resources]
-memory_request = "384Gi"
-memory_limit = "768Gi"
-```
-
-解释口径：
-
-- `mechanismized_v3_dimensionless_328` 在特征值层继续做原 strict ratio-style 无量纲化：价格转 bps/tick，
-  volume/depth 使用 cache 中严格 T-1 `total_shares`，turnover/notional 使用 `total_market_cap`；count 口径不变。
-- v3 不做 `date × decision_target_timestamp` 的截面 robust-zscore；代码中该配置归一为
-  `mechanismized_v3_none`，即机制化后不再追加横截面 zscore/rank。
-- NN 入口仍保留 train-window global zscore，这是优化尺度标准化，不等价于横截面 zscore；它不会按每个
-  决策时点抹掉市场共同活跃度或截面幅度。
-
-2026-07-16 复查确认旧 mixed cache 没有市值/股本列，v3 因而为每个模型特征重复探测缺失 reference，
-并依赖全量 prior-date 60d volume/turnover fallback。原 768Gi Job 的 8 个 shard 均失败；随后临时提高到
-`1Ti/1536Gi` 的重试已按本轮决策停止。新 mixed cache 路径为：
-
-```text
-/mnt/output/opening_strength_fit/cache/
-opening_2019_2025_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1/
-```
-
-2019-2024 已完成 shard 共 69,929,811 行，`total_market_cap` / `total_shares` 仅 18,651 行缺失，
-缺失率 `0.0267%`。训练仍保留历史 same-minute surprise 与 path-shape 特征；只关闭不再需要的
-`historical_daily_activity_references` denominator 构建。兼容 fallback 代码仍保留供旧 cache 调用。
-
-内存实现同时改为按特征需求懒加载 reference，并在一个 transform 内复用同一组 shares、cap、price、depth
-和 count Series；缺失候选列不再分配整列 NaN，book-depth 的 market-cap fallback 只处理 shares 缺失行。
-这不改变 328 特征清单、模型结构、窗口、batch、学习率、epoch、loss 或 NN global zscore。
-
-验证与重提：
-
-```text
-job:   os-nn-2225-gated-v2-mech328v3-mse
-image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260716-nn-mech328-v3-capcache-v1
-digest: sha256:2dfef0f12017debcfb8758644fca307f72962cb62576ce3dcebfffef4d2b0330
-tests: 250 passed, 3 skipped
-resources: request 16 CPU / 384Gi / 1 GPU; limit 32 CPU / 768Gi / 1 GPU
-status at submit check: Running 0/8; first 2 pods Running, waiting for 2025 mixed cache dependency
-```
-
-上述 `status at submit` 只保留为历史提交快照。该低内存版本后来停止，最终由
-`mech328_v3_capcache_896` 的单 shard、`1536Gi` 重跑完成；正式结果和 artifact 路径见本节开头的
-“Ordinary 328 mech v3 cap-cache” closeout，不再把本段解释为活动任务。
+该 challenger 固定 328 特征与 grouped-gated-v2/MSE，只将值变换切到 strict ratio-style v3；不追加截面
+z-score，训练入口仍做 global z-score。旧 cache 缺市值/股本导致 reference fallback 和内存问题，低内存
+重提后来停止，最终由上文 `mech328_v3_capcache_896` 完成。早期提交状态不再视为活动任务。
 
 ### Auction-fresh causal-prune acceptance archive（2026-07-15~17，已归档）
 
-这条线不修改旧 cache 或旧实验。base cache 使用 `stock.tick` 构造分钟样本，并从
-`stock.daily_bar_jy` 按 `TradingDay < sample_date` 取得严格最近上一交易日 reference。原表市值、股本
-字段分别乘 `10000` 转成元、股，写入：
+该独立 lineage 使用严格 T-1 cap/share、因果 freshness/readiness 和 pruned feature 输入。base、mixed target、
+8 个训练 shard 与 pool analysis 全部完成。
 
-```text
-total_market_cap
-float_market_cap
-total_shares
-float_shares
-free_float_shares
-market_cap_reference_date
-market_cap_reference_lag_sessions
-```
-
-缓存与镜像：
-
-```text
-base:
-/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v3_tick2_gap5_ready_base_mcap_lag1/
-
-mixed w030:
-/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v3_tick2_gap5_ready_mixed_w030_mcap_lag1/
-
-image:
-registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260715-auction-fresh-mcap-lag1-v1
-digest: sha256:1ccde06592cf99313112cfc5b0f667a91d448a3818030b072a278cf139d42a33
-```
-
-任务依赖和提交状态：
-
-| stage | run/job family | resource | final status | dependency |
-| --- | --- | --- | --- | --- |
-| base | `build_delay2_{2019..2025}_auction_fresh_cache_v1` / `os-cache-auction-fresh-{year}` | CPU，单 Job request `8 CPU / 256Gi` | 7 个 Job `completed`、零重启 | ClickHouse `stock.tick` + `stock.daily_bar_jy` |
-| mixed target | `build_delay2_{2019..2025}_auction_fresh_mixed_w030_target_v1` / `os-target-auction-fresh-{year}` | CPU，单 Job request `8 CPU / 256Gi` | 7 个 Job `completed` | 对应年度 base 完成 + 既有 next-close label |
-| model | `nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1` / `os-nn-auction-fresh-pruned-v1` | GPU sharded training，8 completions / parallelism 2，单 Pod request `16 CPU / 512Gi / 1 GPU` | 8 个半年 shard completed；metrics 已同步 | 2019-2025 七个 mixed target 全部完成 |
-| pool-internal analysis | `os-analyze-nn-auction-fresh-pruned-v1` | CPU，`8 CPU / 256Gi` request | completed；join 后 `44,033,943/44,033,943` prediction rows retained | model predictions + delay2 next-close labels |
-
-首个样本交易日的集群日志分别引用 `2018-12-28`、`2019-12-31`、`2020-12-31`、
-`2021-12-31`、`2022-12-30`、`2023-12-29`、`2024-12-31`，均严格早于 2019-2025 各年首个
-样本日。2019 少 2 个、2021 少 1 个 reference symbol；缺失保持 null，不退回当日或错误前填。
-
-模型配置的 prune 口径保留 `mid_price + spread_bps` 两自由度价格基底，删除模型输入中的
-`ask_price_1`、`bid_price_1`、`spread_abs`；原始竞价 min/max 仅用于生成 range/position 派生量后删除；
-queue response 使用和名称一致的 1 分钟 horizon。数据层同时要求 entry/outcome tick 最大间隔 5 秒，且
-entry 必须晚于同一 decision group 的完整截面 ready timestamp。
-
-五个市值/股本业务字段会保留在 cache 中，既可供其他任务直接使用，也会被当前 mechanismized v3 作为
-support reference，把名义金额、盘口量和成交量归一化到公司规模；它们不作为五个 raw feature 直接进入
-当前模型矩阵。两个 reference metadata 字段只用于审计并显式列为非特征列。
-
-验收结果（2022-2025，`pool_L` Top100，8 bps fee；对比 mech328 v2 和 gated v2）：
-
-| metric | auction-fresh pruned v1 | mech328 v2 | gated v2 |
+| metric | auction-fresh | mech328 v2 | gated v2 |
 | --- | ---: | ---: | ---: |
 | universe short Rank IC | 0.150489 | 0.154160 | **0.157623** |
-| pool_L short Rank IC | 0.137495 | 0.142022 | **0.144034** |
-| pool_L next excess bps | **16.9692** | 14.3174 | 13.2768 |
+| `pool_L` next excess bps | **16.9692** | 14.3174 | 13.2768 |
 | positive next months | 38/48 | **39/48** | **39/48** |
-| Top100 next net cumulative, 8 bps | **9893.9** | 8508.0 | 8003.8 |
-| cumulative excess vs pool_L | **8221.6** | 6936.8 | 6432.6 |
-| quarterly next-excess wins | **11/16** | 3/16 | 2/16 |
+| Top100 fee8 cumulative bps | **9893.9** | 8508.0 | 8003.8 |
 
-Interpretation: 这轮收益验收胜出，但 short 排序力退化。日度 `pool_L` next excess 的均值/中位数为
-`16.97/15.28 bps`，日胜率 `58.0%`，高于 mech328 v2 的 `14.32/13.52 bps` 和 `57.8%`；但日度标准差
-升至 `79.5 bps`，高于 mech328/gated 的约 `70.4 bps`。因此增量更像严格因果数据链路和 payoff
-对齐带来的经济收益，而不是更强的 short ranker。
-
-Downstream acceptance（t10p20 capacity-only，8 bps fee；2026-07-17 补充）：
-
-| metric | auction-fresh pruned v1 | LGBM pruned 328 | MLP base |
+| downstream metric | auction-fresh | LGBM 328 | MLP base |
 | --- | ---: | ---: | ---: |
-| capacity acceptance cumulative net bps | **9244.5** | 6009.2 | 7657.0 |
+| capacity cumulative net bps | **9244.5** | 6009.2 | 7657.0 |
 | realistic mean fill | 0.8073 | 0.8022 | **0.8093** |
 | realistic cumulative net bps | **7323.9** | 4705.3 | 6113.0 |
 
-Exposure：相对 gated v2，auction-fresh 的活跃度暴露略降但仍高，`turnover_diff_10t/30t`
-`selected_mean_z` 为 `1.146/1.114`，Top decile share `48.0%/46.3%`；size 暴露从 gated v2 的
-log market-cap `z=0.318/0.278` 降到近中性（`market_cap z=-0.024`，`float_market_cap z=-0.020`）。
-
-Tail decomposition：capacity selected raw gross `27.08 bps`（fee 后 `19.08 bps`），单边 P95
-upper-tail cap 后 `-1.51 bps`、P99 cap 后 `21.26 bps`；realistic selected raw gross
-`21.58 bps`（fee 后 `15.12 bps`），P95 cap 后 `-0.29 bps`、P99 cap 后 `17.18 bps`。P95 右尾占 notional
-约 `5.8%/5.6%`，却贡献 `79.62/61.58 bps`，非尾部背景为 `-52.54/-40.01 bps`。
-
-Decision: 归档为通过 Top100、capacity 和 first-pass realistic 收益 gate 的 causal-data challenger。
-short IC 退化与 P95 右尾依赖作为诊断记录，不构成自动否决；该旧-cache lineage 随后由 fixed-clock v4
-supersede。下一步必须做 refill、完整资金预算、overlap 与 market-state 拆解。
-
-Artifacts:
-
-```text
-experiments/results/metrics/
-nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1_metrics_by_year.csv
-nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1_metrics_by_month.csv
-
-experiments/results/backtests/
-nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1/
-
-experiments/results/backtests/
-optimization_overlay_acceptance_auction_fresh_pruned_vs_mech328_v2_gated_v2_2022_2025/
-
-experiments/results/backtests/
-capacity_audit_nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_t10p20_capacityonly_v1/
-capacity_acceptance_nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_t10p20_capacityonly_fee8bps_v1/
-execution_context_auction_fresh_pruned_t10p20_v1/
-realistic_acceptance_auction_fresh_pruned_2022_2025_t10p20_execctx_v2/
-exposure_audit_nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_core_v1/
-exposure_audit_nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_size_industry_v1/
-tail_decomposition_auction_fresh_pruned_t10p20_execctx_v1/
-rank_bucket_reaudit_auction_fresh_pruned_2022_2025_v1/
-multiscale_bucket_diag_auction_fresh_pruned_2022_2025_v1/
-multiscale_bucket_diag_mech328_v2_2022_2025_v1/
-rank_bucket_comparison_auction_fresh_pruned_vs_mech328_v2_2022_2025_v1/
-
-figures:
-optimization_directions_overlay_acceptance.svg
-optimization_directions_net_alpha_cumulative.svg
-pool_l_20_bucket_return_comparison.svg
-top1000_20_bucket_return_comparison.svg
-```
+Decision：通过 Top100、capacity 和 first-pass realistic 收益 gate；short IC 退化与右尾依赖记录为诊断。
+该 lineage 随后由 fixed-clock v4 supersede。
 
 ### Historical overlay baseline：mech328 v2
 
 | metric | gated v2 | XS rank | mech328 v1 | mech328 v2 |
 | --- | ---: | ---: | ---: | ---: |
 | universe short Rank IC | 0.157623 | **0.161260** | 0.160371 | 0.154160 |
-| pool_L next excess bps | 13.2768 | 13.7351 | 11.7491 | **14.3174** |
+| `pool_L` next excess bps | 13.2768 | 13.7351 | 11.7491 | **14.3174** |
 | positive next months | 39/48 | 37/48 | 33/48 | **39/48** |
-| Top100 next net cumulative, 8 bps | 8003.8 | 8225.9 | 7263.6 | **8508.0** |
+| Top100 fee8 cumulative bps | 8003.8 | 8225.9 | 7263.6 | **8508.0** |
 
-Decision at the time: mech328 v2 是 pool overlay incumbent；XS rank 是 short 排序锚；mech328 v1 和
-symbol-zscore 不晋级。该判断后来由 fixed-clock v4 multiden 的完整信号与 downstream evidence
-supersede；mech328 v2 当前只作 historical overlay baseline。
-
-Rank/bucket boundary：2022-2025 的 9,690 个 decision groups 中，Top1000 单股 pair accuracy
-为 `49.45%`，Top100 对 Tail100 为 `48.07%`。第一百股桶均值/单股中位数为
-`+14.317/-44.942 bps`，P99 为 `+1624.81 bps`，说明正均值主要来自右尾；每时刻 Top100
-组合收益的中位数 `+11.76 bps` 只衡量组合时间稳定性，不能解释单股 IC。下一步按组对单股收益做
-P95/P99 upper-tail cap/trim，并拆分非尾部背景、尾部发生率和尾部严重程度；这些输出用于收益来源诊断，
-不作为自动晋级 gate。
-
-Artifacts:
-
-```text
-experiments/results/backtests/optimization_overlay_acceptance_gated_v2_dimensionless_2022_2025/
-experiments/results/backtests/optimization_overlay_acceptance_gated_v2_mech328_v1_v2_2022_2025/
-experiments/results/backtests/rank_bucket_reaudit_old3_mech328_v2_2022_2025_v1/
-experiments/results/backtests/mech328_v2_top1000_pairwise_audit_v1/
-```
+Decision at the time：mech328 v2 为 overlay incumbent，XS rank 为 short 排序锚；之后被 fixed-clock v4
+multiden supersede，当前只作历史基线。
 
 ### First-pass realistic replay
 
@@ -630,34 +200,12 @@ experiments/results/backtests/mech328_v2_top1000_pairwise_audit_v1/
 | MLP base | 0.809290 | 0.635732 | 12.6171 | 6113.0 |
 | auction-fresh pruned | 0.807326 | 0.596713 | 15.1165 | 7323.9 |
 
-Artifacts:
-
-```text
-experiments/results/backtests/realistic_acceptance_lgbm328_2022_2025_t10p20_execctx_v2/
-experiments/results/backtests/realistic_acceptance_mlp_base_2022_2025_t10p20_execctx_v2/
-experiments/results/backtests/realistic_acceptance_auction_fresh_pruned_2022_2025_t10p20_execctx_v2/
-experiments/results/backtests/execution_context_{lgbm328,mlp_base}_t10p20_v1/
-experiments/results/backtests/execution_context_auction_fresh_pruned_t10p20_v1/
-experiments/results/backtests/ask_level_attribution_{lgbm328,mlp_base}_t10p20_v1/
-```
-
-Limitations: selected-order replay 不 refill 低排名股票，不建立同日 turnover budget，不模拟完整持仓/退出/
-资金复用；ask2-10 上下文缺失。它是下一阶段实现起点，不是完整策略验收。
+限制：selected-order replay 不 refill、不维护完整同日预算/持仓/退出，且缺 ask2-10 上下文。它是统一策略
+验收的前身，不是完整策略回测。
 
 ## 状态与归档
 
-Run status 只使用：`queued`、`running`、`completed`、`canceled`、`superseded`。未知状态必须使
-experiment audit 失败。完成的训练 run 应有 metrics；artifact-only run 按 kind 判断，不强制训练 metrics。
+Run status 只允许 `queued`、`running`、`completed`、`canceled`、`superseded`；未知状态必须使 audit 失败。
+训练 run 完成时应有 metrics，artifact-only run 按 kind 验收 summary、trace 和成功标记。
 
-目录约定：
-
-```text
-experiments/runs/<run_id>.toml       实验定义；run.id 与文件名一致
-experiments/jobs/<run_id>*_job.yaml  可执行 K8s manifest
-experiments/results/                 ignored compact mirror
-output/artifacts/<run_id>/           ignored 当前同步副本
-output/legacy/                       ignored 历史/debug 副本
-```
-
-新记录追加顺序：先更新 TOML status 与 trace，再在本文件的对应日期追加一条固定结构记录；不要再维护
-重复的全量 run/path 索引。
+新记录先更新 TOML status 与 trace，再在本文件对应日期增加一条结论；不要维护重复的全量 run/path 索引。

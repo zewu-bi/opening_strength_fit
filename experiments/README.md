@@ -15,8 +15,8 @@
 | `archive/` | 已终止路线的配置、实现快照与证据；不参与当前入口和契约 | tracked |
 | `results/` | 本地/PVC 结果 mirror | ignored |
 
-cache、prediction、逐行 replay、pickle、模型和大 Parquet 不进入 Git。它们由 run config、Job、manifest、
-代码 revision 和 evidence trace 定位。
+cache、prediction、逐行 replay、模型和大 Parquet 不进入 Git；通过 run config、Job、manifest、代码
+revision 和 evidence trace 定位。
 
 ## Run 契约
 
@@ -38,11 +38,9 @@ queued -> running -> completed
 queued/completed -> superseded
 ```
 
-历史 run id 保持原样，不能为了美化名称改写已完成 Job、trace 或 PVC lineage。2026-07-31 起，新文件和
-任务使用 `opening_<window>_<semantic_change>` 短名；固定在 baseline 中的模型、feature、期间和 seed
-不重复写入名称，也不再追加无信息量的 `v1/v2/v6`。例如 `opening_model_1001`、
-`opening_model_longhold`。发生语义变化必须创建新 run，不得覆盖历史配置；名称冲突时追加真实变化或
-实验日期，而不是数字版本。完整规则见 [canonical README](canonical/README.md)。
+历史 run id、Job、trace 和 PVC lineage 不改名。新任务使用
+`opening_<window>_<semantic_change>`；语义变化创建新 run，不覆盖历史配置。完整命名规则见
+[canonical README](canonical/README.md)。
 
 ## 完成条件
 
@@ -65,17 +63,9 @@ osf-sync-experiment-artifacts \
   --artifacts --record
 ```
 
-默认 tracked 目标为 `experiments/evidence/`。单文件上限 1MB，禁止 Parquet、pickle 和模型二进制；需要
-审阅的大表应先聚合。每个 `evidence/backtests/<run_id>/` 必须存在同名 run TOML。
-
-`opening_model` 额外保留 short IC + next excess、Top100 累和、Top1000 平滑分桶和 Top1000 十组
-收益分布四图，以及每图的 compact CSV/trace。已有本地 mirror 时运行 `make evidence-four-figures`
-刷新；源 run 的长 ID 只保留在 archived bundle 和 trace 中。旧 v4 bundle 可用
-`make evidence-v4-four-figures` 单独复画。
-
-日内窗口衰减实验也沿用同一四图契约；每个完成窗口使用训练 run id 建独立 evidence 目录，并额外保留
-pool summary 与 SHA-256 manifest。明显落后于 09:31 基准的窗口归档为 diagnostic checkpoint，不进入
-canonical evidence，也不替换 opening policy。
+默认 tracked 目标为 `experiments/evidence/`。单文件上限 1MB，禁止 Parquet、pickle 和模型二进制；大表
+先聚合。每个 `evidence/backtests/<run_id>/` 必须有同名 run TOML。正式模型和日内窗口实验沿用固定四图、
+compact CSV、trace 与 SHA-256 manifest 契约；具体内容见 [evidence README](evidence/README.md)。
 
 PVC 布局和故障处理见 [runbook](../docs/runbook.md)，当前研究判断见
 [project brief](../docs/project_brief.md)。
