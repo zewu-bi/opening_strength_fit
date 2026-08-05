@@ -8,6 +8,10 @@ CONFIG = ROOT / "experiments/runs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1.t
 W0931_JOBS = ROOT / "experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w0931_jobs.yaml"
 W1001_JOBS = ROOT / "experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w1001_jobs.yaml"
 W1401_JOBS = ROOT / "experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w1401_jobs.yaml"
+TRAINING_IMAGE = (
+    "registry.corp.highfortfunds.com/bizewu/opening-strength-fit@"
+    "sha256:cb7120cf0549ddb4a91533587b04aaf38847b5b78c13ddfbe586d10e22b106b4"
+)
 
 
 def test_required_gpu_models_render_into_the_same_node_affinity_term() -> None:
@@ -59,6 +63,7 @@ def test_dataset350_training_matrix_has_requested_twelve_cases() -> None:
     assert config["k8s"]["resources"]["cpu_request"] == "8"
     assert config["k8s"]["resources"]["cpu_limit"] == "16"
     assert config["k8s"]["resources"]["memory_request"] == "256Gi"
+    assert config["k8s"]["helper_image"] == TRAINING_IMAGE
     assert config["k8s"]["required_node_label_values"]["gpu_model"] == [
         "A100-80",
         "H100-80",
@@ -91,6 +96,7 @@ def test_dataset350_w0931_uses_one_indexed_job_per_label() -> None:
     assert "--label-input" in text
     assert "--run-id" in text
     assert "h5m" not in text
+    assert text.count(f"image: {TRAINING_IMAGE}") == 1
 
 
 def test_dataset350_w1001_queues_five_indexed_label_jobs() -> None:
@@ -115,6 +121,7 @@ def test_dataset350_w1001_queues_five_indexed_label_jobs() -> None:
     assert 'limits: {cpu: "16", memory: 384Gi' in text
     assert "- key: gpu_model" in text
     assert "h5m" not in text
+    assert text.count(f"image: {TRAINING_IMAGE}") == 1
 
 
 def test_dataset350_w1401_queues_two_indexed_label_jobs() -> None:
@@ -135,3 +142,4 @@ def test_dataset350_w1401_queues_two_indexed_label_jobs() -> None:
     assert 'limits: {cpu: "16", memory: 384Gi' in text
     assert "- key: gpu_model" in text
     assert "h5m" not in text
+    assert text.count(f"image: {TRAINING_IMAGE}") == 1
