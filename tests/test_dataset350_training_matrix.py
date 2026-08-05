@@ -14,6 +14,10 @@ TRAINING_IMAGE = (
     "registry.corp.highfortfunds.com/bizewu/opening-strength-fit@"
     "sha256:cb7120cf0549ddb4a91533587b04aaf38847b5b78c13ddfbe586d10e22b106b4"
 )
+H5M_TRAINING_IMAGE = (
+    "registry.corp.highfortfunds.com/bizewu/opening-strength-fit@"
+    "sha256:1c35beb1275aca13e5a71fd03bc13ae703078b29b3e2a744c77e386a32c4917a"
+)
 
 
 def test_required_gpu_models_render_into_the_same_node_affinity_term() -> None:
@@ -65,7 +69,7 @@ def test_dataset350_training_matrix_has_all_fifteen_cases() -> None:
     assert config["k8s"]["resources"]["cpu_request"] == "8"
     assert config["k8s"]["resources"]["cpu_limit"] == "16"
     assert config["k8s"]["resources"]["memory_request"] == "256Gi"
-    assert config["k8s"]["helper_image"] == TRAINING_IMAGE
+    assert config["k8s"]["helper_image"] == H5M_TRAINING_IMAGE
     assert config["k8s"]["required_node_label_values"]["gpu_model"] == [
         "A100-80",
         "H100-80",
@@ -163,7 +167,7 @@ def test_dataset350_h5m_jobs_cover_all_three_windows() -> None:
     assert 'requests: {cpu: "8", memory: 256Gi' in text
     assert 'limits: {cpu: "16", memory: 384Gi' in text
     assert "- key: gpu_model" in text
-    assert text.count(f"image: {TRAINING_IMAGE}") == 1
+    assert text.count(f"image: {H5M_TRAINING_IMAGE}") == 1
 
 
 def test_dataset350_label15_queue_appends_three_h5m_jobs() -> None:

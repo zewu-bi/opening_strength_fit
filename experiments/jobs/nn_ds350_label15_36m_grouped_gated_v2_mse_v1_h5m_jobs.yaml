@@ -41,7 +41,7 @@ items:
             - {key: has_gpu, operator: Equal, value: "true", effect: NoSchedule}
           containers:
             - name: trainer
-              image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:cb7120cf0549ddb4a91533587b04aaf38847b5b78c13ddfbe586d10e22b106b4
+              image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:1c35beb1275aca13e5a71fd03bc13ae703078b29b3e2a744c77e386a32c4917a
               imagePullPolicy: Always
               workingDir: /app/opening_strength_fit
               env:
