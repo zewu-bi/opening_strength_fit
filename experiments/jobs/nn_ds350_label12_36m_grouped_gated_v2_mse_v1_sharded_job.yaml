@@ -106,5 +106,5 @@ spec:
                 --output-dir "${OUT}"
           volumeMounts: [{name: output, mountPath: /mnt/output}]
           resources:
-            requests: {cpu: "16", memory: 384Gi, nvidia.com/gpu: "1"}
-            limits: {cpu: "32", memory: 640Gi, nvidia.com/gpu: "1"}
+            requests: {cpu: "16", memory: 256Gi, nvidia.com/gpu: "1"}
+            limits: {cpu: "32", memory: 384Gi, nvidia.com/gpu: "1"}

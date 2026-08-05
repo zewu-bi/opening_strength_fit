@@ -96,8 +96,8 @@ has_gpu = "true"
 [k8s.resources]
 cpu_request = "16"
 cpu_limit = "32"
-memory_request = "384Gi"
-memory_limit = "640Gi"
+memory_request = "256Gi"
+memory_limit = "384Gi"
 gpu_limit = 1
 
 [[matrix.cases]]
