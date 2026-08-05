@@ -8,6 +8,8 @@ CONFIG = ROOT / "experiments/runs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1.t
 W0931_JOBS = ROOT / "experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w0931_jobs.yaml"
 W1001_JOBS = ROOT / "experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w1001_jobs.yaml"
 W1401_JOBS = ROOT / "experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w1401_jobs.yaml"
+H5M_JOBS = ROOT / "experiments/jobs/nn_ds350_label15_36m_grouped_gated_v2_mse_v1_h5m_jobs.yaml"
+LABEL15_QUEUE = ROOT / "experiments/scripts/run_ds350_label15_training_queue.sh"
 TRAINING_IMAGE = (
     "registry.corp.highfortfunds.com/bizewu/opening-strength-fit@"
     "sha256:cb7120cf0549ddb4a91533587b04aaf38847b5b78c13ddfbe586d10e22b106b4"
@@ -34,18 +36,18 @@ def test_required_gpu_models_render_into_the_same_node_affinity_term() -> None:
     assert all(model in rendered for model in ("A100-80", "H100-80", "H20"))
 
 
-def test_dataset350_training_matrix_has_requested_twelve_cases() -> None:
+def test_dataset350_training_matrix_has_all_fifteen_cases() -> None:
     config = load_toml(CONFIG)
     cases = config["matrix"]["cases"]
-    assert len(cases) == 12
-    assert len({case["name"] for case in cases}) == 12
+    assert len(cases) == 15
+    assert len({case["name"] for case in cases}) == 15
     horizons = [case["horizon"] for case in cases]
     assert horizons.count("1m") == 3
     assert horizons.count("3m") == 3
     assert horizons.count("10m") == 2
     assert horizons.count("1h") == 2
     assert horizons.count("close") == 2
-    assert "5m" not in horizons
+    assert horizons.count("5m") == 3
 
     for case in cases:
         window_slug = case["name"].split("_h", maxsplit=1)[0].removeprefix("w")
@@ -143,3 +145,33 @@ def test_dataset350_w1401_queues_two_indexed_label_jobs() -> None:
     assert "- key: gpu_model" in text
     assert "h5m" not in text
     assert text.count(f"image: {TRAINING_IMAGE}") == 1
+
+
+def test_dataset350_h5m_jobs_cover_all_three_windows() -> None:
+    text = H5M_JOBS.read_text()
+    cases = ["w0931_0940_h5m", "w1001_1010_h5m", "w1401_1410_h5m"]
+    assert "kind: List" in text
+    assert text.count("name: os-nn-ds350-w") == 3
+    assert all(f"osf-case: {case}" in text for case in cases)
+    assert text.count("suspend: true") == 3
+    assert "suspend: false" not in text
+    assert "completionMode: Indexed" in text
+    assert "completions: 8" in text
+    assert "parallelism: 8" in text
+    assert "opening_${WINDOW}_features_350" in text
+    assert "opening_${WINDOW}_labels_h5m_v2" in text
+    assert 'requests: {cpu: "8", memory: 256Gi' in text
+    assert 'limits: {cpu: "16", memory: 384Gi' in text
+    assert "- key: gpu_model" in text
+    assert text.count(f"image: {TRAINING_IMAGE}") == 1
+
+
+def test_dataset350_label15_queue_appends_three_h5m_jobs() -> None:
+    text = LABEL15_QUEUE.read_text()
+    assert text.count("  os-nn-ds350-w") == 15
+    assert text.index("os-nn-ds350-w1401-h3m-v2") < text.index(
+        "os-nn-ds350-w0931-h5m-v2"
+    )
+    assert "os-nn-ds350-w1001-h5m-v2" in text
+    assert "os-nn-ds350-w1401-h5m-v2" in text
+    assert "all 15 ds350 label jobs completed" in text

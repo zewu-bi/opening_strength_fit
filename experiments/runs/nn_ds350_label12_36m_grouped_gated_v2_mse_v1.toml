@@ -1,8 +1,8 @@
 [run]
 id = "nn_ds350_label12_36m_grouped_gated_v2_mse_v1"
 kind = "exploration"
-description = "Twelve-case model-ready feature/label matrix: three windows x 1m/3m validation plus two windows x 10m/1h/close horizon extension; 5m deferred."
-status = "queued"
+description = "Fifteen-case model-ready feature/label matrix: three windows x 1m/3m/5m plus two windows x 10m/1h/close."
+status = "running"
 
 [data]
 source = "labeled_pvc"
@@ -189,3 +189,24 @@ window = "10:01-10:10"
 horizon = "close"
 feature_path = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_features_350"
 label_path = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_labels_hclose_v1"
+
+[[matrix.cases]]
+name = "w0931_0940_h5m"
+window = "09:31-09:40"
+horizon = "5m"
+feature_path = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_features_350"
+label_path = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_h5m_v2"
+
+[[matrix.cases]]
+name = "w1001_1010_h5m"
+window = "10:01-10:10"
+horizon = "5m"
+feature_path = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_features_350"
+label_path = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_labels_h5m_v2"
+
+[[matrix.cases]]
+name = "w1401_1410_h5m"
+window = "14:01-14:10"
+horizon = "5m"
+feature_path = "/mnt/output/opening_strength_fit/datasets/opening_1401_1410_features_350"
+label_path = "/mnt/output/opening_strength_fit/datasets/opening_1401_1410_labels_h5m_v2"
