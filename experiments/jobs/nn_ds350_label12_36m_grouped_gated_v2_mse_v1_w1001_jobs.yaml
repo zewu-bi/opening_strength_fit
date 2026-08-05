@@ -5,9 +5,9 @@ items:
     apiVersion: batch/v1
     kind: Job
     metadata:
-      name: os-nn-ds350-w1401-h1m-v2
+      name: os-nn-ds350-w1001-h1m-v2
       namespace: bizewu
-      labels: {app: os-nn-ds350-w1401-h1m-v2, osf-matrix: ds350-label12-v2, osf-window: w1401-1410, osf-case: w1401_1410_h1m}
+      labels: {app: os-nn-ds350-w1001-h1m-v2, osf-matrix: ds350-label12-v2, osf-window: w1001-1010, osf-case: w1001_1010_h1m}
     spec: &case-spec
       activeDeadlineSeconds: 1209600
       backoffLimit: 8
@@ -18,7 +18,7 @@ items:
       ttlSecondsAfterFinished: 86400
       template: &case-template
         metadata:
-          labels: {app: os-nn-ds350-w1401-h1m-v2, osf-matrix: ds350-label12-v2, osf-window: w1401-1410, osf-case: w1401_1410_h1m}
+          labels: {app: os-nn-ds350-w1001-h1m-v2, osf-matrix: ds350-label12-v2, osf-window: w1001-1010, osf-case: w1001_1010_h1m}
         spec:
           restartPolicy: Never
           imagePullSecrets: [{name: highfort}]
@@ -55,10 +55,13 @@ items:
               args:
                 - |
                   set -euo pipefail
-                  FEATURE_ROOT="/mnt/output/opening_strength_fit/datasets/opening_1401_1410_features_350"
+                  FEATURE_ROOT="/mnt/output/opening_strength_fit/datasets/opening_1001_1010_features_350"
                   case "${CASE:?missing CASE}" in
-                    w1401_1410_h1m) LABEL_DATASET=opening_1401_1410_labels_h1m_v2 ;;
-                    w1401_1410_h3m) LABEL_DATASET=opening_1401_1410_labels_h3m_v2 ;;
+                    w1001_1010_h1m) LABEL_DATASET=opening_1001_1010_labels_h1m_v2 ;;
+                    w1001_1010_h3m) LABEL_DATASET=opening_1001_1010_labels_h3m_v2 ;;
+                    w1001_1010_h10m) LABEL_DATASET=opening_1001_1010_labels_h10m_v1 ;;
+                    w1001_1010_h1h) LABEL_DATASET=opening_1001_1010_labels_h1h_v1 ;;
+                    w1001_1010_hclose) LABEL_DATASET=opening_1001_1010_labels_hclose_v1 ;;
                     *) echo "unsupported CASE=${CASE}" >&2; exit 2 ;;
                   esac
                   LABEL_ROOT="/mnt/output/opening_strength_fit/datasets/${LABEL_DATASET}"
@@ -98,13 +101,52 @@ items:
 
   - <<: *case-job
     metadata:
-      name: os-nn-ds350-w1401-h3m-v2
+      name: os-nn-ds350-w1001-h3m-v2
       namespace: bizewu
-      labels: {app: os-nn-ds350-w1401-h3m-v2, osf-matrix: ds350-label12-v2, osf-window: w1401-1410, osf-case: w1401_1410_h3m}
+      labels: {app: os-nn-ds350-w1001-h3m-v2, osf-matrix: ds350-label12-v2, osf-window: w1001-1010, osf-case: w1001_1010_h3m}
     spec:
       <<: *case-spec
       suspend: true
       template:
         <<: *case-template
         metadata:
-          labels: {app: os-nn-ds350-w1401-h3m-v2, osf-matrix: ds350-label12-v2, osf-window: w1401-1410, osf-case: w1401_1410_h3m}
+          labels: {app: os-nn-ds350-w1001-h3m-v2, osf-matrix: ds350-label12-v2, osf-window: w1001-1010, osf-case: w1001_1010_h3m}
+
+  - <<: *case-job
+    metadata:
+      name: os-nn-ds350-w1001-h10m-v2
+      namespace: bizewu
+      labels: {app: os-nn-ds350-w1001-h10m-v2, osf-matrix: ds350-label12-v2, osf-window: w1001-1010, osf-case: w1001_1010_h10m}
+    spec:
+      <<: *case-spec
+      suspend: true
+      template:
+        <<: *case-template
+        metadata:
+          labels: {app: os-nn-ds350-w1001-h10m-v2, osf-matrix: ds350-label12-v2, osf-window: w1001-1010, osf-case: w1001_1010_h10m}
+
+  - <<: *case-job
+    metadata:
+      name: os-nn-ds350-w1001-h1h-v2
+      namespace: bizewu
+      labels: {app: os-nn-ds350-w1001-h1h-v2, osf-matrix: ds350-label12-v2, osf-window: w1001-1010, osf-case: w1001_1010_h1h}
+    spec:
+      <<: *case-spec
+      suspend: true
+      template:
+        <<: *case-template
+        metadata:
+          labels: {app: os-nn-ds350-w1001-h1h-v2, osf-matrix: ds350-label12-v2, osf-window: w1001-1010, osf-case: w1001_1010_h1h}
+
+  - <<: *case-job
+    metadata:
+      name: os-nn-ds350-w1001-hclose-v2
+      namespace: bizewu
+      labels: {app: os-nn-ds350-w1001-hclose-v2, osf-matrix: ds350-label12-v2, osf-window: w1001-1010, osf-case: w1001_1010_hclose}
+    spec:
+      <<: *case-spec
+      suspend: true
+      template:
+        <<: *case-template
+        metadata:
+          labels: {app: os-nn-ds350-w1001-hclose-v2, osf-matrix: ds350-label12-v2, osf-window: w1001-1010, osf-case: w1001_1010_hclose}

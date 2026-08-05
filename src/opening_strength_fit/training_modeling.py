@@ -287,6 +287,18 @@ def fit_single_prediction_model(
             device=config_str(config, "model", "device", "auto"),
             random_state=config_int(config, "model", "random_state", 7),
             num_workers=config_int(config, "model", "num_workers", 0),
+            training_tensor_storage=config_str(
+                config,
+                "model",
+                "training_tensor_storage",
+                "auto",
+            ),
+            cuda_resident_reserve_gib=config_float(
+                config,
+                "model",
+                "cuda_resident_reserve_gib",
+                8.0,
+            ),
             gate_diagnostics_max_rows=config_int(
                 config,
                 "model",
@@ -625,6 +637,18 @@ def model_config_payload(config: dict, alpha: float) -> dict[str, object]:
             "device": config_str(config, "model", "device", "auto"),
             "random_state": config_int(config, "model", "random_state", 7),
             "num_workers": config_int(config, "model", "num_workers", 0),
+            "training_tensor_storage": config_str(
+                config,
+                "model",
+                "training_tensor_storage",
+                "auto",
+            ),
+            "cuda_resident_reserve_gib": config_float(
+                config,
+                "model",
+                "cuda_resident_reserve_gib",
+                8.0,
+            ),
             "sample_weight_col": config_str(config, "model", "sample_weight_col", ""),
             "feature_standardization": config_str(
                 config,

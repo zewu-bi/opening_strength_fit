@@ -39,6 +39,91 @@ def _torch_loss(loss: str, torch, reduction: str = "none"):
     raise SystemExit("model.loss for torch_mlp must be mse or huber")
 
 
+def _normalize_training_tensor_storage(value: str) -> str:
+    name = str(value or "auto").strip().lower()
+    aliases = {
+        "auto": "auto",
+        "cuda": "cuda_resident",
+        "cuda_resident": "cuda_resident",
+        "gpu": "cuda_resident",
+        "gpu_resident": "cuda_resident",
+        "host": "host_vectorized",
+        "host_vectorized": "host_vectorized",
+        "cpu": "host_vectorized",
+    }
+    if name not in aliases:
+        raise SystemExit(
+            "model.training_tensor_storage for torch_mlp must be auto, "
+            "cuda_resident, or host_vectorized"
+        )
+    return aliases[name]
+
+
+def _resolve_training_tensor_storage(
+    requested: str,
+    *,
+    device: str,
+    required_bytes: int,
+    free_bytes: int,
+    reserve_bytes: int,
+) -> str:
+    """Resolve the bulk tensor location without importing Torch in unit tests."""
+    mode = _normalize_training_tensor_storage(requested)
+    cuda_device = str(device).startswith("cuda")
+    if not cuda_device:
+        if mode == "cuda_resident":
+            raise SystemExit(
+                "model.training_tensor_storage='cuda_resident' requires a CUDA device"
+            )
+        return "host_vectorized"
+    if mode == "host_vectorized":
+        return mode
+
+    fits = int(free_bytes) - int(required_bytes) >= int(reserve_bytes)
+    if fits:
+        return "cuda_resident"
+    if mode == "auto":
+        return "host_vectorized"
+
+    gib = float(1024**3)
+    raise SystemExit(
+        "model.training_tensor_storage='cuda_resident' does not fit: "
+        f"requires {required_bytes / gib:.2f} GiB of training tensors with "
+        f"{reserve_bytes / gib:.2f} GiB reserved, but only {free_bytes / gib:.2f} GiB "
+        "is currently free"
+    )
+
+
+def _consume_torch_loader_seed(torch) -> int:
+    """Match the global CPU RNG draw made when a DataLoader iterator is created."""
+    return int(torch.empty((), dtype=torch.int64).random_().item())
+
+
+def _torch_random_sampler_order(torch, length: int):
+    """Match DataLoader(RandomSampler) order while keeping indices as one tensor."""
+    _consume_torch_loader_seed(torch)
+    sampler_seed = int(torch.empty((), dtype=torch.int64).random_().item())
+    generator = torch.Generator()
+    generator.manual_seed(sampler_seed)
+    return torch.randperm(int(length), generator=generator)
+
+
+def _gate_diagnostic_sample(
+    x_values: np.ndarray,
+    *,
+    rng: np.random.Generator,
+    max_rows: int,
+) -> np.ndarray:
+    max_rows = max(0, int(max_rows))
+    if max_rows <= 0 or len(x_values) == 0:
+        return x_values[:0]
+    if len(x_values) <= max_rows:
+        return x_values
+    selected = rng.choice(len(x_values), size=max_rows, replace=False)
+    selected.sort()
+    return np.ascontiguousarray(x_values[selected])
+
+
 def _torch_gate_diagnostics(
     module,
     x_values: np.ndarray,
@@ -140,6 +225,8 @@ def fit_torch_mlp_frame(
     device: str = "auto",
     random_state: int = 7,
     num_workers: int = 0,
+    training_tensor_storage: str = "auto",
+    cuda_resident_reserve_gib: float = 8.0,
     gate_diagnostics_max_rows: int = 200_000,
     feature_standardization: str = "global_zscore",
     feature_standardization_group_col: str = "symbol",
@@ -148,7 +235,7 @@ def fit_torch_mlp_frame(
     feature_value_transform_rank_method: str = "average",
     feature_value_transform_tick_size: float = 0.01,
 ) -> tuple[TorchMLPPredictionModel, dict[str, object]]:
-    torch, _nn, DataLoader, TensorDataset = _import_torch()
+    torch, _nn, _DataLoader, _TensorDataset = _import_torch()
     features = feature_columns(train, feature_limit, **(feature_filters or {}))
     if sample_weight_col:
         features = [column for column in features if column != sample_weight_col]
@@ -268,15 +355,7 @@ def fit_torch_mlp_frame(
     )
     criterion = _torch_loss(loss, torch, reduction="none")
 
-    x_tensor = torch.from_numpy(x_values)
-    y_tensor = torch.from_numpy(y_values)
-    tensors = [x_tensor, y_tensor]
-    if sample_weight is not None:
-        weight_tensor = torch.from_numpy(sample_weight)
-        tensors.append(weight_tensor)
-    dataset = TensorDataset(*tensors)
-
-    n_rows = len(dataset)
+    n_rows = len(x_values)
     validation_rows = int(n_rows * max(0.0, float(validation_fraction)))
     if validation_max_rows > 0:
         validation_rows = min(validation_rows, int(validation_max_rows))
@@ -286,23 +365,76 @@ def fit_torch_mlp_frame(
         train_mask = np.ones(n_rows, dtype=bool)
         train_mask[validation_indices] = False
         train_indices = np.flatnonzero(train_mask)
-        train_dataset = torch.utils.data.Subset(dataset, train_indices)
-        validation_dataset = torch.utils.data.Subset(dataset, validation_indices)
     else:
-        train_dataset = dataset
-        validation_dataset = None
+        validation_indices = np.empty(0, dtype=np.int64)
+        train_indices = np.arange(n_rows, dtype=np.int64)
 
-    loader_kwargs = {
-        "batch_size": int(batch_size),
-        "num_workers": int(num_workers),
-        "pin_memory": bool(str(resolved_device).startswith("cuda")),
-    }
-    train_loader = DataLoader(train_dataset, shuffle=True, **loader_kwargs)
-    validation_loader = (
-        DataLoader(validation_dataset, shuffle=False, **loader_kwargs)
-        if validation_dataset is not None
-        else None
+    diagnostic_values = _gate_diagnostic_sample(
+        x_values,
+        rng=rng,
+        max_rows=int(gate_diagnostics_max_rows),
     )
+    date_count = int(train.loc[selected_rows, "date"].nunique())
+    symbol_count = int(train.loc[selected_rows, "symbol"].nunique())
+    sample_weight_mean = None
+    sample_weight_zero_rate = None
+    if sample_weight is not None:
+        sample_weight_mean = float(sample_weight.mean())
+        sample_weight_zero_rate = float((sample_weight <= 0.0).mean())
+
+    # Include the two int64 index vectors used for the split and epoch order. The
+    # configured reserve covers model activations, optimizer state, CUDA context,
+    # and temporary batch tensors.
+    required_tensor_bytes = int(
+        x_values.nbytes
+        + y_values.nbytes
+        + (sample_weight.nbytes if sample_weight is not None else 0)
+        + (n_rows + len(train_indices)) * np.dtype(np.int64).itemsize
+    )
+    reserve_bytes = max(0, int(float(cuda_resident_reserve_gib) * 1024**3))
+    cuda_free_bytes = 0
+    cuda_total_bytes = 0
+    if str(resolved_device).startswith("cuda"):
+        cuda_free_bytes, cuda_total_bytes = (
+            int(value)
+            for value in torch.cuda.mem_get_info(torch.device(resolved_device))
+        )
+    resolved_storage = _resolve_training_tensor_storage(
+        training_tensor_storage,
+        device=resolved_device,
+        required_bytes=required_tensor_bytes,
+        free_bytes=cuda_free_bytes,
+        reserve_bytes=reserve_bytes,
+    )
+    cuda_resident = resolved_storage == "cuda_resident"
+
+    x_tensor = torch.from_numpy(x_values)
+    y_tensor = torch.from_numpy(y_values)
+    weight_tensor = torch.from_numpy(sample_weight) if sample_weight is not None else None
+    train_indices_tensor = torch.from_numpy(train_indices)
+    validation_indices_tensor = torch.from_numpy(validation_indices)
+    if cuda_resident:
+        x_tensor = x_tensor.to(resolved_device)
+        y_tensor = y_tensor.to(resolved_device)
+        if weight_tensor is not None:
+            weight_tensor = weight_tensor.to(resolved_device)
+        train_indices_tensor = train_indices_tensor.to(resolved_device)
+        validation_indices_tensor = validation_indices_tensor.to(resolved_device)
+        del x_values, y_values, train_indices, validation_indices
+        if sample_weight is not None:
+            del sample_weight
+
+    def take_batch(tensor, indices):
+        values = tensor.index_select(0, indices)
+        if not cuda_resident and str(resolved_device) != "cpu":
+            values = values.to(resolved_device)
+        return values
+
+    def batch_loss_tensors(indices):
+        batch_x = take_batch(x_tensor, indices)
+        batch_y = take_batch(y_tensor, indices)
+        batch_w = take_batch(weight_tensor, indices) if weight_tensor is not None else None
+        return batch_x, batch_y, batch_w
 
     best_state = None
     best_validation = float("inf")
@@ -314,46 +446,60 @@ def fit_torch_mlp_frame(
     max_epochs = int(max_epochs)
     for epoch in range(1, max_epochs + 1):
         module.train()
-        total_loss = 0.0
-        total_weight = 0.0
-        for batch in train_loader:
+        total_loss_tensor = torch.zeros((), dtype=torch.float64, device=resolved_device)
+        total_weight_tensor = torch.zeros((), dtype=torch.float64, device=resolved_device)
+        epoch_order = _torch_random_sampler_order(torch, len(train_indices_tensor))
+        if cuda_resident:
+            epoch_order = epoch_order.to(resolved_device)
+        for start in range(0, len(epoch_order), int(batch_size)):
+            positions = epoch_order[start : start + int(batch_size)]
+            indices = train_indices_tensor.index_select(0, positions)
             optimizer.zero_grad(set_to_none=True)
-            batch_x = batch[0].to(resolved_device, non_blocking=True)
-            batch_y = batch[1].to(resolved_device, non_blocking=True)
+            batch_x, batch_y, batch_w = batch_loss_tensors(indices)
             raw_loss = criterion(module(batch_x), batch_y)
-            if len(batch) > 2:
-                batch_w = batch[2].to(resolved_device, non_blocking=True)
+            if batch_w is not None:
                 raw_loss = raw_loss * batch_w
                 denom = torch.clamp(batch_w.sum(), min=1.0)
             else:
-                denom = torch.tensor(float(batch_y.numel()), device=resolved_device)
-            loss_value = raw_loss.sum() / denom
+                denom = raw_loss.new_tensor(float(batch_y.numel()))
+            raw_loss_sum = raw_loss.sum()
+            loss_value = raw_loss_sum / denom
             loss_value.backward()
             optimizer.step()
-            total_loss += float(raw_loss.sum().detach().cpu())
-            total_weight += float(denom.detach().cpu())
-        final_train_loss = total_loss / total_weight if total_weight else float("nan")
+            total_loss_tensor += raw_loss_sum.detach().to(dtype=torch.float64)
+            total_weight_tensor += denom.detach().to(dtype=torch.float64)
+        train_totals = torch.stack((total_loss_tensor, total_weight_tensor)).cpu().tolist()
+        final_train_loss = (
+            float(train_totals[0] / train_totals[1]) if train_totals[1] else float("nan")
+        )
 
-        if validation_loader is None:
+        if validation_rows <= 0:
             final_validation_loss = final_train_loss
         else:
+            _consume_torch_loader_seed(torch)
             module.eval()
-            total_loss = 0.0
-            total_weight = 0.0
+            total_loss_tensor = torch.zeros((), dtype=torch.float64, device=resolved_device)
+            total_weight_tensor = torch.zeros((), dtype=torch.float64, device=resolved_device)
             with torch.no_grad():
-                for batch in validation_loader:
-                    batch_x = batch[0].to(resolved_device, non_blocking=True)
-                    batch_y = batch[1].to(resolved_device, non_blocking=True)
+                for start in range(0, validation_rows, int(batch_size)):
+                    indices = validation_indices_tensor[start : start + int(batch_size)]
+                    batch_x, batch_y, batch_w = batch_loss_tensors(indices)
                     raw_loss = criterion(module(batch_x), batch_y)
-                    if len(batch) > 2:
-                        batch_w = batch[2].to(resolved_device, non_blocking=True)
+                    if batch_w is not None:
                         raw_loss = raw_loss * batch_w
                         denom = torch.clamp(batch_w.sum(), min=1.0)
                     else:
-                        denom = torch.tensor(float(batch_y.numel()), device=resolved_device)
-                    total_loss += float(raw_loss.sum().detach().cpu())
-                    total_weight += float(denom.detach().cpu())
-            final_validation_loss = total_loss / total_weight if total_weight else float("nan")
+                        denom = raw_loss.new_tensor(float(batch_y.numel()))
+                    total_loss_tensor += raw_loss.sum().to(dtype=torch.float64)
+                    total_weight_tensor += denom.to(dtype=torch.float64)
+            validation_totals = torch.stack(
+                (total_loss_tensor, total_weight_tensor)
+            ).cpu().tolist()
+            final_validation_loss = (
+                float(validation_totals[0] / validation_totals[1])
+                if validation_totals[1]
+                else float("nan")
+            )
 
         epochs_trained = epoch
         if final_validation_loss < best_validation:
@@ -376,9 +522,9 @@ def fit_torch_mlp_frame(
     if str(resolved_device).startswith("cuda") and torch.cuda.is_available():
         device_name = torch.cuda.get_device_name(torch.device(resolved_device))
     stats: dict[str, object] = {
-        "rows": len(x_values),
-        "dates": int(train.loc[selected_rows, "date"].nunique()),
-        "symbols": int(train.loc[selected_rows, "symbol"].nunique()),
+        "rows": n_rows,
+        "dates": date_count,
+        "symbols": symbol_count,
         "features": len(features),
         "device": resolved_device,
         "torch_cuda_available": bool(torch.cuda.is_available()),
@@ -388,6 +534,13 @@ def fit_torch_mlp_frame(
         "train_loss": float(final_train_loss),
         "validation_loss": float(best_validation),
         "validation_rows": int(validation_rows),
+        "training_tensor_storage": resolved_storage,
+        "training_tensor_required_bytes": required_tensor_bytes,
+        "cuda_memory_free_bytes_before_storage": cuda_free_bytes,
+        "cuda_memory_total_bytes": cuda_total_bytes,
+        "cuda_resident_reserve_bytes": reserve_bytes,
+        "vectorized_index_batches": True,
+        "num_workers_ignored": int(num_workers),
         "feature_standardization": standardization_mode,
         "standardization_group_col": standardization_group_col
         if standardization_mode == "symbol_train_zscore"
@@ -406,18 +559,23 @@ def fit_torch_mlp_frame(
         if value_transform_mode.startswith("mechanismized_")
         else "",
     }
-    if sample_weight is not None:
-        stats["sample_weight_mean"] = float(sample_weight.mean())
-        stats["sample_weight_zero_rate"] = float((sample_weight <= 0.0).mean())
+    if sample_weight_mean is not None:
+        stats["sample_weight_mean"] = sample_weight_mean
+        stats["sample_weight_zero_rate"] = sample_weight_zero_rate
     diagnostics = _torch_gate_diagnostics(
         module,
-        x_values,
+        diagnostic_values,
         device=resolved_device,
         torch=torch,
         rng=rng,
-        max_rows=int(gate_diagnostics_max_rows),
+        max_rows=len(diagnostic_values),
         batch_size=min(int(predict_batch_size or batch_size), 32768),
     )
+    del x_tensor, y_tensor, train_indices_tensor, validation_indices_tensor
+    if weight_tensor is not None:
+        del weight_tensor
+    if str(resolved_device).startswith("cuda"):
+        torch.cuda.empty_cache()
     stats.update(diagnostics)
     return (
         TorchMLPPredictionModel(

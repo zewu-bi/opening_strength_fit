@@ -23,7 +23,19 @@ def avoid_nodes_affinity_yaml(config: dict, indent: int) -> str:
     if isinstance(avoid_nodes, str):
         avoid_nodes = avoid_nodes.replace(",", " ").split()
     nodes = [str(node).strip() for node in avoid_nodes if str(node).strip()]
-    if not nodes:
+    required_label_values = config.get("k8s", {}).get(
+        "required_node_label_values",
+        {},
+    )
+    if not isinstance(required_label_values, dict):
+        raise SystemExit("k8s.required_node_label_values must be a table")
+    required = []
+    for key, raw_values in sorted(required_label_values.items()):
+        values = raw_values if isinstance(raw_values, list) else [raw_values]
+        cleaned = [str(value).strip() for value in values if str(value).strip()]
+        if cleaned:
+            required.append((str(key).strip(), cleaned))
+    if not nodes and not required:
         return ""
 
     lines = [
@@ -32,11 +44,25 @@ def avoid_nodes_affinity_yaml(config: dict, indent: int) -> str:
         f"{' ' * (indent + 4)}requiredDuringSchedulingIgnoredDuringExecution:",
         f"{' ' * (indent + 6)}nodeSelectorTerms:",
         f"{' ' * (indent + 8)}- matchExpressions:",
-        f"{' ' * (indent + 10)}- key: kubernetes.io/hostname",
-        f"{' ' * (indent + 12)}operator: NotIn",
-        f"{' ' * (indent + 12)}values:",
     ]
-    lines.extend(f"{' ' * (indent + 14)}- {node}" for node in nodes)
+    if nodes:
+        lines.extend(
+            [
+                f"{' ' * (indent + 10)}- key: kubernetes.io/hostname",
+                f"{' ' * (indent + 12)}operator: NotIn",
+                f"{' ' * (indent + 12)}values:",
+            ]
+        )
+        lines.extend(f"{' ' * (indent + 14)}- {node}" for node in nodes)
+    for key, values in required:
+        lines.extend(
+            [
+                f"{' ' * (indent + 10)}- key: {key}",
+                f"{' ' * (indent + 12)}operator: In",
+                f"{' ' * (indent + 12)}values:",
+            ]
+        )
+        lines.extend(f"{' ' * (indent + 14)}- {value}" for value in values)
     return "\n".join(lines) + "\n"
 
 

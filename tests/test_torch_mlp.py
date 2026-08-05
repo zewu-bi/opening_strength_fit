@@ -8,7 +8,57 @@ import numpy as np
 import pandas as pd
 
 from opening_strength_fit.model import predict_frame
+from opening_strength_fit.torch_model.training import (
+    _resolve_training_tensor_storage,
+    _torch_random_sampler_order,
+)
 from opening_strength_fit.training_modeling import fit_prediction_model
+
+
+def test_training_tensor_storage_resolution() -> None:
+    gib = 1024**3
+    assert (
+        _resolve_training_tensor_storage(
+            "auto",
+            device="cuda",
+            required_bytes=40 * gib,
+            free_bytes=80 * gib,
+            reserve_bytes=12 * gib,
+        )
+        == "cuda_resident"
+    )
+    assert (
+        _resolve_training_tensor_storage(
+            "auto",
+            device="cuda",
+            required_bytes=40 * gib,
+            free_bytes=48 * gib,
+            reserve_bytes=12 * gib,
+        )
+        == "host_vectorized"
+    )
+    assert (
+        _resolve_training_tensor_storage(
+            "auto",
+            device="cpu",
+            required_bytes=40 * gib,
+            free_bytes=0,
+            reserve_bytes=12 * gib,
+        )
+        == "host_vectorized"
+    )
+
+
+def test_required_cuda_resident_storage_rejects_insufficient_memory() -> None:
+    gib = 1024**3
+    with unittest.TestCase().assertRaisesRegex(SystemExit, "does not fit"):
+        _resolve_training_tensor_storage(
+            "cuda_resident",
+            device="cuda",
+            required_bytes=40 * gib,
+            free_bytes=48 * gib,
+            reserve_bytes=12 * gib,
+        )
 
 
 @unittest.skipUnless(importlib.util.find_spec("torch"), "PyTorch is not installed")
@@ -61,8 +111,27 @@ class TorchMLPTest(unittest.TestCase):
 
         self.assertEqual(model.target_col, "target_label")
         self.assertEqual(stats["features"], 2)
+        self.assertEqual(stats["training_tensor_storage"], "host_vectorized")
+        self.assertTrue(stats["vectorized_index_batches"])
         self.assertIn("target_label", predictions.columns)
         self.assertTrue(np.isfinite(predictions["prediction"]).all())
+
+    def test_vectorized_shuffle_matches_torch_dataloader_order(self) -> None:
+        import torch
+
+        dataset = torch.utils.data.TensorDataset(torch.arange(20))
+        train_indices = np.array([0, 2, 3, 6, 7, 11, 12, 15, 18], dtype=np.int64)
+        subset = torch.utils.data.Subset(dataset, train_indices)
+
+        torch.manual_seed(91)
+        loader = torch.utils.data.DataLoader(subset, batch_size=4, shuffle=True)
+        loader_values = torch.cat([batch[0] for batch in loader])
+
+        torch.manual_seed(91)
+        order = _torch_random_sampler_order(torch, len(train_indices))
+        vectorized_values = torch.from_numpy(train_indices).index_select(0, order)
+
+        torch.testing.assert_close(vectorized_values, loader_values)
 
     def test_torch_mlp_wide_deep_residual_architecture(self) -> None:
         frame = self._toy_frame()

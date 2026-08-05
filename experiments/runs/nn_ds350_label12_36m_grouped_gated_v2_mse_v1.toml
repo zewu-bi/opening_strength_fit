@@ -53,6 +53,8 @@ loss = "mse"
 device = "cuda"
 random_state = 31
 num_workers = 0
+training_tensor_storage = "cuda_resident"
+cuda_resident_reserve_gib = 12.0
 gate_diagnostics_max_rows = 200000
 
 [model.group_embedding_dims]
@@ -94,9 +96,12 @@ shard_parallelism = 8
 [k8s.node_selector]
 has_gpu = "true"
 
+[k8s.required_node_label_values]
+gpu_model = ["A100-80", "H100-80", "H20"]
+
 [k8s.resources]
-cpu_request = "16"
-cpu_limit = "32"
+cpu_request = "8"
+cpu_limit = "16"
 memory_request = "256Gi"
 memory_limit = "384Gi"
 gpu_limit = 1
