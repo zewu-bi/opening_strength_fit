@@ -44,7 +44,7 @@ spec:
                     app: os-raw-source-w1001-1010
       containers:
         - name: opening-strength-fit
-          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260731-raw-source-2d903614
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260731-raw-source-42ec6bdd
           imagePullPolicy: Always
           workingDir: /app/opening_strength_fit
           envFrom:
@@ -69,7 +69,8 @@ spec:
               YEAR="${YEARS[$INDEX]}"
               exec osf-build-raw-source-cache \
                 --config experiments/runs/opening_1001_1010_raw_source.toml \
-                --year "${YEAR}"
+                --year "${YEAR}" \
+                --overwrite
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output

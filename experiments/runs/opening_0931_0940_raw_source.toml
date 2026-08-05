@@ -2,7 +2,7 @@
 id = "opening_0931_0940_raw_source"
 kind = "raw_source_cache"
 description = "Label-free and feature-free raw source cache for 09:31:00-09:40:00 training samples."
-status = "running"
+status = "completed"
 
 [raw_source]
 output_root = "/mnt/output/opening_strength_fit/cache/opening_0931_0940_raw_source"
@@ -10,9 +10,13 @@ years = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
 tick_table = "stock.tick"
 daily_table = "stock.daily_bar_jy"
 symbol_regex = "^(?:(?:00|30)\\d{4}\\.SZ|(?:60|68)\\d{4}\\.SH)$"
-# 09:15-09:45 covers auction/pre-open state, decision clocks, delayed entry,
-# 1-minute labels and 3-minute VWAP labels with a small trailing buffer.
-tick_windows = [[33300000000, 35100000000]]
+# 09:15-09:50 covers auction/pre-open state, decision clocks, delayed entry,
+# and 1m/3m/5m VWAP labels through 09:46:06 with a 234-second tail buffer.
+tick_windows = [[33300000000, 35400000000]]
+decision_end_offset_us = 34800000000
+entry_delay_seconds = 6
+short_label_horizons_seconds = [60, 180, 300]
+short_label_sell_window_seconds = 60
 context_before_days = 31
 context_after_days = 14
 close_start_offset_us = 52200000000

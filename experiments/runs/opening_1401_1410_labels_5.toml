@@ -1,0 +1,19 @@
+[run]
+id = "opening_1401_1410_labels_5"
+kind = "training_label_dataset"
+description = "Build separate 1m, 3m, 5m, next-close, and canonical mixed annual labels for 14:01-14:10 from raw PVC data."
+status = "completed"
+
+[dataset]
+years = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+raw_source_root = "/mnt/output/opening_strength_fit/cache/opening_1401_1410_raw_source"
+label_output_root = "/mnt/output/opening_strength_fit/datasets/opening_1401_1410_labels_1m_3m_5m_next_mixed"
+decision_times = ["14:01:00", "14:02:00", "14:03:00", "14:04:00", "14:05:00", "14:06:00", "14:07:00", "14:08:00", "14:09:00", "14:10:00"]
+feature_tick_start_offset_us = 49800000000
+entry_delay_seconds = 6
+sell_window_seconds = 60
+volume_unit_multiplier = 1.0
+fee_bps = 0.0
+tradable_statuses = ["T0", "20", "TRADE"]
+mixed_next_close_weight = 0.30
+mixed_min_group_size = 50

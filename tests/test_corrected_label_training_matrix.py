@@ -21,22 +21,24 @@ def _load(path: Path) -> dict:
         return tomllib.load(handle)
 
 
-def test_four_training_configs_preserve_latest_v6_training_contract() -> None:
+def test_six_training_configs_preserve_latest_v6_training_contract() -> None:
     canonical = _load(CANONICAL)
-    assert len(TRAINING_CONFIGS) == 4
+    assert len(TRAINING_CONFIGS) == 6
 
     expected = {
-        "nn_v6_w0931_0940_short1m": ("09:31:00", "09:40:00", 60),
-        "nn_v6_w0931_0940_short3m": ("09:31:00", "09:40:00", 180),
-        "nn_v6_w1001_1010_short3m": ("10:01:00", "10:10:00", 180),
-        "nn_v6_w1401_1410_short3m": ("14:01:00", "14:10:00", 180),
+        "nn_v6_w0931_0940_short1m": ("09:31:00", "09:40:00", 60, "608Gi", "960Gi"),
+        "nn_v6_w0931_0940_short3m": ("09:31:00", "09:40:00", 180, "608Gi", "960Gi"),
+        "nn_v6_w1001_1010_short1m": ("10:01:00", "10:10:00", 60, "950Gi", "1400Gi"),
+        "nn_v6_w1001_1010_short3m": ("10:01:00", "10:10:00", 180, "950Gi", "1400Gi"),
+        "nn_v6_w1401_1410_short1m": ("14:01:00", "14:10:00", 60, "608Gi", "960Gi"),
+        "nn_v6_w1401_1410_short3m": ("14:01:00", "14:10:00", 180, "608Gi", "960Gi"),
     }
     for path in TRAINING_CONFIGS:
         config = _load(path)
         run_id = config["run"]["id"]
         prefix = next(prefix for prefix in expected if run_id.startswith(prefix))
-        start, end, hold = expected[prefix]
-        assert config["run"]["status"] == "running"
+        start, end, hold, memory_request, memory_limit = expected[prefix]
+        assert config["run"]["status"] == "completed"
         assert config["sample"]["start_time"] == start
         assert config["sample"]["end_time"] == end
         assert config["labels"]["hold_seconds"] == hold
@@ -47,12 +49,16 @@ def test_four_training_configs_preserve_latest_v6_training_contract() -> None:
             assert config[section] == canonical[section]
         for key in ("avoid_nodes", "shard_parallelism"):
             assert config["k8s"][key] == canonical["k8s"][key]
-        assert config["k8s"]["resources"] == canonical["k8s"]["resources"]
+        resources = config["k8s"]["resources"]
+        for key in ("cpu_request", "cpu_limit", "gpu_limit"):
+            assert resources[key] == canonical["k8s"]["resources"][key]
+        assert resources["memory_request"] == memory_request
+        assert resources["memory_limit"] == memory_limit
         assert config["k8s"]["node_selector"] == canonical["k8s"]["node_selector"]
 
 
-def test_target_matrix_has_one_1m_and_three_3m_corrected_mixed_targets() -> None:
-    assert len(TARGET_CONFIGS) == 4
+def test_target_matrix_has_three_1m_and_three_3m_corrected_mixed_targets() -> None:
+    assert len(TARGET_CONFIGS) == 6
     one_minute = 0
     three_minute = 0
     for path in TARGET_CONFIGS:
@@ -69,7 +75,7 @@ def test_target_matrix_has_one_1m_and_three_3m_corrected_mixed_targets() -> None
             assert target["short_valid_col"] == "valid_label"
         else:
             one_minute += 1
-            assert "w0931_0940_short1m" in config["run"]["id"]
+            assert "short1m" in config["run"]["id"]
         job = JOBS / f"{config['run']['id']}_sharded_job.yaml"
         manifest = job.read_text(encoding="utf-8")
         assert "completionMode: Indexed" in manifest
@@ -78,4 +84,4 @@ def test_target_matrix_has_one_1m_and_three_3m_corrected_mixed_targets() -> None
         if "short_label_input" in target:
             assert "--short-label-input" in manifest
             assert "SHORT_TRACE=" in manifest
-    assert (one_minute, three_minute) == (1, 3)
+    assert (one_minute, three_minute) == (3, 3)

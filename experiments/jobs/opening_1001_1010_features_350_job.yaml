@@ -1,0 +1,48 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-ds-feat350-w1001-1010
+  namespace: bizewu
+  labels: {app: os-ds-feat350-w1001-1010}
+spec:
+  activeDeadlineSeconds: 432000
+  backoffLimit: 2
+  completionMode: Indexed
+  completions: 7
+  parallelism: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: {app: os-ds-feat350-w1001-1010}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: kubernetes.io/hostname, operator: NotIn, values: [node7, node8]}
+      containers:
+        - name: builder
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260804-training-datasets-v2
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          env:
+            - name: JOB_COMPLETION_INDEX
+              valueFrom:
+                fieldRef: {fieldPath: "metadata.annotations['batch.kubernetes.io/job-completion-index']"}
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              YEARS=(2019 2020 2021 2022 2023 2024 2025)
+              YEAR="${YEARS[${JOB_COMPLETION_INDEX}]}"
+              exec osf-build-training-datasets --config experiments/runs/opening_1001_1010_features_350.toml --kind features --year "${YEAR}" --overwrite
+          volumeMounts: [{name: output, mountPath: /mnt/output}]
+          resources:
+            requests: {cpu: "8", memory: 128Gi}
+            limits: {cpu: "24", memory: 384Gi}

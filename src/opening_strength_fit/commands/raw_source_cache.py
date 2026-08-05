@@ -19,12 +19,14 @@ from opening_strength_fit.config import config_int, config_str, load_toml, run_i
 from opening_strength_fit.io.json import write_json
 from opening_strength_fit.universe import DEFAULT_A_SHARE_SYMBOL_REGEX
 
-RAW_SOURCE_SCHEMA_VERSION = "raw_source_v1"
+RAW_SOURCE_SCHEMA_VERSION = "raw_source_v2"
 
 TICK_COLUMNS = (
     "TradingDay",
     "Symbol",
     "ExchTimeOffsetUs",
+    "HighPrice",
+    "LowPrice",
     "LastPrice",
     "TradeNum",
     "Volume",
@@ -36,6 +38,7 @@ TICK_COLUMNS = (
     "AvgBidPrice",
     "TotalBidVolume",
     "TotalBidCount",
+    "IOPV",
     *(
         column
         for level in range(1, 11)
@@ -91,8 +94,7 @@ def _parse_windows(config: dict) -> tuple[tuple[int, int], ...]:
         raise SystemExit("[raw_source].tick_windows must not be empty")
     ordered = tuple(sorted(windows))
     if any(
-        current[0] <= previous[1]
-        for previous, current in zip(ordered, ordered[1:], strict=False)
+        current[0] <= previous[1] for previous, current in zip(ordered, ordered[1:], strict=False)
     ):
         raise SystemExit("[raw_source].tick_windows must be disjoint")
     return ordered
@@ -107,6 +109,57 @@ def _parse_years(config: dict) -> tuple[int, ...]:
     if len(set(years)) != len(years):
         raise SystemExit("[raw_source].years must be unique")
     return years
+
+
+def _parse_short_label_horizons(config: dict) -> tuple[int, ...]:
+    section = config.get("raw_source", {})
+    raw_horizons = (
+        section.get("short_label_horizons_seconds", []) if isinstance(section, dict) else []
+    )
+    horizons = tuple(sorted({int(value) for value in raw_horizons}))
+    if not horizons or any(value <= 0 for value in horizons):
+        raise SystemExit("[raw_source].short_label_horizons_seconds must contain positive seconds")
+    return horizons
+
+
+def label_coverage(config: dict) -> dict[str, object]:
+    windows = _parse_windows(config)
+    horizons = _parse_short_label_horizons(config)
+    decision_end_offset_us = config_int(config, "raw_source", "decision_end_offset_us", 0)
+    entry_delay_seconds = config_int(config, "raw_source", "entry_delay_seconds", 0)
+    sell_window_seconds = config_int(config, "raw_source", "short_label_sell_window_seconds", 0)
+    if decision_end_offset_us <= 0:
+        raise SystemExit("[raw_source].decision_end_offset_us must be positive")
+    if entry_delay_seconds < 0 or sell_window_seconds <= 0:
+        raise SystemExit(
+            "entry_delay_seconds must be non-negative and "
+            "short_label_sell_window_seconds must be positive"
+        )
+    required_end_offset_us = (
+        decision_end_offset_us
+        + (entry_delay_seconds + max(horizons) + sell_window_seconds) * 1_000_000
+    )
+    covering_windows = [
+        window
+        for window in windows
+        if window[0] <= decision_end_offset_us and window[1] >= required_end_offset_us
+    ]
+    if not covering_windows:
+        raise SystemExit(
+            "tick_windows do not continuously cover the latest short label: "
+            f"decision_end={decision_end_offset_us}, required_end={required_end_offset_us}"
+        )
+    available_end_offset_us = max(window[1] for window in covering_windows)
+    return {
+        "short_label_horizons_seconds": list(horizons),
+        "entry_delay_seconds": entry_delay_seconds,
+        "sell_window_seconds": sell_window_seconds,
+        "decision_end_offset_us": decision_end_offset_us,
+        "required_tick_end_offset_us": required_end_offset_us,
+        "available_tick_end_offset_us": available_end_offset_us,
+        "tail_buffer_seconds": (available_end_offset_us - required_end_offset_us) / 1_000_000,
+        "next_close_reference": True,
+    }
 
 
 def tick_source_sql(
@@ -293,22 +346,17 @@ def build_year(
     output_root: Path,
     overwrite: bool,
 ) -> dict[str, object]:
-    tick_table = config_str(
-        config, "raw_source", "tick_table", DEFAULT_CLICKHOUSE_TICK_TABLE
-    )
+    tick_table = config_str(config, "raw_source", "tick_table", DEFAULT_CLICKHOUSE_TICK_TABLE)
     daily_table = config_str(config, "raw_source", "daily_table", "stock.daily_bar_jy")
-    symbol_regex = config_str(
-        config, "raw_source", "symbol_regex", DEFAULT_A_SHARE_SYMBOL_REGEX
-    )
+    symbol_regex = config_str(config, "raw_source", "symbol_regex", DEFAULT_A_SHARE_SYMBOL_REGEX)
     windows = _parse_windows(config)
+    coverage = label_coverage(config)
     context_before_days = config_int(config, "raw_source", "context_before_days", 31)
     context_after_days = config_int(config, "raw_source", "context_after_days", 14)
     close_start_offset_us = config_int(
         config, "raw_source", "close_start_offset_us", 52_200_000_000
     )
-    close_end_offset_us = config_int(
-        config, "raw_source", "close_end_offset_us", 54_000_000_000
-    )
+    close_end_offset_us = config_int(config, "raw_source", "close_end_offset_us", 54_000_000_000)
     year_root = output_root / f"year={year}"
     success_path = year_root / "_SUCCESS"
     manifest_path = year_root / "manifest.json"
@@ -404,6 +452,7 @@ def build_year(
         "source_tables": {"ticks": tick_table, "daily_reference": daily_table},
         "symbol_regex": symbol_regex,
         "tick_windows_us": [list(window) for window in windows],
+        "label_coverage": coverage,
         "tick_columns": list(TICK_COLUMNS),
         "tick_deduplication": {
             "key": ["TradingDay", "Symbol", "ExchTimeOffsetUs"],

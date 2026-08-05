@@ -54,6 +54,8 @@ K8S_JOB_ENTRYPOINTS = (
     "osf-build-raw-source-cache",
     "osf-build-short-labels",
     "osf-build-target-label-cache",
+    "osf-build-training-datasets",
+    "osf-split-horizon-labels",
     "osf-extract-execution-context",
     "osf-run-alpha-conditioned-rolling-validation",
     "osf-run-gap-risk-attribution",

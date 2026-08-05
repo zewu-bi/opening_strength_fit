@@ -13,6 +13,7 @@ from opening_strength_fit.commands.raw_source_cache import (
     TICK_COLUMNS,
     _parse_windows,
     close_reference_sql,
+    label_coverage,
     stream_parquet_atomic,
     tick_source_sql,
 )
@@ -49,22 +50,21 @@ def _parquet_bytes(columns: tuple[str, ...]) -> bytes:
 
 
 def test_tick_contract_contains_only_raw_feature_and_label_inputs() -> None:
-    assert TICK_COLUMNS[:8] == (
+    assert TICK_COLUMNS[:10] == (
         "TradingDay",
         "Symbol",
         "ExchTimeOffsetUs",
+        "HighPrice",
+        "LowPrice",
         "LastPrice",
         "TradeNum",
         "Volume",
         "Turnover",
         "Status",
     )
-    assert len(TICK_COLUMNS) == 74
+    assert len(TICK_COLUMNS) == 77
     assert not {
         "LocalTimeStamp",
-        "IOPV",
-        "HighPrice",
-        "LowPrice",
         "label",
         "target_label",
         "feature",
@@ -102,7 +102,7 @@ def test_tick_sql_projects_contract_and_deduplicates_at_source_boundary() -> Non
     assert "{window_end_1:UInt64}" in sql
     assert "format Parquet" in sql
     assert "select *" not in sql.lower()
-    assert "IOPV" not in sql
+    assert "IOPV" in sql
     assert "Withdraw" not in sql
 
 
@@ -149,17 +149,17 @@ def test_stream_parquet_atomic_validates_and_reuses_complete_file(tmp_path: Path
     [
         (
             "opening_0931_0940_raw_source.toml",
-            ((33_300_000_000, 35_100_000_000),),
+            ((33_300_000_000, 35_400_000_000),),
             "opening_0931_0940_raw_source",
         ),
         (
             "opening_1001_1010_raw_source.toml",
-            ((33_300_000_000, 33_930_000_000), (35_400_000_000, 36_900_000_000)),
+            ((33_300_000_000, 33_930_000_000), (35_400_000_000, 37_200_000_000)),
             "opening_1001_1010_raw_source",
         ),
         (
             "opening_1401_1410_raw_source.toml",
-            ((33_300_000_000, 33_930_000_000), (49_800_000_000, 51_300_000_000)),
+            ((33_300_000_000, 33_930_000_000), (49_800_000_000, 51_600_000_000)),
             "opening_1401_1410_raw_source",
         ),
     ],
@@ -175,3 +175,24 @@ def test_raw_source_configs(
     assert config["raw_source"]["years"] == list(range(2019, 2026))
     assert config["raw_source"]["output_root"].endswith(expected_root)
     assert config["k8s"]["shard_parallelism"] == 2
+    coverage = label_coverage(config)
+    assert coverage["short_label_horizons_seconds"] == [60, 180, 300]
+    assert coverage["entry_delay_seconds"] == 6
+    assert coverage["sell_window_seconds"] == 60
+    assert coverage["tail_buffer_seconds"] == 234.0
+    assert coverage["next_close_reference"] is True
+
+
+def test_label_coverage_rejects_a_window_that_cannot_build_5m() -> None:
+    config = {
+        "raw_source": {
+            "tick_windows": [[33_300_000_000, 35_100_000_000]],
+            "decision_end_offset_us": 34_800_000_000,
+            "entry_delay_seconds": 6,
+            "short_label_horizons_seconds": [60, 180, 300],
+            "short_label_sell_window_seconds": 60,
+        }
+    }
+
+    with pytest.raises(SystemExit, match="do not continuously cover"):
+        label_coverage(config)
