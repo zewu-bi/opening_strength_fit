@@ -11,6 +11,9 @@ from opening_strength_fit.pvc_layout import run_output_dir
 
 JOB_SUFFIXES = (
     ("_pool_internal_analysis_job.yaml", "pool_internal_analysis"),
+    ("_w0931_jobs.yaml", "sharded_training"),
+    ("_w1001_jobs.yaml", "sharded_training"),
+    ("_w1401_jobs.yaml", "sharded_training"),
     ("_sharded_job.yaml", "sharded_training"),
     ("_job.yaml", "training"),
 )

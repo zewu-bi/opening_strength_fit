@@ -4,7 +4,10 @@ from opening_strength_fit.config import load_toml
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "experiments/runs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1.toml"
-JOB = ROOT / "experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_sharded_job.yaml"
+W0931_JOBS = (
+    ROOT
+    / "experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w0931_jobs.yaml"
+)
 
 
 def test_dataset350_training_matrix_has_requested_twelve_cases() -> None:
@@ -31,12 +34,25 @@ def test_dataset350_training_matrix_has_requested_twelve_cases() -> None:
     assert config["model"]["random_state"] == 31
 
 
-def test_dataset350_training_matrix_job_maps_cases_to_oos_shards() -> None:
-    text = JOB.read_text()
-    assert "completions: 96" in text
+def test_dataset350_w0931_uses_one_indexed_job_per_label() -> None:
+    text = W0931_JOBS.read_text()
+    cases = [
+        "w0931_0940_h1m",
+        "w0931_0940_h3m",
+        "w0931_0940_h10m",
+        "w0931_0940_h1h",
+        "w0931_0940_hclose",
+    ]
+    assert "kind: List" in text
+    assert text.count("name: os-nn-ds350-w0931-") == 5
+    assert all(f"osf-case: {case}" in text for case in cases)
+    assert "completionMode: Indexed" in text
+    assert "completions: 8" in text
     assert "parallelism: 8" in text
-    assert "CASE_INDEX=$((INDEX / 8))" in text
-    assert "SPLIT_INDEX=$((INDEX % 8))" in text
+    assert text.count("suspend: false") == 1
+    assert text.count("suspend: true") == 4
+    assert 'requests: {cpu: "16", memory: 256Gi' in text
+    assert 'limits: {cpu: "32", memory: 384Gi' in text
     assert "--feature-input" in text
     assert "--label-input" in text
     assert "--run-id" in text

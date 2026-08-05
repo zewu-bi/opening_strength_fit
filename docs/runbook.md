@@ -85,7 +85,8 @@ osf-train \
 
 入口先验证两侧 key 唯一且覆盖一致；发布顺序一致时只挂接 3 个窄 label 列，避免复制 350 列宽表。
 当前矩阵暂缓 5m，运行三窗口 × 1m/3m 和前两窗口 × 10m/1h/close，共 12 个 case、每个 8 个
-半年 OOS 切分；Job 全局并发为 8。
+半年 OOS 切分。每个 case 使用一个独立 Indexed Job（`completions: 8`），按 label 受控接力，
+使全局最多同时运行 8 个训练 shard；不要再把 12 个 case 合并成一个 96-shard Job。
 
 历史 `next_tick`/forward-5s 只用于旧实验复现；新 cache 默认使用
 `decision_alignment/entry_alignment/future_alignment = clock_state` 和 `entry_clock_delay_seconds = 6`。
