@@ -26,7 +26,7 @@ run 状态由 `osf-audit-experiments` 从 TOML 审计，不在文档中复制完
 | 2026-08-04 | 九个 horizon-split label | `completed`; 9 labels × 7 years | 后续实验从三窗口 × 1m/3m/5m 中选择；新版本为权威训练输入 |
 | 2026-08-05 | corrected-label 三窗口 × 1m/3m NN 网格 | `completed`; 6 runs × 8 shards | 09:31 的短期/隔夜头部超额最强；10:01、14:01 在信号层归档，不晋级策略验收 |
 | 2026-08-05 | 前两窗口 10m/1h/当日收盘 label | `completed`; 6 labels × 7 years | 10m/1h 用持有期后 60 秒 VWAP，收盘 label 用当日收盘价；next-close 逐 key 复用既有数据 |
-| 2026-08-05 | 新分层数据 12-label NN 矩阵（5m 暂缓） | `queued`; 等待 2025 feature 尾部 | 训练入口直接拼同窗口 350-feature 与独立 label；保留 v6 模型/seed/rolling 口径，删除现场特征派生 |
+| 2026-08-05 | 新分层数据 12-label NN 矩阵（5m 暂缓） | GPU 驻留路径已通过最大 fold；12 Jobs 待接力 | 训练入口直接拼同窗口 350-feature 与独立 label；最大 fold 9m15s、H20 SM 83%–85%、主机峰值 202GiB |
 
 ## 决策时间线
 

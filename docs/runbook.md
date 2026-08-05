@@ -90,6 +90,34 @@ osf-train \
 半年 OOS 切分。每个 case 使用一个独立 Indexed Job（`completions: 8`），按 label 受控接力，
 使全局最多同时运行 8 个训练 shard；不要再把 12 个 case 合并成一个 96-shard Job。
 
+这组 NN 必须使用向量化训练路径。训练集标准化后，完整 float32 feature/label tensor 一次搬到 GPU，
+每个 epoch 只生成一个整块随机索引 tensor，再用 GPU `index_select` 切 batch；不得恢复
+`TensorDataset -> Subset -> DataLoader` 的逐行 Python 取数。loss 只在每个 epoch 结束时同步回 CPU。
+配置固定 `training_tensor_storage = "cuda_resident"`，显存不足时直接失败，不允许静默退回慢路径；
+Job 只允许 `A100-80`、`H100-80` 和 `H20`，排除 32GB 5090。
+
+2026-08-05 用最大 2025-07 fold 实测：36,119,812 个训练样本、350 个特征，训练 tensor
+`51,288,133,040` bytes（47.77GiB），H20 显存稳定约 50.8GiB，训练期 SM 连续约 83%–85%；
+容器主机内存峰值 202.0GiB。完整 fold 从 Pod 启动到写完 645 万行预测共 9 分 15 秒，10 epochs、
+best epoch 10。因而每 Pod 申请 `8 CPU / 256Gi / 1 GPU`、上限 `16 CPU / 384Gi / 1 GPU`；
+内存不能按训练期常驻量下调，因为峰值出现在 dataframe 到标准化矩阵的过渡阶段。
+
+三个清单覆盖全部 12 个 Job，默认全部 suspend；发布后由一个持久队列脚本逐个放行：
+
+```bash
+hfcli kubectl apply -f experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w0931_jobs.yaml
+hfcli kubectl apply -f experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w1001_jobs.yaml
+hfcli kubectl apply -f experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w1401_jobs.yaml
+
+systemd-run --user --unit os-nn-ds350-label12-queue \
+  --working-directory "$(pwd)" \
+  experiments/scripts/run_ds350_label12_training_queue.sh
+```
+
+按最大 fold 外推，单个 label 的 8 个 shard 并行约 10 分钟，12 个 label 顺序队列约 2 小时；
+把镜像拉取、调度和节点差异计入后按 2–3 小时看待。日志中的 `torch_training_storage` 必须显示
+`storage: cuda_resident`，每个 epoch 会输出 loss 和秒数，便于区分预处理与真正卡住。
+
 历史 `next_tick`/forward-5s 只用于旧实验复现；新 cache 默认使用
 `decision_alignment/entry_alignment/future_alignment = clock_state` 和 `entry_clock_delay_seconds = 6`。
 

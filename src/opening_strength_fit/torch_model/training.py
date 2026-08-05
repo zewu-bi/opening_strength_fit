@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import numpy as np
 import pandas as pd
 
@@ -235,6 +237,7 @@ def fit_torch_mlp_frame(
     feature_value_transform_rank_method: str = "average",
     feature_value_transform_tick_size: float = 0.01,
 ) -> tuple[TorchMLPPredictionModel, dict[str, object]]:
+    fit_started = time.monotonic()
     torch, _nn, _DataLoader, _TensorDataset = _import_torch()
     features = feature_columns(train, feature_limit, **(feature_filters or {}))
     if sample_weight_col:
@@ -407,7 +410,23 @@ def fit_torch_mlp_frame(
         reserve_bytes=reserve_bytes,
     )
     cuda_resident = resolved_storage == "cuda_resident"
+    gib = float(1024**3)
+    print(
+        "\ntorch_training_storage:"
+        f"\n  rows: {n_rows}"
+        f"\n  features: {len(features)}"
+        f"\n  train_rows: {len(train_indices)}"
+        f"\n  validation_rows: {validation_rows}"
+        f"\n  device: {resolved_device}"
+        f"\n  storage: {resolved_storage}"
+        f"\n  tensor_gib: {required_tensor_bytes / gib:.2f}"
+        f"\n  cuda_free_gib: {cuda_free_bytes / gib:.2f}"
+        f"\n  cuda_total_gib: {cuda_total_bytes / gib:.2f}"
+        f"\n  reserve_gib: {reserve_bytes / gib:.2f}"
+        f"\n  preparation_seconds: {time.monotonic() - fit_started:.1f}"
+    )
 
+    storage_started = time.monotonic()
     x_tensor = torch.from_numpy(x_values)
     y_tensor = torch.from_numpy(y_values)
     weight_tensor = torch.from_numpy(sample_weight) if sample_weight is not None else None
@@ -423,6 +442,8 @@ def fit_torch_mlp_frame(
         del x_values, y_values, train_indices, validation_indices
         if sample_weight is not None:
             del sample_weight
+    storage_seconds = time.monotonic() - storage_started
+    print(f"  storage_transfer_seconds: {storage_seconds:.1f}")
 
     def take_batch(tensor, indices):
         values = tensor.index_select(0, indices)
@@ -443,8 +464,11 @@ def fit_torch_mlp_frame(
     epochs_trained = 0
     final_train_loss = float("nan")
     final_validation_loss = float("nan")
+    epoch_seconds: list[float] = []
+    training_started = time.monotonic()
     max_epochs = int(max_epochs)
     for epoch in range(1, max_epochs + 1):
+        epoch_started = time.monotonic()
         module.train()
         total_loss_tensor = torch.zeros((), dtype=torch.float64, device=resolved_device)
         total_weight_tensor = torch.zeros((), dtype=torch.float64, device=resolved_device)
@@ -511,6 +535,18 @@ def fit_torch_mlp_frame(
             patience_used = 0
         else:
             patience_used += 1
+        epoch_seconds.append(time.monotonic() - epoch_started)
+        print(
+            "torch_epoch:"
+            f" epoch={epoch}/{max_epochs}"
+            f" train_loss={final_train_loss:.9g}"
+            f" validation_loss={final_validation_loss:.9g}"
+            f" best_epoch={best_epoch}"
+            f" seconds={epoch_seconds[-1]:.1f}"
+        )
+        if patience_used:
+            print(f"  early_stopping_patience_used: {patience_used}")
+        if patience_used:
             if int(early_stopping_patience) >= 0 and patience_used > int(early_stopping_patience):
                 break
 
@@ -541,6 +577,9 @@ def fit_torch_mlp_frame(
         "cuda_resident_reserve_bytes": reserve_bytes,
         "vectorized_index_batches": True,
         "num_workers_ignored": int(num_workers),
+        "training_preparation_seconds": float(training_started - fit_started),
+        "training_storage_transfer_seconds": float(storage_seconds),
+        "training_epoch_seconds": epoch_seconds,
         "feature_standardization": standardization_mode,
         "standardization_group_col": standardization_group_col
         if standardization_mode == "symbol_train_zscore"
