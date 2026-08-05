@@ -5,6 +5,7 @@ from opening_strength_fit.config import load_toml
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "experiments/runs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1.toml"
 W0931_JOBS = ROOT / "experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w0931_jobs.yaml"
+W1401_JOBS = ROOT / "experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w1401_jobs.yaml"
 
 
 def test_dataset350_training_matrix_has_requested_twelve_cases() -> None:
@@ -55,4 +56,23 @@ def test_dataset350_w0931_uses_one_indexed_job_per_label() -> None:
     assert "--feature-input" in text
     assert "--label-input" in text
     assert "--run-id" in text
+    assert "h5m" not in text
+
+
+def test_dataset350_w1401_queues_two_indexed_label_jobs() -> None:
+    text = W1401_JOBS.read_text()
+    assert "kind: List" in text
+    assert text.count("name: os-nn-ds350-w1401-") == 2
+    assert "osf-case: w1401_1410_h1m" in text
+    assert "osf-case: w1401_1410_h3m" in text
+    assert text.count("suspend: true") == 1
+    assert "suspend: false" not in text
+    assert "completionMode: Indexed" in text
+    assert "completions: 8" in text
+    assert "parallelism: 8" in text
+    assert "opening_1401_1410_features_350" in text
+    assert "opening_1401_1410_labels_h1m_v2" in text
+    assert "opening_1401_1410_labels_h3m_v2" in text
+    assert 'requests: {cpu: "16", memory: 256Gi' in text
+    assert 'limits: {cpu: "32", memory: 384Gi' in text
     assert "h5m" not in text
