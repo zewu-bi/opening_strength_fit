@@ -23,8 +23,9 @@ run 状态由 `osf-audit-experiments` 从 TOML 审计，不在文档中复制完
 | 2026-07-31 | corrected `opening_model` 09:31-09:40 | `completed` | next excess `17.7934 bps`，成为最新信号基准；策略层仍需同数据重跑 |
 | 2026-07-31 | corrected next-close 与 1m/3m label matrix | `completed` / 历史输入保留 | 旧实验继续按原输入复现，不与新数据版本混作严格单变量对照 |
 | 2026-08-04 | 三窗口 raw source、350 features、基础 5-label 数据 | `completed` | 原始数据与特征/标签构建分层，combined label 仅作中间产物 |
-| 2026-08-04 | 九组 horizon-split label | `completed`; 9 roots × 7 years | 后续实验从三窗口 × 1m/3m/5m 中选择；新版本为权威训练输入 |
+| 2026-08-04 | 九个 horizon-split label | `completed`; 9 labels × 7 years | 后续实验从三窗口 × 1m/3m/5m 中选择；新版本为权威训练输入 |
 | 2026-08-05 | corrected-label 三窗口 × 1m/3m NN 网格 | `completed`; 6 runs × 8 shards | 09:31 的短期/隔夜头部超额最强；10:01、14:01 在信号层归档，不晋级策略验收 |
+| 2026-08-05 | 前两窗口 10m/1h/当日收盘 label | `completed`; 6 labels × 7 years | 10m/1h 用持有期后 60 秒 VWAP，收盘 label 用当日收盘价；next-close 逐 key 复用既有数据 |
 
 ## 决策时间线
 

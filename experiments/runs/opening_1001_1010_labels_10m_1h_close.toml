@@ -1,0 +1,38 @@
+[run]
+id = "opening_1001_1010_labels_10m_1h_close"
+kind = "long_horizon_labels"
+description = "Build combined 10m VWAP, 1h VWAP, same-day close, and reused next-close labels for 10:01-10:10."
+status = "completed"
+
+[dataset]
+years = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+raw_source_root = "/mnt/output/opening_strength_fit/cache/opening_1001_1010_raw_source"
+state_raw_roots = [
+  "/mnt/output/opening_strength_fit/cache/opening_0931_1010_long_label_raw_source_v1",
+]
+next_close_label_root = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_labels_h1m_v2"
+label_output_root = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_labels_10m_1h_close_next"
+decision_times = ["10:01:00", "10:02:00", "10:03:00", "10:04:00", "10:05:00", "10:06:00", "10:07:00", "10:08:00", "10:09:00", "10:10:00"]
+feature_tick_start_offset_us = 35400000000
+entry_delay_seconds = 6
+horizons_seconds = [600, 3600]
+sell_window_seconds = 60
+volume_unit_multiplier = 1.0
+fee_bps = 0.0
+tradable_statuses = ["T0", "20", "TRADE"]
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-long-labels-w1001-1010"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+image_pull_secret = "highfort"
+avoid_nodes = ["node7", "node8"]
+shard_parallelism = 7
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:f04ef3ab7372000162e1b92bf86e96f5f6e0e36f15c163d75c9a3c1cc554ab09"
+
+[k8s.resources]
+cpu_request = "4"
+cpu_limit = "12"
+memory_request = "8Gi"
+memory_limit = "32Gi"

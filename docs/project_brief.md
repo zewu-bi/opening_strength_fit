@@ -31,8 +31,8 @@ rolling OOS 可用于模型和特征选择，不是 untouched final test。
 ## 最新数据源合同
 
 后续新实验将原始数据、feature 和 label 分层：ClickHouse 只用于构建 PVC raw-source cache；训练前由
-同窗口 raw cache 生成 350 features，并从下列 9 个 label root 中选择一个。公共前缀为
-`/mnt/output/opening_strength_fit/datasets/`。
+同窗口 raw cache 生成 350 features，并从下列 15 个最终 label 中选择一个。每个 label 单独存放在一个
+PVC 目录，表中列出目录名；公共前缀为 `/mnt/output/opening_strength_fit/datasets/`。
 
 | 决策窗口 | 1m label | 3m label | 5m label |
 | --- | --- | --- | --- |
@@ -40,14 +40,28 @@ rolling OOS 可用于模型和特征选择，不是 untouched final test。
 | `10:01-10:10` | `opening_1001_1010_labels_h1m_v2` | `opening_1001_1010_labels_h3m_v2` | `opening_1001_1010_labels_h5m_v2` |
 | `14:01-14:10` | `opening_1401_1410_labels_h1m_v2` | `opening_1401_1410_labels_h3m_v2` | `opening_1401_1410_labels_h5m_v2` |
 
-- 每个实验使用同窗口 `opening_<window>_features_350` 和一个 horizon label root；不得跨窗口或混用 target。
+首两个窗口各有 3 个长持有期 label：
+
+| 决策窗口 | 10m VWAP | 1h VWAP | 当日收盘价 |
+| --- | --- | --- | --- |
+| `09:31-09:40` | `opening_0931_0940_labels_h10m_v1` | `opening_0931_0940_labels_h1h_v1` | `opening_0931_0940_labels_hclose_v1` |
+| `10:01-10:10` | `opening_1001_1010_labels_h10m_v1` | `opening_1001_1010_labels_h1h_v1` | `opening_1001_1010_labels_hclose_v1` |
+
+- 每个实验使用同窗口 `opening_<window>_features_350` 和一个最终 label；不得跨窗口或混用 target。
 - label schema 为 3 个样本键加 `label_short`、`label_next_close`、`target_label`；NaN 表示无效。
 - `target_label = xs_zscore(label_short) + 0.30 × xs_zscore(label_next_close)`。
 - 中间 `opening_<window>_labels_1m_3m_5m_next_mixed` 只用于 lineage/回滚，不直接训练。
-- 9 个 root 的 63 个年度文件已通过 schema、行数和 `_SUCCESS` 检查；5m 暂无旧实验对照。
+- 长持有期中间目录 `opening_{0931_0940,1001_1010}_labels_10m_1h_close_next` 同样只用于
+  lineage、审计和拆分，不直接训练。
+- 长持有期入场沿用决策时钟状态后 `+6s` 的 Ask1；10m/1h 在持有期结束后用 60 秒累计
+  `Turnover/Volume` VWAP 退出，当日收盘使用 `close_reference.ClosePrice`。
+- 长持有期 `label_next_close` 逐 key 复用既有 `opening_<window>_labels_h1m_v2`，不重新计算。
+- 原 9 个短周期 label 的 63 个年度文件和新增 6 个长持有期 label 的 42 个年度文件均已通过
+  schema、行数和 `_SUCCESS` 检查。
 
-这 9 组是新的权威训练数据版本，不是旧 6 个 1m/3m target cache 的逐值复制。旧 key 全部包含于新数据，
-但 key 覆盖、close tie-break 和计算精度不同；当前旧实验保留原输入完成或复现，后续实验改用上述矩阵。
+上述 9 个短周期与 6 个长持有期，共 15 个当前可用的新训练 label。9 个短周期 label 不是旧 6 个
+1m/3m target cache 的逐值复制：旧 key 全部包含于新数据，但 key 覆盖、close tie-break 和计算精度不同；
+当前旧实验保留原输入完成或复现，后续实验改用上述矩阵。
 
 ### 旧 corrected v6 兼容血缘
 

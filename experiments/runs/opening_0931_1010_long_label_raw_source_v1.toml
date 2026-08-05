@@ -1,0 +1,31 @@
+[run]
+id = "opening_0931_1010_long_label_raw_source_v1"
+kind = "long_label_raw_source"
+description = "Build a projected 10:19-11:12 PVC tick cache for exact 10m/1h VWAP exits of the 09:31 and 10:01 decision windows."
+status = "completed"
+
+[raw_source]
+output_root = "/mnt/output/opening_strength_fit/cache/opening_0931_1010_long_label_raw_source_v1"
+years = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+tick_table = "stock.tick"
+symbol_regex = "^(?:(?:00|30)\\d{4}\\.SZ|(?:60|68)\\d{4}\\.SH)$"
+# Overlap the existing 10:01 raw cache before its 10:20 endpoint, then retain
+# only cumulative Volume/Turnover states through the latest 11:11:06 exit.
+tick_windows = [[37140000000, 40320000000]]
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-long-label-raw-w0931-1010-v1"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+image_pull_secret = "highfort"
+clickhouse_secret = "opening-strength-clickhouse"
+avoid_nodes = ["node7", "node8"]
+shard_parallelism = 7
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:f04ef3ab7372000162e1b92bf86e96f5f6e0e36f15c163d75c9a3c1cc554ab09"
+
+[k8s.resources]
+cpu_request = "2"
+cpu_limit = "8"
+memory_request = "8Gi"
+memory_limit = "24Gi"

@@ -53,18 +53,24 @@ osf-build-raw-source-cache --config experiments/runs/opening_<window>_raw_source
 osf-build-training-datasets --config experiments/runs/opening_<window>_features_350.toml --kind features --year <YYYY>
 osf-build-training-datasets --config experiments/runs/opening_<window>_labels_5.toml --kind labels --year <YYYY>
 osf-split-horizon-labels --config experiments/runs/opening_<window>_labels_horizon_split.toml --year <YYYY>
+osf-build-long-label-raw-source --config experiments/runs/opening_0931_1010_long_label_raw_source_v1.toml --year <YYYY>
+osf-build-long-horizon-labels --config experiments/runs/opening_<window>_labels_10m_1h_close.toml --year <YYYY>
+osf-split-long-horizon-labels --config experiments/runs/opening_<window>_labels_10m_1h_close_split.toml --year <YYYY>
 ```
 
-后续实验从一个 label root 取数：
+后续实验从一个最终 label 的独立目录取数：
 
 ```text
 /mnt/output/opening_strength_fit/datasets/opening_{0931_0940,1001_1010,1401_1410}_labels_h{1,3,5}m_v2
+/mnt/output/opening_strength_fit/datasets/opening_{0931_0940,1001_1010}_labels_{h10m,h1h,hclose}_v1
 ```
 
 - 用 3 个样本键与同窗口 `opening_<window>_features_350` inner join；
 - 目标列为 `target_label`，NaN 行不训练；
 - 消费前检查两侧 parquet、manifest、`_SUCCESS`、key 唯一性和 join 覆盖；
-- 中间 5-label 大文件和旧 target cache 不作为新 run 输入。
+- 中间 `1m_3m_5m_next_mixed`、`10m_1h_close_next` 文件和旧 target cache 不作为新 run 输入。
+- 长持有期 10m/1h 使用持有期结束后的 60 秒 VWAP，`hclose` 使用当日收盘价；三者均复用既有
+  `label_next_close` 后构造相同权重的 mixed target。
 
 历史 `next_tick`/forward-5s 只用于旧实验复现；新 cache 默认使用
 `decision_alignment/entry_alignment/future_alignment = clock_state` 和 `entry_clock_delay_seconds = 6`。

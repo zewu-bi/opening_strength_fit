@@ -1,0 +1,42 @@
+[run]
+id = "opening_1001_1010_labels_10m_1h_close_split"
+kind = "long_horizon_label_split"
+description = "Split 10:01-10:10 long-horizon labels into 10m, 1h, and same-day-close mixed training roots."
+status = "completed"
+
+[dataset]
+years = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+label_output_root = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_labels_10m_1h_close_next"
+mixed_next_close_weight = 0.30
+mixed_min_group_size = 50
+
+[[dataset.mixed_labels]]
+name = "10m"
+source_column = "label_hold_10m"
+output_root = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_labels_h10m_v1"
+
+[[dataset.mixed_labels]]
+name = "1h"
+source_column = "label_hold_1h"
+output_root = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_labels_h1h_v1"
+
+[[dataset.mixed_labels]]
+name = "close"
+source_column = "label_same_day_close"
+output_root = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_labels_hclose_v1"
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-long-labelsplit-w1001-1010"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+image_pull_secret = "highfort"
+avoid_nodes = ["node7", "node8"]
+shard_parallelism = 7
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:f04ef3ab7372000162e1b92bf86e96f5f6e0e36f15c163d75c9a3c1cc554ab09"
+
+[k8s.resources]
+cpu_request = "4"
+cpu_limit = "12"
+memory_request = "8Gi"
+memory_limit = "32Gi"
