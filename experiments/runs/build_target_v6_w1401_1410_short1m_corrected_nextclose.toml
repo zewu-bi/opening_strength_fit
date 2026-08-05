@@ -1,21 +1,18 @@
 [run]
-id = "build_target_v6_w1401_1410_short3m_corrected_nextclose"
+id = "build_target_v6_w1401_1410_short1m_corrected_nextclose"
 kind = "cache_transform"
-description = "Build seven annual v6 mixed-target shards for 14:01:00-14:10:00: short3m short component plus corrected same-window next-close long component."
+description = "Build seven annual v6 mixed-target shards for 14:01:00-14:10:00: base-cache short1m component plus corrected same-window next-close long component."
 status = "completed"
 
 [target_cache]
 input_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v6_decision_clock_state_clock6_1401_1410_from_start_auction_reuse_mcap_lag1/opening_2019_label_v6_decision_clock_state_clock6_1401_1410_from_start_auction_reuse_mcap_lag1.parquet"
-output_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short3m_corrected_nextclose/opening_2019_target_v6_w1401_1410_short3m_corrected_nextclose.parquet"
+output_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2019_target_v6_w1401_1410_short1m_corrected_nextclose.parquet"
 mode = "mixed"
 group_cols = ["date", "decision_target_timestamp"]
 label_col = "label"
 target_col = "target_label"
 raw_label_col = "label_raw"
 min_group_size = 50
-short_label_input = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_short_label_v6_clock6_1401_1410_h180_vwap60_v1/opening_2019_short_label_v6_clock6_1401_1410_h180_vwap60_v1.parquet"
-short_label_col = "label"
-short_valid_col = "valid_label"
 long_label_input = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_next_close_decision_clock_state_clock6_1401_1410/opening_2019_next_close_decision_clock_state_clock6_1401_1410.parquet"
 long_label_col = "alpha_return_next_close"
 long_label_weight = 0.30
@@ -25,8 +22,7 @@ long_label_transform = "zscore"
 [target_cache_shards]
 years = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
 input_path_template = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v6_decision_clock_state_clock6_1401_1410_from_start_auction_reuse_mcap_lag1/opening_{year}_label_v6_decision_clock_state_clock6_1401_1410_from_start_auction_reuse_mcap_lag1.parquet"
-output_path_template = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short3m_corrected_nextclose/opening_{year}_target_v6_w1401_1410_short3m_corrected_nextclose.parquet"
-short_label_input_template = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_short_label_v6_clock6_1401_1410_h180_vwap60_v1/opening_{year}_short_label_v6_clock6_1401_1410_h180_vwap60_v1.parquet"
+output_path_template = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_{year}_target_v6_w1401_1410_short1m_corrected_nextclose.parquet"
 long_label_input_template = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_next_close_decision_clock_state_clock6_1401_1410/opening_{year}_next_close_decision_clock_state_clock6_1401_1410.parquet"
 
 [data]
@@ -34,16 +30,20 @@ source = "labeled_pvc"
 labeled_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v6_decision_clock_state_clock6_1401_1410_from_start_auction_reuse_mcap_lag1"
 
 [output]
-local_dir = "output/artifacts/cache_builds/build_target_v6_w1401_1410_short3m_corrected_nextclose"
-k8s_dir = "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short3m_corrected_nextclose"
+local_dir = "output/artifacts/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose"
+k8s_dir = "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose"
 
 [k8s]
 namespace = "bizewu"
-job_name = "os-target-v6-1401-1410-short3m"
+job_name = "os-target-v6-1401-1410-short1m"
 image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260731-corrected-label-matrix"
+config_map_name = "os-target-v6-1401-1410-short1m-config"
+config_map_volume_name = "run-config"
+config_map_mount_path = "/app/opening_strength_fit/experiments/runs/build_target_v6_w1401_1410_short1m_corrected_nextclose.toml"
+config_map_sub_path = "build_target_v6_w1401_1410_short1m_corrected_nextclose.toml"
 avoid_nodes = ["node7", "node8"]
 shard_parallelism = 7
 

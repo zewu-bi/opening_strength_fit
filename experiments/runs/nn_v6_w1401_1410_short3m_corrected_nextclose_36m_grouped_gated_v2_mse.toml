@@ -2,7 +2,7 @@
 id = "nn_v6_w1401_1410_short3m_corrected_nextclose_36m_grouped_gated_v2_mse"
 kind = "exploration"
 description = "Canonical v6 14:01:00-14:10:00 training with short3m short component and corrected same-window next-close long component; all feature, model, rolling OOS, pool, resource, and seed settings match the latest v6 incumbent."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"

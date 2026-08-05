@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: os-nn-v6-1001-1010-short3m-r1-s0
+  name: os-nn-v6-1401-1410-short1m-s0
   namespace: bizewu
 spec:
   backoffLimit: 0
@@ -15,7 +15,9 @@ spec:
         - name: opening-strength-output
           persistentVolumeClaim:
             claimName: bizewu-private-data
-
+        - name: run-config
+          configMap:
+            name: os-nn-v6-1401-1410-short1m-config
       nodeSelector:
         has_gpu: "true"
       affinity:
@@ -62,7 +64,7 @@ spec:
               WAIT_PATH_TIMEOUT_SECONDS=604800
               WAIT_PATH_INTERVAL_SECONDS=120
               WAIT_PATH_STARTED=${SECONDS}
-              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2019_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2020_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2021_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2022_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2023_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2024_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2025_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2019/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2020/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2021/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2022/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2023/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2024/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2025/_SUCCESS")
+              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2019_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2020_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2021_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2022_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2023_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2024_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2025_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2019/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2020/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2021/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2022/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2023/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2024/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2025/_SUCCESS")
               for WAIT_PATH in "${WAIT_PATHS[@]}"; do
                 until [ -f "${WAIT_PATH}" ]; do
                   if [ $((SECONDS - WAIT_PATH_STARTED)) -ge "${WAIT_PATH_TIMEOUT_SECONDS}" ]; then
@@ -74,7 +76,7 @@ spec:
                 done
                 echo "dependency file is ready: ${WAIT_PATH}"
               done
-              ROOT=/mnt/output/opening_strength_fit/nn/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse
+              ROOT=/mnt/output/opening_strength_fit/nn/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse
               mkdir -p "${ROOT}"
               TEST_START=2022-01
               TEST_END=2022-06
@@ -85,11 +87,11 @@ spec:
               fi
 
               echo
-              echo "running nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse shard test=${TEST_START}..${TEST_END} index=0"
+              echo "running nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse shard test=${TEST_START}..${TEST_END} index=0"
               echo "output_dir=${OUT}"
 
               osf-train \
-                --config experiments/runs/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse.toml \
+                --config experiments/runs/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml \
                 --rolling-monthly \
                 --train-months 36 \
                 --test-months 6 \
@@ -100,21 +102,23 @@ spec:
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output
-
+            - name: run-config
+              mountPath: /app/opening_strength_fit/experiments/runs/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml
+              subPath: nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml
           resources:
             requests:
               cpu: "16"
-              memory: 950Gi
+              memory: 608Gi
               nvidia.com/gpu: "1"
             limits:
               cpu: "32"
-              memory: 1400Gi
+              memory: 960Gi
               nvidia.com/gpu: "1"
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: os-nn-v6-1001-1010-short3m-r1-s1
+  name: os-nn-v6-1401-1410-short1m-s1
   namespace: bizewu
 spec:
   backoffLimit: 0
@@ -128,7 +132,9 @@ spec:
         - name: opening-strength-output
           persistentVolumeClaim:
             claimName: bizewu-private-data
-
+        - name: run-config
+          configMap:
+            name: os-nn-v6-1401-1410-short1m-config
       nodeSelector:
         has_gpu: "true"
       affinity:
@@ -175,7 +181,7 @@ spec:
               WAIT_PATH_TIMEOUT_SECONDS=604800
               WAIT_PATH_INTERVAL_SECONDS=120
               WAIT_PATH_STARTED=${SECONDS}
-              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2019_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2020_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2021_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2022_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2023_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2024_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2025_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2019/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2020/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2021/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2022/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2023/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2024/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2025/_SUCCESS")
+              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2019_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2020_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2021_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2022_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2023_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2024_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2025_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2019/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2020/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2021/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2022/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2023/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2024/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2025/_SUCCESS")
               for WAIT_PATH in "${WAIT_PATHS[@]}"; do
                 until [ -f "${WAIT_PATH}" ]; do
                   if [ $((SECONDS - WAIT_PATH_STARTED)) -ge "${WAIT_PATH_TIMEOUT_SECONDS}" ]; then
@@ -187,7 +193,7 @@ spec:
                 done
                 echo "dependency file is ready: ${WAIT_PATH}"
               done
-              ROOT=/mnt/output/opening_strength_fit/nn/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse
+              ROOT=/mnt/output/opening_strength_fit/nn/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse
               mkdir -p "${ROOT}"
               TEST_START=2022-07
               TEST_END=2022-12
@@ -198,11 +204,11 @@ spec:
               fi
 
               echo
-              echo "running nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse shard test=${TEST_START}..${TEST_END} index=1"
+              echo "running nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse shard test=${TEST_START}..${TEST_END} index=1"
               echo "output_dir=${OUT}"
 
               osf-train \
-                --config experiments/runs/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse.toml \
+                --config experiments/runs/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml \
                 --rolling-monthly \
                 --train-months 36 \
                 --test-months 6 \
@@ -213,21 +219,23 @@ spec:
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output
-
+            - name: run-config
+              mountPath: /app/opening_strength_fit/experiments/runs/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml
+              subPath: nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml
           resources:
             requests:
               cpu: "16"
-              memory: 950Gi
+              memory: 608Gi
               nvidia.com/gpu: "1"
             limits:
               cpu: "32"
-              memory: 1400Gi
+              memory: 960Gi
               nvidia.com/gpu: "1"
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: os-nn-v6-1001-1010-short3m-r1-s2
+  name: os-nn-v6-1401-1410-short1m-s2
   namespace: bizewu
 spec:
   backoffLimit: 0
@@ -241,7 +249,9 @@ spec:
         - name: opening-strength-output
           persistentVolumeClaim:
             claimName: bizewu-private-data
-
+        - name: run-config
+          configMap:
+            name: os-nn-v6-1401-1410-short1m-config
       nodeSelector:
         has_gpu: "true"
       affinity:
@@ -288,7 +298,7 @@ spec:
               WAIT_PATH_TIMEOUT_SECONDS=604800
               WAIT_PATH_INTERVAL_SECONDS=120
               WAIT_PATH_STARTED=${SECONDS}
-              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2019_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2020_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2021_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2022_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2023_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2024_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2025_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2019/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2020/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2021/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2022/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2023/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2024/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2025/_SUCCESS")
+              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2019_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2020_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2021_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2022_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2023_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2024_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2025_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2019/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2020/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2021/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2022/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2023/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2024/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2025/_SUCCESS")
               for WAIT_PATH in "${WAIT_PATHS[@]}"; do
                 until [ -f "${WAIT_PATH}" ]; do
                   if [ $((SECONDS - WAIT_PATH_STARTED)) -ge "${WAIT_PATH_TIMEOUT_SECONDS}" ]; then
@@ -300,7 +310,7 @@ spec:
                 done
                 echo "dependency file is ready: ${WAIT_PATH}"
               done
-              ROOT=/mnt/output/opening_strength_fit/nn/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse
+              ROOT=/mnt/output/opening_strength_fit/nn/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse
               mkdir -p "${ROOT}"
               TEST_START=2023-01
               TEST_END=2023-06
@@ -311,11 +321,11 @@ spec:
               fi
 
               echo
-              echo "running nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse shard test=${TEST_START}..${TEST_END} index=2"
+              echo "running nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse shard test=${TEST_START}..${TEST_END} index=2"
               echo "output_dir=${OUT}"
 
               osf-train \
-                --config experiments/runs/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse.toml \
+                --config experiments/runs/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml \
                 --rolling-monthly \
                 --train-months 36 \
                 --test-months 6 \
@@ -326,21 +336,23 @@ spec:
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output
-
+            - name: run-config
+              mountPath: /app/opening_strength_fit/experiments/runs/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml
+              subPath: nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml
           resources:
             requests:
               cpu: "16"
-              memory: 950Gi
+              memory: 608Gi
               nvidia.com/gpu: "1"
             limits:
               cpu: "32"
-              memory: 1400Gi
+              memory: 960Gi
               nvidia.com/gpu: "1"
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: os-nn-v6-1001-1010-short3m-r1-s3
+  name: os-nn-v6-1401-1410-short1m-s3
   namespace: bizewu
 spec:
   backoffLimit: 0
@@ -354,7 +366,9 @@ spec:
         - name: opening-strength-output
           persistentVolumeClaim:
             claimName: bizewu-private-data
-
+        - name: run-config
+          configMap:
+            name: os-nn-v6-1401-1410-short1m-config
       nodeSelector:
         has_gpu: "true"
       affinity:
@@ -401,7 +415,7 @@ spec:
               WAIT_PATH_TIMEOUT_SECONDS=604800
               WAIT_PATH_INTERVAL_SECONDS=120
               WAIT_PATH_STARTED=${SECONDS}
-              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2019_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2020_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2021_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2022_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2023_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2024_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2025_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2019/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2020/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2021/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2022/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2023/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2024/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2025/_SUCCESS")
+              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2019_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2020_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2021_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2022_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2023_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2024_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2025_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2019/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2020/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2021/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2022/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2023/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2024/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2025/_SUCCESS")
               for WAIT_PATH in "${WAIT_PATHS[@]}"; do
                 until [ -f "${WAIT_PATH}" ]; do
                   if [ $((SECONDS - WAIT_PATH_STARTED)) -ge "${WAIT_PATH_TIMEOUT_SECONDS}" ]; then
@@ -413,7 +427,7 @@ spec:
                 done
                 echo "dependency file is ready: ${WAIT_PATH}"
               done
-              ROOT=/mnt/output/opening_strength_fit/nn/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse
+              ROOT=/mnt/output/opening_strength_fit/nn/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse
               mkdir -p "${ROOT}"
               TEST_START=2023-07
               TEST_END=2023-12
@@ -424,11 +438,11 @@ spec:
               fi
 
               echo
-              echo "running nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse shard test=${TEST_START}..${TEST_END} index=3"
+              echo "running nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse shard test=${TEST_START}..${TEST_END} index=3"
               echo "output_dir=${OUT}"
 
               osf-train \
-                --config experiments/runs/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse.toml \
+                --config experiments/runs/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml \
                 --rolling-monthly \
                 --train-months 36 \
                 --test-months 6 \
@@ -439,21 +453,23 @@ spec:
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output
-
+            - name: run-config
+              mountPath: /app/opening_strength_fit/experiments/runs/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml
+              subPath: nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml
           resources:
             requests:
               cpu: "16"
-              memory: 950Gi
+              memory: 608Gi
               nvidia.com/gpu: "1"
             limits:
               cpu: "32"
-              memory: 1400Gi
+              memory: 960Gi
               nvidia.com/gpu: "1"
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: os-nn-v6-1001-1010-short3m-r1-s4
+  name: os-nn-v6-1401-1410-short1m-s4
   namespace: bizewu
 spec:
   backoffLimit: 0
@@ -467,7 +483,9 @@ spec:
         - name: opening-strength-output
           persistentVolumeClaim:
             claimName: bizewu-private-data
-
+        - name: run-config
+          configMap:
+            name: os-nn-v6-1401-1410-short1m-config
       nodeSelector:
         has_gpu: "true"
       affinity:
@@ -514,7 +532,7 @@ spec:
               WAIT_PATH_TIMEOUT_SECONDS=604800
               WAIT_PATH_INTERVAL_SECONDS=120
               WAIT_PATH_STARTED=${SECONDS}
-              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2019_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2020_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2021_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2022_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2023_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2024_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2025_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2019/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2020/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2021/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2022/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2023/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2024/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2025/_SUCCESS")
+              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2019_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2020_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2021_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2022_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2023_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2024_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2025_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2019/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2020/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2021/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2022/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2023/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2024/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2025/_SUCCESS")
               for WAIT_PATH in "${WAIT_PATHS[@]}"; do
                 until [ -f "${WAIT_PATH}" ]; do
                   if [ $((SECONDS - WAIT_PATH_STARTED)) -ge "${WAIT_PATH_TIMEOUT_SECONDS}" ]; then
@@ -526,7 +544,7 @@ spec:
                 done
                 echo "dependency file is ready: ${WAIT_PATH}"
               done
-              ROOT=/mnt/output/opening_strength_fit/nn/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse
+              ROOT=/mnt/output/opening_strength_fit/nn/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse
               mkdir -p "${ROOT}"
               TEST_START=2024-01
               TEST_END=2024-06
@@ -537,11 +555,11 @@ spec:
               fi
 
               echo
-              echo "running nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse shard test=${TEST_START}..${TEST_END} index=4"
+              echo "running nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse shard test=${TEST_START}..${TEST_END} index=4"
               echo "output_dir=${OUT}"
 
               osf-train \
-                --config experiments/runs/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse.toml \
+                --config experiments/runs/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml \
                 --rolling-monthly \
                 --train-months 36 \
                 --test-months 6 \
@@ -552,21 +570,23 @@ spec:
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output
-
+            - name: run-config
+              mountPath: /app/opening_strength_fit/experiments/runs/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml
+              subPath: nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml
           resources:
             requests:
               cpu: "16"
-              memory: 950Gi
+              memory: 608Gi
               nvidia.com/gpu: "1"
             limits:
               cpu: "32"
-              memory: 1400Gi
+              memory: 960Gi
               nvidia.com/gpu: "1"
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: os-nn-v6-1001-1010-short3m-r1-s5
+  name: os-nn-v6-1401-1410-short1m-s5
   namespace: bizewu
 spec:
   backoffLimit: 0
@@ -580,7 +600,9 @@ spec:
         - name: opening-strength-output
           persistentVolumeClaim:
             claimName: bizewu-private-data
-
+        - name: run-config
+          configMap:
+            name: os-nn-v6-1401-1410-short1m-config
       nodeSelector:
         has_gpu: "true"
       affinity:
@@ -627,7 +649,7 @@ spec:
               WAIT_PATH_TIMEOUT_SECONDS=604800
               WAIT_PATH_INTERVAL_SECONDS=120
               WAIT_PATH_STARTED=${SECONDS}
-              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2019_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2020_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2021_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2022_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2023_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2024_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2025_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2019/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2020/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2021/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2022/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2023/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2024/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2025/_SUCCESS")
+              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2019_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2020_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2021_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2022_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2023_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2024_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2025_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2019/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2020/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2021/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2022/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2023/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2024/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2025/_SUCCESS")
               for WAIT_PATH in "${WAIT_PATHS[@]}"; do
                 until [ -f "${WAIT_PATH}" ]; do
                   if [ $((SECONDS - WAIT_PATH_STARTED)) -ge "${WAIT_PATH_TIMEOUT_SECONDS}" ]; then
@@ -639,7 +661,7 @@ spec:
                 done
                 echo "dependency file is ready: ${WAIT_PATH}"
               done
-              ROOT=/mnt/output/opening_strength_fit/nn/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse
+              ROOT=/mnt/output/opening_strength_fit/nn/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse
               mkdir -p "${ROOT}"
               TEST_START=2024-07
               TEST_END=2024-12
@@ -650,11 +672,11 @@ spec:
               fi
 
               echo
-              echo "running nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse shard test=${TEST_START}..${TEST_END} index=5"
+              echo "running nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse shard test=${TEST_START}..${TEST_END} index=5"
               echo "output_dir=${OUT}"
 
               osf-train \
-                --config experiments/runs/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse.toml \
+                --config experiments/runs/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml \
                 --rolling-monthly \
                 --train-months 36 \
                 --test-months 6 \
@@ -665,21 +687,23 @@ spec:
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output
-
+            - name: run-config
+              mountPath: /app/opening_strength_fit/experiments/runs/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml
+              subPath: nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml
           resources:
             requests:
               cpu: "16"
-              memory: 950Gi
+              memory: 608Gi
               nvidia.com/gpu: "1"
             limits:
               cpu: "32"
-              memory: 1400Gi
+              memory: 960Gi
               nvidia.com/gpu: "1"
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: os-nn-v6-1001-1010-short3m-r1-s6
+  name: os-nn-v6-1401-1410-short1m-s6
   namespace: bizewu
 spec:
   backoffLimit: 0
@@ -693,7 +717,9 @@ spec:
         - name: opening-strength-output
           persistentVolumeClaim:
             claimName: bizewu-private-data
-
+        - name: run-config
+          configMap:
+            name: os-nn-v6-1401-1410-short1m-config
       nodeSelector:
         has_gpu: "true"
       affinity:
@@ -740,7 +766,7 @@ spec:
               WAIT_PATH_TIMEOUT_SECONDS=604800
               WAIT_PATH_INTERVAL_SECONDS=120
               WAIT_PATH_STARTED=${SECONDS}
-              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2019_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2020_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2021_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2022_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2023_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2024_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2025_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2019/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2020/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2021/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2022/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2023/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2024/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2025/_SUCCESS")
+              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2019_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2020_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2021_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2022_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2023_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2024_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2025_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2019/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2020/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2021/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2022/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2023/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2024/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2025/_SUCCESS")
               for WAIT_PATH in "${WAIT_PATHS[@]}"; do
                 until [ -f "${WAIT_PATH}" ]; do
                   if [ $((SECONDS - WAIT_PATH_STARTED)) -ge "${WAIT_PATH_TIMEOUT_SECONDS}" ]; then
@@ -752,7 +778,7 @@ spec:
                 done
                 echo "dependency file is ready: ${WAIT_PATH}"
               done
-              ROOT=/mnt/output/opening_strength_fit/nn/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse
+              ROOT=/mnt/output/opening_strength_fit/nn/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse
               mkdir -p "${ROOT}"
               TEST_START=2025-01
               TEST_END=2025-06
@@ -763,11 +789,11 @@ spec:
               fi
 
               echo
-              echo "running nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse shard test=${TEST_START}..${TEST_END} index=6"
+              echo "running nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse shard test=${TEST_START}..${TEST_END} index=6"
               echo "output_dir=${OUT}"
 
               osf-train \
-                --config experiments/runs/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse.toml \
+                --config experiments/runs/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml \
                 --rolling-monthly \
                 --train-months 36 \
                 --test-months 6 \
@@ -778,21 +804,23 @@ spec:
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output
-
+            - name: run-config
+              mountPath: /app/opening_strength_fit/experiments/runs/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml
+              subPath: nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml
           resources:
             requests:
               cpu: "16"
-              memory: 950Gi
+              memory: 608Gi
               nvidia.com/gpu: "1"
             limits:
               cpu: "32"
-              memory: 1400Gi
+              memory: 960Gi
               nvidia.com/gpu: "1"
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: os-nn-v6-1001-1010-short3m-r1-s7
+  name: os-nn-v6-1401-1410-short1m-s7
   namespace: bizewu
 spec:
   backoffLimit: 0
@@ -806,7 +834,9 @@ spec:
         - name: opening-strength-output
           persistentVolumeClaim:
             claimName: bizewu-private-data
-
+        - name: run-config
+          configMap:
+            name: os-nn-v6-1401-1410-short1m-config
       nodeSelector:
         has_gpu: "true"
       affinity:
@@ -853,7 +883,7 @@ spec:
               WAIT_PATH_TIMEOUT_SECONDS=604800
               WAIT_PATH_INTERVAL_SECONDS=120
               WAIT_PATH_STARTED=${SECONDS}
-              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2019_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2020_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2021_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2022_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2023_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2024_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2025_target_v6_w1001_1010_short3m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2019/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2020/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2021/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2022/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2023/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2024/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2025/_SUCCESS")
+              WAIT_PATHS=("/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2019_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2020_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2021_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2022_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2023_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2024_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2025_target_v6_w1401_1410_short1m_corrected_nextclose.parquet" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2019/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2020/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2021/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2022/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2023/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2024/_SUCCESS" "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1401_1410_short1m_corrected_nextclose/year=2025/_SUCCESS")
               for WAIT_PATH in "${WAIT_PATHS[@]}"; do
                 until [ -f "${WAIT_PATH}" ]; do
                   if [ $((SECONDS - WAIT_PATH_STARTED)) -ge "${WAIT_PATH_TIMEOUT_SECONDS}" ]; then
@@ -865,7 +895,7 @@ spec:
                 done
                 echo "dependency file is ready: ${WAIT_PATH}"
               done
-              ROOT=/mnt/output/opening_strength_fit/nn/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse
+              ROOT=/mnt/output/opening_strength_fit/nn/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse
               mkdir -p "${ROOT}"
               TEST_START=2025-07
               TEST_END=2025-12
@@ -876,11 +906,11 @@ spec:
               fi
 
               echo
-              echo "running nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse shard test=${TEST_START}..${TEST_END} index=7"
+              echo "running nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse shard test=${TEST_START}..${TEST_END} index=7"
               echo "output_dir=${OUT}"
 
               osf-train \
-                --config experiments/runs/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse.toml \
+                --config experiments/runs/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml \
                 --rolling-monthly \
                 --train-months 36 \
                 --test-months 6 \
@@ -891,13 +921,15 @@ spec:
           volumeMounts:
             - name: opening-strength-output
               mountPath: /mnt/output
-
+            - name: run-config
+              mountPath: /app/opening_strength_fit/experiments/runs/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml
+              subPath: nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml
           resources:
             requests:
               cpu: "16"
-              memory: 950Gi
+              memory: 608Gi
               nvidia.com/gpu: "1"
             limits:
               cpu: "32"
-              memory: 1400Gi
+              memory: 960Gi
               nvidia.com/gpu: "1"

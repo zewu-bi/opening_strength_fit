@@ -1,0 +1,29 @@
+effect,slice,metric,delta
+holding_horizon_3m_minus_1m,09:31-09:40,universe_short_rank_ic,-0.051086000000000006
+holding_horizon_3m_minus_1m,09:31-09:40,pool_L_top100_short_excess_bps,1.1033109999999997
+holding_horizon_3m_minus_1m,09:31-09:40,pool_L_top100_overnight_excess_bps,2.127271999999998
+holding_horizon_3m_minus_1m,09:31-09:40,pool_L_overnight_rank_ic,0.0005679999999999991
+holding_horizon_3m_minus_1m,10:01-10:10,universe_short_rank_ic,-0.06975799999999999
+holding_horizon_3m_minus_1m,10:01-10:10,pool_L_top100_short_excess_bps,0.1862389999999996
+holding_horizon_3m_minus_1m,10:01-10:10,pool_L_top100_overnight_excess_bps,1.7267520000000003
+holding_horizon_3m_minus_1m,10:01-10:10,pool_L_overnight_rank_ic,0.0012200000000000002
+holding_horizon_3m_minus_1m,14:01-14:10,universe_short_rank_ic,-0.06257000000000001
+holding_horizon_3m_minus_1m,14:01-14:10,pool_L_top100_short_excess_bps,0.4273529999999992
+holding_horizon_3m_minus_1m,14:01-14:10,pool_L_top100_overnight_excess_bps,1.2196620000000002
+holding_horizon_3m_minus_1m,14:01-14:10,pool_L_overnight_rank_ic,0.002999999999999999
+window_minus_09:31-09:40,10:01-10:10 @ 1m,universe_short_rank_ic,0.094938
+window_minus_09:31-09:40,10:01-10:10 @ 1m,pool_L_top100_short_excess_bps,-4.1122819999999995
+window_minus_09:31-09:40,10:01-10:10 @ 1m,pool_L_top100_overnight_excess_bps,-11.4147
+window_minus_09:31-09:40,10:01-10:10 @ 1m,pool_L_overnight_rank_ic,-0.00605
+window_minus_09:31-09:40,14:01-14:10 @ 1m,universe_short_rank_ic,0.21884800000000001
+window_minus_09:31-09:40,14:01-14:10 @ 1m,pool_L_top100_short_excess_bps,-4.163640999999999
+window_minus_09:31-09:40,14:01-14:10 @ 1m,pool_L_top100_overnight_excess_bps,-16.99104
+window_minus_09:31-09:40,14:01-14:10 @ 1m,pool_L_overnight_rank_ic,0.0002950000000000001
+window_minus_09:31-09:40,10:01-10:10 @ 3m,universe_short_rank_ic,0.07626600000000001
+window_minus_09:31-09:40,10:01-10:10 @ 3m,pool_L_top100_short_excess_bps,-5.029354
+window_minus_09:31-09:40,10:01-10:10 @ 3m,pool_L_top100_overnight_excess_bps,-11.815219999999998
+window_minus_09:31-09:40,10:01-10:10 @ 3m,pool_L_overnight_rank_ic,-0.005397999999999999
+window_minus_09:31-09:40,14:01-14:10 @ 3m,universe_short_rank_ic,0.207364
+window_minus_09:31-09:40,14:01-14:10 @ 3m,pool_L_top100_short_excess_bps,-4.839599
+window_minus_09:31-09:40,14:01-14:10 @ 3m,pool_L_top100_overnight_excess_bps,-17.89865
+window_minus_09:31-09:40,14:01-14:10 @ 3m,pool_L_overnight_rank_ic,0.0027270000000000003

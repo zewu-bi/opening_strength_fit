@@ -153,6 +153,24 @@ status = "completed"
     assert "local" in result.stdout
 
 
+def test_experiment_audit_allows_local_comparison_analysis_run(tmp_path: Path) -> None:
+    result = _run_audit_fixture(
+        tmp_path,
+        run_id="local_comparison",
+        run_toml="""\
+[run]
+id = "local_comparison"
+kind = "comparison_analysis"
+description = "local comparison fixture"
+status = "completed"
+""",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "local_comparison" in result.stdout
+    assert "local" in result.stdout
+
+
 def test_experiment_audit_only_requires_ignored_metrics_in_strict_mode(tmp_path: Path) -> None:
     run_toml = """\
 [run]

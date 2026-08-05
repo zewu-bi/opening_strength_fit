@@ -2,7 +2,7 @@
 id = "build_target_v6_w0931_0940_short3m_corrected_nextclose"
 kind = "cache_transform"
 description = "Build seven annual v6 mixed-target shards for 09:31:00-09:40:00: short3m short component plus corrected same-window next-close long component."
-status = "running"
+status = "completed"
 
 [target_cache]
 input_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v6_decision_clock_state_clock6_unique_base_mcap_lag1/opening_2019_label_v6_decision_clock_state_clock6_unique_base_mcap_lag1.parquet"

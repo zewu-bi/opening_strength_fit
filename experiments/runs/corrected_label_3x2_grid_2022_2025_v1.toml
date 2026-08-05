@@ -1,0 +1,28 @@
+[run]
+id = "corrected_label_3x2_grid_2022_2025_v1"
+kind = "comparison_analysis"
+description = "Closeout comparison for the corrected-label three-window by two-short-horizon NN rolling-OOS grid."
+status = "completed"
+
+[grid]
+windows = ["09:31-09:40", "10:01-10:10", "14:01-14:10"]
+short_horizons = ["1m", "3m"]
+test_start_month = "2022-01"
+test_end_month = "2025-12"
+source_run_ids = [
+  "nn_v6_w0931_0940_short1m_corrected_nextclose_36m_grouped_gated_v2_mse",
+  "nn_v6_w0931_0940_short3m_corrected_nextclose_36m_grouped_gated_v2_mse",
+  "nn_v6_w1001_1010_short1m_corrected_nextclose_36m_grouped_gated_v2_mse",
+  "nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse",
+  "nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse",
+  "nn_v6_w1401_1410_short3m_corrected_nextclose_36m_grouped_gated_v2_mse",
+]
+
+[evaluation]
+pool = "L"
+top_n = 100
+metrics = ["universe_short_rank_ic", "pool_L_top100_short_excess_bps", "pool_L_top100_overnight_excess_bps", "pool_L_overnight_rank_ic"]
+
+[output]
+local_dir = "experiments/results/backtests/corrected_label_3x2_grid_2022_2025_v1"
+evidence_dir = "experiments/evidence/backtests/corrected_label_3x2_grid_2022_2025_v1"

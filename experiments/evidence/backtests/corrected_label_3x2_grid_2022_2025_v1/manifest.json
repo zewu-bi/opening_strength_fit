@@ -1,0 +1,88 @@
+{
+  "created_at_utc": "2026-08-05T01:53:12.350103+00:00",
+  "definitions": {
+    "overnight_excess": "Mean pool_L Top100 next-close internal excess in bps",
+    "overnight_ic": "Mean pool_L next-close Rank IC",
+    "short_excess": "Mean pool_L Top100 short internal excess in bps",
+    "short_ic": "Mean universe short Rank IC across quarterly OOS summaries"
+  },
+  "outputs": {
+    "02_top100_cumulative_3x2.csv": {
+      "bytes": 454470,
+      "sha256": "c58a11e5b65f7e62928b8c409308dcf8d7b2dd8a28e1754d117c9620113901ad"
+    },
+    "02_top100_cumulative_3x2.svg": {
+      "bytes": 156326,
+      "sha256": "c10ec4b80dec9ae12cb31ed348b4eff0069c4aa4298415531bb22d0e3d7786f0"
+    },
+    "02_top100_cumulative_3x2_trace.json": {
+      "bytes": 2989,
+      "sha256": "a07474173529f83640fc0e734ccb3496799952479dd90ccaa65de86380162dbb"
+    },
+    "corrected_label_3x2_effects.csv": {
+      "bytes": 2459,
+      "sha256": "56174486e78853e76d64e4e7eab7347944b8e4ecfa69c3371f5e27227e1c1768"
+    },
+    "corrected_label_3x2_summary.csv": {
+      "bytes": 868,
+      "sha256": "49d4d4b144b3850ce1106c929205d43c354df54906657591a3bb65f8f6baa129"
+    },
+    "corrected_label_3x2_summary.md": {
+      "bytes": 529,
+      "sha256": "1c07b5b0e0548baab1827750064c3f1605d1b2b76460f7a052c01576eedf666a"
+    }
+  },
+  "period": "2022-01 through 2025-12",
+  "schema_version": 1,
+  "scope": "corrected-label three-window by two-short-horizon rolling-OOS grid",
+  "sources": {
+    "experiments/results/backtests/nn_v6_w0931_0940_short1m_corrected_nextclose_36m_grouped_gated_v2_mse/next_excess_rank_ic_plot_data.csv": {
+      "bytes": 3777,
+      "sha256": "651bd406a6e3e7e927ed1fa4ebcfaae70a9b2e32658acb0b75d27282b751083d"
+    },
+    "experiments/results/backtests/nn_v6_w0931_0940_short1m_corrected_nextclose_36m_grouped_gated_v2_mse/short_excess_rank_ic_plot_data.csv": {
+      "bytes": 3771,
+      "sha256": "a9a4a1287f2c1b2240e33a8c07a09e13fc2ba0b5bc702b42f13a59830c5d1b10"
+    },
+    "experiments/results/backtests/nn_v6_w0931_0940_short3m_corrected_nextclose_36m_grouped_gated_v2_mse/next_excess_rank_ic_plot_data.csv": {
+      "bytes": 3773,
+      "sha256": "be2ff0a18e1fc868c9707fa8667179dd587f18e4cae6f97c46c0637780209a73"
+    },
+    "experiments/results/backtests/nn_v6_w0931_0940_short3m_corrected_nextclose_36m_grouped_gated_v2_mse/short_excess_rank_ic_plot_data.csv": {
+      "bytes": 3774,
+      "sha256": "5fe88c3b58c4c27061ba810359c5f4bc26e7c877b9bf97c85c9797e00362cd96"
+    },
+    "experiments/results/backtests/nn_v6_w1001_1010_short1m_corrected_nextclose_36m_grouped_gated_v2_mse/next_excess_rank_ic_plot_data.csv": {
+      "bytes": 3798,
+      "sha256": "0cf101a50b05fefed9f092e800cdca2ef8871e563265f1f19bd951c14cfcf8f3"
+    },
+    "experiments/results/backtests/nn_v6_w1001_1010_short1m_corrected_nextclose_36m_grouped_gated_v2_mse/short_excess_rank_ic_plot_data.csv": {
+      "bytes": 3760,
+      "sha256": "42cb749e5357f34f52bc5b3d4b21c8641cb8e1886aaa2476e63c5ed796031e7b"
+    },
+    "experiments/results/backtests/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse/next_excess_rank_ic_plot_data.csv": {
+      "bytes": 3791,
+      "sha256": "b61010c8b4d903aa11fca0ebba49a7b859e40a5ca2f36b0850996abe1ef78144"
+    },
+    "experiments/results/backtests/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse/short_excess_rank_ic_plot_data.csv": {
+      "bytes": 3759,
+      "sha256": "6a7f52517ee88802f26244b517b488853a15adce375cf8f96051ef868518055e"
+    },
+    "experiments/results/backtests/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse/next_excess_rank_ic_plot_data.csv": {
+      "bytes": 3789,
+      "sha256": "3262251ead7eedaaa40b0774cf3e93d3a9e3225df977bf4bea7d9b132d90cc08"
+    },
+    "experiments/results/backtests/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse/short_excess_rank_ic_plot_data.csv": {
+      "bytes": 3757,
+      "sha256": "9904f5bd41d88367333779880bea62bfc27399f55ef7be3305ebc89beb28ec76"
+    },
+    "experiments/results/backtests/nn_v6_w1401_1410_short3m_corrected_nextclose_36m_grouped_gated_v2_mse/next_excess_rank_ic_plot_data.csv": {
+      "bytes": 3781,
+      "sha256": "665edb237500b2a6e292547ce8f06b3a91a5bb872cd15163e5ffbe709bb6acc7"
+    },
+    "experiments/results/backtests/nn_v6_w1401_1410_short3m_corrected_nextclose_36m_grouped_gated_v2_mse/short_excess_rank_ic_plot_data.csv": {
+      "bytes": 3760,
+      "sha256": "c732446b30dd04377d8c24bff32ce061b25de49833c6450a2854377881d10519"
+    }
+  }
+}

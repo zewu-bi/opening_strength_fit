@@ -1,0 +1,93 @@
+{
+  "apiVersion": "batch/v1",
+  "kind": "Job",
+  "metadata": {
+    "name": "os-top1000-corrected-1001-1010-3m-hist",
+    "namespace": "bizewu"
+  },
+  "spec": {
+    "backoffLimit": 0,
+    "ttlSecondsAfterFinished": 86400,
+    "template": {
+      "spec": {
+        "restartPolicy": "Never",
+        "imagePullSecrets": [
+          {
+            "name": "highfort"
+          }
+        ],
+        "nodeSelector": {
+          "kubernetes.io/hostname": "node14"
+        },
+        "tolerations": [
+          {
+            "key": "has_gpu",
+            "operator": "Equal",
+            "value": "true",
+            "effect": "NoSchedule"
+          }
+        ],
+        "volumes": [
+          {
+            "name": "opening-strength-output",
+            "persistentVolumeClaim": {
+              "claimName": "bizewu-private-data"
+            }
+          },
+          {
+            "name": "analysis-script",
+            "configMap": {
+              "name": "os-top1000-rank-bucket-script-v3"
+            }
+          }
+        ],
+        "containers": [
+          {
+            "name": "opening-strength-fit",
+            "image": "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260731-corrected-label-matrix",
+            "imagePullPolicy": "Always",
+            "envFrom": [
+              {
+                "secretRef": {
+                  "name": "opening-strength-clickhouse"
+                }
+              },
+              {
+                "secretRef": {
+                  "name": "xy-fit-ceph-credentials"
+                }
+              }
+            ],
+            "workingDir": "/app/opening_strength_fit",
+            "command": [
+              "/bin/bash",
+              "-lc",
+              "set -euo pipefail\nmkdir -p /tmp/1001_1010-short3m-next-label-compat /mnt/output/opening_strength_fit/nn/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse/analysis/top1000_corrected_acceptance\nfor YEAR in 2019 2020 2021 2022 2023 2024 2025; do\n  ln -sf /mnt/output/opening_strength_fit/cache/opening_2019_2025_next_close_decision_clock_state_clock6_1001_1010/opening_${YEAR}_next_close_decision_clock_state_clock6_1001_1010.parquet /tmp/1001_1010-short3m-next-label-compat/opening_${YEAR}_next_close_labels_v1.parquet\ndone\npython /opt/analysis/run_top1000_rank_bucket_diagnostics.py --prediction-root /mnt/output/opening_strength_fit/nn --next-label-root /tmp/1001_1010-short3m-next-label-compat --pool-path lml.bzw@ssd/data/pool_L.parquet --output-dir /mnt/output/opening_strength_fit/nn/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse/analysis/top1000_corrected_acceptance/hist --variant corrected_1001_1010_short3m --run-id nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse --top1000-bucket-return-histogram-only --histogram-bin-width-bps 100\ntouch /mnt/output/opening_strength_fit/nn/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse/analysis/top1000_corrected_acceptance/_HIST_SUCCESS"
+            ],
+            "volumeMounts": [
+              {
+                "name": "opening-strength-output",
+                "mountPath": "/mnt/output"
+              },
+              {
+                "name": "analysis-script",
+                "mountPath": "/opt/analysis",
+                "readOnly": true
+              }
+            ],
+            "resources": {
+              "requests": {
+                "cpu": "8",
+                "memory": "192Gi"
+              },
+              "limits": {
+                "cpu": "16",
+                "memory": "320Gi"
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

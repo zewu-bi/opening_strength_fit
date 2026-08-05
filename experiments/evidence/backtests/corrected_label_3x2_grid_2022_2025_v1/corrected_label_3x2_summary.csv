@@ -1,0 +1,7 @@
+window,holding_horizon,run_id,universe_short_rank_ic,pool_L_top100_short_excess_bps,pool_L_top100_overnight_excess_bps,pool_L_overnight_rank_ic
+09:31-09:40,1m,nn_v6_w0931_0940_short1m_corrected_nextclose_36m_grouped_gated_v2_mse,0.160081,11.812923,18.08143,0.008845
+09:31-09:40,3m,nn_v6_w0931_0940_short3m_corrected_nextclose_36m_grouped_gated_v2_mse,0.108995,12.916234,20.208702,0.009413
+10:01-10:10,1m,nn_v6_w1001_1010_short1m_corrected_nextclose_36m_grouped_gated_v2_mse,0.255019,7.700641,6.66673,0.002795
+10:01-10:10,3m,nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse,0.185261,7.88688,8.393482,0.004015
+14:01-14:10,1m,nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse,0.378929,7.649282,1.09039,0.00914
+14:01-14:10,3m,nn_v6_w1401_1410_short3m_corrected_nextclose_36m_grouped_gated_v2_mse,0.316359,8.076635,2.310052,0.01214

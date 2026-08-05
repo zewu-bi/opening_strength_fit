@@ -1,14 +1,15 @@
 # Project Brief
 
-> Last reviewed: 2026-08-04
+> Last reviewed: 2026-08-05
 
 ## 目标
 
 项目研究分钟级、因果可见的 opening score，能否在 `pool_L` 内产生扣除成本、容量和执行限制后仍稳定的
 超额。模型可使用全 A 股训练，但只评价既定股池内的增量。
 
-当前 `09:31-09:40` 基准为 `opening_model`。`10:01-10:10` 已确认 short 排序仍强、可交易头部收益明显
-衰减；后续用相同训练和验收口径比较预先固定的其他十分钟窗口。
+当前 `09:31-09:40` 基准为 `opening_model`。旧 corrected-label 血缘上的三窗口 × 1m/3m 网格已经
+完成：窗口越晚，short Rank IC 越高，但可交易头部尤其隔夜超额越弱；六格中经济指标最强的是
+`09:31-09:40 / 3m`。
 
 ## 固定研究口径
 
@@ -51,7 +52,7 @@ rolling OOS 可用于模型和特征选择，不是 untouched final test。
 ### 旧 corrected v6 兼容血缘
 
 2026-07-31 启动的旧 1m/3m 实验继续读取各自 run TOML 中固定的 base、standalone 3m、corrected
-next-close 和 target cache。它们只用于历史复现，不再作为新实验模板。
+next-close 和 target cache。六组 3×2 网格已经完成并归档；它们只用于历史复现，不再作为新实验模板。
 
 ## 当前结论
 
@@ -62,6 +63,9 @@ next-close 和 target cache。它们只用于历史复现，不再作为新实�
 | fixed-clock v4 multi-denominator | `17.1714 bps` | archived previous baseline |
 | `opening_model` | **`17.7934 bps`** | 最新信号/模型基准；策略层待重跑 |
 | 10:01-10:10 multi-denominator | `6.5491 bps` | decay checkpoint；不晋级 |
+| corrected 3×2：09:31 / 3m | **`20.2087 bps`** | 六格经济指标最强；旧兼容血缘结论 |
+| corrected 3×2：10:01 / 1m~3m | `6.6667~8.3935 bps` | 信号层归档；不晋级 |
+| corrected 3×2：14:01 / 1m~3m | `1.0904~2.3101 bps` | 信号层归档；不晋级 |
 
 `opening_model` 的当前证据见
 [baseline evidence](../experiments/evidence/baselines/opening_model/)，不可变来源见
@@ -90,7 +94,6 @@ overlap 等用于风险解释，不设自动通过或否决门槛。
 后续顺序：
 
 1. 在 `opening_model` 上重跑 unified capacity/no-refill/visible-refill；
-2. 完成预先固定的日内窗口训练与四图比较；
-3. 每个窗口只允许时钟和对应数据 lineage 变化；
-4. 只让保留足够信号的窗口进入完整策略验收；
-5. 汇总窗口时点与 OOS 选股能力的衰减关系。
+2. 后续新实验直接使用分层后的 `features_350 + horizon label` 数据，不再现场拼旧 target cache；
+3. 如需把 3×2 结论迁移到新权威数据版本，按同一模型/seed/rolling-OOS 口径完整重跑；
+4. 只让 09:31 窗口中保留足够经济收益的候选进入完整策略验收。

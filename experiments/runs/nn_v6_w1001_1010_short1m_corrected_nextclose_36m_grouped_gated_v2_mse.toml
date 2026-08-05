@@ -1,12 +1,12 @@
 [run]
-id = "nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse"
+id = "nn_v6_w1001_1010_short1m_corrected_nextclose_36m_grouped_gated_v2_mse"
 kind = "exploration"
-description = "Canonical v6 10:01:00-10:10:00 training with short3m short component and corrected same-window next-close long component; all feature, model, rolling OOS, pool, resource, and seed settings match the latest v6 incumbent."
+description = "Canonical v6 10:01:00-10:10:00 training with short1m short component and corrected same-window next-close long component; all feature, model, rolling OOS, pool, resource, and seed settings match the latest v6 incumbent."
 status = "completed"
 
 [data]
 source = "labeled_pvc"
-labeled_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose"
+labeled_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short1m_corrected_nextclose"
 tick_path = ""
 input_kind = "labeled"
 feature_limit = 0
@@ -28,7 +28,7 @@ decision_times = ["10:01:00", "10:02:00", "10:03:00", "10:04:00", "10:05:00", "1
 buy_price_col = "ask_price_1"
 volume_col = "volume"
 turnover_col = "turnover"
-hold_seconds = 180
+hold_seconds = 60
 sell_window_seconds = 60
 volume_unit_multiplier = 1.0
 fee_bps = 0.0
@@ -177,34 +177,38 @@ ic_mode = "cross_section"
 top_n = 100
 
 [output]
-local_dir = "output/artifacts/nn/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse"
-k8s_dir = "/mnt/output/opening_strength_fit/nn/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse"
+local_dir = "output/artifacts/nn/nn_v6_w1001_1010_short1m_corrected_nextclose_36m_grouped_gated_v2_mse"
+k8s_dir = "/mnt/output/opening_strength_fit/nn/nn_v6_w1001_1010_short1m_corrected_nextclose_36m_grouped_gated_v2_mse"
 
 [k8s]
 namespace = "bizewu"
-job_name = "os-nn-v6-1001-1010-short3m-r1"
+job_name = "os-nn-v6-1001-1010-short1m"
 image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260731-corrected-label-matrix"
 shard_job_mode = "separate"
+config_map_name = "os-nn-v6-1001-1010-short1m-config"
+config_map_volume_name = "run-config"
+config_map_mount_path = "/app/opening_strength_fit/experiments/runs/nn_v6_w1001_1010_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml"
+config_map_sub_path = "nn_v6_w1001_1010_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml"
 avoid_nodes = ["node6", "node7", "node8", "node12", "node17", "node19", "node20", "node22", "node24", "node25", "node26", "node27", "node28"]
 wait_for_paths = [
-  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2019_target_v6_w1001_1010_short3m_corrected_nextclose.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2020_target_v6_w1001_1010_short3m_corrected_nextclose.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2021_target_v6_w1001_1010_short3m_corrected_nextclose.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2022_target_v6_w1001_1010_short3m_corrected_nextclose.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2023_target_v6_w1001_1010_short3m_corrected_nextclose.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2024_target_v6_w1001_1010_short3m_corrected_nextclose.parquet",
-  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2025_target_v6_w1001_1010_short3m_corrected_nextclose.parquet",
-  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2019/_SUCCESS",
-  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2020/_SUCCESS",
-  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2021/_SUCCESS",
-  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2022/_SUCCESS",
-  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2023/_SUCCESS",
-  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2024/_SUCCESS",
-  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short3m_corrected_nextclose/year=2025/_SUCCESS",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short1m_corrected_nextclose/opening_2019_target_v6_w1001_1010_short1m_corrected_nextclose.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short1m_corrected_nextclose/opening_2020_target_v6_w1001_1010_short1m_corrected_nextclose.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short1m_corrected_nextclose/opening_2021_target_v6_w1001_1010_short1m_corrected_nextclose.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short1m_corrected_nextclose/opening_2022_target_v6_w1001_1010_short1m_corrected_nextclose.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short1m_corrected_nextclose/opening_2023_target_v6_w1001_1010_short1m_corrected_nextclose.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short1m_corrected_nextclose/opening_2024_target_v6_w1001_1010_short1m_corrected_nextclose.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short1m_corrected_nextclose/opening_2025_target_v6_w1001_1010_short1m_corrected_nextclose.parquet",
+  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short1m_corrected_nextclose/year=2019/_SUCCESS",
+  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short1m_corrected_nextclose/year=2020/_SUCCESS",
+  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short1m_corrected_nextclose/year=2021/_SUCCESS",
+  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short1m_corrected_nextclose/year=2022/_SUCCESS",
+  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short1m_corrected_nextclose/year=2023/_SUCCESS",
+  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short1m_corrected_nextclose/year=2024/_SUCCESS",
+  "/mnt/output/opening_strength_fit/cache_builds/build_target_v6_w1001_1010_short1m_corrected_nextclose/year=2025/_SUCCESS",
 ]
 wait_for_path_timeout_seconds = 604800
 wait_for_path_interval_seconds = 120
@@ -222,10 +226,10 @@ gpu_limit = 1
 
 [analysis.pool_internal]
 enabled = true
-job_name = "os-analyze-nn-v6-1001-1010-short3m"
-variant = "nn_v6_w1001_1010_short3m_corrected_nextclose_grouped_gated_v2_mech_v3_gelu_mse"
-plot_prefix = "nn_v6_w1001_1010_short3m_corrected_nextclose_grouped_gated_v2_mech_v3_gelu_mse"
-plot_variant_label = "v6 decision-state 10:01:00-10:10:00 short3m + corrected next-close"
+job_name = "os-analyze-nn-v6-1001-1010-short1m"
+variant = "nn_v6_w1001_1010_short1m_corrected_nextclose_grouped_gated_v2_mech_v3_gelu_mse"
+plot_prefix = "nn_v6_w1001_1010_short1m_corrected_nextclose_grouped_gated_v2_mech_v3_gelu_mse"
+plot_variant_label = "v6 decision-state 10:01:00-10:10:00 short1m + corrected next-close"
 plot_period = "quarter"
 pools = ["universe", "L"]
 top_n = 100

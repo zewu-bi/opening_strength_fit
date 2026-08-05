@@ -1,8 +1,8 @@
 # Experiment Log
 
-> Last reconciled: 2026-08-04
+> Last reconciled: 2026-08-05
 >
-> Coverage: 2026-05-20 through 2026-08-04
+> Coverage: 2026-05-20 through 2026-08-05
 
 本文件是实验事实账本，按时间记录假设、结果、状态和决策。当前研究口径见
 [project_brief.md](project_brief.md)，执行命令见 [runbook.md](runbook.md)，历史长记录见
@@ -24,6 +24,7 @@ run 状态由 `osf-audit-experiments` 从 TOML 审计，不在文档中复制完
 | 2026-07-31 | corrected next-close 与 1m/3m label matrix | `completed` / 历史输入保留 | 旧实验继续按原输入复现，不与新数据版本混作严格单变量对照 |
 | 2026-08-04 | 三窗口 raw source、350 features、基础 5-label 数据 | `completed` | 原始数据与特征/标签构建分层，combined label 仅作中间产物 |
 | 2026-08-04 | 九组 horizon-split label | `completed`; 9 roots × 7 years | 后续实验从三窗口 × 1m/3m/5m 中选择；新版本为权威训练输入 |
+| 2026-08-05 | corrected-label 三窗口 × 1m/3m NN 网格 | `completed`; 6 runs × 8 shards | 09:31 的短期/隔夜头部超额最强；10:01、14:01 在信号层归档，不晋级策略验收 |
 
 ## 决策时间线
 
@@ -92,6 +93,26 @@ prediction 全量匹配 label。
 
 10:01 更稳定地识别“跌得较少”的股票，但 opening edge 的隔夜与费后部分明显衰减。Decision：归档为
 completed decay checkpoint，不做 downstream promotion audit，也不替换 09:31 policy。
+
+### Corrected-label 三窗口 × 1m/3m 网格（2026-08-05，已完成）
+
+三组预先固定十分钟窗口各自使用同窗口 corrected feature/label lineage；除 short label horizon 为 1m
+或 3m 外，350 features、grouped-gated NN、seed、`pool_L`、36m rolling / 6m OOS 与 corrected
+next-close 分量保持一致。六组训练均完成 8/8 shard，pool-internal 分析全量匹配 prediction 与 label。
+
+| window | short horizon | universe short Rank IC | `pool_L` short Top100 excess | `pool_L` overnight Top100 excess |
+| --- | --- | ---: | ---: | ---: |
+| 09:31-09:40 | 1m | 0.160081 | 11.8129 bps | 18.0814 bps |
+| 09:31-09:40 | 3m | 0.108995 | **12.9162 bps** | **20.2087 bps** |
+| 10:01-10:10 | 1m | 0.255019 | 7.7006 bps | 6.6667 bps |
+| 10:01-10:10 | 3m | 0.185261 | 7.8869 bps | 8.3935 bps |
+| 14:01-14:10 | 1m | **0.378929** | 7.6493 bps | 1.0904 bps |
+| 14:01-14:10 | 3m | 0.316359 | 8.0766 bps | 2.3101 bps |
+
+窗口后移时，短期 IC 单调升高，但短期头部超额下降、隔夜头部超额强烈单调衰减。3m 相对 1m 在三个
+窗口都降低短期 IC（平均 `-0.0611`），但提高短期超额（平均 `+0.5723 bps`）和隔夜超额（平均
+`+1.6912 bps`）。Decision：若目标是当前经济指标，09:31-09:40 / 3m 是六格首选；10:01 和
+14:01 明显落后，按 runbook 停在信号层归档，不进入 capacity / realistic promotion audit。
 
 ### Ordinary 328 mech v3 cap-cache（2026-07-21，已完成）
 

@@ -22,6 +22,8 @@ Current diagnostic evidence:
   separates stocks already sealed at decision/entry from stocks predicted to reach the limit later
 - [10:01-10:10 intraday-window decay checkpoint](backtests/nn_delay6_clock_state_36m_2022_2025_w1001_1010_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/) —
   first same-model, same-target rolling-OOS measurement after moving the ten-minute window later
+- [corrected-label 3×2 window/horizon grid](backtests/corrected_label_3x2_grid_2022_2025_v1/) —
+  six-run closeout table and controlled window/horizon effects
 
 The tracked tail, bootstrap, overlap, and concentration outputs are diagnostics. In particular,
 the one-sided P95/P99 upper-tail cap is not an automatic promotion gate.
