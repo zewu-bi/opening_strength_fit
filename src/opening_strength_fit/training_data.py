@@ -57,7 +57,7 @@ from opening_strength_fit.dataset import load_ticks
 from opening_strength_fit.feature_config import feature_filters_from_config
 from opening_strength_fit.features import mechanismized_feature_value_reference_columns
 from opening_strength_fit.io import frame_columns, read_frame, write_frame_atomic
-from opening_strength_fit.model import PREDICTION_CONTEXT_COLUMNS
+from opening_strength_fit.model import PREDICTION_CONTEXT_COLUMNS, feature_columns
 from opening_strength_fit.reports import dataset_summary, print_mapping
 from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns
 from opening_strength_fit.training_labeled import (
@@ -73,6 +73,8 @@ from opening_strength_fit.training_windows import (
     test_year_from_args,
 )
 from opening_strength_fit.universe import DEFAULT_A_SHARE_SYMBOL_REGEX, load_symbol_list
+
+DATASET_JOIN_KEYS = ("date", "symbol", "decision_target_timestamp")
 
 
 def _input_kind(args: argparse.Namespace, config: dict) -> str:
@@ -94,13 +96,21 @@ def resolve_data_source(args: argparse.Namespace, config: dict, tick_path: str) 
         return "path"
     if getattr(args, "labeled_input", None):
         return "labeled_pvc"
+    feature_input = getattr(args, "feature_input", None)
+    label_input = getattr(args, "label_input", None)
+    if bool(feature_input) != bool(label_input):
+        raise SystemExit("pass --feature-input and --label-input together")
+    if feature_input and label_input:
+        return "labeled_pvc"
     source = args.data_source or config_str(config, "data", "source", "auto")
     source = source.strip().lower()
     if source == "auto":
         labeled_path = os.environ.get("OPENING_STRENGTH_LABELED_PATH", "") or config_value(
             config, "data", "labeled_path", ""
         )
-        if labeled_path:
+        feature_path = config_value(config, "data", "feature_path", "")
+        label_path = config_value(config, "data", "label_path", "")
+        if labeled_path or (feature_path and label_path):
             return "labeled_pvc"
         return "path" if tick_path else "clickhouse"
     if source in {"path", "clickhouse", "labeled_pvc"}:
@@ -229,6 +239,7 @@ def _labeled_pvc_path(args: argparse.Namespace, config: dict) -> Path:
         args.labeled_input
         or os.environ.get("OPENING_STRENGTH_LABELED_PATH", "")
         or config_value(config, "data", "labeled_path", "")
+        or config_value(config, "data", "feature_path", "")
         or config_value(config, "data", "tick_path", "")
         or config_value(
             config,
@@ -239,7 +250,8 @@ def _labeled_pvc_path(args: argparse.Namespace, config: dict) -> Path:
     )
     if raw in (None, ""):
         raise SystemExit(
-            "No labeled PVC path supplied. Set [data].labeled_path, "
+            "No labeled PVC path supplied. Set [data].labeled_path or "
+            "[data].feature_path + [data].label_path, "
             "[data].tick_path, [cache].labeled_path, --labeled-input, or "
             "OPENING_STRENGTH_LABELED_PATH."
         )
@@ -634,6 +646,165 @@ def _read_labeled_pvc_frame(
         filter_labeled_frame(pd.concat(parts, ignore_index=True), config),
         config,
     )
+
+
+def _read_dataset_pvc_parts(
+    path: Path,
+    *,
+    columns: list[str] | None,
+    filters: list[tuple[str, str, object]] | None,
+    kind: str,
+) -> pd.DataFrame:
+    parts = []
+    for file in _labeled_pvc_files(path):
+        part = _read_labeled_pvc_file(file, columns=columns, filters=filters)
+        if part.empty:
+            continue
+        parts.append(part)
+        print_mapping(
+            f"{kind}_pvc_part",
+            {"file": str(file), "rows": len(part), "columns": len(part.columns)},
+        )
+    if not parts:
+        raise SystemExit(f"no filtered {kind} rows found under: {path}")
+    return pd.concat(parts, ignore_index=True) if len(parts) > 1 else parts[0]
+
+
+def _normalize_dataset_join_keys(frame: pd.DataFrame, *, kind: str) -> pd.DataFrame:
+    out = standardize_columns(frame)
+    missing = [column for column in DATASET_JOIN_KEYS if column not in out.columns]
+    if missing:
+        raise SystemExit(f"{kind} dataset is missing join keys {missing}")
+    out = out.copy(deep=False)
+    parsed_date = pd.to_datetime(out["date"], errors="coerce")
+    parsed_timestamp = pd.to_datetime(out["decision_target_timestamp"], errors="coerce")
+    out["date"] = parsed_date.dt.strftime("%Y-%m-%d")
+    out["symbol"] = out["symbol"].astype("string")
+    out["decision_target_timestamp"] = parsed_timestamp
+    null_keys = out.loc[:, list(DATASET_JOIN_KEYS)].isna().any(axis=1)
+    if null_keys.any():
+        raise SystemExit(f"{kind} dataset has {int(null_keys.sum())} null-key rows")
+    duplicate = out.duplicated(list(DATASET_JOIN_KEYS), keep=False)
+    if duplicate.any():
+        raise SystemExit(f"{kind} dataset has {int(duplicate.sum())} duplicate-key rows")
+    return out
+
+
+def _read_split_feature_label_pvc_frame(
+    feature_path: Path,
+    label_path: Path,
+    *,
+    filters: list[tuple[str, str, object]] | None,
+    config: dict,
+) -> pd.DataFrame:
+    projected_feature_columns = _labeled_pvc_read_columns(feature_path, config)
+    features = _normalize_dataset_join_keys(
+        _read_dataset_pvc_parts(
+            feature_path,
+            columns=projected_feature_columns,
+            filters=filters,
+            kind="feature",
+        ),
+        kind="feature",
+    )
+    configured_label_columns = config_list(
+        config,
+        "data",
+        "label_columns",
+        ["label_short", "label_next_close", "target_label"],
+    )
+    label_columns = list(dict.fromkeys([*DATASET_JOIN_KEYS, *configured_label_columns]))
+    labels = _normalize_dataset_join_keys(
+        _read_dataset_pvc_parts(
+            label_path,
+            columns=label_columns,
+            filters=filters,
+            kind="label",
+        ),
+        kind="label",
+    )
+    missing_labels = [column for column in configured_label_columns if column not in labels.columns]
+    if missing_labels:
+        raise SystemExit(f"label dataset is missing columns {missing_labels}")
+    overlapping_labels = sorted(set(configured_label_columns).intersection(features.columns))
+    if overlapping_labels:
+        raise SystemExit(f"feature dataset unexpectedly contains label columns {overlapping_labels}")
+
+    keys_already_aligned = len(features) == len(labels) and all(
+        features[column].equals(labels[column]) for column in DATASET_JOIN_KEYS
+    )
+    if keys_already_aligned:
+        # Published feature/label shards preserve the same row order. Keep the 350-column
+        # feature blocks shallow and attach only the three narrow label arrays; a full
+        # merge would transiently duplicate the wide frame for no benefit.
+        merged = features.copy(deep=False)
+        for column in configured_label_columns:
+            merged[column] = labels[column].to_numpy(copy=False)
+        feature_only = 0
+        label_only = 0
+        alignment = "same_order"
+    else:
+        merged = features.merge(
+            labels.loc[:, label_columns],
+            on=list(DATASET_JOIN_KEYS),
+            how="outer",
+            validate="one_to_one",
+            indicator=True,
+        )
+        coverage = merged["_merge"].value_counts().to_dict()
+        feature_only = int(coverage.get("left_only", 0))
+        label_only = int(coverage.get("right_only", 0))
+        if feature_only or label_only:
+            raise SystemExit(
+                "feature/label key coverage mismatch: "
+                f"feature_only={feature_only} label_only={label_only}"
+            )
+        merged = merged.drop(columns="_merge")
+        alignment = "key_join"
+
+    short_column = config_str(config, "data", "short_label_column", "label_short")
+    target_column = config_str(config, "model", "target_col", "target_label")
+    if short_column not in merged.columns or target_column not in merged.columns:
+        raise SystemExit(
+            f"joined dataset requires short={short_column!r} and target={target_column!r}"
+        )
+    short = pd.to_numeric(merged[short_column], errors="coerce")
+    target = pd.to_numeric(merged[target_column], errors="coerce")
+    if "timestamp" not in merged.columns:
+        merged["timestamp"] = merged["decision_target_timestamp"]
+    if "decision_time" not in merged.columns:
+        merged["decision_time"] = merged["decision_target_timestamp"].dt.strftime("%H:%M:%S")
+    if "decision_lag_seconds" not in merged.columns:
+        merged["decision_lag_seconds"] = 0.0
+    merged["label"] = short
+    merged["gross_label"] = short
+    merged["valid_label"] = short.notna() & target.notna()
+    print_mapping(
+        "feature_label_join",
+        {
+            "feature_path": str(feature_path),
+            "label_path": str(label_path),
+            "rows": len(merged),
+            "valid_target_rows": int(merged["valid_label"].sum()),
+            "feature_only": feature_only,
+            "label_only": label_only,
+            "alignment": alignment,
+        },
+    )
+    result = _downcast_labeled_pvc_frame(filter_labeled_frame(merged, config), config)
+    expected_features = config_int(config, "data", "expected_feature_count", 0)
+    if expected_features:
+        selected_features = feature_columns(
+            result,
+            None,
+            **feature_filters_from_config(config),
+        )
+        if len(selected_features) != expected_features:
+            raise SystemExit(
+                "joined training feature count mismatch: "
+                f"expected={expected_features} actual={len(selected_features)}"
+            )
+    return result
 
 
 def _load_labeled_cache(path: Path, config: dict) -> pd.DataFrame:
@@ -1120,6 +1291,31 @@ def load_labeled_pvc_frame(
     args: argparse.Namespace,
     config: dict,
 ) -> pd.DataFrame:
+    feature_path_raw = str(
+        getattr(args, "feature_input", None)
+        or config_str(config, "data", "feature_path", "")
+    ).strip()
+    label_path_raw = str(
+        getattr(args, "label_input", None) or config_str(config, "data", "label_path", "")
+    ).strip()
+    if not getattr(args, "labeled_input", None) and (feature_path_raw or label_path_raw):
+        if not feature_path_raw or not label_path_raw:
+            raise SystemExit("[data] requires both feature_path and label_path")
+        filters, filter_summary = _labeled_pvc_date_filters(args, config)
+        print_mapping(
+            "split_training_dataset",
+            {
+                "feature_path": feature_path_raw,
+                "label_path": label_path_raw,
+                **filter_summary,
+            },
+        )
+        return _read_split_feature_label_pvc_frame(
+            Path(feature_path_raw),
+            Path(label_path_raw),
+            filters=filters,
+            config=config,
+        )
     path = _labeled_pvc_path(args, config)
     filters, filter_summary = _labeled_pvc_date_filters(args, config)
     columns = _labeled_pvc_read_columns(path, config)

@@ -83,7 +83,10 @@ def train_from_args(args: argparse.Namespace) -> None:
             'OPENING_STRENGTH_TICK_PATH, or use [data].source = "clickhouse".'
         )
 
-    run_name = run_id(config, args.config) if args.config else "local_ridge_opening"
+    run_name = (
+        getattr(args, "run_id", None)
+        or (run_id(config, args.config) if args.config else "local_ridge_opening")
+    )
     output_dir = Path(
         args.output_dir
         or config_str(config, "output", "local_dir", f"output/legacy/analysis/{run_name}")
@@ -197,6 +200,8 @@ def train_from_args(args: argparse.Namespace) -> None:
                 "config_path": args.config,
                 "config_sha256": _file_sha256(args.config) if args.config else "",
                 "source_revision": os.environ.get("OPENING_STRENGTH_SOURCE_REVISION", ""),
+                "feature_input": getattr(args, "feature_input", None) or "",
+                "label_input": getattr(args, "label_input", None) or "",
             },
             "windows": len(splits),
             "train_window": f"{splits[0].train_start_date} -> {splits[-1].train_end_date}",

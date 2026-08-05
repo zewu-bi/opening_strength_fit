@@ -4,6 +4,7 @@ import argparse
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -17,6 +18,141 @@ from opening_strength_fit.training_data import (
 
 
 class LabeledPvcSourceTest(unittest.TestCase):
+    def test_labeled_pvc_joins_separate_feature_and_label_datasets(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            feature_root = root / "features" / "year=2022"
+            label_root = root / "labels" / "year=2022"
+            feature_root.mkdir(parents=True)
+            label_root.mkdir(parents=True)
+            keys = {
+                "date": ["2022-01-04", "2022-01-04"],
+                "symbol": ["000001.SZ", "000002.SZ"],
+                "decision_target_timestamp": pd.to_datetime(
+                    ["2022-01-04 09:31:00", "2022-01-04 09:31:00"]
+                ),
+            }
+            pd.DataFrame({**keys, "feature_a": [1.0, 2.0]}).to_parquet(
+                feature_root / "features.parquet", index=False
+            )
+            pd.DataFrame(
+                {
+                    **keys,
+                    "label_short": [0.01, 0.02],
+                    "label_next_close": [0.03, 0.04],
+                    "target_label": [0.5, 1.0],
+                }
+            ).to_parquet(label_root / "labels.parquet", index=False)
+            args = argparse.Namespace(labeled_input=None)
+            config = {
+                "data": {
+                    "source": "labeled_pvc",
+                    "feature_path": str(root / "features"),
+                    "label_path": str(root / "labels"),
+                    "downcast_float32": True,
+                },
+                "universe": {"enabled": False},
+                "model": {"target_col": "target_label"},
+            }
+
+            with mock.patch.object(
+                pd.DataFrame,
+                "merge",
+                side_effect=AssertionError("same-order input should not use a wide merge"),
+            ):
+                labeled = load_labeled_pvc_frame(args, config)
+
+        self.assertEqual(len(labeled), 2)
+        self.assertEqual(labeled["feature_a"].tolist(), [1.0, 2.0])
+        np.testing.assert_allclose(labeled["label"], [0.01, 0.02])
+        np.testing.assert_allclose(labeled["gross_label"], [0.01, 0.02])
+        self.assertTrue(labeled["valid_label"].all())
+
+    def test_labeled_pvc_key_joins_when_label_order_differs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            feature_root = root / "features"
+            label_root = root / "labels"
+            feature_root.mkdir()
+            label_root.mkdir()
+            timestamps = pd.to_datetime(["2022-01-04 09:31:00"] * 2)
+            pd.DataFrame(
+                {
+                    "date": ["2022-01-04"] * 2,
+                    "symbol": ["000001.SZ", "000002.SZ"],
+                    "decision_target_timestamp": timestamps,
+                    "feature_a": [1.0, 2.0],
+                }
+            ).to_parquet(feature_root / "features.parquet", index=False)
+            pd.DataFrame(
+                {
+                    "date": ["2022-01-04"] * 2,
+                    "symbol": ["000002.SZ", "000001.SZ"],
+                    "decision_target_timestamp": timestamps,
+                    "label_short": [0.02, 0.01],
+                    "label_next_close": [0.04, 0.03],
+                    "target_label": [1.0, 0.5],
+                }
+            ).to_parquet(label_root / "labels.parquet", index=False)
+            args = argparse.Namespace(labeled_input=None)
+            config = {
+                "data": {
+                    "source": "labeled_pvc",
+                    "feature_path": str(feature_root),
+                    "label_path": str(label_root),
+                },
+                "universe": {"enabled": False},
+                "model": {"target_col": "target_label"},
+            }
+
+            labeled = load_labeled_pvc_frame(args, config)
+
+        assert labeled["symbol"].tolist() == ["000001.SZ", "000002.SZ"]
+        np.testing.assert_allclose(labeled["label_short"], [0.01, 0.02])
+
+    def test_labeled_pvc_rejects_split_dataset_key_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            feature_root = root / "features"
+            label_root = root / "labels"
+            feature_root.mkdir()
+            label_root.mkdir()
+            pd.DataFrame(
+                {
+                    "date": ["2022-01-04"],
+                    "symbol": ["000001.SZ"],
+                    "decision_target_timestamp": pd.to_datetime(
+                        ["2022-01-04 09:31:00"]
+                    ),
+                    "feature_a": [1.0],
+                }
+            ).to_parquet(feature_root / "features.parquet", index=False)
+            pd.DataFrame(
+                {
+                    "date": ["2022-01-04"],
+                    "symbol": ["000002.SZ"],
+                    "decision_target_timestamp": pd.to_datetime(
+                        ["2022-01-04 09:31:00"]
+                    ),
+                    "label_short": [0.01],
+                    "label_next_close": [0.03],
+                    "target_label": [0.5],
+                }
+            ).to_parquet(label_root / "labels.parquet", index=False)
+            args = argparse.Namespace(labeled_input=None)
+            config = {
+                "data": {
+                    "source": "labeled_pvc",
+                    "feature_path": str(feature_root),
+                    "label_path": str(label_root),
+                },
+                "universe": {"enabled": False},
+                "model": {"target_col": "target_label"},
+            }
+
+            with self.assertRaisesRegex(SystemExit, "key coverage mismatch"):
+                load_labeled_pvc_frame(args, config)
+
     def test_labeled_pvc_source_reads_data_labeled_path(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "labeled.parquet"

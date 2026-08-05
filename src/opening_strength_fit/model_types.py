@@ -40,6 +40,8 @@ NON_FEATURE_COLUMNS = {
     "entry_lag_seconds",
     "entry_status",
     "label",
+    "label_short",
+    "label_next_close",
     "label_raw",
     "label_xs_mean",
     "label_xs_std",
@@ -78,6 +80,8 @@ ENTRY_ASK_CONTEXT_COLUMNS = tuple(
 )
 
 PREDICTION_CONTEXT_COLUMNS = (
+    "label_short",
+    "label_next_close",
     "status",
     "decision_source_timestamp",
     "decision_state_age_seconds",

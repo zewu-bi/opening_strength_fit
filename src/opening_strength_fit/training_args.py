@@ -27,6 +27,17 @@ def build_training_parser(description: str) -> argparse.ArgumentParser:
         help="PVC/local labeled parquet/csv path override for data.source=labeled_pvc.",
     )
     parser.add_argument(
+        "--feature-input",
+        default=None,
+        help="Model-ready feature dataset root used with --label-input.",
+    )
+    parser.add_argument(
+        "--label-input",
+        default=None,
+        help="Final label dataset root used with --feature-input.",
+    )
+    parser.add_argument("--run-id", default=None, help="Runtime run id override.")
+    parser.add_argument(
         "--input-kind",
         choices=["auto", "raw_ticks", "labeled"],
         default=None,

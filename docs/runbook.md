@@ -72,6 +72,21 @@ osf-split-long-horizon-labels --config experiments/runs/opening_<window>_labels_
 - 长持有期 10m/1h 使用持有期结束后的 60 秒 VWAP，`hclose` 使用当日收盘价；三者均复用既有
   `label_next_close` 后构造相同权重的 mixed target。
 
+训练直接传入同窗口的 feature 与最终 label，不再生成合并 cache：
+
+```bash
+osf-train \
+  --config experiments/runs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1.toml \
+  --feature-input /mnt/output/opening_strength_fit/datasets/opening_<window>_features_350 \
+  --label-input /mnt/output/opening_strength_fit/datasets/opening_<window>_labels_<horizon>_<version> \
+  --run-id <case_run_id> \
+  --rolling-monthly --train-months 36 --test-months 6
+```
+
+入口先验证两侧 key 唯一且覆盖一致；发布顺序一致时只挂接 3 个窄 label 列，避免复制 350 列宽表。
+当前矩阵暂缓 5m，运行三窗口 × 1m/3m 和前两窗口 × 10m/1h/close，共 12 个 case、每个 8 个
+半年 OOS 切分；Job 全局并发为 8。
+
 历史 `next_tick`/forward-5s 只用于旧实验复现；新 cache 默认使用
 `decision_alignment/entry_alignment/future_alignment = clock_state` 和 `entry_clock_delay_seconds = 6`。
 

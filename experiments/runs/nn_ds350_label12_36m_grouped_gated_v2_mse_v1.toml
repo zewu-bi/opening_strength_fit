@@ -1,0 +1,185 @@
+[run]
+id = "nn_ds350_label12_36m_grouped_gated_v2_mse_v1"
+kind = "exploration"
+description = "Twelve-case model-ready feature/label matrix: three windows x 1m/3m validation plus two windows x 10m/1h/close horizon extension; 5m deferred."
+status = "queued"
+
+[data]
+source = "labeled_pvc"
+input_kind = "labeled"
+downcast_float32 = true
+expected_feature_count = 350
+label_columns = ["label_short", "label_next_close", "target_label"]
+short_label_column = "label_short"
+
+[universe]
+enabled = true
+symbol_regex = "^(?:(?:00|30)\\d{4}\\.SZ|(?:60|68)\\d{4}\\.SH)$"
+symbols_file = ""
+
+[features]
+feature_value_transform = "none"
+
+[window]
+mode = "rolling_monthly"
+train_months = 36
+test_months = 6
+test_stride_months = 6
+test_start_month = "2022-01"
+test_end_month = "2025-12"
+
+[model]
+name = "torch_mlp"
+target_col = "target_label"
+architecture = "grouped_gated_v2"
+hidden_layers = [768, 512, 256, 128]
+group_embedding_dim = 32
+fusion_dim = 256
+block_hidden_dim = 512
+num_blocks = 2
+transformer_heads = 4
+activation = "gelu"
+dropout = 0.10
+batch_size = 32768
+predict_batch_size = 131072
+learning_rate = 0.00025
+weight_decay = 0.0001
+max_epochs = 10
+validation_fraction = 0.01
+validation_max_rows = 250000
+early_stopping_patience = 2
+loss = "mse"
+device = "cuda"
+random_state = 31
+num_workers = 0
+gate_diagnostics_max_rows = 200000
+
+[model.group_embedding_dims]
+preopen_auction = 16
+limit_price_state = 16
+book_depth_level = 48
+book_shape_spread_gap = 48
+book_imbalance_pressure = 32
+trade_activity = 32
+trade_price_impact = 32
+postopen_price_path = 48
+postopen_liquidity_change = 32
+historical_surprise = 48
+path_shape_confirmation = 48
+other = 24
+
+[evaluation]
+score_bins = 10
+bucket_mode = "cross_section"
+selection_mode = "cross_section"
+ic_mode = "cross_section"
+top_n = 100
+
+[output]
+local_dir = "output/artifacts/nn/nn_ds350_label12_36m_grouped_gated_v2_mse_v1"
+k8s_dir = "/mnt/output/opening_strength_fit/nn/nn_ds350_label12_36m_grouped_gated_v2_mse_v1"
+write_split_artifacts = true
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-nn-ds350-label12-v1"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:ceb963e59e0a94d3894a6a0030e1ed79cdb62992c5de4c602119f61ee8718d60"
+avoid_nodes = ["node6", "node7", "node8", "node12", "node17", "node19", "node20", "node22", "node24", "node25", "node26", "node27", "node28"]
+shard_parallelism = 8
+
+[k8s.node_selector]
+has_gpu = "true"
+
+[k8s.resources]
+cpu_request = "16"
+cpu_limit = "32"
+memory_request = "384Gi"
+memory_limit = "640Gi"
+gpu_limit = 1
+
+[[matrix.cases]]
+name = "w0931_0940_h1m"
+window = "09:31-09:40"
+horizon = "1m"
+feature_path = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_features_350"
+label_path = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_h1m_v2"
+
+[[matrix.cases]]
+name = "w0931_0940_h3m"
+window = "09:31-09:40"
+horizon = "3m"
+feature_path = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_features_350"
+label_path = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_h3m_v2"
+
+[[matrix.cases]]
+name = "w1001_1010_h1m"
+window = "10:01-10:10"
+horizon = "1m"
+feature_path = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_features_350"
+label_path = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_labels_h1m_v2"
+
+[[matrix.cases]]
+name = "w1001_1010_h3m"
+window = "10:01-10:10"
+horizon = "3m"
+feature_path = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_features_350"
+label_path = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_labels_h3m_v2"
+
+[[matrix.cases]]
+name = "w1401_1410_h1m"
+window = "14:01-14:10"
+horizon = "1m"
+feature_path = "/mnt/output/opening_strength_fit/datasets/opening_1401_1410_features_350"
+label_path = "/mnt/output/opening_strength_fit/datasets/opening_1401_1410_labels_h1m_v2"
+
+[[matrix.cases]]
+name = "w1401_1410_h3m"
+window = "14:01-14:10"
+horizon = "3m"
+feature_path = "/mnt/output/opening_strength_fit/datasets/opening_1401_1410_features_350"
+label_path = "/mnt/output/opening_strength_fit/datasets/opening_1401_1410_labels_h3m_v2"
+
+[[matrix.cases]]
+name = "w0931_0940_h10m"
+window = "09:31-09:40"
+horizon = "10m"
+feature_path = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_features_350"
+label_path = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_h10m_v1"
+
+[[matrix.cases]]
+name = "w0931_0940_h1h"
+window = "09:31-09:40"
+horizon = "1h"
+feature_path = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_features_350"
+label_path = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_h1h_v1"
+
+[[matrix.cases]]
+name = "w0931_0940_hclose"
+window = "09:31-09:40"
+horizon = "close"
+feature_path = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_features_350"
+label_path = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_hclose_v1"
+
+[[matrix.cases]]
+name = "w1001_1010_h10m"
+window = "10:01-10:10"
+horizon = "10m"
+feature_path = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_features_350"
+label_path = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_labels_h10m_v1"
+
+[[matrix.cases]]
+name = "w1001_1010_h1h"
+window = "10:01-10:10"
+horizon = "1h"
+feature_path = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_features_350"
+label_path = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_labels_h1h_v1"
+
+[[matrix.cases]]
+name = "w1001_1010_hclose"
+window = "10:01-10:10"
+horizon = "close"
+feature_path = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_features_350"
+label_path = "/mnt/output/opening_strength_fit/datasets/opening_1001_1010_labels_hclose_v1"
