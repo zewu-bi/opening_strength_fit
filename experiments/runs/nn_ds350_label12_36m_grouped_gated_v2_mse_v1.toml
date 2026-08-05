@@ -86,7 +86,7 @@ job_name = "os-nn-ds350-label12-v1"
 image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
-helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:8c4cf60b68f5fd9b8096e14d84d482f7ae801036b7746bea3cca18e7ef247545"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:fcdadf835d02757dfe8c699ff17b16e7f963fe8cf202da0803eda290f2226c40"
 avoid_nodes = ["node6", "node7", "node8", "node12", "node17", "node19", "node20", "node22", "node24", "node25", "node26", "node27", "node28"]
 shard_parallelism = 8
 
