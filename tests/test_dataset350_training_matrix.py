@@ -4,10 +4,7 @@ from opening_strength_fit.config import load_toml
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "experiments/runs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1.toml"
-W0931_JOBS = (
-    ROOT
-    / "experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w0931_jobs.yaml"
-)
+W0931_JOBS = ROOT / "experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w0931_jobs.yaml"
 
 
 def test_dataset350_training_matrix_has_requested_twelve_cases() -> None:
@@ -29,6 +26,8 @@ def test_dataset350_training_matrix_has_requested_twelve_cases() -> None:
         assert f"opening_{window_slug}_labels_h" in case["label_path"]
 
     assert config["data"]["expected_feature_count"] == 350
+    assert config["data"]["trusted_model_ready_split"] is True
+    assert config["universe"]["enabled"] is False
     assert config["features"]["feature_value_transform"] == "none"
     assert config["model"]["target_col"] == "target_label"
     assert config["model"]["random_state"] == 31

@@ -37,8 +37,10 @@ def dataset_summary(df: pd.DataFrame) -> dict[str, object]:
     if "symbol" in df.columns:
         summary["n_symbols"] = int(df["symbol"].nunique())
     if "timestamp" in df.columns and len(df):
-        summary["time_min"] = df["timestamp"].dt.strftime("%H:%M:%S").min()
-        summary["time_max"] = df["timestamp"].dt.strftime("%H:%M:%S").max()
+        timestamp_min = df["timestamp"].min()
+        timestamp_max = df["timestamp"].max()
+        summary["time_min"] = timestamp_min.strftime("%H:%M:%S")
+        summary["time_max"] = timestamp_max.strftime("%H:%M:%S")
     if "label" in df.columns:
         summary["non_null_labels"] = int(df["label"].notna().sum())
         summary["valid_labels"] = (

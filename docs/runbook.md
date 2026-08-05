@@ -65,7 +65,7 @@ osf-split-long-horizon-labels --config experiments/runs/opening_<window>_labels_
 /mnt/output/opening_strength_fit/datasets/opening_{0931_0940,1001_1010}_labels_{h10m,h1h,hclose}_v1
 ```
 
-- 用 3 个样本键与同窗口 `opening_<window>_features_350` inner join；
+- 最终 label 发布时按 3 个样本键与同窗口 `opening_<window>_features_350` 对齐，并保持相同行顺序；
 - 目标列为 `target_label`，NaN 行不训练；
 - 消费前检查两侧 parquet、manifest、`_SUCCESS`、key 唯一性和 join 覆盖；
 - 中间 `1m_3m_5m_next_mixed`、`10m_1h_close_next` 文件和旧 target cache 不作为新 run 输入。
@@ -83,7 +83,9 @@ osf-train \
   --rolling-monthly --train-months 36 --test-months 6
 ```
 
-入口先验证两侧 key 唯一且覆盖一致；发布顺序一致时只挂接 3 个窄 label 列，避免复制 350 列宽表。
+发布阶段负责完整的 key 唯一性和覆盖检查。训练的 model-ready 快路径检查总行数并抽样核对三键，
+随后按发布顺序只挂接 3 个窄 label 列；它不再重复执行全表 key 扫描、universe 正则过滤或通用特征清洗。
+未显式启用该快路径的普通输入仍走完整 key join 和清洗后备逻辑。
 当前矩阵暂缓 5m，运行三窗口 × 1m/3m 和前两窗口 × 10m/1h/close，共 12 个 case、每个 8 个
 半年 OOS 切分。每个 case 使用一个独立 Indexed Job（`completions: 8`），按 label 受控接力，
 使全局最多同时运行 8 个训练 shard；不要再把 12 个 case 合并成一个 96-shard Job。

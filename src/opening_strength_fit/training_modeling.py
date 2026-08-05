@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 from pathlib import Path
 
 import numpy as np
@@ -695,6 +696,13 @@ def model_config_payload(config: dict, alpha: float) -> dict[str, object]:
     return {"name": model_name}
 
 
+def partition_labeled_split(labeled: pd.DataFrame, split) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Materialize one train/test partition without an extra defensive deep copy."""
+    train = labeled.loc[labeled["date"].isin(split.train_dates)]
+    test = labeled.loc[labeled["date"].isin(split.test_dates)]
+    return train, test
+
+
 def fit_predict_split(
     *,
     labeled: pd.DataFrame,
@@ -709,9 +717,43 @@ def fit_predict_split(
     stock_pool: pd.DataFrame | None = None,
     write_period_artifacts: bool = True,
 ) -> tuple[pd.DataFrame, dict[str, object], dict[str, object]]:
+    partition = list(partition_labeled_split(labeled, split))
+    return fit_predict_partition(
+        partition=partition,
+        split=split,
+        run_name=run_name,
+        output_dir=output_dir,
+        args=args,
+        config=config,
+        alpha=alpha,
+        evaluation_settings=evaluation_settings,
+        stock_pool_settings=stock_pool_settings,
+        stock_pool=stock_pool,
+        write_period_artifacts=write_period_artifacts,
+    )
+
+
+def fit_predict_partition(
+    *,
+    partition: list[pd.DataFrame],
+    split,
+    run_name: str,
+    output_dir: Path,
+    args: argparse.Namespace,
+    config: dict,
+    alpha: float,
+    evaluation_settings: dict[str, object],
+    stock_pool_settings: StockPoolConfig | None = None,
+    stock_pool: pd.DataFrame | None = None,
+    write_period_artifacts: bool = True,
+) -> tuple[pd.DataFrame, dict[str, object], dict[str, object]]:
+    if len(partition) != 2:
+        raise ValueError("partition must contain exactly [train, test]")
+    # Pop ownership out of the caller's mutable holder. This lets `del train`
+    # below actually release the wide frame before test prediction starts.
+    train = partition.pop(0)
+    test = partition.pop(0)
     stock_pool_settings = stock_pool_settings or stock_pool_config_from_mapping(config)
-    train = labeled.loc[labeled["date"].isin(split.train_dates)].copy()
-    test = labeled.loc[labeled["date"].isin(split.test_dates)].copy()
     train = filter_configured_stock_pool_train(train, stock_pool_settings, stock_pool)
     model, train_stats = fit_prediction_model(
         train,
@@ -720,6 +762,10 @@ def fit_predict_split(
         alpha=alpha,
     )
     train_stats = {**train_stats, "feature_names": list(model.features)}
+    # The fitted Torch model owns no reference to the host training frame. Release
+    # it before allocating prediction/evaluation buffers for the test period.
+    del train
+    gc.collect()
     predictions = predict_frame(model, test)
     if "valid_label" in predictions.columns:
         predictions = predictions.loc[predictions["valid_label"]].copy()

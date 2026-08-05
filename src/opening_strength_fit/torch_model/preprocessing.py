@@ -158,10 +158,15 @@ def _torch_feature_value_frame(
     missing = [column for column in transform_required if column and column not in frame.columns]
     if missing and mode != "none":
         raise SystemExit(f"features.feature_value_transform requires columns: {missing[:5]}")
+    if mode == "none":
+        missing_features = [column for column in features if column not in frame.columns]
+        if missing_features:
+            raise SystemExit(f"model features are missing columns: {missing_features[:5]}")
+        # A published model-ready frame already contains the final float32 feature
+        # values. Returning it directly avoids duplicating the full wide training set.
+        return frame
     available = [column for column in required if column and column in frame.columns]
     model_frame = frame.loc[:, available].copy()
-    if mode == "none":
-        return model_frame
     if mode.startswith("mechanismized_v3_"):
         return transform_mechanismized_v3_feature_values(
             model_frame,
@@ -208,26 +213,63 @@ def _standardized_float_matrix(
     group_keys: np.ndarray | None = None,
     group_mean: np.ndarray | None = None,
     group_scale: np.ndarray | None = None,
+    row_mask: pd.Series | np.ndarray | None = None,
+    column_block_size: int = 16,
+    stats_row_block_size: int = 131_072,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    values = (
-        frame[features]
-        .replace([np.inf, -np.inf], np.nan)
-        .to_numpy(
-            dtype=np.float32,
-            copy=True,
-        )
-    )
+    mask_values = None if row_mask is None else np.asarray(row_mask, dtype=bool)
+    if mask_values is not None and len(mask_values) != len(frame):
+        raise ValueError("row_mask must have the same length as frame")
+    row_count = len(frame) if mask_values is None else int(mask_values.sum())
+    values = np.empty((row_count, len(features)), dtype=np.float32)
+    column_block_size = max(1, int(column_block_size))
+    for start in range(0, len(features), column_block_size):
+        end = min(start + column_block_size, len(features))
+        columns = features[start:end]
+        block = frame.loc[:, columns] if mask_values is None else frame.loc[mask_values, columns]
+        values[:, start:end] = block.to_numpy(dtype=np.float32, copy=False)
+
+    stats_row_block_size = max(1, int(stats_row_block_size))
     if mean is None:
-        with np.errstate(invalid="ignore"):
-            mean = np.nanmean(values, axis=0).astype("float32")
-        mean = np.where(np.isfinite(mean), mean, 0.0).astype("float32")
+        sums = np.zeros(len(features), dtype=np.float64)
+        counts = np.zeros(len(features), dtype=np.int64)
+        for start in range(0, len(values), stats_row_block_size):
+            block = values[start : start + stats_row_block_size]
+            finite = np.isfinite(block)
+            sums += np.where(finite, block, 0.0).sum(axis=0, dtype=np.float64)
+            counts += finite.sum(axis=0, dtype=np.int64)
+        mean64 = np.divide(
+            sums,
+            counts,
+            out=np.zeros_like(sums),
+            where=counts > 0,
+        )
+        mean = mean64.astype("float32")
     if scale is None:
-        with np.errstate(invalid="ignore"):
-            scale = np.nanstd(values, axis=0).astype("float32")
+        squared_deviations = np.zeros(len(features), dtype=np.float64)
+        counts = np.zeros(len(features), dtype=np.int64)
+        mean64 = mean.astype(np.float64)
+        for start in range(0, len(values), stats_row_block_size):
+            block = values[start : start + stats_row_block_size]
+            finite = np.isfinite(block)
+            centered = block.astype(np.float64) - mean64
+            centered[~finite] = 0.0
+            squared_deviations += np.einsum("ij,ij->j", centered, centered)
+            counts += finite.sum(axis=0, dtype=np.int64)
+        variance = np.divide(
+            squared_deviations,
+            counts,
+            out=np.zeros_like(squared_deviations),
+            where=counts > 0,
+        )
+        scale = np.sqrt(variance).astype("float32")
         scale = np.where(np.isfinite(scale) & (scale > 0.0), scale, 1.0).astype("float32")
     if group_keys is None or group_mean is None or group_scale is None:
-        values -= mean
-        values /= scale
+        for start in range(0, len(values), stats_row_block_size):
+            block = values[start : start + stats_row_block_size]
+            block -= mean
+            block /= scale
+            np.nan_to_num(block, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
     else:
         if group_col not in frame.columns:
             raise SystemExit(
@@ -245,7 +287,7 @@ def _standardized_float_matrix(
                 denominator = group_scale[group_index]
             values[row_positions] -= center
             values[row_positions] /= denominator
-    np.nan_to_num(values, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+        np.nan_to_num(values, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
     return values, mean.astype("float32"), scale.astype("float32")
 
 

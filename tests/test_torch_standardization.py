@@ -9,6 +9,31 @@ from opening_strength_fit.torch_model.preprocessing import (
 )
 
 
+def test_global_standardization_can_select_rows_without_feature_frame_copy() -> None:
+    frame = pd.DataFrame(
+        {
+            "feature_a": pd.Series([1.0, np.inf, 3.0, 5.0], dtype="float32"),
+            "feature_b": pd.Series([2.0, 4.0, np.nan, 8.0], dtype="float32"),
+            "target": [1.0, np.nan, 2.0, 3.0],
+        }
+    )
+    selected = frame["target"].notna()
+
+    values, mean, scale = _standardized_float_matrix(
+        frame,
+        ["feature_a", "feature_b"],
+        row_mask=selected,
+        column_block_size=1,
+        stats_row_block_size=2,
+    )
+
+    np.testing.assert_allclose(mean, [3.0, 5.0])
+    np.testing.assert_allclose(scale, [np.sqrt(8.0 / 3.0), 3.0], rtol=1e-6)
+    np.testing.assert_allclose(values[0], [-np.sqrt(1.5), -1.0], rtol=1e-6)
+    np.testing.assert_allclose(values[1], [0.0, 0.0], rtol=1e-6)
+    np.testing.assert_allclose(values[2], [np.sqrt(1.5), 1.0], rtol=1e-6)
+
+
 def test_symbol_train_zscore_uses_each_symbol_own_training_scale() -> None:
     frame = pd.DataFrame(
         {

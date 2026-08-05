@@ -8,12 +8,13 @@ status = "queued"
 source = "labeled_pvc"
 input_kind = "labeled"
 downcast_float32 = true
+trusted_model_ready_split = true
 expected_feature_count = 350
 label_columns = ["label_short", "label_next_close", "target_label"]
 short_label_column = "label_short"
 
 [universe]
-enabled = true
+enabled = false
 symbol_regex = "^(?:(?:00|30)\\d{4}\\.SZ|(?:60|68)\\d{4}\\.SH)$"
 symbols_file = ""
 

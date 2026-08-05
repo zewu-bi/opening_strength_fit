@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import hashlib
 import os
 from pathlib import Path
@@ -40,8 +41,10 @@ from opening_strength_fit.training_labeled import (
     apply_sample_weight_from_config,
 )
 from opening_strength_fit.training_modeling import (
+    fit_predict_partition,
     fit_predict_split,
     model_config_payload,
+    partition_labeled_split,
 )
 from opening_strength_fit.training_windows import (
     build_evaluation_settings,
@@ -83,9 +86,8 @@ def train_from_args(args: argparse.Namespace) -> None:
             'OPENING_STRENGTH_TICK_PATH, or use [data].source = "clickhouse".'
         )
 
-    run_name = (
-        getattr(args, "run_id", None)
-        or (run_id(config, args.config) if args.config else "local_ridge_opening")
+    run_name = getattr(args, "run_id", None) or (
+        run_id(config, args.config) if args.config else "local_ridge_opening"
     )
     output_dir = Path(
         args.output_dir
@@ -133,20 +135,41 @@ def train_from_args(args: argparse.Namespace) -> None:
         "write_split_artifacts",
         len(splits) > 1,
     )
+    single_partition = None
+    if len(splits) == 1 and config_bool(
+        config,
+        "data",
+        "trusted_model_ready_split",
+        False,
+    ):
+        single_partition = list(partition_labeled_split(labeled, splits[0]))
+        del labeled
+        gc.collect()
     for split in splits:
-        predictions, metrics_row, train_stats = fit_predict_split(
-            labeled=labeled,
-            split=split,
-            run_name=run_name,
-            output_dir=output_dir,
-            args=args,
-            config=config,
-            alpha=alpha,
-            evaluation_settings=evaluation_settings,
-            stock_pool_settings=stock_pool_settings,
-            stock_pool=stock_pool,
-            write_period_artifacts=write_split_artifacts,
-        )
+        common_fit_args = {
+            "split": split,
+            "run_name": run_name,
+            "output_dir": output_dir,
+            "args": args,
+            "config": config,
+            "alpha": alpha,
+            "evaluation_settings": evaluation_settings,
+            "stock_pool_settings": stock_pool_settings,
+            "stock_pool": stock_pool,
+            "write_period_artifacts": write_split_artifacts,
+        }
+        if single_partition is None:
+            predictions, metrics_row, train_stats = fit_predict_split(
+                labeled=labeled,
+                **common_fit_args,
+            )
+        else:
+            predictions, metrics_row, train_stats = fit_predict_partition(
+                partition=single_partition,
+                **common_fit_args,
+            )
+            del single_partition
+            gc.collect()
         prediction_frames.append(predictions)
         metric_rows.append(metrics_row)
         train_stats_by_window[str(metrics_row["test_month"])] = train_stats
@@ -157,7 +180,13 @@ def train_from_args(args: argparse.Namespace) -> None:
     if not combined_predictions.empty:
         sort_cols = [
             column
-            for column in ["date", "symbol", "timestamp", "decision_time"]
+            for column in [
+                "date",
+                "symbol",
+                "decision_target_timestamp",
+                "timestamp",
+                "decision_time",
+            ]
             if column in combined_predictions.columns
         ]
         combined_predictions = combined_predictions.sort_values(sort_cols)

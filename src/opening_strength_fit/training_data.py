@@ -5,6 +5,7 @@ import os
 import re
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from opening_strength_fit.cache_lock import (
@@ -690,6 +691,44 @@ def _normalize_dataset_join_keys(frame: pd.DataFrame, *, kind: str) -> pd.DataFr
     return out
 
 
+def _validate_model_ready_split_keys(
+    features: pd.DataFrame,
+    labels: pd.DataFrame,
+    *,
+    sample_rows: int = 4096,
+) -> None:
+    """Cheaply validate the row-order contract of published model-ready datasets."""
+    for kind, frame in (("feature", features), ("label", labels)):
+        missing = [column for column in DATASET_JOIN_KEYS if column not in frame.columns]
+        if missing:
+            raise SystemExit(f"{kind} dataset is missing join keys {missing}")
+    if len(features) != len(labels):
+        raise SystemExit(
+            "model-ready feature/label row count mismatch: "
+            f"features={len(features)} labels={len(labels)}"
+        )
+    if not len(features):
+        return
+
+    count = min(max(2, int(sample_rows)), len(features))
+    positions = np.unique(np.linspace(0, len(features) - 1, num=count, dtype=np.int64))
+    for column in DATASET_JOIN_KEYS:
+        feature_keys = features[column].iloc[positions].reset_index(drop=True)
+        label_keys = labels[column].iloc[positions].reset_index(drop=True)
+        if column == "decision_target_timestamp":
+            feature_values = pd.to_datetime(feature_keys, errors="coerce").to_numpy()
+            label_values = pd.to_datetime(label_keys, errors="coerce").to_numpy()
+        else:
+            feature_values = feature_keys.astype(str).to_numpy()
+            label_values = label_keys.astype(str).to_numpy()
+        if not np.array_equal(feature_values, label_values):
+            raise SystemExit(
+                "model-ready feature/label sampled key mismatch in "
+                f"{column!r}; rebuild the published datasets or disable "
+                "data.trusted_model_ready_split for a full key join"
+            )
+
+
 def _read_split_feature_label_pvc_frame(
     feature_path: Path,
     label_path: Path,
@@ -697,16 +736,21 @@ def _read_split_feature_label_pvc_frame(
     filters: list[tuple[str, str, object]] | None,
     config: dict,
 ) -> pd.DataFrame:
+    trusted_model_ready = config_bool(
+        config,
+        "data",
+        "trusted_model_ready_split",
+        False,
+    )
     projected_feature_columns = _labeled_pvc_read_columns(feature_path, config)
-    features = _normalize_dataset_join_keys(
-        _read_dataset_pvc_parts(
-            feature_path,
-            columns=projected_feature_columns,
-            filters=filters,
-            kind="feature",
-        ),
+    features = _read_dataset_pvc_parts(
+        feature_path,
+        columns=projected_feature_columns,
+        filters=filters,
         kind="feature",
     )
+    if not trusted_model_ready:
+        features = _normalize_dataset_join_keys(features, kind="feature")
     configured_label_columns = config_list(
         config,
         "data",
@@ -714,35 +758,39 @@ def _read_split_feature_label_pvc_frame(
         ["label_short", "label_next_close", "target_label"],
     )
     label_columns = list(dict.fromkeys([*DATASET_JOIN_KEYS, *configured_label_columns]))
-    labels = _normalize_dataset_join_keys(
-        _read_dataset_pvc_parts(
-            label_path,
-            columns=label_columns,
-            filters=filters,
-            kind="label",
-        ),
+    labels = _read_dataset_pvc_parts(
+        label_path,
+        columns=label_columns,
+        filters=filters,
         kind="label",
     )
+    if trusted_model_ready:
+        _validate_model_ready_split_keys(features, labels)
+    else:
+        labels = _normalize_dataset_join_keys(labels, kind="label")
     missing_labels = [column for column in configured_label_columns if column not in labels.columns]
     if missing_labels:
         raise SystemExit(f"label dataset is missing columns {missing_labels}")
     overlapping_labels = sorted(set(configured_label_columns).intersection(features.columns))
     if overlapping_labels:
-        raise SystemExit(f"feature dataset unexpectedly contains label columns {overlapping_labels}")
+        raise SystemExit(
+            f"feature dataset unexpectedly contains label columns {overlapping_labels}"
+        )
 
-    keys_already_aligned = len(features) == len(labels) and all(
-        features[column].equals(labels[column]) for column in DATASET_JOIN_KEYS
+    keys_already_aligned = trusted_model_ready or (
+        len(features) == len(labels)
+        and all(features[column].equals(labels[column]) for column in DATASET_JOIN_KEYS)
     )
     if keys_already_aligned:
         # Published feature/label shards preserve the same row order. Keep the 350-column
         # feature blocks shallow and attach only the three narrow label arrays; a full
         # merge would transiently duplicate the wide frame for no benefit.
-        merged = features.copy(deep=False)
+        merged = features if trusted_model_ready else features.copy(deep=False)
         for column in configured_label_columns:
             merged[column] = labels[column].to_numpy(copy=False)
         feature_only = 0
         label_only = 0
-        alignment = "same_order"
+        alignment = "trusted_sampled_order" if trusted_model_ready else "same_order"
     else:
         merged = features.merge(
             labels.loc[:, label_columns],
@@ -770,12 +818,13 @@ def _read_split_feature_label_pvc_frame(
         )
     short = pd.to_numeric(merged[short_column], errors="coerce")
     target = pd.to_numeric(merged[target_column], errors="coerce")
-    if "timestamp" not in merged.columns:
-        merged["timestamp"] = merged["decision_target_timestamp"]
-    if "decision_time" not in merged.columns:
-        merged["decision_time"] = merged["decision_target_timestamp"].dt.strftime("%H:%M:%S")
-    if "decision_lag_seconds" not in merged.columns:
-        merged["decision_lag_seconds"] = 0.0
+    if not trusted_model_ready:
+        if "timestamp" not in merged.columns:
+            merged["timestamp"] = merged["decision_target_timestamp"]
+        if "decision_time" not in merged.columns:
+            merged["decision_time"] = merged["decision_target_timestamp"].dt.strftime("%H:%M:%S")
+        if "decision_lag_seconds" not in merged.columns:
+            merged["decision_lag_seconds"] = 0.0
     merged["label"] = short
     merged["gross_label"] = short
     merged["valid_label"] = short.notna() & target.notna()
@@ -791,7 +840,11 @@ def _read_split_feature_label_pvc_frame(
             "alignment": alignment,
         },
     )
-    result = _downcast_labeled_pvc_frame(filter_labeled_frame(merged, config), config)
+    result = (
+        _downcast_labeled_pvc_frame(merged, config)
+        if trusted_model_ready
+        else _downcast_labeled_pvc_frame(filter_labeled_frame(merged, config), config)
+    )
     expected_features = config_int(config, "data", "expected_feature_count", 0)
     if expected_features:
         selected_features = feature_columns(
@@ -1292,8 +1345,7 @@ def load_labeled_pvc_frame(
     config: dict,
 ) -> pd.DataFrame:
     feature_path_raw = str(
-        getattr(args, "feature_input", None)
-        or config_str(config, "data", "feature_path", "")
+        getattr(args, "feature_input", None) or config_str(config, "data", "feature_path", "")
     ).strip()
     label_path_raw = str(
         getattr(args, "label_input", None) or config_str(config, "data", "label_path", "")

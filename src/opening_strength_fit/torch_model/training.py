@@ -174,11 +174,11 @@ def fit_torch_mlp_frame(
         tick_size=value_transform_tick_size,
         extra_columns=(target_col, "valid_label", standardization_group_col),
     )
-    x_frame, y_series = _clean_xy(model_input, features, target_col=target_col)
     standardization_group_keys = None
     standardization_group_mean = None
     standardization_group_scale = None
     if standardization_mode == "symbol_train_zscore":
+        x_frame, y_series = _clean_xy(model_input, features, target_col=target_col)
         if standardization_group_col not in model_input.columns:
             raise SystemExit(
                 "model.feature_standardization='symbol_train_zscore' requires "
@@ -209,8 +209,21 @@ def fit_torch_mlp_frame(
             group_mean=standardization_group_mean,
             group_scale=standardization_group_scale,
         )
+        selected_rows: pd.Index | pd.Series = x_frame.index
     else:
-        x_values, feature_mean, feature_scale = _standardized_float_matrix(x_frame, features)
+        target = pd.to_numeric(model_input[target_col], errors="coerce")
+        valid_rows = target.notna() & np.isfinite(target)
+        if "valid_label" in model_input.columns:
+            valid_rows &= model_input["valid_label"].fillna(False).astype(bool)
+        if not bool(valid_rows.any()):
+            raise SystemExit("empty labeled frame after filtering valid labels")
+        x_values, feature_mean, feature_scale = _standardized_float_matrix(
+            model_input,
+            features,
+            row_mask=valid_rows,
+        )
+        y_series = target.loc[valid_rows].astype("float64")
+        selected_rows = valid_rows
     y_values = y_series.to_numpy(dtype=np.float32, copy=True).reshape(-1, 1)
 
     sample_weight = None
@@ -218,7 +231,7 @@ def fit_torch_mlp_frame(
         if sample_weight_col not in train.columns:
             raise SystemExit(f"missing sample weight column: {sample_weight_col}")
         sample_weight = (
-            pd.to_numeric(train.loc[x_frame.index, sample_weight_col], errors="coerce")
+            pd.to_numeric(train.loc[selected_rows, sample_weight_col], errors="coerce")
             .replace([np.inf, -np.inf], np.nan)
             .fillna(0.0)
             .clip(lower=0.0)
@@ -364,8 +377,8 @@ def fit_torch_mlp_frame(
         device_name = torch.cuda.get_device_name(torch.device(resolved_device))
     stats: dict[str, object] = {
         "rows": len(x_values),
-        "dates": int(train.loc[x_frame.index, "date"].nunique()),
-        "symbols": int(train.loc[x_frame.index, "symbol"].nunique()),
+        "dates": int(train.loc[selected_rows, "date"].nunique()),
+        "symbols": int(train.loc[selected_rows, "symbol"].nunique()),
         "features": len(features),
         "device": resolved_device,
         "torch_cuda_available": bool(torch.cuda.is_available()),
