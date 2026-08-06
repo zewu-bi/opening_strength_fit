@@ -21,6 +21,7 @@ TOP1000_RETURN_HISTOGRAM_Y_LIMITS = SCRIPT_MODULE.TOP1000_RETURN_HISTOGRAM_Y_LIM
 TOP1000_SCORE_BUCKETS = SCRIPT_MODULE.TOP1000_SCORE_BUCKETS
 plot_score_bucket_histograms = SCRIPT_MODULE.plot_score_bucket_histograms
 plot_score_bucket_histograms_full_scale = SCRIPT_MODULE.plot_score_bucket_histograms_full_scale
+load_ranked_pool_shard = SCRIPT_MODULE.load_ranked_pool_shard
 
 
 def _histogram() -> pd.DataFrame:
@@ -35,6 +36,37 @@ def _histogram() -> pd.DataFrame:
             for midpoint in (-50.0, 50.0)
         ]
     )
+
+
+def test_ranked_pool_shard_can_reuse_embedded_next_label(tmp_path: Path) -> None:
+    pred_path = tmp_path / "predictions.parquet"
+    pd.DataFrame(
+        {
+            "date": ["2025-01-02"] * 3,
+            "symbol": ["000001.SZ", "000002.SZ", "000003.SZ"],
+            "decision_target_timestamp": pd.to_datetime(["2025-01-02 09:31:00"] * 3),
+            "prediction": [0.3, 0.1, 0.2],
+            "label_next_close": [0.03, -0.01, 0.01],
+        }
+    ).to_parquet(pred_path, index=False)
+    pool = pd.DataFrame(
+        [[True, True, True]],
+        index=["2025-01-02"],
+        columns=["000001.SZ", "000002.SZ", "000003.SZ"],
+    )
+
+    frame, trace = load_ranked_pool_shard(
+        pred_path=pred_path,
+        labels=None,
+        pool=pool,
+        prediction_next_label_col="label_next_close",
+    )
+
+    assert frame["symbol"].tolist() == ["000001.SZ", "000003.SZ", "000002.SZ"]
+    assert frame["score_rank"].tolist() == [1, 2, 3]
+    assert frame["excess_bps"].tolist() == pytest.approx([200.0, 0.0, -200.0])
+    assert trace["next_label_source"] == "prediction:label_next_close"
+    assert trace["missing_labels"] == 0
 
 
 def test_score_bucket_histogram_plot_has_fixed_acceptance_window(

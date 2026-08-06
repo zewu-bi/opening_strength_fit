@@ -1,0 +1,110 @@
+{
+  "created_at_utc": "2026-08-06T05:50:39.733432+00:00",
+  "prediction_root": "/mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1",
+  "next_label_root": null,
+  "prediction_next_label_col": "label_next_close",
+  "pool_path": "lml.bzw@ssd/data/pool_L.parquet",
+  "variant": "ds350_w0931_0940_h1m_max30",
+  "run_id": "w0931_0940_h1m",
+  "months": {
+    "2022-01": {
+      "prediction_pool_rows": 3633703,
+      "joined_rows": 3633703,
+      "groups": 1170,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "next_label_source": "prediction:label_next_close",
+      "pool_group_size_min": 3044,
+      "pool_groups_total": 1170,
+      "pool_groups_with_top_n": 1170,
+      "pool_groups_below_top_n": 0
+    },
+    "2022-07": {
+      "prediction_pool_rows": 4049229,
+      "joined_rows": 4049229,
+      "groups": 1250,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "next_label_source": "prediction:label_next_close",
+      "pool_group_size_min": 3135,
+      "pool_groups_total": 1250,
+      "pool_groups_with_top_n": 1250,
+      "pool_groups_below_top_n": 0
+    },
+    "2023-01": {
+      "prediction_pool_rows": 3944512,
+      "joined_rows": 3944512,
+      "groups": 1180,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "next_label_source": "prediction:label_next_close",
+      "pool_group_size_min": 3265,
+      "pool_groups_total": 1180,
+      "pool_groups_with_top_n": 1180,
+      "pool_groups_below_top_n": 0
+    },
+    "2023-07": {
+      "prediction_pool_rows": 4264551,
+      "joined_rows": 4264551,
+      "groups": 1240,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "next_label_source": "prediction:label_next_close",
+      "pool_group_size_min": 3369,
+      "pool_groups_total": 1240,
+      "pool_groups_with_top_n": 1240,
+      "pool_groups_below_top_n": 0
+    },
+    "2024-01": {
+      "prediction_pool_rows": 4052213,
+      "joined_rows": 4052213,
+      "groups": 1170,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "next_label_source": "prediction:label_next_close",
+      "pool_group_size_min": 3407,
+      "pool_groups_total": 1170,
+      "pool_groups_with_top_n": 1170,
+      "pool_groups_below_top_n": 0
+    },
+    "2024-07": {
+      "prediction_pool_rows": 4317448,
+      "joined_rows": 4317448,
+      "groups": 1250,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "next_label_source": "prediction:label_next_close",
+      "pool_group_size_min": 2664,
+      "pool_groups_total": 1250,
+      "pool_groups_with_top_n": 1250,
+      "pool_groups_below_top_n": 0
+    },
+    "2025-01": {
+      "prediction_pool_rows": 4056597,
+      "joined_rows": 4056597,
+      "groups": 1170,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "next_label_source": "prediction:label_next_close",
+      "pool_group_size_min": 3420,
+      "pool_groups_total": 1170,
+      "pool_groups_with_top_n": 1170,
+      "pool_groups_below_top_n": 0
+    },
+    "2025-07": {
+      "prediction_pool_rows": 4372583,
+      "joined_rows": 4372583,
+      "groups": 1260,
+      "duplicate_keys": 0,
+      "missing_labels": 0,
+      "next_label_source": "prediction:label_next_close",
+      "pool_group_size_min": 3434,
+      "pool_groups_total": 1260,
+      "pool_groups_with_top_n": 1260,
+      "pool_groups_below_top_n": 0
+    }
+  },
+  "top_n": 1000,
+  "inference_unit": "trading_day",
+  "hac": "Bartlett/Newey-West, maximum lag 5"
+}

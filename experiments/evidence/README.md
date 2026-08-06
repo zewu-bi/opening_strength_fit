@@ -12,6 +12,9 @@ Current canonical evidence:
 
 Current diagnostic evidence:
 
+- [ds350 max-30 15-label matrix](backtests/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/) —
+  authoritative 15-label result archive; includes all 120 rolling folds plus the standard four-figure
+  acceptance bundle for `09:31-09:40 / 1m`
 - [archived v4 multiden four-figure acceptance](backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/) —
   previous signal baseline
 - [archived v4 multiden unified strategy acceptance](backtests/strategy_acceptance_clock6_v4_multiden_2022_2025_v1/) —

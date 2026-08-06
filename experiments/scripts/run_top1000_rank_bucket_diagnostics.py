@@ -40,13 +40,26 @@ def parse_args() -> argparse.Namespace:
         description="Run Top1000 rank, bucket, and economically aligned IC diagnostics."
     )
     parser.add_argument("--prediction-root", type=Path, required=True)
-    parser.add_argument("--next-label-root", type=Path, required=True)
+    parser.add_argument("--next-label-root", type=Path)
+    parser.add_argument(
+        "--prediction-next-label-col",
+        default="",
+        help=(
+            "Read next-close labels directly from each prediction parquet column instead of "
+            "loading and joining separate yearly label files."
+        ),
+    )
     parser.add_argument("--pool-path", required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--variant", required=True)
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--months", default=",".join(DEFAULT_MONTHS))
     parser.add_argument("--top-n", type=int, default=1000)
+    parser.add_argument(
+        "--rank-bucket-only",
+        action="store_true",
+        help="Write rank/bucket diagnostics without the additional multiscale diagnostics.",
+    )
     parser.add_argument(
         "--top100-positive-histogram-only",
         action="store_true",
@@ -68,6 +81,63 @@ def parse_args() -> argparse.Namespace:
         default=TOP1000_RETURN_HISTOGRAM_BIN_WIDTH_BPS,
     )
     return parser.parse_args()
+
+
+def load_ranked_pool_shard(
+    *,
+    pred_path: Path,
+    labels: pd.DataFrame | None,
+    pool: pd.DataFrame,
+    prediction_next_label_col: str,
+) -> tuple[pd.DataFrame, dict[str, int | str]]:
+    if not prediction_next_label_col:
+        if labels is None:
+            raise ValueError("separate next-close labels are required")
+        return ms.load_ranked_pool_shard(pred_path=pred_path, labels=labels, pool=pool)
+
+    columns = [*ms.PREDICTION_COLS, prediction_next_label_col]
+    pred = pd.read_parquet(pred_path, columns=columns).rename(
+        columns={prediction_next_label_col: "alpha_return_next_close"}
+    )
+    pred["date"] = ms.normalize_date(pred["date"])
+    pred = pred.loc[ms.stock_pool_membership_mask(pred, pool)].copy()
+    pred_rows = len(pred)
+    duplicate_keys = int(pred.duplicated(ms.PREDICTION_COLS[:3]).sum())
+    if duplicate_keys:
+        raise ValueError(f"invalid predictions for {pred_path}: duplicates={duplicate_keys}")
+    missing_labels = int(pred["alpha_return_next_close"].isna().sum())
+    if missing_labels:
+        raise ValueError(
+            f"invalid embedded labels for {pred_path}: missing_labels={missing_labels}"
+        )
+
+    frame = pred
+    frame["pool_mean"] = frame.groupby(ms.GROUP_COLS, observed=True)[
+        "alpha_return_next_close"
+    ].transform("mean")
+    frame["excess_bps"] = (frame["alpha_return_next_close"] - frame["pool_mean"]) * 10000.0
+    frame["realized_pool_pct"] = frame.groupby(ms.GROUP_COLS, observed=True)[
+        "alpha_return_next_close"
+    ].rank(ascending=False, method="average", pct=True)
+    frame["realized_pool_top5"] = frame["realized_pool_pct"] <= 0.05
+    frame["realized_pool_top10"] = frame["realized_pool_pct"] <= 0.10
+    frame = frame.sort_values(
+        ms.GROUP_COLS + ["prediction"],
+        ascending=[True, True, False],
+        kind="mergesort",
+    )
+    grouped = frame.groupby(ms.GROUP_COLS, sort=False, observed=True)
+    frame["score_rank"] = grouped.cumcount() + 1
+    frame["group_size"] = grouped["symbol"].transform("size")
+    frame["month"] = frame["date"].str.slice(0, 7)
+    return frame, {
+        "prediction_pool_rows": pred_rows,
+        "joined_rows": len(frame),
+        "groups": int(grouped.ngroups),
+        "duplicate_keys": duplicate_keys,
+        "missing_labels": missing_labels,
+        "next_label_source": f"prediction:{prediction_next_label_col}",
+    }
 
 
 def average_ranks(values: np.ndarray) -> np.ndarray:
@@ -787,7 +857,8 @@ def _plot_score_bucket_histograms(
 def run_top1000_bucket_return_histogram(
     *,
     prediction_root: Path,
-    next_label_root: Path,
+    next_label_root: Path | None,
+    prediction_next_label_col: str,
     pool_path: str,
     output_dir: Path,
     variant: str,
@@ -803,7 +874,8 @@ def run_top1000_bucket_return_histogram(
     trace: dict[str, object] = {
         "created_at_utc": datetime.now(UTC).isoformat(),
         "prediction_root": str(prediction_root),
-        "next_label_root": str(next_label_root),
+        "next_label_root": str(next_label_root) if next_label_root is not None else None,
+        "prediction_next_label_col": prediction_next_label_col or None,
         "pool_path": pool_path,
         "variant": variant,
         "run_id": run_id,
@@ -815,15 +887,18 @@ def run_top1000_bucket_return_histogram(
     }
     for month in months:
         year = month[:4]
-        if year not in labels:
+        if not prediction_next_label_col and year not in labels:
+            if next_label_root is None:
+                raise ValueError("next_label_root is required without embedded prediction labels")
             labels.clear()
             labels[year] = ms.load_label_for_year(ms.next_label_path(next_label_root, year))
         pred_path = ms.prediction_path(prediction_root, run_id, month)
         print(f"Top1000 bucket histogram shard {month}: {pred_path}", flush=True)
-        frame, shard_trace = ms.load_ranked_pool_shard(
+        frame, shard_trace = load_ranked_pool_shard(
             pred_path=pred_path,
-            labels=labels[year],
+            labels=labels.get(year),
             pool=pool,
+            prediction_next_label_col=prediction_next_label_col,
         )
         group_sizes = frame.groupby(ms.GROUP_COLS, observed=True)["group_size"].first()
         complete_groups = group_sizes.loc[group_sizes.ge(1000)]
@@ -911,7 +986,8 @@ def run_top1000_bucket_return_histogram(
 def run_rank_bucket(
     *,
     prediction_root: Path,
-    next_label_root: Path,
+    next_label_root: Path | None,
+    prediction_next_label_col: str,
     pool_path: str,
     output_dir: Path,
     variant: str,
@@ -929,7 +1005,8 @@ def run_rank_bucket(
     trace: dict[str, object] = {
         "created_at_utc": datetime.now(UTC).isoformat(),
         "prediction_root": str(prediction_root),
-        "next_label_root": str(next_label_root),
+        "next_label_root": str(next_label_root) if next_label_root is not None else None,
+        "prediction_next_label_col": prediction_next_label_col or None,
         "pool_path": pool_path,
         "variant": variant,
         "run_id": run_id,
@@ -940,15 +1017,18 @@ def run_rank_bucket(
     }
     for month in months:
         year = month[:4]
-        if year not in labels:
+        if not prediction_next_label_col and year not in labels:
+            if next_label_root is None:
+                raise ValueError("next_label_root is required without embedded prediction labels")
             labels.clear()
             labels[year] = ms.load_label_for_year(ms.next_label_path(next_label_root, year))
         pred_path = ms.prediction_path(prediction_root, run_id, month)
         print(f"rank/bucket shard {month}: {pred_path}", flush=True)
-        frame, shard_trace = ms.load_ranked_pool_shard(
+        frame, shard_trace = load_ranked_pool_shard(
             pred_path=pred_path,
-            labels=labels[year],
+            labels=labels.get(year),
             pool=pool,
+            prediction_next_label_col=prediction_next_label_col,
         )
         group_sizes = frame.groupby(ms.GROUP_COLS, observed=True)["group_size"].first()
         complete_groups = group_sizes.loc[group_sizes.ge(top_n)]
@@ -1011,10 +1091,31 @@ def run_rank_bucket(
 def main() -> None:
     args = parse_args()
     months = [month.strip() for month in args.months.split(",") if month.strip()]
+    if args.next_label_root is None and not args.prediction_next_label_col:
+        raise SystemExit(
+            "pass --next-label-root or read embedded labels with --prediction-next-label-col"
+        )
+    if args.prediction_next_label_col and (
+        args.top100_positive_histogram_only or args.top100_return_histogram_only
+    ):
+        raise SystemExit(
+            "embedded prediction labels are supported for rank-bucket and Top1000 bucket "
+            "distribution diagnostics"
+        )
+    if (
+        args.prediction_next_label_col
+        and not args.rank_bucket_only
+        and not args.top1000_bucket_return_histogram_only
+    ):
+        raise SystemExit(
+            "embedded prediction labels currently require --rank-bucket-only; "
+            "the multiscale diagnostic still requires --next-label-root"
+        )
     if args.top1000_bucket_return_histogram_only:
         run_top1000_bucket_return_histogram(
             prediction_root=args.prediction_root,
             next_label_root=args.next_label_root,
+            prediction_next_label_col=args.prediction_next_label_col,
             pool_path=args.pool_path,
             output_dir=args.output_dir,
             variant=args.variant,
@@ -1051,6 +1152,7 @@ def main() -> None:
     run_rank_bucket(
         prediction_root=args.prediction_root,
         next_label_root=args.next_label_root,
+        prediction_next_label_col=args.prediction_next_label_col,
         pool_path=args.pool_path,
         output_dir=rank_output,
         variant=args.variant,
@@ -1058,6 +1160,9 @@ def main() -> None:
         months=months,
         top_n=args.top_n,
     )
+    if args.rank_bucket_only:
+        print(f"wrote {args.output_dir}", flush=True)
+        return
     ms.run_multiscale_bucket_diagnostics(
         ms.MultiscaleBucketDiagConfig(
             prediction_root=args.prediction_root,
