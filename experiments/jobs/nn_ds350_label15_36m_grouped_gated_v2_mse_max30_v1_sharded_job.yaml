@@ -1,0 +1,275 @@
+apiVersion: v1
+kind: List
+items:
+  - &case-job
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: os-nn-ds350-m30-w0931-h1m-v1
+      namespace: bizewu
+      labels: {app: os-nn-ds350-m30-w0931-h1m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w0931-0940, osf-case: w0931_0940_h1m}
+    spec: &case-spec
+      activeDeadlineSeconds: 1209600
+      backoffLimit: 8
+      completionMode: Indexed
+      completions: 8
+      parallelism: 8
+      suspend: true
+      ttlSecondsAfterFinished: 86400
+      template: &case-template
+        metadata:
+          labels: {app: os-nn-ds350-m30-w0931-h1m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w0931-0940, osf-case: w0931_0940_h1m}
+        spec:
+          restartPolicy: Never
+          imagePullSecrets: [{name: highfort}]
+          volumes:
+            - name: output
+              persistentVolumeClaim: {claimName: bizewu-private-data}
+          nodeSelector: {has_gpu: "true"}
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: kubernetes.io/hostname
+                        operator: NotIn
+                        values: [node6, node7, node8, node12, node17, node19, node20, node22, node24, node25, node26, node27, node28]
+                      - key: gpu_model
+                        operator: In
+                        values: [A100-80, H100-80, H20]
+          tolerations:
+            - {key: has_gpu, operator: Equal, value: "true", effect: NoSchedule}
+          containers:
+            - name: trainer
+              image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:1c35beb1275aca13e5a71fd03bc13ae703078b29b3e2a744c77e386a32c4917a
+              imagePullPolicy: Always
+              workingDir: /app/opening_strength_fit
+              env:
+                - name: JOB_COMPLETION_INDEX
+                  valueFrom:
+                    fieldRef: {fieldPath: "metadata.annotations['batch.kubernetes.io/job-completion-index']"}
+                - name: CASE
+                  valueFrom:
+                    fieldRef: {fieldPath: "metadata.labels['osf-case']"}
+              command: [/bin/bash, -lc]
+              args:
+                - |
+                  set -euo pipefail
+                  case "${CASE:?missing CASE}" in
+                    w0931_0940_*) WINDOW=0931_0940 ;;
+                    w1001_1010_*) WINDOW=1001_1010 ;;
+                    w1401_1410_*) WINDOW=1401_1410 ;;
+                    *) echo "unsupported CASE=${CASE}" >&2; exit 2 ;;
+                  esac
+                  case "${CASE}" in
+                    *_h1m) LABEL_SUFFIX=h1m_v2 ;;
+                    *_h3m) LABEL_SUFFIX=h3m_v2 ;;
+                    *_h5m) LABEL_SUFFIX=h5m_v2 ;;
+                    *_h10m) LABEL_SUFFIX=h10m_v1 ;;
+                    *_h1h) LABEL_SUFFIX=h1h_v1 ;;
+                    *_hclose) LABEL_SUFFIX=hclose_v1 ;;
+                    *) echo "unsupported CASE=${CASE}" >&2; exit 2 ;;
+                  esac
+                  FEATURE_ROOT="/mnt/output/opening_strength_fit/datasets/opening_${WINDOW}_features_350"
+                  LABEL_ROOT="/mnt/output/opening_strength_fit/datasets/opening_${WINDOW}_labels_${LABEL_SUFFIX}"
+                  TEST_STARTS=(2022-01 2022-07 2023-01 2023-07 2024-01 2024-07 2025-01 2025-07)
+                  TEST_ENDS=(2022-06 2022-12 2023-06 2023-12 2024-06 2024-12 2025-06 2025-12)
+                  INDEX="${JOB_COMPLETION_INDEX:?missing JOB_COMPLETION_INDEX}"
+                  TEST_START="${TEST_STARTS[${INDEX}]}"
+                  TEST_END="${TEST_ENDS[${INDEX}]}"
+                  RUN_ID="nn_ds350_${CASE}_36m_grouped_gated_v2_mse_max30_v1"
+                  OUT="/mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/${CASE}/month_${TEST_START}"
+
+                  for YEAR in 2019 2020 2021 2022 2023 2024 2025; do
+                    test -f "${FEATURE_ROOT}/year=${YEAR}/_SUCCESS"
+                    test -f "${LABEL_ROOT}/year=${YEAR}/_SUCCESS"
+                  done
+                  if [ -f "${OUT}/_SUCCESS" ] && [ -f "${OUT}/metrics_by_year.csv" ] && [ -f "${OUT}/predictions.parquet" ]; then
+                    echo "output already complete, skipping ${OUT}"
+                    exit 0
+                  fi
+
+                  exec osf-train \
+                    --config experiments/runs/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1.toml \
+                    --feature-input "${FEATURE_ROOT}" \
+                    --label-input "${LABEL_ROOT}" \
+                    --run-id "${RUN_ID}" \
+                    --rolling-monthly \
+                    --train-months 36 \
+                    --test-months 6 \
+                    --test-stride-months 6 \
+                    --test-start-month "${TEST_START}" \
+                    --test-end-month "${TEST_END}" \
+                    --output-dir "${OUT}"
+              volumeMounts: [{name: output, mountPath: /mnt/output}]
+              resources:
+                requests: {cpu: "8", memory: 256Gi, nvidia.com/gpu: "1"}
+                limits: {cpu: "16", memory: 384Gi, nvidia.com/gpu: "1"}
+
+  - <<: *case-job
+    metadata: &w0931-h3m-meta
+      name: os-nn-ds350-m30-w0931-h3m-v1
+      namespace: bizewu
+      labels: {app: os-nn-ds350-m30-w0931-h3m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w0931-0940, osf-case: w0931_0940_h3m}
+    spec:
+      <<: *case-spec
+      template:
+        <<: *case-template
+        metadata:
+          labels: {app: os-nn-ds350-m30-w0931-h3m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w0931-0940, osf-case: w0931_0940_h3m}
+
+  - <<: *case-job
+    metadata: &w0931-h5m-meta
+      name: os-nn-ds350-m30-w0931-h5m-v1
+      namespace: bizewu
+      labels: {app: os-nn-ds350-m30-w0931-h5m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w0931-0940, osf-case: w0931_0940_h5m}
+    spec:
+      <<: *case-spec
+      template:
+        <<: *case-template
+        metadata:
+          labels: {app: os-nn-ds350-m30-w0931-h5m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w0931-0940, osf-case: w0931_0940_h5m}
+
+  - <<: *case-job
+    metadata: &w0931-h10m-meta
+      name: os-nn-ds350-m30-w0931-h10m-v1
+      namespace: bizewu
+      labels: {app: os-nn-ds350-m30-w0931-h10m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w0931-0940, osf-case: w0931_0940_h10m}
+    spec:
+      <<: *case-spec
+      template:
+        <<: *case-template
+        metadata:
+          labels: {app: os-nn-ds350-m30-w0931-h10m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w0931-0940, osf-case: w0931_0940_h10m}
+
+  - <<: *case-job
+    metadata: &w0931-h1h-meta
+      name: os-nn-ds350-m30-w0931-h1h-v1
+      namespace: bizewu
+      labels: {app: os-nn-ds350-m30-w0931-h1h-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w0931-0940, osf-case: w0931_0940_h1h}
+    spec:
+      <<: *case-spec
+      template:
+        <<: *case-template
+        metadata:
+          labels: {app: os-nn-ds350-m30-w0931-h1h-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w0931-0940, osf-case: w0931_0940_h1h}
+
+  - <<: *case-job
+    metadata: &w0931-hclose-meta
+      name: os-nn-ds350-m30-w0931-hclose-v1
+      namespace: bizewu
+      labels: {app: os-nn-ds350-m30-w0931-hclose-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w0931-0940, osf-case: w0931_0940_hclose}
+    spec:
+      <<: *case-spec
+      template:
+        <<: *case-template
+        metadata:
+          labels: {app: os-nn-ds350-m30-w0931-hclose-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w0931-0940, osf-case: w0931_0940_hclose}
+
+  - <<: *case-job
+    metadata: &w1001-h1m-meta
+      name: os-nn-ds350-m30-w1001-h1m-v1
+      namespace: bizewu
+      labels: {app: os-nn-ds350-m30-w1001-h1m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w1001-1010, osf-case: w1001_1010_h1m}
+    spec:
+      <<: *case-spec
+      template:
+        <<: *case-template
+        metadata:
+          labels: {app: os-nn-ds350-m30-w1001-h1m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w1001-1010, osf-case: w1001_1010_h1m}
+
+  - <<: *case-job
+    metadata: &w1001-h3m-meta
+      name: os-nn-ds350-m30-w1001-h3m-v1
+      namespace: bizewu
+      labels: {app: os-nn-ds350-m30-w1001-h3m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w1001-1010, osf-case: w1001_1010_h3m}
+    spec:
+      <<: *case-spec
+      template:
+        <<: *case-template
+        metadata:
+          labels: {app: os-nn-ds350-m30-w1001-h3m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w1001-1010, osf-case: w1001_1010_h3m}
+
+  - <<: *case-job
+    metadata: &w1001-h5m-meta
+      name: os-nn-ds350-m30-w1001-h5m-v1
+      namespace: bizewu
+      labels: {app: os-nn-ds350-m30-w1001-h5m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w1001-1010, osf-case: w1001_1010_h5m}
+    spec:
+      <<: *case-spec
+      template:
+        <<: *case-template
+        metadata:
+          labels: {app: os-nn-ds350-m30-w1001-h5m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w1001-1010, osf-case: w1001_1010_h5m}
+
+  - <<: *case-job
+    metadata: &w1001-h10m-meta
+      name: os-nn-ds350-m30-w1001-h10m-v1
+      namespace: bizewu
+      labels: {app: os-nn-ds350-m30-w1001-h10m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w1001-1010, osf-case: w1001_1010_h10m}
+    spec:
+      <<: *case-spec
+      template:
+        <<: *case-template
+        metadata:
+          labels: {app: os-nn-ds350-m30-w1001-h10m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w1001-1010, osf-case: w1001_1010_h10m}
+
+  - <<: *case-job
+    metadata: &w1001-h1h-meta
+      name: os-nn-ds350-m30-w1001-h1h-v1
+      namespace: bizewu
+      labels: {app: os-nn-ds350-m30-w1001-h1h-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w1001-1010, osf-case: w1001_1010_h1h}
+    spec:
+      <<: *case-spec
+      template:
+        <<: *case-template
+        metadata:
+          labels: {app: os-nn-ds350-m30-w1001-h1h-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w1001-1010, osf-case: w1001_1010_h1h}
+
+  - <<: *case-job
+    metadata: &w1001-hclose-meta
+      name: os-nn-ds350-m30-w1001-hclose-v1
+      namespace: bizewu
+      labels: {app: os-nn-ds350-m30-w1001-hclose-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w1001-1010, osf-case: w1001_1010_hclose}
+    spec:
+      <<: *case-spec
+      template:
+        <<: *case-template
+        metadata:
+          labels: {app: os-nn-ds350-m30-w1001-hclose-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w1001-1010, osf-case: w1001_1010_hclose}
+
+  - <<: *case-job
+    metadata: &w1401-h1m-meta
+      name: os-nn-ds350-m30-w1401-h1m-v1
+      namespace: bizewu
+      labels: {app: os-nn-ds350-m30-w1401-h1m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w1401-1410, osf-case: w1401_1410_h1m}
+    spec:
+      <<: *case-spec
+      template:
+        <<: *case-template
+        metadata:
+          labels: {app: os-nn-ds350-m30-w1401-h1m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w1401-1410, osf-case: w1401_1410_h1m}
+
+  - <<: *case-job
+    metadata: &w1401-h3m-meta
+      name: os-nn-ds350-m30-w1401-h3m-v1
+      namespace: bizewu
+      labels: {app: os-nn-ds350-m30-w1401-h3m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w1401-1410, osf-case: w1401_1410_h3m}
+    spec:
+      <<: *case-spec
+      template:
+        <<: *case-template
+        metadata:
+          labels: {app: os-nn-ds350-m30-w1401-h3m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w1401-1410, osf-case: w1401_1410_h3m}
+
+  - <<: *case-job
+    metadata: &w1401-h5m-meta
+      name: os-nn-ds350-m30-w1401-h5m-v1
+      namespace: bizewu
+      labels: {app: os-nn-ds350-m30-w1401-h5m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w1401-1410, osf-case: w1401_1410_h5m}
+    spec:
+      <<: *case-spec
+      template:
+        <<: *case-template
+        metadata:
+          labels: {app: os-nn-ds350-m30-w1401-h5m-v1, osf-matrix: ds350-label15-m30-v1, osf-window: w1401-1410, osf-case: w1401_1410_h5m}

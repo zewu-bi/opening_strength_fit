@@ -120,6 +120,24 @@ systemd-run --user --unit os-nn-ds350-label15-queue \
 把镜像拉取、共享 PVC 和节点差异计入后按 2.5–4 小时看待。日志中的 `torch_training_storage` 必须显示
 `storage: cuda_resident`，每个 epoch 会输出 loss 和秒数，便于区分预处理与真正卡住。
 
+上述 max-10 矩阵只保留为与历史 v6 同预算的基线，不作为收敛充分性的证明。2026-08-06 汇总其
+120 个 fold：119 个跑满 10 epochs，仅 1 个提前停止；85/120 的 best epoch 为 10，91/120 在
+epoch 9→10 的 validation loss 仍下降。因此另设完全隔离的 max-30 / patience-3 收敛实验，模型、
+数据、seed、rolling split 和资源不变：
+
+```bash
+hfcli kubectl apply -f experiments/jobs/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1_sharded_job.yaml
+
+systemd-run --user --unit os-nn-ds350-label15-max30-queue \
+  --working-directory "$(pwd)" \
+  experiments/scripts/run_ds350_label15_max30_training_queue.sh
+```
+
+新结果只写入
+`/mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1`，不得指向或
+复用 max-10 的 `nn_ds350_label12_36m_grouped_gated_v2_mse_v1`。完成后必须跨 120 个 fold 汇总
+`epochs_trained`、`best_epoch` 和末轮 validation loss；Job 成功本身不等同于收敛。
+
 历史 `next_tick`/forward-5s 只用于旧实验复现；新 cache 默认使用
 `decision_alignment/entry_alignment/future_alignment = clock_state` 和 `entry_clock_delay_seconds = 6`。
 
