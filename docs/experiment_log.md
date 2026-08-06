@@ -27,7 +27,7 @@ run 状态由 `osf-audit-experiments` 从 TOML 审计，不在文档中复制完
 | 2026-08-05 | corrected-label 三窗口 × 1m/3m NN 网格 | `completed`; 6 runs × 8 shards | 09:31 的短期/隔夜头部超额最强；10:01、14:01 在信号层归档，不晋级策略验收 |
 | 2026-08-05 | 前两窗口 10m/1h/当日收盘 label | `completed`; 6 labels × 7 years | 10m/1h 用持有期后 60 秒 VWAP，收盘 label 用当日收盘价；next-close 逐 key 复用既有数据 |
 | 2026-08-05 | 新分层数据 15-label NN 矩阵 | `completed`; 15 runs × 8 shards | 训练入口直接拼同窗口 350-feature 与独立 label；最大 fold 9m15s、H20 SM 83%–85%、主机峰值 202GiB |
-| 2026-08-06 | 15-label max-30 收敛实验 | `queued`; 独立结果根目录 | max-10 中 119/120 跑满上限、85/120 best epoch=10；固定其余变量，改为 max 30 / patience 3 |
+| 2026-08-06 | 15-label max-30 收敛实验 | `running`; 独立结果根目录 | max-10 中 119/120 跑满上限、85/120 best epoch=10；固定其余变量，改为 max 30 / patience 3 |
 
 ## 决策时间线
 
