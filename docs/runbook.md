@@ -145,6 +145,9 @@ systemd-run --user --unit os-nn-ds350-label15-max30-queue-reverse \
 各自最多放行一个 8-fold label Job，因此总上限为 2 labels / 16 GPUs；两个队列从列表两端靠拢，
 已经完成或正在运行的 Job 会被幂等观察，不会生成重复 Job。
 
+完成后的汇报、比较和下游分析一律以 max-30 根目录为当前权威结果；max-10 根目录仅用于 v6 同预算
+复现和 epoch 敏感性对照。若 max-30 的 OOS 指标低于 max-10，应报告该下降，不得据此切回 max-10。
+
 历史 `next_tick`/forward-5s 只用于旧实验复现；新 cache 默认使用
 `decision_alignment/entry_alignment/future_alignment = clock_state` 和 `entry_clock_delay_seconds = 6`。
 

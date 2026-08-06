@@ -21,6 +21,8 @@ def test_max30_changes_only_the_intended_training_budget_and_run_identity() -> N
     baseline = load_toml(BASELINE_CONFIG)
     max30 = load_toml(MAX30_CONFIG)
 
+    assert baseline["run"]["status"] == "superseded"
+    assert max30["run"]["status"] == "completed"
     assert max30["model"]["max_epochs"] == 30
     assert max30["model"]["early_stopping_patience"] == 3
     assert max30["matrix"] == baseline["matrix"]

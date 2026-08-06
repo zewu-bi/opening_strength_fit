@@ -26,8 +26,8 @@ run 状态由 `osf-audit-experiments` 从 TOML 审计，不在文档中复制完
 | 2026-08-04 | 九个 horizon-split label | `completed`; 9 labels × 7 years | 后续实验从三窗口 × 1m/3m/5m 中选择；新版本为权威训练输入 |
 | 2026-08-05 | corrected-label 三窗口 × 1m/3m NN 网格 | `completed`; 6 runs × 8 shards | 09:31 的短期/隔夜头部超额最强；10:01、14:01 在信号层归档，不晋级策略验收 |
 | 2026-08-05 | 前两窗口 10m/1h/当日收盘 label | `completed`; 6 labels × 7 years | 10m/1h 用持有期后 60 秒 VWAP，收盘 label 用当日收盘价；next-close 逐 key 复用既有数据 |
-| 2026-08-05 | 新分层数据 15-label NN 矩阵 | `completed`; 15 runs × 8 shards | 训练入口直接拼同窗口 350-feature 与独立 label；最大 fold 9m15s、H20 SM 83%–85%、主机峰值 202GiB |
-| 2026-08-06 | 15-label max-30 收敛实验 | `completed`; 15 runs × 8 shards | case 排序与正负方向稳健，但 1h/close 的 Top100 excess 明显回落；max-30 不晋级为默认预算 |
+| 2026-08-05 | 新分层数据 15-label max-10 NN 矩阵 | `superseded`; 15 runs × 8 shards | 只保留为 v6 同预算复现与 epoch 敏感性对照，不再作为当前结果口径 |
+| 2026-08-06 | 15-label max-30 NN 矩阵 | `completed`; 15 runs × 8 shards；当前权威结果 | case 排序与正负方向稳健；1h/close 的较低 Top100 excess 是最终结果的一部分，不回退到 max-10 |
 
 ## 决策时间线
 
@@ -117,15 +117,16 @@ next-close 分量保持一致。六组训练均完成 8/8 shard，pool-internal 
 `+1.6912 bps`）。Decision：若目标是当前经济指标，09:31-09:40 / 3m 是六格首选；10:01 和
 14:01 明显落后，按 runbook 停在信号层归档，不进入 capacity / realistic promotion audit。
 
-### 15-label max-30 收敛敏感性（2026-08-06，已完成）
+### 15-label max-30 权威结果与 max-10 对照（2026-08-06，已完成）
 
 在新分层数据的 15-label max-10 基线上，仅把训练预算从 max 10 / patience 2 改为 max 30 /
 patience 3；模型、feature、label、seed、rolling split 和 OOS 区间保持不变，结果写入独立目录。120/120
 fold 完成：平均训练 `22.91` epochs，107/120 的 best epoch 大于 10，36/120 的 best epoch 为 30；
 相对 epoch 10，best validation loss 平均再下降 `0.9121%`。这证明 10 不是由原验证准则确定的收敛点。
 
-但更低的训练期随机行 validation loss 没有转化成更高的时间外经济指标。pool_L 的 max-30 相对
-max-10 平均变化如下：
+当前 15-label 矩阵的结果口径固定为 max-30；max-10 只用于 v6 同预算复现和 epoch 敏感性对照。
+更低的训练期随机行 validation loss 没有转化成更高的时间外经济指标，以下回落本身就是 max-30
+权威结果的一部分，而不是退回 max-10 的理由。pool_L 的 max-30 相对 max-10 平均变化如下：
 
 | horizon | short Top100 excess Δ | next Top100 excess Δ | short Rank IC Δ | next Rank IC Δ |
 | --- | ---: | ---: | ---: | ---: |
@@ -138,9 +139,10 @@ max-10 平均变化如下：
 
 15/15 case 在两个预算下的 pool_L short/next excess 都保持为正，case 排序也高度一致：short/next
 Rank IC 的 Spearman 分别为 `0.9964/0.9393`，short/next excess 的 Spearman 为 `0.9000/0.9250`。
-因此窗口衰减、1m/3m 相对关系和信号正负等研究结论稳健；但 1h/close 的绝对 Top100 收益不是预算
-稳健结果。Decision：max-10 保留为历史同预算基线，max-30 只作敏感性证据，不以当前 OOS 反向挑选
-epoch。后续先把 early stopping validation 改为训练窗口尾部的时间块，再用未参与选择的 OOS 评估预算。
+因此窗口衰减、1m/3m 相对关系和信号正负等研究结论稳健；1h/close 后续引用和下游分析必须使用
+max-30 的较低绝对 Top100 收益。Decision：max-30 是当前权威训练结果；max-10 降为历史对照。
+后续可以把 early stopping validation 改为训练窗口尾部的时间块，但这属于下一版方法改进，不改变
+本批结果以 max-30 为准。
 
 ### Ordinary 328 mech v3 cap-cache（2026-07-21，已完成）
 

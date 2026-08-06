@@ -1,8 +1,8 @@
 [run]
 id = "nn_ds350_label12_36m_grouped_gated_v2_mse_v1"
 kind = "exploration"
-description = "Fifteen-case model-ready feature/label matrix: three windows x 1m/3m/5m plus two windows x 10m/1h/close."
-status = "running"
+description = "Historical max-10 baseline for the fifteen-case feature/label matrix; superseded by the authoritative max-30 run."
+status = "superseded"
 
 [data]
 source = "labeled_pvc"
