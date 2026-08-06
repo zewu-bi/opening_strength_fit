@@ -10,6 +10,9 @@ W1001_JOBS = ROOT / "experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_
 W1401_JOBS = ROOT / "experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w1401_jobs.yaml"
 H5M_JOBS = ROOT / "experiments/jobs/nn_ds350_label15_36m_grouped_gated_v2_mse_v1_h5m_jobs.yaml"
 LABEL15_QUEUE = ROOT / "experiments/scripts/run_ds350_label15_training_queue.sh"
+LABEL15_ANALYSIS_JOB = (
+    ROOT / "experiments/jobs/support/ds350_label15_pool_internal_analysis_job.yaml"
+)
 TRAINING_IMAGE = (
     "registry.corp.highfortfunds.com/bizewu/opening-strength-fit@"
     "sha256:cb7120cf0549ddb4a91533587b04aaf38847b5b78c13ddfbe586d10e22b106b4"
@@ -179,3 +182,20 @@ def test_dataset350_label15_queue_appends_three_h5m_jobs() -> None:
     assert "os-nn-ds350-w1001-h5m-v2" in text
     assert "os-nn-ds350-w1401-h5m-v2" in text
     assert "all 15 ds350 label jobs completed" in text
+
+
+def test_dataset350_label15_analysis_reuses_pool_internal_summary_without_plots() -> None:
+    text = LABEL15_ANALYSIS_JOB.read_text()
+    assert "completionMode: Indexed" in text
+    assert "completions: 15" in text
+    assert "parallelism: 5" in text
+    assert text.count("                w0931_0940_h") == 6
+    assert text.count("                w1001_1010_h") == 6
+    assert text.count("                w1401_1410_h") == 3
+    assert "osf-analyze-pool-internal-top100" in text
+    assert "--pool universe" in text
+    assert "--pool L" in text
+    assert "--top-n 100" in text
+    assert "--pool-date-lag-sessions 0" in text
+    assert "pool_internal_quarter_summary.csv" in text
+    assert "--report-dir" not in text
