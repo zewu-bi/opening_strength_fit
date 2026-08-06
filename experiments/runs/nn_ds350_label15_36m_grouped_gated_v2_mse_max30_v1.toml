@@ -2,7 +2,7 @@
 id = "nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1"
 kind = "exploration"
 description = "Isolated convergence run for all fifteen ds350 labels: max 30 epochs with patience 3; preserves the max-10 baseline."
-status = "running"
+status = "completed"
 
 [data]
 source = "labeled_pvc"
