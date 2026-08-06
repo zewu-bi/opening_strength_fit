@@ -66,6 +66,9 @@ def test_max30_queue_runs_all_fifteen_labels_with_at_most_eight_gpus() -> None:
     text = MAX30_QUEUE.read_text()
 
     assert text.count("  os-nn-ds350-m30-") == 15
+    assert 'QUEUE_DIRECTION="${QUEUE_DIRECTION:-forward}"' in text
+    assert "reverse)" in text
+    assert 'JOBS=("${REVERSED_JOBS[@]}")' in text
     assert 'if [[ "${SUCCEEDED:-0}" -ge 8 ]]' in text
-    assert "all 15 ds350 max-30 label jobs completed" in text
+    assert "all 15 ds350 max-30 label jobs observed complete" in text
     assert "os-nn-ds350-w0931-h1m-v2" not in text

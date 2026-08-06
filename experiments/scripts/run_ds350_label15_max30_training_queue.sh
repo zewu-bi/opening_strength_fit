@@ -21,6 +21,25 @@ JOBS=(
   os-nn-ds350-m30-w1401-h5m-v1
 )
 
+# A second queue may consume the same finite job list from the other end. Both
+# queues are idempotent: completed jobs are skipped and an already-running job
+# is only observed, so the two lanes safely converge near the middle.
+QUEUE_DIRECTION="${QUEUE_DIRECTION:-forward}"
+case "${QUEUE_DIRECTION}" in
+  forward) ;;
+  reverse)
+    REVERSED_JOBS=()
+    for ((INDEX = ${#JOBS[@]} - 1; INDEX >= 0; INDEX--)); do
+      REVERSED_JOBS+=("${JOBS[${INDEX}]}")
+    done
+    JOBS=("${REVERSED_JOBS[@]}")
+    ;;
+  *)
+    echo "QUEUE_DIRECTION must be forward or reverse, got ${QUEUE_DIRECTION}" >&2
+    exit 2
+    ;;
+esac
+
 POLL_SECONDS="${POLL_SECONDS:-60}"
 CURRENT_JOB=""
 HFCLI_BIN="${HFCLI_BIN:-$(command -v hfcli || true)}"
@@ -71,4 +90,4 @@ for JOB in "${JOBS[@]}"; do
 done
 
 CURRENT_JOB=""
-echo "all 15 ds350 max-30 label jobs completed"
+echo "all 15 ds350 max-30 label jobs observed complete (${QUEUE_DIRECTION} queue)"

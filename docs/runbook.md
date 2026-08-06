@@ -131,12 +131,19 @@ hfcli kubectl apply -f experiments/jobs/nn_ds350_label15_36m_grouped_gated_v2_ms
 systemd-run --user --unit os-nn-ds350-label15-max30-queue \
   --working-directory "$(pwd)" \
   experiments/scripts/run_ds350_label15_max30_training_queue.sh
+
+systemd-run --user --unit os-nn-ds350-label15-max30-queue-reverse \
+  --working-directory "$(pwd)" \
+  /usr/bin/env QUEUE_DIRECTION=reverse \
+  experiments/scripts/run_ds350_label15_max30_training_queue.sh
 ```
 
 新结果只写入
 `/mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1`，不得指向或
 复用 max-10 的 `nn_ds350_label12_36m_grouped_gated_v2_mse_v1`。完成后必须跨 120 个 fold 汇总
-`epochs_trained`、`best_epoch` 和末轮 validation loss；Job 成功本身不等同于收敛。
+`epochs_trained`、`best_epoch` 和末轮 validation loss；Job 成功本身不等同于收敛。正向和反向服务
+各自最多放行一个 8-fold label Job，因此总上限为 2 labels / 16 GPUs；两个队列从列表两端靠拢，
+已经完成或正在运行的 Job 会被幂等观察，不会生成重复 Job。
 
 历史 `next_tick`/forward-5s 只用于旧实验复现；新 cache 默认使用
 `decision_alignment/entry_alignment/future_alignment = clock_state` 和 `entry_clock_delay_seconds = 6`。
