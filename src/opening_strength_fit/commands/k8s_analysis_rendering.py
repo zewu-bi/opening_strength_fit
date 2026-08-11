@@ -8,21 +8,21 @@ from pathlib import Path
 import pandas as pd
 
 from opening_strength_fit.commands.artifact_sync_metrics import DEFAULT_NEXT_CLOSE_LABEL_PVC_DIR
-from opening_strength_fit.commands.k8s_rendering_common import (
-    avoid_nodes_affinity_yaml as _avoid_nodes_affinity_yaml,
-)
-from opening_strength_fit.commands.k8s_rendering_common import (
-    env_from_secrets_yaml as _env_from_secrets_yaml,
-)
-from opening_strength_fit.commands.k8s_rendering_common import k8s_job_name as _k8s_job_name
-from opening_strength_fit.commands.k8s_rendering_common import (
-    node_selector_yaml as _node_selector_yaml,
-)
-from opening_strength_fit.commands.k8s_rendering_common import (
-    wait_for_specific_paths_yaml as _wait_for_specific_paths_yaml,
-)
 from opening_strength_fit.config import config_value as get
 from opening_strength_fit.config import run_id
+from opening_strength_fit.k8s_rendering_support import (
+    avoid_nodes_affinity_yaml as _avoid_nodes_affinity_yaml,
+)
+from opening_strength_fit.k8s_rendering_support import (
+    env_from_secrets_yaml as _env_from_secrets_yaml,
+)
+from opening_strength_fit.k8s_rendering_support import k8s_job_name as _k8s_job_name
+from opening_strength_fit.k8s_rendering_support import (
+    node_selector_yaml as _node_selector_yaml,
+)
+from opening_strength_fit.k8s_rendering_support import (
+    wait_for_specific_paths_yaml as _wait_for_specific_paths_yaml,
+)
 from opening_strength_fit.pvc_layout import (
     output_layout,
     rolling_shard_dir_name,

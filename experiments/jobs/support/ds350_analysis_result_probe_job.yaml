@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-ds350-analysis-result-probe-v1
+  namespace: bizewu
+spec:
+  activeDeadlineSeconds: 1800
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 172800
+  template:
+    metadata:
+      labels: {app: os-ds350-analysis-result-probe-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+      containers:
+        - name: probe
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:8eb66ef731709af980fa7e047ccb59748c0ed8f4ed36aa3460ee9b1f4a9fe0b6
+          imagePullPolicy: Always
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              ROOT=/mnt/output/opening_strength_fit
+              for path in \
+                "${ROOT}/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/analysis/label_limit_trap_v1/0931_0940/label_limit_trap_summary.csv" \
+                "${ROOT}/runs/analyses/ds350_future_info_v1/retrain_comparison/summary.json"; do
+                echo "FILE=${path}"
+                if test -f "${path}"; then
+                  sed -n '1,260p' "${path}"
+                else
+                  echo MISSING
+                fi
+              done
+          volumeMounts:
+            - {name: output, mountPath: /mnt/output}
+          resources:
+            requests: {cpu: "1", memory: 2Gi}
+            limits: {cpu: "2", memory: 4Gi}

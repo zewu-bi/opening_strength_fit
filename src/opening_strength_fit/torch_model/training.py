@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -32,13 +33,44 @@ def _torch_device(device: str, torch) -> str:
     raise SystemExit("model.device for torch_mlp must be auto, cpu, cuda, gpu, or cuda:<index>")
 
 
-def _torch_loss(loss: str, torch, reduction: str = "none"):
+def _torch_loss(
+    loss: str,
+    torch,
+    reduction: str = "none",
+    *,
+    huber_beta: float = 1.0,
+    mse_blend_weight: float = 0.2,
+):
     name = loss.strip().lower()
+    beta = float(huber_beta)
+    if beta <= 0.0:
+        raise SystemExit("model.huber_beta must be positive")
     if name in {"mse", "l2", "mean_squared_error"}:
         return torch.nn.MSELoss(reduction=reduction)
     if name in {"huber", "smooth_l1", "smoothl1"}:
-        return torch.nn.SmoothL1Loss(reduction=reduction)
-    raise SystemExit("model.loss for torch_mlp must be mse or huber")
+        return torch.nn.SmoothL1Loss(beta=beta, reduction=reduction)
+    if name in {"huber_mse_blend", "huber_mse", "smooth_l1_mse_blend"}:
+        weight = float(mse_blend_weight)
+        if not 0.0 <= weight <= 1.0:
+            raise SystemExit("model.mse_blend_weight must be between zero and one")
+
+        class HuberMSEBlendLoss(torch.nn.Module):
+            def forward(self, prediction, target):
+                huber = torch.nn.functional.smooth_l1_loss(
+                    prediction,
+                    target,
+                    beta=beta,
+                    reduction=reduction,
+                )
+                mse = torch.nn.functional.mse_loss(
+                    prediction,
+                    target,
+                    reduction=reduction,
+                )
+                return (1.0 - weight) * huber + weight * mse
+
+        return HuberMSEBlendLoss()
+    raise SystemExit("model.loss for torch_mlp must be mse, huber, or huber_mse_blend")
 
 
 def _normalize_training_tensor_storage(value: str) -> str:
@@ -74,9 +106,7 @@ def _resolve_training_tensor_storage(
     cuda_device = str(device).startswith("cuda")
     if not cuda_device:
         if mode == "cuda_resident":
-            raise SystemExit(
-                "model.training_tensor_storage='cuda_resident' requires a CUDA device"
-            )
+            raise SystemExit("model.training_tensor_storage='cuda_resident' requires a CUDA device")
         return "host_vectorized"
     if mode == "host_vectorized":
         return mode
@@ -198,47 +228,40 @@ def _torch_gate_diagnostics(
     }
 
 
-def fit_torch_mlp_frame(
+@dataclass(frozen=True)
+class _PreparedTrainingData:
+    features: list[str]
+    x_values: np.ndarray
+    y_values: np.ndarray
+    sample_weight: np.ndarray | None
+    selected_rows: pd.Index | pd.Series
+    feature_mean: np.ndarray
+    feature_scale: np.ndarray
+    standardization_mode: str
+    standardization_group_col: str
+    standardization_group_keys: object | None
+    standardization_group_mean: np.ndarray | None
+    standardization_group_scale: np.ndarray | None
+    value_transform_mode: str
+    value_transform_group_cols: tuple[str, ...]
+    value_transform_rank_method: str
+    value_transform_tick_size: float
+
+
+def _prepare_torch_training_data(
     train: pd.DataFrame,
     *,
-    feature_limit: int | None = None,
-    target_col: str = "label",
-    sample_weight_col: str = "",
-    feature_filters: dict[str, tuple[str, ...]] | None = None,
-    hidden_layers: tuple[int, ...] = (512, 256, 128),
-    architecture: str = "mlp",
-    group_embedding_dim: int = 48,
-    group_embedding_dims: dict[str, int] | None = None,
-    fusion_dim: int = 256,
-    block_hidden_dim: int = 512,
-    num_blocks: int = 2,
-    transformer_heads: int = 4,
-    dropout: float = 0.1,
-    activation: str = "relu",
-    batch_size: int = 32768,
-    predict_batch_size: int | None = None,
-    learning_rate: float = 3e-4,
-    weight_decay: float = 1e-4,
-    max_epochs: int = 8,
-    validation_fraction: float = 0.02,
-    validation_max_rows: int = 250_000,
-    early_stopping_patience: int = 2,
-    loss: str = "mse",
-    device: str = "auto",
-    random_state: int = 7,
-    num_workers: int = 0,
-    training_tensor_storage: str = "auto",
-    cuda_resident_reserve_gib: float = 8.0,
-    gate_diagnostics_max_rows: int = 200_000,
-    feature_standardization: str = "global_zscore",
-    feature_standardization_group_col: str = "symbol",
-    feature_value_transform: str = "none",
-    feature_value_transform_group_cols: tuple[str, ...] = ("date", "decision_target_timestamp"),
-    feature_value_transform_rank_method: str = "average",
-    feature_value_transform_tick_size: float = 0.01,
-) -> tuple[TorchMLPPredictionModel, dict[str, object]]:
-    fit_started = time.monotonic()
-    torch, _nn, _DataLoader, _TensorDataset = _import_torch()
+    feature_limit: int | None,
+    target_col: str,
+    sample_weight_col: str,
+    feature_filters: dict[str, tuple[str, ...]] | None,
+    feature_standardization: str,
+    feature_standardization_group_col: str,
+    feature_value_transform: str,
+    feature_value_transform_group_cols: tuple[str, ...],
+    feature_value_transform_rank_method: str,
+    feature_value_transform_tick_size: float,
+) -> _PreparedTrainingData:
     features = feature_columns(train, feature_limit, **(feature_filters or {}))
     if sample_weight_col:
         features = [column for column in features if column != sample_weight_col]
@@ -328,6 +351,233 @@ def fit_torch_mlp_frame(
             .to_numpy(dtype=np.float32)
             .reshape(-1, 1)
         )
+    return _PreparedTrainingData(
+        features=features,
+        x_values=x_values,
+        y_values=y_values,
+        sample_weight=sample_weight,
+        selected_rows=selected_rows,
+        feature_mean=feature_mean,
+        feature_scale=feature_scale,
+        standardization_mode=standardization_mode,
+        standardization_group_col=standardization_group_col,
+        standardization_group_keys=standardization_group_keys,
+        standardization_group_mean=standardization_group_mean,
+        standardization_group_scale=standardization_group_scale,
+        value_transform_mode=value_transform_mode,
+        value_transform_group_cols=value_transform_group_cols,
+        value_transform_rank_method=value_transform_rank_method,
+        value_transform_tick_size=value_transform_tick_size,
+    )
+
+
+@dataclass(frozen=True)
+class _EpochResult:
+    best_state: object | None
+    best_validation: float
+    best_epoch: int
+    epochs_trained: int
+    final_train_loss: float
+    epoch_seconds: list[float]
+
+
+def _fit_torch_epochs(
+    *,
+    torch,
+    module,
+    optimizer,
+    criterion,
+    x_tensor,
+    y_tensor,
+    weight_tensor,
+    train_indices_tensor,
+    validation_indices_tensor,
+    validation_rows: int,
+    resolved_device: str,
+    cuda_resident: bool,
+    batch_size: int,
+    max_epochs: int,
+    early_stopping_patience: int,
+) -> _EpochResult:
+    def take_batch(tensor, indices):
+        values = tensor.index_select(0, indices)
+        if not cuda_resident and resolved_device != "cpu":
+            values = values.to(resolved_device)
+        return values
+
+    def batch_loss_tensors(indices):
+        batch_x = take_batch(x_tensor, indices)
+        batch_y = take_batch(y_tensor, indices)
+        batch_w = take_batch(weight_tensor, indices) if weight_tensor is not None else None
+        return batch_x, batch_y, batch_w
+
+    best_state = None
+    best_validation = float("inf")
+    best_epoch = 0
+    patience_used = 0
+    epochs_trained = 0
+    final_train_loss = float("nan")
+    epoch_seconds: list[float] = []
+    for epoch in range(1, int(max_epochs) + 1):
+        epoch_started = time.monotonic()
+        module.train()
+        total_loss_tensor = torch.zeros((), dtype=torch.float64, device=resolved_device)
+        total_weight_tensor = torch.zeros((), dtype=torch.float64, device=resolved_device)
+        epoch_order = _torch_random_sampler_order(torch, len(train_indices_tensor))
+        if cuda_resident:
+            epoch_order = epoch_order.to(resolved_device)
+        for start in range(0, len(epoch_order), int(batch_size)):
+            positions = epoch_order[start : start + int(batch_size)]
+            indices = train_indices_tensor.index_select(0, positions)
+            optimizer.zero_grad(set_to_none=True)
+            batch_x, batch_y, batch_w = batch_loss_tensors(indices)
+            raw_loss = criterion(module(batch_x), batch_y)
+            if batch_w is not None:
+                raw_loss = raw_loss * batch_w
+                denom = torch.clamp(batch_w.sum(), min=1.0)
+            else:
+                denom = raw_loss.new_tensor(float(batch_y.numel()))
+            raw_loss_sum = raw_loss.sum()
+            (raw_loss_sum / denom).backward()
+            optimizer.step()
+            total_loss_tensor += raw_loss_sum.detach().to(dtype=torch.float64)
+            total_weight_tensor += denom.detach().to(dtype=torch.float64)
+        train_totals = torch.stack((total_loss_tensor, total_weight_tensor)).cpu().tolist()
+        final_train_loss = (
+            float(train_totals[0] / train_totals[1]) if train_totals[1] else float("nan")
+        )
+
+        final_validation_loss = final_train_loss
+        if validation_rows > 0:
+            _consume_torch_loader_seed(torch)
+            module.eval()
+            total_loss_tensor = torch.zeros((), dtype=torch.float64, device=resolved_device)
+            total_weight_tensor = torch.zeros((), dtype=torch.float64, device=resolved_device)
+            with torch.no_grad():
+                for start in range(0, validation_rows, int(batch_size)):
+                    indices = validation_indices_tensor[start : start + int(batch_size)]
+                    batch_x, batch_y, batch_w = batch_loss_tensors(indices)
+                    raw_loss = criterion(module(batch_x), batch_y)
+                    if batch_w is not None:
+                        raw_loss = raw_loss * batch_w
+                        denom = torch.clamp(batch_w.sum(), min=1.0)
+                    else:
+                        denom = raw_loss.new_tensor(float(batch_y.numel()))
+                    total_loss_tensor += raw_loss.sum().to(dtype=torch.float64)
+                    total_weight_tensor += denom.to(dtype=torch.float64)
+            validation_totals = torch.stack((total_loss_tensor, total_weight_tensor)).cpu().tolist()
+            final_validation_loss = (
+                float(validation_totals[0] / validation_totals[1])
+                if validation_totals[1]
+                else float("nan")
+            )
+
+        epochs_trained = epoch
+        if final_validation_loss < best_validation:
+            best_validation = final_validation_loss
+            best_epoch = epoch
+            best_state = {
+                key: value.detach().cpu().clone() for key, value in module.state_dict().items()
+            }
+            patience_used = 0
+        else:
+            patience_used += 1
+        epoch_seconds.append(time.monotonic() - epoch_started)
+        print(
+            "torch_epoch:"
+            f" epoch={epoch}/{int(max_epochs)}"
+            f" train_loss={final_train_loss:.9g}"
+            f" validation_loss={final_validation_loss:.9g}"
+            f" best_epoch={best_epoch}"
+            f" seconds={epoch_seconds[-1]:.1f}"
+        )
+        if patience_used:
+            print(f"  early_stopping_patience_used: {patience_used}")
+        if int(early_stopping_patience) >= 0 and patience_used > int(early_stopping_patience):
+            break
+
+    return _EpochResult(
+        best_state=best_state,
+        best_validation=best_validation,
+        best_epoch=best_epoch,
+        epochs_trained=epochs_trained,
+        final_train_loss=final_train_loss,
+        epoch_seconds=epoch_seconds,
+    )
+
+
+def fit_torch_mlp_frame(
+    train: pd.DataFrame,
+    *,
+    feature_limit: int | None = None,
+    target_col: str = "label",
+    sample_weight_col: str = "",
+    feature_filters: dict[str, tuple[str, ...]] | None = None,
+    hidden_layers: tuple[int, ...] = (512, 256, 128),
+    architecture: str = "mlp",
+    group_embedding_dim: int = 48,
+    group_embedding_dims: dict[str, int] | None = None,
+    fusion_dim: int = 256,
+    block_hidden_dim: int = 512,
+    num_blocks: int = 2,
+    transformer_heads: int = 4,
+    dropout: float = 0.1,
+    activation: str = "relu",
+    batch_size: int = 32768,
+    predict_batch_size: int | None = None,
+    learning_rate: float = 3e-4,
+    weight_decay: float = 1e-4,
+    max_epochs: int = 8,
+    validation_fraction: float = 0.02,
+    validation_max_rows: int = 250_000,
+    early_stopping_patience: int = 2,
+    loss: str = "mse",
+    huber_beta: float = 1.0,
+    mse_blend_weight: float = 0.2,
+    device: str = "auto",
+    random_state: int = 7,
+    num_workers: int = 0,
+    training_tensor_storage: str = "auto",
+    cuda_resident_reserve_gib: float = 8.0,
+    gate_diagnostics_max_rows: int = 200_000,
+    feature_standardization: str = "global_zscore",
+    feature_standardization_group_col: str = "symbol",
+    feature_value_transform: str = "none",
+    feature_value_transform_group_cols: tuple[str, ...] = ("date", "decision_target_timestamp"),
+    feature_value_transform_rank_method: str = "average",
+    feature_value_transform_tick_size: float = 0.01,
+) -> tuple[TorchMLPPredictionModel, dict[str, object]]:
+    fit_started = time.monotonic()
+    torch, _nn, _DataLoader, _TensorDataset = _import_torch()
+    prepared = _prepare_torch_training_data(
+        train,
+        feature_limit=feature_limit,
+        target_col=target_col,
+        sample_weight_col=sample_weight_col,
+        feature_filters=feature_filters,
+        feature_standardization=feature_standardization,
+        feature_standardization_group_col=feature_standardization_group_col,
+        feature_value_transform=feature_value_transform,
+        feature_value_transform_group_cols=feature_value_transform_group_cols,
+        feature_value_transform_rank_method=feature_value_transform_rank_method,
+        feature_value_transform_tick_size=feature_value_transform_tick_size,
+    )
+    features = prepared.features
+    x_values = prepared.x_values
+    y_values = prepared.y_values
+    sample_weight = prepared.sample_weight
+    selected_rows = prepared.selected_rows
+    feature_mean = prepared.feature_mean
+    feature_scale = prepared.feature_scale
+    standardization_mode = prepared.standardization_mode
+    standardization_group_col = prepared.standardization_group_col
+    standardization_group_keys = prepared.standardization_group_keys
+    standardization_group_mean = prepared.standardization_group_mean
+    standardization_group_scale = prepared.standardization_group_scale
+    value_transform_mode = prepared.value_transform_mode
+    value_transform_group_cols = prepared.value_transform_group_cols
+    value_transform_rank_method = prepared.value_transform_rank_method
+    value_transform_tick_size = prepared.value_transform_tick_size
 
     if len(x_values) < 2:
         raise SystemExit("torch_mlp needs at least two valid training rows")
@@ -356,7 +606,13 @@ def fit_torch_mlp_frame(
         lr=float(learning_rate),
         weight_decay=float(weight_decay),
     )
-    criterion = _torch_loss(loss, torch, reduction="none")
+    criterion = _torch_loss(
+        loss,
+        torch,
+        reduction="none",
+        huber_beta=float(huber_beta),
+        mse_blend_weight=float(mse_blend_weight),
+    )
 
     n_rows = len(x_values)
     validation_rows = int(n_rows * max(0.0, float(validation_fraction)))
@@ -399,8 +655,7 @@ def fit_torch_mlp_frame(
     cuda_total_bytes = 0
     if str(resolved_device).startswith("cuda"):
         cuda_free_bytes, cuda_total_bytes = (
-            int(value)
-            for value in torch.cuda.mem_get_info(torch.device(resolved_device))
+            int(value) for value in torch.cuda.mem_get_info(torch.device(resolved_device))
         )
     resolved_storage = _resolve_training_tensor_storage(
         training_tensor_storage,
@@ -445,111 +700,30 @@ def fit_torch_mlp_frame(
     storage_seconds = time.monotonic() - storage_started
     print(f"  storage_transfer_seconds: {storage_seconds:.1f}")
 
-    def take_batch(tensor, indices):
-        values = tensor.index_select(0, indices)
-        if not cuda_resident and str(resolved_device) != "cpu":
-            values = values.to(resolved_device)
-        return values
-
-    def batch_loss_tensors(indices):
-        batch_x = take_batch(x_tensor, indices)
-        batch_y = take_batch(y_tensor, indices)
-        batch_w = take_batch(weight_tensor, indices) if weight_tensor is not None else None
-        return batch_x, batch_y, batch_w
-
-    best_state = None
-    best_validation = float("inf")
-    best_epoch = 0
-    patience_used = 0
-    epochs_trained = 0
-    final_train_loss = float("nan")
-    final_validation_loss = float("nan")
-    epoch_seconds: list[float] = []
     training_started = time.monotonic()
-    max_epochs = int(max_epochs)
-    for epoch in range(1, max_epochs + 1):
-        epoch_started = time.monotonic()
-        module.train()
-        total_loss_tensor = torch.zeros((), dtype=torch.float64, device=resolved_device)
-        total_weight_tensor = torch.zeros((), dtype=torch.float64, device=resolved_device)
-        epoch_order = _torch_random_sampler_order(torch, len(train_indices_tensor))
-        if cuda_resident:
-            epoch_order = epoch_order.to(resolved_device)
-        for start in range(0, len(epoch_order), int(batch_size)):
-            positions = epoch_order[start : start + int(batch_size)]
-            indices = train_indices_tensor.index_select(0, positions)
-            optimizer.zero_grad(set_to_none=True)
-            batch_x, batch_y, batch_w = batch_loss_tensors(indices)
-            raw_loss = criterion(module(batch_x), batch_y)
-            if batch_w is not None:
-                raw_loss = raw_loss * batch_w
-                denom = torch.clamp(batch_w.sum(), min=1.0)
-            else:
-                denom = raw_loss.new_tensor(float(batch_y.numel()))
-            raw_loss_sum = raw_loss.sum()
-            loss_value = raw_loss_sum / denom
-            loss_value.backward()
-            optimizer.step()
-            total_loss_tensor += raw_loss_sum.detach().to(dtype=torch.float64)
-            total_weight_tensor += denom.detach().to(dtype=torch.float64)
-        train_totals = torch.stack((total_loss_tensor, total_weight_tensor)).cpu().tolist()
-        final_train_loss = (
-            float(train_totals[0] / train_totals[1]) if train_totals[1] else float("nan")
-        )
-
-        if validation_rows <= 0:
-            final_validation_loss = final_train_loss
-        else:
-            _consume_torch_loader_seed(torch)
-            module.eval()
-            total_loss_tensor = torch.zeros((), dtype=torch.float64, device=resolved_device)
-            total_weight_tensor = torch.zeros((), dtype=torch.float64, device=resolved_device)
-            with torch.no_grad():
-                for start in range(0, validation_rows, int(batch_size)):
-                    indices = validation_indices_tensor[start : start + int(batch_size)]
-                    batch_x, batch_y, batch_w = batch_loss_tensors(indices)
-                    raw_loss = criterion(module(batch_x), batch_y)
-                    if batch_w is not None:
-                        raw_loss = raw_loss * batch_w
-                        denom = torch.clamp(batch_w.sum(), min=1.0)
-                    else:
-                        denom = raw_loss.new_tensor(float(batch_y.numel()))
-                    total_loss_tensor += raw_loss.sum().to(dtype=torch.float64)
-                    total_weight_tensor += denom.to(dtype=torch.float64)
-            validation_totals = torch.stack(
-                (total_loss_tensor, total_weight_tensor)
-            ).cpu().tolist()
-            final_validation_loss = (
-                float(validation_totals[0] / validation_totals[1])
-                if validation_totals[1]
-                else float("nan")
-            )
-
-        epochs_trained = epoch
-        if final_validation_loss < best_validation:
-            best_validation = final_validation_loss
-            best_epoch = epoch
-            best_state = {
-                key: value.detach().cpu().clone() for key, value in module.state_dict().items()
-            }
-            patience_used = 0
-        else:
-            patience_used += 1
-        epoch_seconds.append(time.monotonic() - epoch_started)
-        print(
-            "torch_epoch:"
-            f" epoch={epoch}/{max_epochs}"
-            f" train_loss={final_train_loss:.9g}"
-            f" validation_loss={final_validation_loss:.9g}"
-            f" best_epoch={best_epoch}"
-            f" seconds={epoch_seconds[-1]:.1f}"
-        )
-        if patience_used:
-            print(f"  early_stopping_patience_used: {patience_used}")
-        if patience_used:
-            if int(early_stopping_patience) >= 0 and patience_used > int(early_stopping_patience):
-                break
-
+    epoch_result = _fit_torch_epochs(
+        torch=torch,
+        module=module,
+        optimizer=optimizer,
+        criterion=criterion,
+        x_tensor=x_tensor,
+        y_tensor=y_tensor,
+        weight_tensor=weight_tensor,
+        train_indices_tensor=train_indices_tensor,
+        validation_indices_tensor=validation_indices_tensor,
+        validation_rows=validation_rows,
+        resolved_device=resolved_device,
+        cuda_resident=cuda_resident,
+        batch_size=int(batch_size),
+        max_epochs=int(max_epochs),
+        early_stopping_patience=int(early_stopping_patience),
+    )
+    best_state = epoch_result.best_state
+    best_validation = epoch_result.best_validation
+    best_epoch = epoch_result.best_epoch
+    epochs_trained = epoch_result.epochs_trained
+    final_train_loss = epoch_result.final_train_loss
+    epoch_seconds = epoch_result.epoch_seconds
     if best_state is not None:
         module.load_state_dict(best_state)
     module.eval()
@@ -569,6 +743,9 @@ def fit_torch_mlp_frame(
         "best_epoch": int(best_epoch),
         "train_loss": float(final_train_loss),
         "validation_loss": float(best_validation),
+        "loss": str(loss),
+        "huber_beta": float(huber_beta),
+        "mse_blend_weight": float(mse_blend_weight),
         "validation_rows": int(validation_rows),
         "training_tensor_storage": resolved_storage,
         "training_tensor_required_bytes": required_tensor_bytes,

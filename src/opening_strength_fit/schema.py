@@ -14,6 +14,22 @@ CLOCK_PATTERN = r"(\d{1,2}:\d{2}(?::\d{2})?)"
 DECISION_KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
 
 
+def normalize_text_series(values: pd.Series) -> pd.Series:
+    return values.map(
+        lambda value: (
+            value.decode("utf-8", errors="replace") if isinstance(value, bytes) else str(value)
+        )
+    )
+
+
+def normalize_date_series(values: pd.Series) -> pd.Series:
+    if pd.api.types.is_numeric_dtype(values):
+        parsed = pd.to_datetime(values, unit="D", origin="unix", errors="coerce")
+    else:
+        parsed = pd.to_datetime(values, errors="coerce")
+    return parsed.dt.strftime("%Y-%m-%d")
+
+
 def bid_price_col(level: int) -> str:
     return f"bid_price_{level}"
 
@@ -74,8 +90,8 @@ def normalize_decision_keys(
     """Normalize the shared date/symbol/decision timestamp join keys."""
 
     out = frame.copy()
-    out["date"] = pd.to_datetime(out["date"], errors="coerce").dt.strftime("%Y-%m-%d")
-    out["symbol"] = out["symbol"].astype(str)
+    out["date"] = normalize_date_series(out["date"])
+    out["symbol"] = normalize_text_series(out["symbol"])
     out["decision_target_timestamp"] = pd.to_datetime(
         out["decision_target_timestamp"],
         errors="coerce",
@@ -83,6 +99,10 @@ def normalize_decision_keys(
     if drop_missing:
         return out.dropna(subset=list(key_columns)).copy()
     return out
+
+
+def normalize_decision_keys_preserving_rows(frame: pd.DataFrame) -> pd.DataFrame:
+    return normalize_decision_keys(frame, drop_missing=False)
 
 
 def _depth_aliases() -> dict[str, str]:

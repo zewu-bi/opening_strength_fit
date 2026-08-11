@@ -2,7 +2,9 @@
 id = "lgbm_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_raw_plus_mech_v3_v1"
 kind = "exploration"
 description = "C: current fixed-clock v4 auction-pruned lineage with raw values plus mech-v3 derivatives only for materially changed columns; existing bps/return/ratio columns are not duplicated."
-status = "queued"
+status = "superseded"
+closed_at = "2026-08-11"
+status_reason = "Governance reconciliation: the later ds350 layered-data lineage replaced this unexecuted route."
 
 [data]
 source = "labeled_pvc"

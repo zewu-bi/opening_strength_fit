@@ -3,6 +3,8 @@ id = "nn_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_grouped_gated_v2_m
 kind = "exploration"
 description = "GPU PyTorch grouped gated v2 GELU MSE NN over 2022-2025 on the same 328 features; applies strict ratio-style dimensionless transforms using cached T-1 total shares and market cap, removes the cross-sectional robust zscore, and retains the NN train-set global zscore."
 status = "superseded"
+closed_at = "2026-07-22"
+status_reason = "Closed as an ablation after the mechanismized v3 comparison."
 
 [data]
 source = "labeled_pvc"

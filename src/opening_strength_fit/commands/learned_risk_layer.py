@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 
 import numpy as np
@@ -16,14 +15,7 @@ from opening_strength_fit.alpha_conditioning import (
     section_str,
 )
 from opening_strength_fit.analysis import (
-    load_or_fetch_next_close_labels as shared_load_or_fetch_next_close_labels,
-)
-from opening_strength_fit.analysis import (
     write_json,
-)
-from opening_strength_fit.clickhouse_ticks import (
-    DEFAULT_CLICKHOUSE_TICK_HOST,
-    DEFAULT_CLICKHOUSE_TICK_TABLE,
 )
 from opening_strength_fit.config import (
     config_bool,
@@ -40,22 +32,23 @@ from opening_strength_fit.feature_config import (
     feature_filters_from_config,
     feature_limit,
 )
-from opening_strength_fit.horizon_clickhouse_labels import compute_clickhouse_close_labels
-from opening_strength_fit.horizons import HorizonSpec
 from opening_strength_fit.io import read_frame, write_frame
 from opening_strength_fit.labels import finite_numeric_series
 from opening_strength_fit.model import evaluate_prediction_frame, fit_lightgbm_frame, predict_frame
+from opening_strength_fit.next_close_labels import add_next_close_label_arguments
 from opening_strength_fit.reports import (
     dataset_summary,
     metrics_by_year_from_windows,
     print_mapping,
 )
+from opening_strength_fit.risk_labels import (
+    load_risk_next_close_labels,
+    next_close_label_request,
+)
 from opening_strength_fit.training_args import build_training_parser
 from opening_strength_fit.training_data import load_labeled_pvc_frame
 from opening_strength_fit.training_windows import date_splits
 
-DEFAULT_CLOSE_OFFSET_US = 54_000_000_000
-DEFAULT_CLOSE_LOOKBACK_SECONDS = 1_800
 RISK_RANK_MIN = {
     "ask_depth_10": 0.40,
     "depth_imbalance_10": 0.20,
@@ -70,14 +63,7 @@ RISK_RANK_MAX = {
 
 def parse_args() -> argparse.Namespace:
     parser = build_training_parser("Train a learned dirty-risk / next-flip layer.")
-    parser.add_argument("--next-close-label-input", default="")
-    parser.add_argument("--close-offset-us", type=int, default=DEFAULT_CLOSE_OFFSET_US)
-    parser.add_argument(
-        "--close-lookback-seconds",
-        type=int,
-        default=DEFAULT_CLOSE_LOOKBACK_SECONDS,
-    )
-    parser.add_argument("--calendar-days-after", type=int, default=10)
+    add_next_close_label_arguments(parser, include_connection=False)
     return parser.parse_args()
 
 
@@ -119,72 +105,10 @@ def load_or_fetch_next_close_labels(
     config: dict,
     output_dir: Path,
 ) -> pd.DataFrame:
-    configured_input = config_str(config, "risk_layer", "next_close_label_input", "")
-    label_input = args.next_close_label_input or configured_input
-
-    username = (
-        args.clickhouse_user
-        or config_str(config, "clickhouse", "user", "")
-        or os.environ.get("CLICKHOUSE_USER", "")
-    )
-    password = (
-        args.clickhouse_password
-        or config_str(config, "clickhouse", "password", "")
-        or os.environ.get("CLICKHOUSE_PASSWORD", "")
-    )
-
-    def _fetch(base: pd.DataFrame) -> pd.DataFrame:
-        if not username or not password:
-            raise SystemExit(
-                "bad-tail risk labels need next-close labels. Pass "
-                "--next-close-label-input or set ClickHouse credentials."
-            )
-        label_base = base[[*KEY_COLUMNS, "buy_price"]].drop_duplicates(list(KEY_COLUMNS))
-        return compute_clickhouse_close_labels(
-            label_base.copy(),
-            [HorizonSpec(name="next_close", label="next close", seconds=None)],
-            host=args.clickhouse_host
-            or config_str(
-                config,
-                "clickhouse",
-                "host",
-                DEFAULT_CLICKHOUSE_TICK_HOST,
-            ),
-            port=int(
-                args.clickhouse_port
-                or config_optional_int(config, "clickhouse", "port", None)
-                or os.environ.get("CLICKHOUSE_PORT", "8123")
-            ),
-            username=username,
-            password=password,
-            table=args.clickhouse_table
-            or config_str(
-                config,
-                "clickhouse",
-                "table",
-                os.environ.get("CLICKHOUSE_TICK_TABLE", DEFAULT_CLICKHOUSE_TICK_TABLE),
-            ),
-            close_offset_us=int(
-                config_optional_int(config, "risk_layer", "close_offset_us", None)
-                or args.close_offset_us
-            ),
-            close_lookback_seconds=int(
-                config_optional_int(config, "risk_layer", "close_lookback_seconds", None)
-                or args.close_lookback_seconds
-            ),
-            calendar_days_after=int(
-                config_optional_int(config, "risk_layer", "calendar_days_after", None)
-                or args.calendar_days_after
-            ),
-            fee_bps=0.0,
-        )
-
-    return shared_load_or_fetch_next_close_labels(
+    return load_risk_next_close_labels(
         labeled,
+        request=next_close_label_request(args, config),
         output_dir=output_dir,
-        label_input=label_input,
-        fetch_labels=_fetch,
-        key_columns=KEY_COLUMNS,
     )
 
 

@@ -1,0 +1,71 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-audit-ds350-m30-schema-v2
+  namespace: bizewu
+spec:
+  activeDeadlineSeconds: 1800
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 172800
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      nodeSelector:
+        has_gpu: "true"
+      tolerations:
+        - key: has_gpu
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+      volumes:
+        - name: output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+      containers:
+        - name: probe
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:1c35beb1275aca13e5a71fd03bc13ae703078b29b3e2a744c77e386a32c4917a
+          imagePullPolicy: Always
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              python - <<'PY'
+              import json
+              from pathlib import Path
+              import pyarrow.parquet as pq
+
+              root = Path("/mnt/output/opening_strength_fit")
+              for case in ("w0931_0940_hclose", "w1001_1010_hclose"):
+                  path = root / "nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1" / case / "month_2022-01/predictions.parquet"
+                  parquet = pq.ParquetFile(path)
+                  print(f"PREDICTION={case} rows={parquet.metadata.num_rows}")
+                  print(parquet.schema_arrow.names)
+              for window in ("0931_0940", "1001_1010"):
+                  raw = root / f"cache/opening_{window}_raw_source/year=2022"
+                  for name in ("daily_reference.parquet", "close_reference.parquet", "ticks/date=2022-01-04.parquet"):
+                      path = raw / name
+                      parquet = pq.ParquetFile(path)
+                      print(f"RAW={window}/{name} rows={parquet.metadata.num_rows}")
+                      print(parquet.schema_arrow.names)
+                  print(json.dumps(json.loads((raw / "manifest.json").read_text()), ensure_ascii=False)[:5000])
+                  import pandas as pd
+                  status = pd.read_parquet(
+                      raw / "daily_reference.parquet",
+                      columns=["UpdownLimitStatus", "STStatus", "TradeStatus"],
+                  )
+                  for column in status.columns:
+                      print(f"UNIQUE={window}/{column} dtype={status[column].dtype}")
+                      print(status[column].value_counts(dropna=False).head(20).to_dict())
+              PY
+          volumeMounts:
+            - name: output
+              mountPath: /mnt/output
+          resources:
+            requests:
+              cpu: "1"
+              memory: 4Gi
+            limits:
+              cpu: "2"
+              memory: 8Gi

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import shlex
 from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,11 +13,11 @@ from opening_strength_fit.analysis import KEY_COLUMNS, write_json
 from opening_strength_fit.clickhouse_ticks import (
     DEFAULT_CLICKHOUSE_TICK_HOST,
     DEFAULT_CLICKHOUSE_TICK_PORT,
-    get_tick_client,
+    managed_tick_client,
     validate_table_name,
 )
 from opening_strength_fit.commands.arguments import CommandArguments
-from opening_strength_fit.config import config_str, load_toml, run_id
+from opening_strength_fit.config import config_str, load_env_file, load_toml, run_id
 from opening_strength_fit.exposure_audit import normalize_audit_frame
 from opening_strength_fit.io import read_frame, write_frame
 from opening_strength_fit.prediction_frames import prediction_files
@@ -60,21 +59,6 @@ def parse_args() -> argparse.Namespace:
         help="Write one exposure row per full prediction key instead of daily date,symbol keys.",
     )
     return parser.parse_args()
-
-
-def load_env_file(path: str | Path) -> None:
-    env_path = Path(path)
-    if not env_path.exists():
-        return
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        parts = shlex.split(line, comments=True)
-        if not parts or "=" not in parts[0]:
-            continue
-        key, value = parts[0].split("=", 1)
-        os.environ.setdefault(key, value)
 
 
 def _prediction_files(paths: Iterable[str]) -> list[Path]:
@@ -313,17 +297,19 @@ def main() -> None:
     )
     username = str(_clickhouse_setting(args.clickhouse_user, "CLICKHOUSE_USER", "") or "")
     password = str(_clickhouse_setting(args.clickhouse_password, "CLICKHOUSE_PASSWORD", "") or "")
-    if not username or not password:
-        raise SystemExit("ClickHouse credentials are missing; set CLICKHOUSE_USER/PASSWORD")
-    client = get_tick_client(host=host, port=port, username=username, password=password)
-
-    exposures = build_exposure_input(
-        keys=full_keys,
-        client=client,
-        daily_bar_table=daily_bar_table,
-        industry_table=industry_table,
-        date_chunk_size=date_chunk_size,
-    )
+    with managed_tick_client(
+        host=host,
+        port=port,
+        username=username,
+        password=password,
+    ) as client:
+        exposures = build_exposure_input(
+            keys=full_keys,
+            client=client,
+            daily_bar_table=daily_bar_table,
+            industry_table=industry_table,
+            date_chunk_size=date_chunk_size,
+        )
     if include_decision_timestamp:
         exposures = full_keys.merge(exposures, on=["date", "symbol"], how="left")
 

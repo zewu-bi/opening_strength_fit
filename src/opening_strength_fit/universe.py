@@ -4,11 +4,13 @@ from pathlib import Path
 
 import pandas as pd
 
+from opening_strength_fit.schema import normalize_text_series
+
 DEFAULT_A_SHARE_SYMBOL_REGEX = r"^(?:(?:00|30)\d{4}\.SZ|(?:60|68)\d{4}\.SH)$"
 
 
 def normalize_symbols(symbols: pd.Series) -> pd.Series:
-    return symbols.astype(str).str.strip().str.upper()
+    return normalize_text_series(symbols).str.strip().str.upper()
 
 
 def load_symbol_list(path: str | Path) -> set[str]:
@@ -46,12 +48,3 @@ def filter_symbol_universe(
     out = frame.loc[mask].copy()
     out[symbol_col] = normalized.loc[mask].to_numpy()
     return out
-
-
-def universe_summary(before: pd.DataFrame, after: pd.DataFrame) -> dict[str, int]:
-    return {
-        "input_rows": int(len(before)),
-        "input_symbols": int(before["symbol"].nunique()) if "symbol" in before else 0,
-        "kept_rows": int(len(after)),
-        "kept_symbols": int(after["symbol"].nunique()) if "symbol" in after else 0,
-    }

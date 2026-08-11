@@ -1,6 +1,9 @@
-.PHONY: install-dev install-cluster smoke evidence-four-figures evidence-v4-four-figures test test-cov lint format contracts ci
+.PHONY: install-core install-dev install-cluster smoke evidence-four-figures evidence-v4-four-figures test test-cov lint format contracts ci
 
 PYTHON ?= .venv/bin/python
+
+install-core:
+	$(PYTHON) -m pip install -c requirements.lock -e .
 
 install-dev:
 	$(PYTHON) -m pip install -c requirements.lock -e ".[dev]"
@@ -23,7 +26,7 @@ test:
 	$(PYTHON) -m pytest -q
 
 test-cov:
-	$(PYTHON) -m pytest --cov=opening_strength_fit --cov-report=term-missing
+	$(PYTHON) -m pytest --cov=opening_strength_fit --cov-report=term-missing --cov-fail-under=55
 
 lint:
 	$(PYTHON) -m ruff check .
@@ -34,7 +37,7 @@ format:
 	$(PYTHON) -m ruff format .
 
 contracts:
-	$(PYTHON) -m opening_strength_fit.commands.experiment_audit
+	$(PYTHON) -m opening_strength_fit.commands.experiment_audit --summary-only
 	$(PYTHON) -m opening_strength_fit.commands.project_contracts
 
-ci: lint test
+ci: lint test-cov smoke contracts

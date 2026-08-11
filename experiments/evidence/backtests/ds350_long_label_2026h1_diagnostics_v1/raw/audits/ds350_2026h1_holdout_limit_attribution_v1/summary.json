@@ -1,0 +1,207 @@
+{
+  "status": "ok",
+  "scope": "strict 2026H1; excludes dates preceding a ClickHouse tick gap",
+  "excluded_dates": [
+    "2026-03-18",
+    "2026-04-22",
+    "2026-05-06"
+  ],
+  "summary": {
+    "groups": 1100,
+    "dates": 110,
+    "selected_limit_share_pct": 6.665454545454545,
+    "candidate_limit_share_pct": 1.7199109205507417,
+    "same_day_close": {
+      "pool_raw_bps": -2.7427056005815627,
+      "selected_raw_bps": 33.7711852476808,
+      "excess_bps": 36.513890848262356,
+      "limit_excess_contribution_bps": 36.63351753080269,
+      "nonlimit_excess_contribution_bps": -0.11962689945368435,
+      "reselected_no_limit_excess_bps": 1.8363196849822998,
+      "positive5_share_pct": 13.13318809617511,
+      "positive5_gross_contribution_bps": 109.99435584554442,
+      "selected_valid_rows": 99.91
+    },
+    "next_close": {
+      "pool_raw_bps": -0.5332052158899767,
+      "selected_raw_bps": 28.36351317665352,
+      "excess_bps": 28.89671839254349,
+      "limit_excess_contribution_bps": 44.016510299458,
+      "nonlimit_excess_contribution_bps": -15.119792030141014,
+      "reselected_no_limit_excess_bps": -13.67680549621582,
+      "positive5_share_pct": 21.38529129285536,
+      "positive5_gross_contribution_bps": 224.57747176782524,
+      "selected_valid_rows": 99.66181818181818
+    }
+  },
+  "monthly": {
+    "2026-01": {
+      "groups": 200,
+      "dates": 20,
+      "selected_limit_share_pct": 7.59,
+      "candidate_limit_share_pct": 1.873104112080959,
+      "same_day_close": {
+        "pool_raw_bps": 27.496610515066376,
+        "selected_raw_bps": 52.08147333137394,
+        "excess_bps": 24.584862816307567,
+        "limit_excess_contribution_bps": 44.47536356985311,
+        "nonlimit_excess_contribution_bps": -19.890501089568442,
+        "reselected_no_limit_excess_bps": -16.248031616210938,
+        "positive5_share_pct": 15.874925788497217,
+        "positive5_gross_contribution_bps": 137.3806914507742,
+        "selected_valid_rows": 99.91
+      },
+      "next_close": {
+        "pool_raw_bps": 44.133918231759274,
+        "selected_raw_bps": 35.69381965499352,
+        "excess_bps": -8.440098576765745,
+        "limit_excess_contribution_bps": 53.97015619060389,
+        "nonlimit_excess_contribution_bps": -62.41025331474419,
+        "reselected_no_limit_excess_bps": -62.93965148925781,
+        "positive5_share_pct": 22.98841861705632,
+        "positive5_gross_contribution_bps": 262.8248571866552,
+        "selected_valid_rows": 99.71
+      }
+    },
+    "2026-02": {
+      "groups": 140,
+      "dates": 14,
+      "selected_limit_share_pct": 6.392857142857143,
+      "candidate_limit_share_pct": 1.454166834777163,
+      "same_day_close": {
+        "pool_raw_bps": 14.490451915394793,
+        "selected_raw_bps": 42.319033626751896,
+        "excess_bps": 27.828581711357103,
+        "limit_excess_contribution_bps": 34.05579309811669,
+        "nonlimit_excess_contribution_bps": -6.227211810826894,
+        "reselected_no_limit_excess_bps": -5.119153022766113,
+        "positive5_share_pct": 11.486724386724388,
+        "positive5_gross_contribution_bps": 94.12656013540719,
+        "selected_valid_rows": 99.9
+      },
+      "next_close": {
+        "pool_raw_bps": 47.447613550011205,
+        "selected_raw_bps": 57.76776516594789,
+        "excess_bps": 10.32015161593668,
+        "limit_excess_contribution_bps": 38.56168989132556,
+        "nonlimit_excess_contribution_bps": -28.241538785688476,
+        "reselected_no_limit_excess_bps": -25.252988815307617,
+        "positive5_share_pct": 19.982358571134085,
+        "positive5_gross_contribution_bps": 201.26459459198705,
+        "selected_valid_rows": 99.83571428571429
+      }
+    },
+    "2026-03": {
+      "groups": 200,
+      "dates": 20,
+      "selected_limit_share_pct": 5.84,
+      "candidate_limit_share_pct": 1.3445617965868149,
+      "same_day_close": {
+        "pool_raw_bps": -47.71034904134727,
+        "selected_raw_bps": -13.192133171107582,
+        "excess_bps": 34.51821587023969,
+        "limit_excess_contribution_bps": 35.7538619618569,
+        "nonlimit_excess_contribution_bps": -1.2356455294364888,
+        "reselected_no_limit_excess_bps": -2.574247121810913,
+        "positive5_share_pct": 10.759545454545455,
+        "positive5_gross_contribution_bps": 88.12935823819251,
+        "selected_valid_rows": 99.955
+      },
+      "next_close": {
+        "pool_raw_bps": -55.17922368097327,
+        "selected_raw_bps": -71.78720471810783,
+        "excess_bps": -16.60798103713455,
+        "limit_excess_contribution_bps": 41.895831698631056,
+        "nonlimit_excess_contribution_bps": -58.50381287631766,
+        "reselected_no_limit_excess_bps": -62.023704528808594,
+        "positive5_share_pct": 16.67066378066378,
+        "positive5_gross_contribution_bps": 163.1466561824028,
+        "selected_valid_rows": 99.785
+      }
+    },
+    "2026-04": {
+      "groups": 190,
+      "dates": 19,
+      "selected_limit_share_pct": 5.673684210526316,
+      "candidate_limit_share_pct": 1.529840025604755,
+      "same_day_close": {
+        "pool_raw_bps": 24.180172813303688,
+        "selected_raw_bps": 56.781190059695874,
+        "excess_bps": 32.60101724639218,
+        "limit_excess_contribution_bps": 29.18369017302392,
+        "nonlimit_excess_contribution_bps": 3.417326861883188,
+        "reselected_no_limit_excess_bps": 5.511369705200195,
+        "positive5_share_pct": 11.75204678362573,
+        "positive5_gross_contribution_bps": 94.77552156224016,
+        "selected_valid_rows": 99.91052631578947
+      },
+      "next_close": {
+        "pool_raw_bps": 64.20491274275504,
+        "selected_raw_bps": 94.8685417255669,
+        "excess_bps": 30.663628982811822,
+        "limit_excess_contribution_bps": 35.71711930740138,
+        "nonlimit_excess_contribution_bps": -5.053490824837885,
+        "reselected_no_limit_excess_bps": 2.0305986404418945,
+        "positive5_share_pct": 21.21442687337268,
+        "positive5_gross_contribution_bps": 212.2483790105734,
+        "selected_valid_rows": 99.10526315789474
+      }
+    },
+    "2026-05": {
+      "groups": 160,
+      "dates": 16,
+      "selected_limit_share_pct": 7.675,
+      "candidate_limit_share_pct": 1.901683853879853,
+      "same_day_close": {
+        "pool_raw_bps": -36.792683806959495,
+        "selected_raw_bps": 13.706680714491416,
+        "excess_bps": 50.4993645214509,
+        "limit_excess_contribution_bps": 40.72055364537434,
+        "nonlimit_excess_contribution_bps": 9.778810871081864,
+        "reselected_no_limit_excess_bps": 13.826156616210938,
+        "positive5_share_pct": 13.31395202020202,
+        "positive5_gross_contribution_bps": 114.82040142687508,
+        "selected_valid_rows": 99.90625
+      },
+      "next_close": {
+        "pool_raw_bps": -79.132429815706,
+        "selected_raw_bps": -10.45975481456316,
+        "excess_bps": 68.67267500114288,
+        "limit_excess_contribution_bps": 46.817199639401736,
+        "nonlimit_excess_contribution_bps": 21.855474796706886,
+        "reselected_no_limit_excess_bps": 22.386240005493164,
+        "positive5_share_pct": 21.38787878787879,
+        "positive5_gross_contribution_bps": 222.62145748117354,
+        "selected_valid_rows": 99.78125
+      }
+    },
+    "2026-06": {
+      "groups": 210,
+      "dates": 21,
+      "selected_limit_share_pct": 6.880952380952381,
+      "candidate_limit_share_pct": 2.142125964370374,
+      "same_day_close": {
+        "pool_raw_bps": 1.3795469097476565,
+        "selected_raw_bps": 49.829885747569,
+        "excess_bps": 48.450338837821356,
+        "limit_excess_contribution_bps": 35.34773060795326,
+        "nonlimit_excess_contribution_bps": 13.102607356127587,
+        "reselected_no_limit_excess_bps": 15.436872482299805,
+        "positive5_share_pct": 14.992143004387904,
+        "positive5_gross_contribution_bps": 125.40690356296608,
+        "selected_valid_rows": 99.87619047619047
+      },
+      "next_close": {
+        "pool_raw_bps": -21.704167596420184,
+        "selected_raw_bps": 66.5694867913401,
+        "excess_bps": 88.27365438776027,
+        "limit_excess_contribution_bps": 45.56820264790804,
+        "nonlimit_excess_contribution_bps": 42.705451068093986,
+        "reselected_no_limit_excess_bps": 45.31424331665039,
+        "positive5_share_pct": 25.436533479222305,
+        "positive5_gross_contribution_bps": 274.84403723295844,
+        "selected_valid_rows": 99.79523809523809
+      }
+    }
+  }
+}

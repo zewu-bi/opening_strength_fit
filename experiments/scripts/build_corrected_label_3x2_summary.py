@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
 
+from opening_strength_fit.artifact_catalog import file_sha256
 
 WINDOWS = (
     ("09:31-09:40", "0931_0940"),
@@ -16,14 +16,6 @@ WINDOWS = (
 )
 HORIZONS = (("1m", "short1m"), ("3m", "short3m"))
 RUN_TEMPLATE = "nn_v6_w{window}_{horizon}_corrected_nextclose_36m_grouped_gated_v2_mse"
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _mean_row(path: Path, pool: str) -> pd.Series:
@@ -66,7 +58,7 @@ def build_summary(backtests_root: Path, output_dir: Path) -> None:
             for path in (short_path, next_path):
                 relative = path.as_posix()
                 sources[relative] = {
-                    "sha256": _sha256(path),
+                    "sha256": file_sha256(path),
                     "bytes": path.stat().st_size,
                 }
 
@@ -103,8 +95,7 @@ def build_summary(backtests_root: Path, output_dir: Path) -> None:
                         "slice": f"{later_window} @ {horizon_label}",
                         "metric": metric,
                         "delta": float(
-                            windowed.loc[later_window, metric]
-                            - windowed.loc["09:31-09:40", metric]
+                            windowed.loc[later_window, metric] - windowed.loc["09:31-09:40", metric]
                         ),
                     }
                 )
@@ -136,8 +127,7 @@ def build_summary(backtests_root: Path, output_dir: Path) -> None:
     body = [
         "| "
         + " | ".join(
-            [str(row.iloc[0]), str(row.iloc[1])]
-            + [f"{float(value):.6f}" for value in row.iloc[2:]]
+            [str(row.iloc[0]), str(row.iloc[1])] + [f"{float(value):.6f}" for value in row.iloc[2:]]
         )
         + " |"
         for _, row in markdown.iterrows()
@@ -167,7 +157,7 @@ def build_summary(backtests_root: Path, output_dir: Path) -> None:
         },
         "sources": sources,
         "outputs": {
-            path.name: {"sha256": _sha256(path), "bytes": path.stat().st_size}
+            path.name: {"sha256": file_sha256(path), "bytes": path.stat().st_size}
             for path in (*outputs, *optional_outputs)
         },
     }

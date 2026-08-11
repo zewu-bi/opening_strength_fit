@@ -1,0 +1,9 @@
+{
+  "status": "ok",
+  "scope": "same-day Pool L",
+  "score": "09:31-09:40 1m-label model",
+  "outcome": "entry+6s to next close (label_next_close; not pure overnight)",
+  "buckets": "Top1000 by score, ten consecutive 100-name buckets",
+  "event": "same-day final close at upper limit; ex-post attribution only",
+  "missing_final_limit_reference_rows_treated_as_nonlimit": 40
+}

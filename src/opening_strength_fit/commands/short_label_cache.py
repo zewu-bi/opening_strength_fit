@@ -36,9 +36,9 @@ from opening_strength_fit.io import (
 )
 from opening_strength_fit.labels import _clock_state_values, safe_price_return
 from opening_strength_fit.reports import print_mapping
-from opening_strength_fit.schema import normalize_decision_keys
+from opening_strength_fit.schema import DECISION_KEY_COLUMNS, normalize_decision_keys
 
-KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
+KEY_COLUMNS = DECISION_KEY_COLUMNS
 DEFAULT_DECISION_TIMES = tuple(f"09:{minute:02d}:00" for minute in range(31, 41))
 DEFAULT_TRADABLE_STATUSES = ("T0", "20", "TRADE")
 
@@ -64,7 +64,9 @@ def validate_source_cache(
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        raise SystemExit(f"cannot read short-label source manifest {manifest_path}: {error}") from error
+        raise SystemExit(
+            f"cannot read short-label source manifest {manifest_path}: {error}"
+        ) from error
     actual_schema = str(manifest.get("cache_schema_version", ""))
     if expected_schema_version and actual_schema != expected_schema_version:
         raise SystemExit(
@@ -127,8 +129,7 @@ def read_short_label_base(
     duplicate_keys = base.duplicated(list(KEY_COLUMNS), keep=False)
     if duplicate_keys.any():
         raise SystemExit(
-            "short-label source keys are not unique: "
-            f"{int(duplicate_keys.sum())} duplicate rows"
+            f"short-label source keys are not unique: {int(duplicate_keys.sum())} duplicate rows"
         )
     observed_times = set(base["decision_target_timestamp"].dt.strftime("%H:%M:%S"))
     missing_times = sorted(set(decision_times) - observed_times)
@@ -136,8 +137,7 @@ def read_short_label_base(
         raise SystemExit(f"short-label source missing decision clocks: {missing_times}")
     has_entry = base["entry_timestamp"].notna()
     delay = (
-        base.loc[has_entry, "entry_timestamp"]
-        - base.loc[has_entry, "decision_target_timestamp"]
+        base.loc[has_entry, "entry_timestamp"] - base.loc[has_entry, "decision_target_timestamp"]
     ) / pd.Timedelta(seconds=1)
     wrong_delay = ~np.isclose(
         delay.to_numpy(dtype="float64"),
@@ -216,12 +216,8 @@ def compute_short_vwap_labels(
         out[f"{suffix}_state_age_seconds"] = pd.to_numeric(
             aligned[f"{suffix}_state_age_seconds"], errors="coerce"
         )
-        out[f"{suffix}_volume"] = pd.to_numeric(
-            aligned[f"volume_{suffix}"], errors="coerce"
-        )
-        out[f"{suffix}_turnover"] = pd.to_numeric(
-            aligned[f"turnover_{suffix}"], errors="coerce"
-        )
+        out[f"{suffix}_volume"] = pd.to_numeric(aligned[f"volume_{suffix}"], errors="coerce")
+        out[f"{suffix}_turnover"] = pd.to_numeric(aligned[f"turnover_{suffix}"], errors="coerce")
 
     out["sell_volume"] = out["sell_end_volume"] - out["sell_start_volume"]
     out["sell_turnover"] = out["sell_end_turnover"] - out["sell_start_turnover"]
@@ -274,8 +270,7 @@ def fetch_short_vwap_labels(
 ) -> pd.DataFrame:
     if not username or not password:
         raise SystemExit(
-            "ClickHouse short labels need credentials. Set CLICKHOUSE_USER and "
-            "CLICKHOUSE_PASSWORD."
+            "ClickHouse short labels need credentials. Set CLICKHOUSE_USER and CLICKHOUSE_PASSWORD."
         )
     client = get_tick_client(
         host=host or DEFAULT_CLICKHOUSE_TICK_HOST,
@@ -285,9 +280,8 @@ def fetch_short_vwap_labels(
     )
     parts: list[pd.DataFrame] = []
     for trading_day, day_base in base.groupby("date", sort=True, observed=True):
-        targets = (
-            day_base["entry_timestamp"]
-            + pd.to_timedelta(int(hold_seconds) + int(sell_window_seconds), unit="s")
+        targets = day_base["entry_timestamp"] + pd.to_timedelta(
+            int(hold_seconds) + int(sell_window_seconds), unit="s"
         )
         valid_targets = targets.dropna()
         if valid_targets.empty:
@@ -379,7 +373,9 @@ def write_short_label_manifest(
             "query_start_offset_us": int(query_start_offset_us),
             "fee_bps": float(fee_bps),
         },
-        "columns": [{"name": str(col), "dtype": str(dtype)} for col, dtype in labels.dtypes.items()],
+        "columns": [
+            {"name": str(col), "dtype": str(dtype)} for col, dtype in labels.dtypes.items()
+        ],
     }
     write_json(short_label_manifest_path(output_path), manifest)
     return manifest
@@ -431,9 +427,7 @@ def main() -> None:
     query_start_offset_us = config_int(
         config, "short_labels", "query_start_offset_us", 33_300_000_000
     )
-    volume_unit_multiplier = config_float(
-        config, "short_labels", "volume_unit_multiplier", 1.0
-    )
+    volume_unit_multiplier = config_float(config, "short_labels", "volume_unit_multiplier", 1.0)
     fee_bps = config_float(config, "short_labels", "fee_bps", 0.0)
     tradable_statuses = tuple(
         str(value)

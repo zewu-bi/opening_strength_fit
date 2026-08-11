@@ -2,7 +2,9 @@
 id = "pool_internal_head_blend_auction_fresh_pruned_mech328_v2_2022_2025_v1"
 kind = "pool_internal_analysis"
 description = "Pool-L head-only rank boost of auction-fresh on top of mech328 v2, with anchors, agreement gates, Top100/200 acceptance, 20-bucket shape, overlap, and upper-tail sensitivity."
-status = "running"
+status = "completed"
+closed_at = "2026-08-11"
+status_reason = "Governance reconciliation: completed downstream artifacts prove this prerequisite or analysis finished."
 
 [blend]
 base_name = "mech328_v2"

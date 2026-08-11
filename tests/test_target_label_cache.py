@@ -7,9 +7,7 @@ from opening_strength_fit.commands.target_label_cache import _merge_short_label_
 
 
 def _base_frame() -> pd.DataFrame:
-    decision_times = pd.to_datetime(
-        ["2025-01-02 09:30:00", "2025-01-02 09:31:00"]
-    )
+    decision_times = pd.to_datetime(["2025-01-02 09:30:00", "2025-01-02 09:31:00"])
     return pd.DataFrame(
         {
             "date": ["2025-01-02", "2025-01-02"],

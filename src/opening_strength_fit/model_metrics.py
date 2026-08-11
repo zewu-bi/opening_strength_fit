@@ -1,17 +1,32 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+
+import numpy as np
 import pandas as pd
 
 from opening_strength_fit.evaluation import resolve_group_cols
 
 
-def corr(a: pd.Series, b: pd.Series, method: str) -> float:
-    valid = a.notna() & b.notna()
-    a = a.loc[valid]
-    b = b.loc[valid]
-    if len(a) < 2 or a.nunique(dropna=True) < 2 or b.nunique(dropna=True) < 2:
+def corr(a: pd.Series, b: pd.Series, method: str, *, min_count: int = 2) -> float:
+    values = pd.DataFrame({"a": a, "b": b}).replace([np.inf, -np.inf], np.nan).dropna()
+    if (
+        len(values) < min_count
+        or values["a"].nunique(dropna=True) < 2
+        or values["b"].nunique(dropna=True) < 2
+    ):
         return float("nan")
-    return float(a.corr(b, method=method))
+    return float(values["a"].corr(values["b"], method=method))
+
+
+def array_corr(
+    a: Sequence[float] | np.ndarray,
+    b: Sequence[float] | np.ndarray,
+    method: str = "pearson",
+) -> float:
+    if len(a) != len(b):
+        raise ValueError("correlation inputs must have the same length")
+    return corr(pd.Series(a, copy=False), pd.Series(b, copy=False), method, min_count=3)
 
 
 def ir(mean: float, std: float) -> float:

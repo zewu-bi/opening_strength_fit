@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -12,167 +13,42 @@ from opening_strength_fit.analysis import (
     write_artifact_fetch_trace,
     write_json,
 )
-from opening_strength_fit.commands.alpha_conditioned_rolling_validation import (
-    summarize_group_metrics as summarize_rolling_group_metrics,
+from opening_strength_fit.artifact_catalog import (
+    CAPACITY_ACCEPTANCE_ARTIFACTS,
+    CAPACITY_AUDIT_ARTIFACTS,
+    EXPOSURE_AUDIT_ARTIFACTS,
+    FEATURE_AUDIT_ARTIFACTS,
+    FEATURE_AUDIT_COMBINED_CSVS,
+    FEATURE_HYGIENE_ARTIFACTS,
+    GAP_ATTRIBUTION_ARTIFACTS,
+    PRESENTATION_CORE_ARCHIVE_PROFILE,
+    PRESENTATION_CORE_REPORT_KEYS,
+    ROLLING_VALIDATION_ARTIFACTS,
+    ROLLING_VALIDATION_SHARD_ARTIFACTS,
+    SCORE_RISK_ARTIFACTS,
+    STRATEGY_ACCEPTANCE_ARTIFACTS,
+    is_capacity_acceptance,
+    is_capacity_audit,
+    is_exposure_audit,
+    is_feature_audit,
+    is_feature_hygiene,
+    is_gap_attribution,
+    is_pool_internal_analysis,
+    is_rolling_validation,
+    is_score_risk_sweep,
 )
 from opening_strength_fit.commands.artifact_sync_remote import (
     fetch_remote_directory_if_exists,
     fetch_remote_file_if_exists,
 )
-from opening_strength_fit.commands.pool_internal_analysis import record_pool_internal_outputs
 from opening_strength_fit.k8s import RunSpec
+from opening_strength_fit.pool_internal_artifacts import record_pool_internal_outputs
 from opening_strength_fit.pvc_layout import rolling_shard_dir_candidates
+from opening_strength_fit.score_variant_eval import (
+    summarize_group_metrics as summarize_rolling_group_metrics,
+)
 
-SCORE_RISK_ARTIFACTS = (
-    "score_risk_summary.csv",
-    "score_risk_minute_summary.csv",
-    "score_risk_group_metrics.csv",
-    "score_risk_trace.json",
-)
-ROLLING_VALIDATION_ARTIFACTS = (
-    "rolling_summary.csv",
-    "rolling_month_summary.csv",
-    "rolling_group_metrics.csv",
-    "rolling_trace.json",
-)
-ROLLING_VALIDATION_SHARD_ARTIFACTS = (
-    "rolling_group_metrics.csv",
-    "rolling_month_summary.csv",
-    "rolling_summary.csv",
-    "rolling_trace.json",
-)
-FEATURE_AUDIT_ARTIFACTS = (
-    "feature_audit_metrics.csv",
-    "feature_audit_permutation.csv",
-    "feature_importance.csv",
-    "feature_group_importance.csv",
-    "feature_audit_trace.json",
-)
-FEATURE_AUDIT_COMBINED_CSVS = (
-    "feature_audit_metrics.csv",
-    "feature_audit_permutation.csv",
-    "feature_importance.csv",
-    "feature_group_importance.csv",
-)
-FEATURE_HYGIENE_ARTIFACTS = (
-    "feature_hygiene.csv",
-    "feature_correlation_pairs.csv",
-    "feature_correlation_clusters.csv",
-    "feature_prune_candidates.csv",
-    "feature_keep_list.txt",
-    "feature_drop_list.txt",
-    "feature_hygiene_trace.json",
-)
-CAPACITY_AUDIT_ARTIFACTS = (
-    "capacity_audit_selected.csv",
-    "capacity_audit_group_metrics.csv",
-    "capacity_audit_daily_summary.csv",
-    "capacity_audit_month_summary.csv",
-    "capacity_audit_summary.csv",
-    "capacity_audit_trace.json",
-)
-CAPACITY_ACCEPTANCE_ARTIFACTS = (
-    "capacity_acceptance_daily_summary.csv",
-    "capacity_acceptance_summary.csv",
-    "capacity_acceptance_trace.json",
-)
-STRATEGY_ACCEPTANCE_ARTIFACTS = (
-    "strategy_acceptance_summary.csv",
-    "strategy_acceptance_daily.csv",
-    "strategy_acceptance_group_metrics.csv",
-    "strategy_acceptance_capacity_summary.csv",
-    "strategy_acceptance_overlap_summary.csv",
-    "strategy_acceptance_overlap_daily.csv",
-    "strategy_acceptance_overlap_adjacent.csv",
-    "strategy_acceptance_tail_summary.csv",
-    "strategy_acceptance_tail_monthly.csv",
-    "strategy_acceptance_tail_concentration.csv",
-    "strategy_acceptance_bootstrap.csv",
-    "strategy_acceptance_leave_one_out.csv",
-    "strategy_acceptance_trace.json",
-    "_SUCCESS",
-)
-EXPOSURE_AUDIT_ARTIFACTS = (
-    "exposure_audit_group_metrics.csv",
-    "exposure_audit_month_summary.csv",
-    "exposure_audit_summary.csv",
-    "exposure_audit_category_summary.csv",
-    "exposure_audit_industry_group_metrics.csv",
-    "exposure_audit_industry_month_summary.csv",
-    "exposure_audit_industry_summary.csv",
-    "exposure_audit_daily_concentration.csv",
-    "exposure_audit_concentration_summary.csv",
-    "exposure_audit_trace.json",
-)
-GAP_ATTRIBUTION_ARTIFACTS = (
-    "gap_attribution_outcomes_by_month.csv",
-    "gap_attribution_outcomes_overall.csv",
-    "gap_attribution_feature_exposure_overall.csv",
-    "gap_attribution_penalized_feature_delta.csv",
-    "gap_attribution_residual_penalized_vs_kept.csv",
-    "gap_attribution_trace.json",
-)
 DEFAULT_ARTIFACTS_ROOT = Path("output/artifacts")
-PRESENTATION_CORE_ARCHIVE_PROFILE = "presentation_core"
-PRESENTATION_CORE_REPORT_KEYS = {
-    "short_excess_rank_ic_plot_data",
-    "short_excess_rank_ic_figure",
-    "next_excess_rank_ic_plot_data",
-    "next_excess_rank_ic_figure",
-    "daily_cumulative_plot_data",
-    "daily_cumulative_figure",
-    "daily_cumulative_trace",
-}
-
-
-def is_score_risk_sweep(spec: RunSpec) -> bool:
-    return spec.kind == "score_risk_sweep"
-
-
-def is_rolling_validation(spec: RunSpec) -> bool:
-    return spec.kind == "alpha_conditioned_rolling_validation"
-
-
-def is_gap_attribution(spec: RunSpec) -> bool:
-    return spec.kind == "gap_risk_attribution"
-
-
-def is_capacity_audit(spec: RunSpec) -> bool:
-    return spec.kind == "capacity_audit"
-
-
-def is_capacity_acceptance(spec: RunSpec) -> bool:
-    return spec.kind == "capacity_acceptance"
-
-
-def is_exposure_audit(spec: RunSpec) -> bool:
-    return spec.kind == "exposure_audit"
-
-
-def is_feature_audit(spec: RunSpec) -> bool:
-    return spec.kind == "feature_audit"
-
-
-def is_feature_hygiene(spec: RunSpec) -> bool:
-    return spec.kind == "feature_hygiene"
-
-
-def is_pool_internal_analysis(spec: RunSpec) -> bool:
-    return spec.pool_internal_analysis_enabled
-
-
-def is_non_standard_artifact_run(spec: RunSpec) -> bool:
-    return (
-        is_score_risk_sweep(spec)
-        or is_rolling_validation(spec)
-        or is_gap_attribution(spec)
-        or is_capacity_acceptance(spec)
-        or is_capacity_audit(spec)
-        or spec.kind == "strategy_acceptance"
-        or is_exposure_audit(spec)
-        or is_feature_audit(spec)
-        or is_feature_hygiene(spec)
-    )
 
 
 def local_artifact_dir(spec: RunSpec, output_root: Path | None) -> Path:
@@ -220,23 +96,32 @@ def record_artifact_fetch(
     )
 
 
+def pull_required_artifact_set(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    output_root: Path | None,
+    artifact_names: tuple[str, ...],
+    artifact_label: str,
+) -> list[Path]:
+    output_dir, pulled, missing = pull_artifact_set(
+        hfcli, spec, pod_name, output_root, artifact_names
+    )
+    if not pulled:
+        raise SystemExit(f"{spec.run_id}: no {artifact_label} artifacts found under {spec.pvc_dir}")
+    record_artifact_fetch(spec, output_dir, pulled, missing)
+    return pulled
+
+
 def pull_score_risk_artifacts(
     hfcli: str,
     spec: RunSpec,
     pod_name: str,
     output_root: Path | None,
 ) -> list[Path]:
-    output_dir, pulled, missing = pull_artifact_set(
-        hfcli,
-        spec,
-        pod_name,
-        output_root,
-        SCORE_RISK_ARTIFACTS,
+    return pull_required_artifact_set(
+        hfcli, spec, pod_name, output_root, SCORE_RISK_ARTIFACTS, "score-risk"
     )
-    if not pulled:
-        raise SystemExit(f"{spec.run_id}: no score-risk artifacts found under {spec.pvc_dir}")
-    record_artifact_fetch(spec, output_dir, pulled, missing)
-    return pulled
 
 
 def pull_rolling_validation_artifacts(
@@ -279,17 +164,9 @@ def pull_gap_attribution_artifacts(
     pod_name: str,
     output_root: Path | None,
 ) -> list[Path]:
-    output_dir, pulled, missing = pull_artifact_set(
-        hfcli,
-        spec,
-        pod_name,
-        output_root,
-        GAP_ATTRIBUTION_ARTIFACTS,
+    return pull_required_artifact_set(
+        hfcli, spec, pod_name, output_root, GAP_ATTRIBUTION_ARTIFACTS, "gap-attribution"
     )
-    if not pulled:
-        raise SystemExit(f"{spec.run_id}: no gap-attribution artifacts found under {spec.pvc_dir}")
-    record_artifact_fetch(spec, output_dir, pulled, missing)
-    return pulled
 
 
 def pull_capacity_audit_artifacts(
@@ -298,17 +175,9 @@ def pull_capacity_audit_artifacts(
     pod_name: str,
     output_root: Path | None,
 ) -> list[Path]:
-    output_dir, pulled, missing = pull_artifact_set(
-        hfcli,
-        spec,
-        pod_name,
-        output_root,
-        CAPACITY_AUDIT_ARTIFACTS,
+    return pull_required_artifact_set(
+        hfcli, spec, pod_name, output_root, CAPACITY_AUDIT_ARTIFACTS, "capacity-audit"
     )
-    if not pulled:
-        raise SystemExit(f"{spec.run_id}: no capacity-audit artifacts found under {spec.pvc_dir}")
-    record_artifact_fetch(spec, output_dir, pulled, missing)
-    return pulled
 
 
 def pull_capacity_acceptance_artifacts(
@@ -317,19 +186,14 @@ def pull_capacity_acceptance_artifacts(
     pod_name: str,
     output_root: Path | None,
 ) -> list[Path]:
-    output_dir, pulled, missing = pull_artifact_set(
+    return pull_required_artifact_set(
         hfcli,
         spec,
         pod_name,
         output_root,
         CAPACITY_ACCEPTANCE_ARTIFACTS,
+        "capacity-acceptance",
     )
-    if not pulled:
-        raise SystemExit(
-            f"{spec.run_id}: no capacity-acceptance artifacts found under {spec.pvc_dir}"
-        )
-    record_artifact_fetch(spec, output_dir, pulled, missing)
-    return pulled
 
 
 def pull_exposure_audit_artifacts(
@@ -338,17 +202,9 @@ def pull_exposure_audit_artifacts(
     pod_name: str,
     output_root: Path | None,
 ) -> list[Path]:
-    output_dir, pulled, missing = pull_artifact_set(
-        hfcli,
-        spec,
-        pod_name,
-        output_root,
-        EXPOSURE_AUDIT_ARTIFACTS,
+    return pull_required_artifact_set(
+        hfcli, spec, pod_name, output_root, EXPOSURE_AUDIT_ARTIFACTS, "exposure-audit"
     )
-    if not pulled:
-        raise SystemExit(f"{spec.run_id}: no exposure-audit artifacts found under {spec.pvc_dir}")
-    record_artifact_fetch(spec, output_dir, pulled, missing)
-    return pulled
 
 
 def pull_feature_audit_artifacts(
@@ -383,17 +239,9 @@ def pull_feature_hygiene_artifacts(
     pod_name: str,
     output_root: Path | None,
 ) -> list[Path]:
-    output_dir, pulled, missing = pull_artifact_set(
-        hfcli,
-        spec,
-        pod_name,
-        output_root,
-        FEATURE_HYGIENE_ARTIFACTS,
+    return pull_required_artifact_set(
+        hfcli, spec, pod_name, output_root, FEATURE_HYGIENE_ARTIFACTS, "feature-hygiene"
     )
-    if not pulled:
-        raise SystemExit(f"{spec.run_id}: no feature-hygiene artifacts found under {spec.pvc_dir}")
-    record_artifact_fetch(spec, output_dir, pulled, missing)
-    return pulled
 
 
 def pull_pool_internal_analysis_artifacts(
@@ -497,11 +345,14 @@ def combine_rolling_validation_shards(
     return [group_path, month_path, summary_path, trace_path]
 
 
-def pull_rolling_validation_shards(
+def _pull_month_shards(
     hfcli: str,
     spec: RunSpec,
     pod_name: str,
     output_dir: Path,
+    *,
+    artifact_names: tuple[str, ...],
+    combine_shards: Callable[..., list[Path]],
 ) -> list[Path]:
     if not spec.test_start_month or not spec.test_end_month:
         return []
@@ -519,7 +370,7 @@ def pull_rolling_validation_shards(
         shard_dir = output_dir / f"month_{start_month}"
         shard_dir.mkdir(parents=True, exist_ok=True)
         found = False
-        for name in ROLLING_VALIDATION_SHARD_ARTIFACTS:
+        for name in artifact_names:
             local_path = shard_dir / name
             fetched = any(
                 fetch_remote_file_if_exists(
@@ -541,12 +392,28 @@ def pull_rolling_validation_shards(
         if not found:
             missing_months.append(label)
 
-    combined = combine_rolling_validation_shards(
+    combined = combine_shards(
         output_dir,
         months=[start for start, _ in windows],
         missing_months=missing_months,
     )
     return [*pulled, *combined]
+
+
+def pull_rolling_validation_shards(
+    hfcli: str,
+    spec: RunSpec,
+    pod_name: str,
+    output_dir: Path,
+) -> list[Path]:
+    return _pull_month_shards(
+        hfcli,
+        spec,
+        pod_name,
+        output_dir,
+        artifact_names=ROLLING_VALIDATION_SHARD_ARTIFACTS,
+        combine_shards=combine_rolling_validation_shards,
+    )
 
 
 def combine_feature_audit_shards(
@@ -595,50 +462,14 @@ def pull_feature_audit_shards(
     pod_name: str,
     output_dir: Path,
 ) -> list[Path]:
-    if not spec.test_start_month or not spec.test_end_month:
-        return []
-
-    pulled: list[Path] = []
-    missing_months: list[str] = []
-    windows = month_window_periods(
-        spec.test_start_month,
-        spec.test_end_month,
-        test_months=spec.test_months,
-        stride_months=spec.test_stride_months,
-    )
-    labels = [start if start == end else f"{start}_{end}" for start, end in windows]
-    for (start_month, end_month), label in zip(windows, labels, strict=True):
-        shard_dir = output_dir / f"month_{start_month}"
-        shard_dir.mkdir(parents=True, exist_ok=True)
-        found = False
-        for name in FEATURE_AUDIT_ARTIFACTS:
-            local_path = shard_dir / name
-            fetched = any(
-                fetch_remote_file_if_exists(
-                    hfcli,
-                    spec,
-                    pod_name,
-                    f"{spec.pvc_dir}/{remote_dir}/{name}",
-                    local_path,
-                )
-                for remote_dir in rolling_shard_dir_candidates(
-                    start_month,
-                    end_month,
-                    preferred_layout=spec.output_layout,
-                )
-            )
-            if fetched:
-                pulled.append(local_path)
-                found = True
-        if not found:
-            missing_months.append(label)
-
-    combined = combine_feature_audit_shards(
+    return _pull_month_shards(
+        hfcli,
+        spec,
+        pod_name,
         output_dir,
-        months=[start for start, _ in windows],
-        missing_months=missing_months,
+        artifact_names=FEATURE_AUDIT_ARTIFACTS,
+        combine_shards=combine_feature_audit_shards,
     )
-    return [*pulled, *combined]
 
 
 def record_artifact_file(source: Path, destination: Path) -> Path | None:

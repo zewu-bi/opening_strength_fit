@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
 
+from opening_strength_fit.artifact_catalog import file_sha256
 from opening_strength_fit.optimization_acceptance_plots import (
     add_cumulative_percent_display_columns,
     combine_net_alpha_cumulative_data,
@@ -20,7 +20,6 @@ from opening_strength_fit.optimization_direction_data import (
     load_realized_cumulative_plot_data,
 )
 from opening_strength_fit.pool_internal_plot_svg import write_two_panel_line_svg
-
 
 DIRECTIONS = tuple(
     DirectionSpec(
@@ -38,14 +37,6 @@ DIRECTIONS = tuple(
     )
     for horizon in ("1m", "3m")
 )
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def build(backtests_root: Path, output_dir: Path) -> None:
@@ -148,7 +139,7 @@ def build(backtests_root: Path, output_dir: Path) -> None:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         outputs = manifest.setdefault("outputs", {})
         for path in (csv_path, svg_path, trace_path):
-            outputs[path.name] = {"sha256": _sha256(path), "bytes": path.stat().st_size}
+            outputs[path.name] = {"sha256": file_sha256(path), "bytes": path.stat().st_size}
         manifest_path.write_text(
             json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )

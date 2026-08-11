@@ -2,7 +2,9 @@
 id = "build_delay6_clock_state_1101_1110_from_start_cache_v1"
 kind = "labeled_cache"
 description = "Build the 2019-2025 11:00-11:10 fixed-clock feature cache: 11:00 is the from-start context row and 11:01-11:10 are the ten model decision rows; auction features are reused from the canonical opening cache with strict T-1 market-cap/share enrichment."
-status = "running"
+status = "superseded"
+closed_at = "2026-08-11"
+status_reason = "Governance reconciliation: the later ds350 layered-data lineage replaced this unexecuted route."
 
 [data]
 source = "clickhouse"

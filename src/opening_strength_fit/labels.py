@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 
 from opening_strength_fit.schema import (
     OPEN_SAMPLE_END,
@@ -14,6 +16,46 @@ from opening_strength_fit.schema import (
     ensure_timestamp_columns,
     filter_time_range,
 )
+
+
+def read_clock_return_labels(
+    label_root: str | Path,
+    year: int,
+    *,
+    clock: str,
+    label_column: str,
+    valid_column: str,
+    output_column: str,
+    multiplier: float = 1.0,
+    batch_size: int = 500_000,
+) -> pd.DataFrame:
+    hour, minute = (int(value) for value in clock.split(":", 1))
+    parquet = pq.ParquetFile(Path(label_root) / f"year={year}" / "labels.parquet")
+    columns = [
+        "date",
+        "symbol",
+        "decision_target_timestamp",
+        label_column,
+        valid_column,
+    ]
+    parts = []
+    for batch in parquet.iter_batches(columns=columns, batch_size=batch_size):
+        frame = batch.to_pandas()
+        timestamp = pd.to_datetime(frame["decision_target_timestamp"], errors="coerce")
+        keep = timestamp.dt.hour.eq(hour) & timestamp.dt.minute.eq(minute)
+        if not keep.any():
+            continue
+        frame = frame.loc[keep].copy()
+        frame["date"] = frame["date"].astype(str)
+        frame["symbol"] = frame["symbol"].astype(str)
+        valid = frame[valid_column].fillna(False).astype(bool)
+        frame[output_column] = (
+            finite_numeric_series(frame[label_column]).where(valid).mul(multiplier)
+        )
+        parts.append(frame[["date", "symbol", output_column]])
+    if not parts:
+        return pd.DataFrame(columns=["date", "symbol", output_column])
+    return pd.concat(parts, ignore_index=True).drop_duplicates(["date", "symbol"], keep="last")
 
 
 def finite_numeric_series(
@@ -298,6 +340,33 @@ def _future_tick_values(
     return out
 
 
+def _validate_label_alignments(
+    entry_alignment: str,
+    future_alignment: str,
+    *,
+    entry_clock_delay_seconds: int | None,
+    entry_max_gap_seconds: int | None,
+    max_future_gap_seconds: int | None,
+) -> tuple[str, str]:
+    normalized_entry = str(entry_alignment).strip().lower().replace("-", "_")
+    if normalized_entry not in {"tick_offset", "clock_state"}:
+        raise SystemExit(
+            f"unknown entry_alignment {entry_alignment!r}; expected tick_offset or clock_state"
+        )
+    normalized_future = str(future_alignment).strip().lower().replace("-", "_")
+    if normalized_future not in {"next_tick", "clock_state"}:
+        raise SystemExit(
+            f"unknown future_alignment {future_alignment!r}; expected next_tick or clock_state"
+        )
+    if normalized_entry == "clock_state" and entry_clock_delay_seconds is None:
+        raise SystemExit("clock_state entry alignment requires entry_clock_delay_seconds")
+    if normalized_entry == "clock_state" and entry_max_gap_seconds is not None:
+        raise SystemExit("entry_max_gap_seconds is incompatible with clock_state entry alignment")
+    if normalized_future == "clock_state" and max_future_gap_seconds is not None:
+        raise SystemExit("max_future_gap_seconds is incompatible with clock_state future alignment")
+    return normalized_entry, normalized_future
+
+
 def build_trade_labels(
     ticks: pd.DataFrame,
     *,
@@ -333,25 +402,13 @@ def build_trade_labels(
     state_work = work if state_ticks is None else ensure_timestamp_columns(state_ticks)
     state_work = state_work.sort_values(["date", "symbol", "timestamp"]).reset_index(drop=True)
 
-    normalized_entry_alignment = str(entry_alignment).strip().lower().replace("-", "_")
-    if normalized_entry_alignment not in {"tick_offset", "clock_state"}:
-        raise SystemExit(
-            f"unknown entry_alignment {entry_alignment!r}; expected tick_offset or clock_state"
-        )
-    normalized_future_alignment = str(future_alignment).strip().lower().replace("-", "_")
-    if normalized_future_alignment not in {"next_tick", "clock_state"}:
-        raise SystemExit(
-            f"unknown future_alignment {future_alignment!r}; expected next_tick or clock_state"
-        )
-    if normalized_entry_alignment == "clock_state":
-        if entry_clock_delay_seconds is None:
-            raise SystemExit("clock_state entry alignment requires entry_clock_delay_seconds")
-        if entry_max_gap_seconds is not None:
-            raise SystemExit(
-                "entry_max_gap_seconds is incompatible with clock_state entry alignment"
-            )
-    if normalized_future_alignment == "clock_state" and max_future_gap_seconds is not None:
-        raise SystemExit("max_future_gap_seconds is incompatible with clock_state future alignment")
+    normalized_entry_alignment, normalized_future_alignment = _validate_label_alignments(
+        entry_alignment,
+        future_alignment,
+        entry_clock_delay_seconds=entry_clock_delay_seconds,
+        entry_max_gap_seconds=entry_max_gap_seconds,
+        max_future_gap_seconds=max_future_gap_seconds,
+    )
 
     entry_value_columns = [buy_price_col]
     for level in PRICE_LEVELS:

@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from opening_strength_fit.clickhouse_ticks import get_tick_client
+from opening_strength_fit.feature_utils import finite_numeric as finite
 from opening_strength_fit.stock_pool import (
     DEFAULT_STOCK_POOL_PATHS,
     load_stock_pool,
@@ -79,10 +80,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pool", default="L", choices=["L"])
     parser.add_argument("--top-n", type=int, default=TOP_N)
     return parser.parse_args()
-
-
-def finite(values: pd.Series) -> pd.Series:
-    return pd.to_numeric(values, errors="coerce").replace([np.inf, -np.inf], np.nan)
 
 
 def read_filtered_parquet(

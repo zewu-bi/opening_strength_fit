@@ -1,0 +1,8 @@
+{
+  "status": "ok",
+  "score": "09:31-09:40 close-label model",
+  "selection": "causal Top100 before inspecting outcome availability",
+  "event": "same-day final close at upper limit",
+  "close_to_next_open": "same-day official close to next official open",
+  "next_open_to_next_close": "next official open to next close"
+}

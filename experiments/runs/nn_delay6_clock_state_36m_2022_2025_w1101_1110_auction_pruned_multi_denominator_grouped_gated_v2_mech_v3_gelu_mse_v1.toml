@@ -2,7 +2,9 @@
 id = "nn_delay6_clock_state_36m_2022_2025_w1101_1110_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1"
 kind = "exploration"
 description = "11:01-11:10 fixed-window rerun of the canonical 09:31-09:40 v4 multi-denominator model; only the sample clock and corresponding cache/output lineage change."
-status = "queued"
+status = "superseded"
+closed_at = "2026-08-11"
+status_reason = "Governance reconciliation: the later ds350 layered-data lineage replaced this unexecuted route."
 
 [data]
 source = "labeled_pvc"

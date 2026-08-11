@@ -11,8 +11,9 @@ import pyarrow.parquet as pq
 
 from opening_strength_fit.config import config_int, config_str, config_value, load_toml, run_id
 from opening_strength_fit.io import write_json
+from opening_strength_fit.schema import DECISION_KEY_COLUMNS
 
-KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
+KEY_COLUMNS = DECISION_KEY_COLUMNS
 DEFAULT_FEATURES = (
     "spread_bps",
     "turnover_diff_1t",

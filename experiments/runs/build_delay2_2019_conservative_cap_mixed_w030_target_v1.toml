@@ -3,6 +3,8 @@ id = "build_delay2_2019_conservative_cap_mixed_w030_target_v1"
 kind = "cache_transform"
 description = "Build the 2019 mixed-w030 target shard from the conservative T-1 market-cap cache whose delay2 counts distinct exchange timestamps."
 status = "superseded"
+closed_at = "2026-07-17"
+status_reason = "Replaced by the corrected target and later clock-state cache lineage."
 
 [target_cache]
 input_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v2_tick2_unique_base_mcap_lag1/opening_2019_label_v2_tick2_unique_base_mcap_lag1.parquet"

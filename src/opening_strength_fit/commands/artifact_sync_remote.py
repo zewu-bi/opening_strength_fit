@@ -7,11 +7,12 @@ from pathlib import Path
 from opening_strength_fit.k8s import RunSpec, command_succeeds, run_command
 
 
-def remote_file_exists(
+def _remote_path_exists(
     hfcli: str,
     namespace: str,
     pod_name: str,
     remote_path: str,
+    kind: str,
 ) -> bool:
     return command_succeeds(
         [
@@ -24,9 +25,18 @@ def remote_file_exists(
             "--",
             "/bin/sh",
             "-lc",
-            f"test -f '{remote_path}'",
+            f"test -{kind} '{remote_path}'",
         ]
     )
+
+
+def remote_file_exists(
+    hfcli: str,
+    namespace: str,
+    pod_name: str,
+    remote_path: str,
+) -> bool:
+    return _remote_path_exists(hfcli, namespace, pod_name, remote_path, "f")
 
 
 def remote_dir_exists(
@@ -35,20 +45,7 @@ def remote_dir_exists(
     pod_name: str,
     remote_path: str,
 ) -> bool:
-    return command_succeeds(
-        [
-            hfcli,
-            "kubectl",
-            "exec",
-            "-n",
-            namespace,
-            pod_name,
-            "--",
-            "/bin/sh",
-            "-lc",
-            f"test -d '{remote_path}'",
-        ]
-    )
+    return _remote_path_exists(hfcli, namespace, pod_name, remote_path, "d")
 
 
 def fetch_binary_file(

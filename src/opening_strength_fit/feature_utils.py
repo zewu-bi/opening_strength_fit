@@ -6,6 +6,33 @@ import numpy as np
 import pandas as pd
 
 
+def finite_numeric(values: pd.Series) -> pd.Series:
+    return pd.to_numeric(values, errors="coerce").replace([np.inf, -np.inf], np.nan)
+
+
+def weighted_share_stats(values: pd.Series, weights: pd.Series) -> dict[str, float]:
+    weights = finite_numeric(weights).clip(lower=0.0)
+    valid = values.notna() & weights.notna() & weights.gt(0.0)
+    if not valid.any():
+        return {
+            "unique": 0.0,
+            "max_share": float("nan"),
+            "top5_share": float("nan"),
+            "hhi": float("nan"),
+            "effective_count": float("nan"),
+        }
+    shares = weights.loc[valid].groupby(values.loc[valid].astype(str)).sum()
+    shares = shares / shares.sum()
+    hhi = float((shares**2).sum())
+    return {
+        "unique": float(len(shares)),
+        "max_share": float(shares.max()),
+        "top5_share": float(shares.sort_values(ascending=False).head(5).sum()),
+        "hhi": hhi,
+        "effective_count": float(1.0 / hhi) if hhi > 0 else float("nan"),
+    }
+
+
 def safe_divide(numerator, denominator):
     denominator = np.asarray(denominator, dtype="float64")
     numerator = np.asarray(numerator, dtype="float64")

@@ -3,6 +3,8 @@ id = "build_delay2_2024_cache_v1"
 kind = "labeled_cache"
 description = "Build the 2024 shard of the 2023-2024 09:30-09:40 delay2 labeled cache for 2024 monthly rolling validation."
 status = "canceled"
+closed_at = "2026-07-16"
+status_reason = "Canceled after the v1 cache route failed validation; the v2 build replaced it."
 
 [data]
 source = "clickhouse"

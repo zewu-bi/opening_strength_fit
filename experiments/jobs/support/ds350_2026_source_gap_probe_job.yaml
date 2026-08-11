@@ -1,0 +1,105 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-ds350-2026-source-gap-probe-v1
+  namespace: bizewu
+  labels: {app: os-ds350-2026-source-gap-probe-v1}
+spec:
+  activeDeadlineSeconds: 3600
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 172800
+  template:
+    metadata:
+      labels: {app: os-ds350-2026-source-gap-probe-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      containers:
+        - name: probe
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260731-raw-source-42ec6bdd
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          envFrom:
+            - secretRef: {name: opening-strength-clickhouse}
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              python - <<'PY'
+              import os
+
+              from opening_strength_fit.clickhouse_ticks import get_tick_client
+              from opening_strength_fit.universe import DEFAULT_A_SHARE_SYMBOL_REGEX
+
+              client = get_tick_client(
+                  username=os.environ["CLICKHOUSE_USER"],
+                  password=os.environ["CLICKHOUSE_PASSWORD"],
+                  host=os.environ["CLICKHOUSE_HOST"],
+                  port=int(os.environ.get("CLICKHOUSE_PORT", "8123")),
+              )
+              params = {
+                  "start_date": "2026-01-01",
+                  "end_date": "2026-07-15",
+                  "symbol_regex": DEFAULT_A_SHARE_SYMBOL_REGEX,
+              }
+              tick_dates = client.query_df(
+                  """
+                  select distinct TradingDay as date
+                  from stock.tick
+                  where TradingDay >= {start_date:Date}
+                    and TradingDay <= {end_date:Date}
+                    and match(Symbol, {symbol_regex:String})
+                  order by date
+                  """,
+                  parameters=params,
+              )
+              daily_dates = client.query_df(
+                  """
+                  select distinct TradingDay as date
+                  from stock.daily_bar_jy
+                  where TradingDay >= {start_date:Date}
+                    and TradingDay <= {end_date:Date}
+                    and match(Symbol, {symbol_regex:String})
+                  order by date
+                  """,
+                  parameters=params,
+              )
+              tick_set = set(tick_dates["date"].astype(str))
+              daily_set = set(daily_dates["date"].astype(str))
+              print("daily_not_tick", sorted(daily_set - tick_set))
+              print("tick_not_daily", sorted(tick_set - daily_set))
+              missing = sorted(daily_set - tick_set)
+              if missing:
+                  counts = client.query_df(
+                      """
+                      select
+                          TradingDay as date,
+                          count() as rows,
+                          uniqExact(Symbol) as symbols,
+                          min(ExchTimeOffsetUs) as min_offset,
+                          max(ExchTimeOffsetUs) as max_offset
+                      from stock.tick
+                      where TradingDay in {dates:Array(Date)}
+                      group by TradingDay
+                      order by TradingDay
+                      """,
+                      parameters={"dates": missing},
+                  )
+                  print("\nstock.tick counts without symbol filter on missing dates")
+                  print(counts.to_string(index=False))
+              tables = client.query_df(
+                  """
+                  select database, name, engine, total_rows
+                  from system.tables
+                  where database = 'stock'
+                    and (positionCaseInsensitive(name, 'tick') > 0
+                         or positionCaseInsensitive(name, 'snapshot') > 0)
+                  order by name
+                  """
+              )
+              print("\nstock tick-like tables")
+              print(tables.to_string(index=False))
+              PY
+          resources:
+            requests: {cpu: "1", memory: 2Gi}
+            limits: {cpu: "2", memory: 4Gi}

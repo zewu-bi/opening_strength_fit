@@ -3,6 +3,8 @@ id = "nn_ds350_label12_36m_grouped_gated_v2_mse_v1"
 kind = "exploration"
 description = "Historical max-10 baseline for the fifteen-case feature/label matrix; superseded by the authoritative max-30 run."
 status = "superseded"
+closed_at = "2026-08-06"
+status_reason = "Superseded by the completed fifteen-label max-30 matrix."
 
 [data]
 source = "labeled_pvc"

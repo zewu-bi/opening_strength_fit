@@ -20,7 +20,7 @@ from opening_strength_fit.schema import (
     normalize_clock_time,
     standardize_columns,
 )
-from opening_strength_fit.universe import DEFAULT_A_SHARE_SYMBOL_REGEX, filter_symbol_universe
+from opening_strength_fit.universe import filter_symbol_universe
 
 
 def load_ticks(
@@ -163,27 +163,6 @@ def build_labeled_feature_frame(
     if require_cross_section_ready_entry:
         sampled = require_entry_after_cross_section_ready(sampled)
     return sampled
-
-
-def build_opening_research_frame(
-    ticks: pd.DataFrame,
-    *,
-    universe_regex: str | None = DEFAULT_A_SHARE_SYMBOL_REGEX,
-    universe_symbols: set[str] | None = None,
-    sample_mode: str = "decision_points",
-    decision_times: list[str] | tuple[str, ...] = DEFAULT_DECISION_TIMES,
-    decision_max_lag_seconds: int | None = 5,
-    **label_kwargs,
-) -> pd.DataFrame:
-    return build_labeled_feature_frame(
-        ticks,
-        universe_regex=universe_regex,
-        universe_symbols=universe_symbols,
-        sample_mode=sample_mode,
-        decision_times=decision_times,
-        decision_max_lag_seconds=decision_max_lag_seconds,
-        **label_kwargs,
-    )
 
 
 def valid_labeled_rows(frame: pd.DataFrame) -> pd.DataFrame:

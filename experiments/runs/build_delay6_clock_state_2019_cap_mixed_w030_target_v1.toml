@@ -2,7 +2,9 @@
 id = "build_delay6_clock_state_2019_cap_mixed_w030_target_v1"
 kind = "cache_transform"
 description = "Build the 2019 mixed-w030 target shard from the fixed +6s wall-clock, point-in-time-state T-1 market-cap cache."
-status = "queued"
+status = "completed"
+closed_at = "2026-08-11"
+status_reason = "Governance reconciliation: completed downstream artifacts prove this prerequisite or analysis finished."
 
 [target_cache]
 input_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v4_clock6_state_unique_base_mcap_lag1/opening_2019_label_v4_clock6_state_unique_base_mcap_lag1.parquet"

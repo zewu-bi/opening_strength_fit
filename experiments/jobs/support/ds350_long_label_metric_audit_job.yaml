@@ -1,0 +1,179 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-audit-ds350-long-label-v2
+  namespace: bizewu
+  labels:
+    app: os-audit-ds350-long-label-v2
+spec:
+  activeDeadlineSeconds: 21600
+  backoffLimit: 1
+  completionMode: Indexed
+  completions: 4
+  parallelism: 4
+  ttlSecondsAfterFinished: 172800
+  template:
+    metadata:
+      labels:
+        app: os-audit-ds350-long-label-v2
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      nodeSelector:
+        has_gpu: "true"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values: [node6, node7, node8, node12, node17, node19, node20, node22, node24, node25, node26, node27, node28]
+      tolerations:
+        - key: has_gpu
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+      volumes:
+        - name: output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+      containers:
+        - name: audit
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:1c35beb1275aca13e5a71fd03bc13ae703078b29b3e2a744c77e386a32c4917a
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          envFrom:
+            - secretRef:
+                name: xy-fit-ceph-credentials
+          env:
+            - name: JOB_COMPLETION_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.annotations['batch.kubernetes.io/job-completion-index']"
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              CASES=(w0931_0940_h1h w0931_0940_hclose w1001_1010_h1h w1001_1010_hclose)
+              CASE="${CASES[${JOB_COMPLETION_INDEX:?missing index}]}"
+              python - "${CASE}" <<'PY'
+              import sys
+              from pathlib import Path
+
+              import numpy as np
+              import pandas as pd
+
+              from opening_strength_fit.stock_pool import (
+                  DEFAULT_STOCK_POOL_PATHS,
+                  load_stock_pool,
+                  stock_pool_membership_mask,
+              )
+
+              case = sys.argv[1]
+              root = Path("/mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1") / case
+              files = sorted(root.glob("month_*/predictions.parquet"))
+              if len(files) != 8:
+                  raise SystemExit(f"{case}: expected 8 prediction files, got {len(files)}")
+              columns = ["date", "symbol", "decision_target_timestamp", "prediction", "label"]
+              frame = pd.concat((pd.read_parquet(path, columns=columns) for path in files), ignore_index=True)
+              frame["date"] = pd.to_datetime(frame["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+              frame["decision_target_timestamp"] = pd.to_datetime(
+                  frame["decision_target_timestamp"], errors="coerce"
+              )
+              pool = load_stock_pool(DEFAULT_STOCK_POOL_PATHS["L"])
+              work = frame.loc[stock_pool_membership_mask(frame, pool, date_lag_sessions=0)].copy()
+              work = work.dropna(subset=["prediction", "label"])
+              keys = ["date", "decision_target_timestamp"]
+              work["score_rank"] = work.groupby(keys, sort=False)["prediction"].rank(
+                  ascending=False, method="first"
+              )
+              work["selected"] = work["score_rank"].le(100)
+
+              records = []
+              bucket_records = []
+              for (date, clock), item in work.groupby(keys, sort=False):
+                  label = pd.to_numeric(item["label"], errors="coerce")
+                  score = pd.to_numeric(item["prediction"], errors="coerce")
+                  selected = item["selected"].to_numpy(dtype=bool)
+                  pool_mean = float(label.mean())
+                  selected_mean = float(label.loc[selected].mean())
+                  label_std = float(label.std(ddof=0))
+                  pearson = float(score.corr(label, method="pearson"))
+                  spearman = float(score.corr(label, method="spearman"))
+                  score_std = float(score.std(ddof=0))
+                  selected_score_z = (
+                      float((score.loc[selected].mean() - score.mean()) / score_std)
+                      if score_std > 0 else np.nan
+                  )
+                  records.append(
+                      {
+                          "date": date,
+                          "clock": clock,
+                          "quarter": str(pd.Timestamp(date).to_period("Q")),
+                          "n": len(item),
+                          "pool_mean_bps": pool_mean * 10_000,
+                          "selected_mean_bps": selected_mean * 10_000,
+                          "excess_bps": (selected_mean - pool_mean) * 10_000,
+                          "label_std_bps": label_std * 10_000,
+                          "tail_effect_sigma": (selected_mean - pool_mean) / label_std if label_std > 0 else np.nan,
+                          "selected_score_z": selected_score_z,
+                          "pearson": pearson,
+                          "spearman": spearman,
+                      }
+                  )
+                  rank = item["score_rank"]
+                  bucket = pd.cut(
+                      rank,
+                      bins=[0, 100, 200, 500, 1000, np.inf],
+                      labels=["001-100", "101-200", "201-500", "501-1000", "1001+"],
+                      right=True,
+                  )
+                  centered = (label - pool_mean) * 10_000
+                  bucket_frame = pd.DataFrame({"bucket": bucket, "centered_bps": centered})
+                  for bucket_name, bucket_item in bucket_frame.groupby("bucket", observed=True):
+                      bucket_records.append(
+                          {
+                              "date": date,
+                              "quarter": str(pd.Timestamp(date).to_period("Q")),
+                              "clock": clock,
+                              "bucket": str(bucket_name),
+                              "rows": len(bucket_item),
+                              "centered_bps": float(bucket_item["centered_bps"].mean()),
+                          }
+                      )
+
+              metrics = pd.DataFrame(records)
+              quarterly = metrics.groupby("quarter", as_index=False).mean(numeric_only=True)
+              overall = quarterly.mean(numeric_only=True)
+              clock = metrics.assign(clock_label=metrics["clock"].dt.strftime("%H:%M")).groupby(
+                  "clock_label", as_index=False
+              ).mean(numeric_only=True)
+              buckets = pd.DataFrame(bucket_records)
+              bucket_quarter = buckets.groupby(["quarter", "bucket"], as_index=False).agg(
+                  centered_bps=("centered_bps", "mean"), rows=("rows", "mean")
+              )
+              bucket_overall = bucket_quarter.groupby("bucket", as_index=False).mean(numeric_only=True)
+
+              print(f"AUDIT_BEGIN={case}")
+              print("QUARTER_EQUAL_OVERALL")
+              print(overall.to_frame("value").to_csv())
+              print("SCORE_BUCKETS_POOL_CENTERED_BPS")
+              print(bucket_overall.to_csv(index=False))
+              print("BY_CLOCK")
+              print(clock[["clock_label", "pool_mean_bps", "selected_mean_bps", "excess_bps", "label_std_bps", "tail_effect_sigma", "pearson", "spearman"]].to_csv(index=False))
+              print("BY_QUARTER")
+              print(quarterly[["quarter", "pool_mean_bps", "selected_mean_bps", "excess_bps", "label_std_bps", "tail_effect_sigma", "pearson", "spearman"]].to_csv(index=False))
+              print(f"AUDIT_END={case}")
+              PY
+          volumeMounts:
+            - name: output
+              mountPath: /mnt/output
+          resources:
+            requests:
+              cpu: "8"
+              memory: 192Gi
+            limits:
+              cpu: "16"
+              memory: 320Gi

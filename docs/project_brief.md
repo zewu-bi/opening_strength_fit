@@ -1,6 +1,6 @@
 # Project Brief
 
-> Last reviewed: 2026-08-05
+> Last reviewed: 2026-08-11
 
 ## 目标
 
@@ -10,6 +10,10 @@
 当前 `09:31-09:40` 基准为 `opening_model`。旧 corrected-label 血缘上的三窗口 × 1m/3m 网格已经
 完成：窗口越晚，short Rank IC 越高，但可交易头部尤其隔夜超额越弱；六格中经济指标最强的是
 `09:31-09:40 / 3m`。
+
+新 ds350 分层数据上的 15-label / max-30 矩阵也已完成 120 个 rolling OOS fold，并登记为
+`opening_label_matrix`。它是当前权威研究矩阵，不是 canonical 信号晋级：`opening_model` 仍是完成既定
+信号评价的当前基准，二者不得用同一个“最新模型”概念混写。
 
 ## 固定研究口径
 
@@ -23,6 +27,7 @@
 | 目标 | `xs_norm(short_return) + 0.30 × xs_norm(next_close_return)` |
 | 验证 | `36m train -> next 6m` rolling OOS，覆盖 2022-2025 |
 | canonical base/cache/model | `opening_base` / `opening_cache` / `opening_model` |
+| canonical research matrix | `opening_label_matrix`（diagnostic only） |
 | downstream reference | archived v4 multiden；待在 `opening_model` 上重跑 |
 | ablation / historical baseline | fixed-clock v4 control / mech328 v2 |
 
@@ -80,11 +85,18 @@ next-close 和 target cache。六组 3×2 网格已经完成并归档；它们�
 | corrected 3×2：09:31 / 3m | **`20.2087 bps`** | 六格经济指标最强；旧兼容血缘结论 |
 | corrected 3×2：10:01 / 1m~3m | `6.6667~8.3935 bps` | 信号层归档；不晋级 |
 | corrected 3×2：14:01 / 1m~3m | `1.0904~2.3101 bps` | 信号层归档；不晋级 |
+| ds350 max-30：09:31 / 1m~close | `17.6132~20.6595 bps` next excess | 当前权威 label 矩阵；待策略验收 |
+| ds350 max-30：10:01 / 1m~close | `7.1724~10.7120 bps` next excess | 窗口衰减确认；诊断保留 |
+| ds350 max-30：14:01 / 1m~5m | `1.1508~2.7231 bps` next excess | 明显衰减；不进入晋级队列 |
 
 `opening_model` 的当前证据见
 [baseline evidence](../experiments/evidence/baselines/opening_model/)，不可变来源见
 [canonical registry](../experiments/canonical/opening.toml)。完整历史数字见
 [experiment log](experiment_log.md)。
+
+15-label 的逐 case 指标见
+[max-30 evidence](../experiments/evidence/backtests/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/README.md)。
+不同 horizon 改变了监督目标，表中最好数字不能直接解释为单变量模型提升。
 
 ## 验收逻辑
 
@@ -104,12 +116,14 @@ overlap 等用于风险解释，不设自动通过或否决门槛。
 - 尚无通用的全天持仓、退出和现金复用账本；
 - ask2-10 深度在现有输入中无有效信息；
 - GPU 复跑依赖 run/Job 中记录的镜像和外部 cache。
-- 当前 350-feature NN 训练只支持高显存 GPU 驻留快路径；80/96GB 节点一次保存约 48GiB 训练
-  tensor。主机内存峰值仍约 202GiB，因此资源口径为 8 CPU、256GiB request、1 GPU。
+- 当前 350-feature NN 优先使用高显存 GPU 驻留快路径；80/96GB 节点一次保存约 48GiB 训练 tensor。
+  代码保留可显式选择的 host/vectorized 路径，但权威矩阵配置不允许显存不足时静默 fallback。完整矩阵的
+  历史主机内存峰值约 202GiB，因此正式资源口径仍为 8 CPU、256GiB request、1 GPU。
 
 后续顺序：
 
-1. 在 `opening_model` 上重跑 unified capacity/no-refill/visible-refill；
-2. 后续新实验直接使用分层后的 `features_350 + horizon label` 数据，不再现场拼旧 target cache；
-3. 如需把 3×2 结论迁移到新权威数据版本，按同一模型/seed/rolling-OOS 口径完整重跑；
-4. 只让 09:31 窗口中保留足够经济收益的候选进入完整策略验收。
+1. 从 `opening_label_matrix` 的 09:31 候选中预注册少量候选，完成统一
+   capacity/no-refill/visible-refill、exposure 和 strategy acceptance；
+2. 只有完整验收通过后，才创建新的 `opening_model` source run 并原子更新 canonical/evidence/docs；
+3. 后续新实验直接使用分层后的 `features_350 + horizon label` 数据，不再现场拼旧 target cache；
+4. 10:01/14:01 保留为衰减诊断，不在没有新假设时重复消耗训练资源。

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -9,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from opening_strength_fit.model_metrics import array_corr
 from opening_strength_fit.stock_pool import load_stock_pool
 
 CANONICAL_WEIGHTING = "decision_group_equal"
@@ -74,31 +74,7 @@ def stock_pool_membership_mask(frame: pd.DataFrame, pool: pd.DataFrame) -> np.nd
 
 
 def spearman_rank_ic(scores: np.ndarray, outcomes: np.ndarray) -> float:
-    if len(scores) != len(outcomes):
-        raise ValueError("scores and outcomes must have the same length")
-    valid = np.isfinite(scores) & np.isfinite(outcomes)
-    if valid.sum() < 3:
-        return math.nan
-    scores = scores[valid]
-    outcomes = outcomes[valid]
-    if np.ptp(scores) == 0 or np.ptp(outcomes) == 0:
-        return math.nan
-    x_rank = pd.Series(scores, copy=False).rank(method="average").to_numpy(dtype="float64")
-    y_rank = pd.Series(outcomes, copy=False).rank(method="average").to_numpy(dtype="float64")
-    return float(np.corrcoef(x_rank, y_rank)[0, 1])
-
-
-def fixed_score_spearman(excess_bps: np.ndarray) -> float:
-    """Rank IC for rows already sorted from highest to lowest score.
-
-    This compatibility helper uses unique descending score positions, but keeps
-    outcome ties intact through average ranks. New calculations should call
-    ``spearman_rank_ic`` with the original score values so score ties are also
-    handled correctly.
-    """
-    n = len(excess_bps)
-    scores = np.arange(n, 0, -1, dtype="float64")
-    return spearman_rank_ic(scores, excess_bps)
+    return array_corr(scores, outcomes, "spearman")
 
 
 def summarize_monthly_stability(

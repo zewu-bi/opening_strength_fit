@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 from collections.abc import Callable
 from pathlib import Path
 
@@ -14,24 +13,18 @@ from opening_strength_fit.analysis import (
     selection_return_stats,
     write_json,
 )
-from opening_strength_fit.analysis import (
-    load_or_fetch_next_close_labels as shared_load_or_fetch_next_close_labels,
-)
-from opening_strength_fit.clickhouse_ticks import (
-    DEFAULT_CLICKHOUSE_TICK_HOST,
-    DEFAULT_CLICKHOUSE_TICK_TABLE,
-)
-from opening_strength_fit.horizon_clickhouse_labels import compute_clickhouse_close_labels
-from opening_strength_fit.horizons import HorizonSpec
 from opening_strength_fit.io import frame_columns, read_frame
+from opening_strength_fit.next_close_labels import (
+    add_next_close_label_arguments,
+    load_or_fetch_next_close_labels_from_args,
+)
+from opening_strength_fit.schema import DECISION_KEY_COLUMNS
 
 DEFAULT_INPUT = (
     "output/legacy/predictions/lgbm_delay2_postopen_0931_0940_baseline_v1/predictions_all.parquet"
 )
 DEFAULT_OUTPUT_DIR = "output/legacy/reports/lgbm_delay2_postopen_tail_guards_v1"
-DEFAULT_CLOSE_OFFSET_US = 54_000_000_000
-DEFAULT_CLOSE_LOOKBACK_SECONDS = 1_800
-KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
+KEY_COLUMNS = DECISION_KEY_COLUMNS
 BASE_COLUMNS = (*KEY_COLUMNS, "prediction", "label")
 GUARD_COLUMNS = (
     "spread_bps",
@@ -53,34 +46,12 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument("--input", default=DEFAULT_INPUT)
-    parser.add_argument("--next-close-label-input", default="")
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--score-col", default="prediction")
     parser.add_argument("--top-n", type=int, default=100)
     parser.add_argument("--start-clock", default="09:31")
     parser.add_argument("--end-clock", default="09:40")
-    parser.add_argument("--clickhouse-host", default=os.environ.get("CLICKHOUSE_HOST", ""))
-    parser.add_argument(
-        "--clickhouse-port",
-        type=int,
-        default=int(os.environ.get("CLICKHOUSE_PORT", "8123")),
-    )
-    parser.add_argument("--clickhouse-user", default=os.environ.get("CLICKHOUSE_USER", ""))
-    parser.add_argument(
-        "--clickhouse-password",
-        default=os.environ.get("CLICKHOUSE_PASSWORD", ""),
-    )
-    parser.add_argument(
-        "--clickhouse-table",
-        default=os.environ.get("CLICKHOUSE_TICK_TABLE", DEFAULT_CLICKHOUSE_TICK_TABLE),
-    )
-    parser.add_argument("--close-offset-us", type=int, default=DEFAULT_CLOSE_OFFSET_US)
-    parser.add_argument(
-        "--close-lookback-seconds",
-        type=int,
-        default=DEFAULT_CLOSE_LOOKBACK_SECONDS,
-    )
-    parser.add_argument("--calendar-days-after", type=int, default=10)
+    add_next_close_label_arguments(parser, include_connection=True)
     return parser.parse_args()
 
 
@@ -114,46 +85,6 @@ def load_predictions(path: Path, clocks: list[str], score_col: str) -> pd.DataFr
 
 def load_next_close_labels(path: Path) -> pd.DataFrame:
     return load_next_close_label_file(path, key_columns=KEY_COLUMNS)
-
-
-def load_or_fetch_next_close_labels(
-    predictions: pd.DataFrame,
-    *,
-    args: argparse.Namespace,
-    output_dir: Path,
-) -> pd.DataFrame:
-    def _fetch(base: pd.DataFrame) -> pd.DataFrame:
-        if "buy_price" not in base.columns:
-            raise SystemExit(
-                "next-close labels not found and prediction input has no buy_price "
-                "column for ClickHouse label generation."
-            )
-        if not args.clickhouse_user or not args.clickhouse_password:
-            raise SystemExit(
-                "next-close labels not found. Pass --next-close-label-input or set "
-                "CLICKHOUSE_USER and CLICKHOUSE_PASSWORD."
-            )
-        return compute_clickhouse_close_labels(
-            base[["date", "symbol", "decision_target_timestamp", "buy_price"]].copy(),
-            [HorizonSpec(name="next_close", label="next close", seconds=None)],
-            host=args.clickhouse_host or DEFAULT_CLICKHOUSE_TICK_HOST,
-            port=int(args.clickhouse_port),
-            username=args.clickhouse_user,
-            password=args.clickhouse_password,
-            table=args.clickhouse_table,
-            close_offset_us=int(args.close_offset_us),
-            close_lookback_seconds=int(args.close_lookback_seconds),
-            calendar_days_after=int(args.calendar_days_after),
-            fee_bps=0.0,
-        )
-
-    return shared_load_or_fetch_next_close_labels(
-        predictions,
-        output_dir=output_dir,
-        label_input=args.next_close_label_input,
-        fetch_labels=_fetch,
-        key_columns=KEY_COLUMNS,
-    )
 
 
 def add_group_ranks(frame: pd.DataFrame, columns: tuple[str, ...]) -> pd.DataFrame:
@@ -398,7 +329,7 @@ def main() -> None:
     clocks = clock_range(args.start_clock, args.end_clock)
 
     predictions = load_predictions(Path(args.input), clocks, args.score_col)
-    next_labels = load_or_fetch_next_close_labels(
+    next_labels = load_or_fetch_next_close_labels_from_args(
         predictions,
         args=args,
         output_dir=output_dir,

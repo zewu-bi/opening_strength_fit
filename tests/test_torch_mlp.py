@@ -10,6 +10,7 @@ import pandas as pd
 from opening_strength_fit.model import predict_frame
 from opening_strength_fit.torch_model.training import (
     _resolve_training_tensor_storage,
+    _torch_loss,
     _torch_random_sampler_order,
 )
 from opening_strength_fit.training_modeling import fit_prediction_model
@@ -63,6 +64,30 @@ def test_required_cuda_resident_storage_rejects_insufficient_memory() -> None:
 
 @unittest.skipUnless(importlib.util.find_spec("torch"), "PyTorch is not installed")
 class TorchMLPTest(unittest.TestCase):
+    def test_huber_mse_blend_loss(self) -> None:
+        import torch
+
+        prediction = torch.tensor([0.0, 2.0])
+        target = torch.zeros(2)
+        huber = _torch_loss("huber", torch, huber_beta=1.0)(prediction, target)
+        blended = _torch_loss(
+            "huber_mse_blend",
+            torch,
+            huber_beta=1.0,
+            mse_blend_weight=0.2,
+        )(prediction, target)
+
+        torch.testing.assert_close(huber, torch.tensor([0.0, 1.5]))
+        torch.testing.assert_close(blended, torch.tensor([0.0, 2.0]))
+
+    def test_huber_mse_blend_rejects_invalid_settings(self) -> None:
+        import torch
+
+        with self.assertRaisesRegex(SystemExit, "huber_beta"):
+            _torch_loss("huber", torch, huber_beta=0.0)
+        with self.assertRaisesRegex(SystemExit, "mse_blend_weight"):
+            _torch_loss("huber_mse_blend", torch, mse_blend_weight=1.1)
+
     def _toy_frame(self) -> pd.DataFrame:
         rows = 32
         return pd.DataFrame(

@@ -2,7 +2,9 @@
 id = "lgbm_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_raw_v1"
 kind = "exploration"
 description = "A: current fixed-clock v4 auction-pruned 350-feature lineage with raw base values plus 25 explicit multi-denominator ratios; LightGBM uses native missing values and real row bagging."
-status = "queued"
+status = "superseded"
+closed_at = "2026-08-11"
+status_reason = "Governance reconciliation: the later ds350 layered-data lineage replaced this unexecuted route."
 
 [data]
 source = "labeled_pvc"

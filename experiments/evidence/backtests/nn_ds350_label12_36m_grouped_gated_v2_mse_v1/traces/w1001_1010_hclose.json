@@ -1,0 +1,23 @@
+{
+  "created_at_utc": "2026-08-06T02:24:46.967608+00:00",
+  "run_id": "nn_ds350_w1001_1010_hclose_36m_grouped_gated_v2_mse_v1",
+  "variant": "w1001_1010_hclose",
+  "backtest_mode": "self",
+  "predictions": [
+    "/mnt/output/opening_strength_fit/nn/nn_ds350_label12_36m_grouped_gated_v2_mse_v1/w1001_1010_hclose"
+  ],
+  "next_close_label_input": "/mnt/output/opening_strength_fit/cache/opening_2019_2025_next_close_decision_clock_state_clock6_1001_1010",
+  "rows": 47999580,
+  "missing_next_close_rows": 4282,
+  "pools": [
+    "universe",
+    "L"
+  ],
+  "top_n": 100,
+  "pool_date_lag_sessions": 0,
+  "plot_period": "month",
+  "report_plots": {},
+  "weekly_outputs": {},
+  "company_backtest": {},
+  "record_paths": []
+}

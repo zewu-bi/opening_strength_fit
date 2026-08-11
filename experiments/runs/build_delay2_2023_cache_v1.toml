@@ -3,6 +3,8 @@ id = "build_delay2_2023_cache_v1"
 kind = "labeled_cache"
 description = "Build the 2023 shard of the 2023-2024 09:30-09:40 delay2 labeled cache for 2024 monthly rolling validation."
 status = "superseded"
+closed_at = "2026-07-16"
+status_reason = "Replaced by the corrected v2 cache build."
 
 [data]
 source = "clickhouse"

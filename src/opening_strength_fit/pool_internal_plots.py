@@ -1,11 +1,23 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 import pandas as pd
 
 from opening_strength_fit.analysis import write_json
+from opening_strength_fit.pool_internal_plot_metadata import (
+    pool_group_slug as _pool_group_slug,
+)
+from opening_strength_fit.pool_internal_plot_metadata import (
+    pool_group_title as _pool_group_title,
+)
+from opening_strength_fit.pool_internal_plot_metadata import slug_label as slug_label
+from opening_strength_fit.pool_internal_plot_metadata import (
+    summary_months as _summary_months,
+)
+from opening_strength_fit.pool_internal_plot_metadata import (
+    write_plot_trace as _write_plot_trace,
+)
 from opening_strength_fit.pool_internal_plot_svg import FONT_FAMILY as FONT_FAMILY
 from opening_strength_fit.pool_internal_plot_svg import PLOT_COLORS as PLOT_COLORS
 from opening_strength_fit.pool_internal_plot_svg import PLOT_POOLS
@@ -16,11 +28,6 @@ from opening_strength_fit.pool_internal_plot_svg import (
 from opening_strength_fit.pool_internal_plot_svg import (
     write_two_panel_line_svg as _write_two_panel_line_svg,
 )
-
-
-def slug_label(value: str) -> str:
-    text = re.sub(r"[^A-Za-z0-9]+", "_", value.strip()).strip("_").lower()
-    return text or "pool_internal"
 
 
 def month_major_plot_data(
@@ -400,32 +407,41 @@ def write_daily_pool_internal_cumulative_plot(
     )
 
 
-def write_company_backtest_cumulative_plot(
+def _write_company_backtest_plot(
     plot_data: pd.DataFrame,
     output_dir: Path,
     *,
-    input_path: Path | None = None,
-    output_prefix: str = "company_backtest",
-    output_name: str = "",
-    variant_label: str = "company API",
-    pools: tuple[str, ...] | None = None,
-    series_colors: dict[str, str] | None = None,
-    x_label_mode: str = "years_only",
+    input_path: Path | None,
+    output_prefix: str,
+    output_name: str,
+    variant_label: str,
+    pools: tuple[str, ...] | None,
+    series_colors: dict[str, str] | None,
+    x_label_mode: str,
+    second_column: str,
+    error_label: str,
+    palette: tuple[str, ...],
+    default_stem_suffix: str,
+    title: str,
+    second_panel_title: str,
+    result_prefix: str,
+    metric: str,
+    style: str,
+    cumulative_definition: str,
 ) -> dict[str, str]:
-    required = {"pool", "week_start", "profit_cumulative_bps", "alpha_cumulative_bps"}
+    required = {"pool", "week_start", "profit_cumulative_bps", second_column}
     missing = sorted(required - set(plot_data.columns))
     if missing:
-        raise ValueError(f"company backtest plot data missing columns: {missing}")
+        raise ValueError(f"{error_label} missing columns: {missing}")
 
     output_prefix = slug_label(output_prefix)
     data = plot_data.copy()
     data["week_start"] = pd.to_datetime(data["week_start"], errors="coerce")
     data = data.dropna(subset=["week_start"]).sort_values(["pool", "week_start"])
     if data.empty:
-        raise ValueError("company backtest plot data is empty")
+        raise ValueError(f"{error_label.removesuffix(' missing columns:')} is empty")
 
     pools = tuple(pools or data["pool"].dropna().astype(str).drop_duplicates().tolist())
-    palette = ("#e49413", "#009e73", "#2f6796", "#5d6674", "#d55e00", "#7a68a6")
     series_colors = dict(series_colors or {})
     for index, pool in enumerate(pools):
         PLOT_COLORS.setdefault(pool, series_colors.get(pool, palette[index % len(palette)]))
@@ -435,13 +451,13 @@ def write_company_backtest_cumulative_plot(
         include_zero=True,
         target_ticks=9,
     )
-    (alpha_ylim, alpha_step) = _nice_line_axis(
-        data["alpha_cumulative_bps"],
+    (second_ylim, second_step) = _nice_line_axis(
+        data[second_column],
         include_zero=True,
         target_ticks=9,
     )
 
-    file_stem = slug_label(output_name) if output_name else f"{output_prefix}_company_backtest"
+    file_stem = slug_label(output_name) if output_name else f"{output_prefix}_{default_stem_suffix}"
     chart_dir = output_dir if output_name else output_dir / file_stem
     plot_data_path = chart_dir / f"{file_stem}_plot_data.csv"
     figure = chart_dir / f"{file_stem}.svg"
@@ -453,7 +469,7 @@ def write_company_backtest_cumulative_plot(
 
     _write_two_panel_line_svg(
         csv_data,
-        title=f"{variant_label} 公司API回测累和",
+        title=f"{variant_label} {title}",
         panels=[
             {
                 "title": "收益累和",
@@ -465,11 +481,11 @@ def write_company_backtest_cumulative_plot(
                 "fixed_ylim": True,
             },
             {
-                "title": "Alpha累和",
+                "title": second_panel_title,
                 "ylabel": "bps",
-                "column": "alpha_cumulative_bps",
-                "default_ylim": alpha_ylim,
-                "tick_step": alpha_step,
+                "column": second_column,
+                "default_ylim": second_ylim,
+                "tick_step": second_step,
                 "tick_decimals": None,
                 "fixed_ylim": True,
             },
@@ -487,20 +503,53 @@ def write_company_backtest_cumulative_plot(
             "variant_label": variant_label,
             "series": list(pools),
             "included_dates": sorted(csv_data["week_start"].dropna().astype(str).unique()),
-            "metric": "company_backtest_cumulative_profit_alpha",
-            "style": "manual svg two-panel line figure for company API profit and alpha",
-            "cumulative_definition": (
-                "cumulative sum of company API daily profit and alpha, displayed in bps"
-            ),
+            "metric": metric,
+            "style": style,
+            "cumulative_definition": cumulative_definition,
             "x_label_mode": x_label_mode,
         },
         ensure_ascii=True,
     )
     return {
-        "company_backtest_plot_data": str(plot_data_path),
-        "company_backtest_figure": str(figure),
-        "company_backtest_trace": str(trace),
+        f"{result_prefix}_plot_data": str(plot_data_path),
+        f"{result_prefix}_figure": str(figure),
+        f"{result_prefix}_trace": str(trace),
     }
+
+
+def write_company_backtest_cumulative_plot(
+    plot_data: pd.DataFrame,
+    output_dir: Path,
+    *,
+    input_path: Path | None = None,
+    output_prefix: str = "company_backtest",
+    output_name: str = "",
+    variant_label: str = "company API",
+    pools: tuple[str, ...] | None = None,
+    series_colors: dict[str, str] | None = None,
+    x_label_mode: str = "years_only",
+) -> dict[str, str]:
+    return _write_company_backtest_plot(
+        plot_data,
+        output_dir,
+        input_path=input_path,
+        output_prefix=output_prefix,
+        output_name=output_name,
+        variant_label=variant_label,
+        pools=pools,
+        series_colors=series_colors,
+        x_label_mode=x_label_mode,
+        second_column="alpha_cumulative_bps",
+        error_label="company backtest plot data",
+        palette=("#e49413", "#009e73", "#2f6796", "#5d6674", "#d55e00", "#7a68a6"),
+        default_stem_suffix="company_backtest",
+        title="公司API回测累和",
+        second_panel_title="Alpha累和",
+        result_prefix="company_backtest",
+        metric="company_backtest_cumulative_profit_alpha",
+        style="manual svg two-panel line figure for company API profit and alpha",
+        cumulative_definition="cumulative sum of company API daily profit and alpha, displayed in bps",
+    )
 
 
 def write_company_backtest_neutral_comparison_plot(
@@ -515,101 +564,30 @@ def write_company_backtest_neutral_comparison_plot(
     series_colors: dict[str, str] | None = None,
     x_label_mode: str = "years_only",
 ) -> dict[str, str]:
-    required = {
-        "pool",
-        "week_start",
-        "profit_cumulative_bps",
-        "incremental_cumulative_bps",
-    }
-    missing = sorted(required - set(plot_data.columns))
-    if missing:
-        raise ValueError(f"company neutral comparison plot data missing columns: {missing}")
-
-    output_prefix = slug_label(output_prefix)
-    data = plot_data.copy()
-    data["week_start"] = pd.to_datetime(data["week_start"], errors="coerce")
-    data = data.dropna(subset=["week_start"]).sort_values(["pool", "week_start"])
-    if data.empty:
-        raise ValueError("company neutral comparison plot data is empty")
-
-    pools = tuple(pools or data["pool"].dropna().astype(str).drop_duplicates().tolist())
-    palette = ("#e49413", "#009e73", "#5d6674", "#2f6796", "#7a68a6", "#d55e00")
-    series_colors = dict(series_colors or {})
-    for index, pool in enumerate(pools):
-        PLOT_COLORS.setdefault(pool, series_colors.get(pool, palette[index % len(palette)]))
-
-    (profit_ylim, profit_step) = _nice_line_axis(
-        data["profit_cumulative_bps"],
-        include_zero=True,
-        target_ticks=9,
-    )
-    (incremental_ylim, incremental_step) = _nice_line_axis(
-        data["incremental_cumulative_bps"],
-        include_zero=True,
-        target_ticks=9,
-    )
-
-    file_stem = slug_label(output_name) if output_name else f"{output_prefix}_neutral_comparison"
-    chart_dir = output_dir if output_name else output_dir / file_stem
-    plot_data_path = chart_dir / f"{file_stem}_plot_data.csv"
-    figure = chart_dir / f"{file_stem}.svg"
-    trace = chart_dir / f"{file_stem}_trace.json"
-    chart_dir.mkdir(parents=True, exist_ok=True)
-    csv_data = data.copy()
-    csv_data["week_start"] = csv_data["week_start"].dt.strftime("%Y-%m-%d")
-    csv_data.to_csv(plot_data_path, index=False, float_format="%.6f")
-
-    _write_two_panel_line_svg(
-        csv_data,
-        title=f"{variant_label} 公司API neutral baseline",
-        panels=[
-            {
-                "title": "收益累和",
-                "ylabel": "bps",
-                "column": "profit_cumulative_bps",
-                "default_ylim": profit_ylim,
-                "tick_step": profit_step,
-                "tick_decimals": None,
-                "fixed_ylim": True,
-            },
-            {
-                "title": "相对 neutral_pool 增量",
-                "ylabel": "bps",
-                "column": "incremental_cumulative_bps",
-                "default_ylim": incremental_ylim,
-                "tick_step": incremental_step,
-                "tick_decimals": None,
-                "fixed_ylim": True,
-            },
-        ],
-        output_path=figure,
+    return _write_company_backtest_plot(
+        plot_data,
+        output_dir,
+        input_path=input_path,
+        output_prefix=output_prefix,
+        output_name=output_name,
+        variant_label=variant_label,
         pools=pools,
+        series_colors=series_colors,
         x_label_mode=x_label_mode,
+        second_column="incremental_cumulative_bps",
+        error_label="company neutral comparison plot data",
+        palette=("#e49413", "#009e73", "#5d6674", "#2f6796", "#7a68a6", "#d55e00"),
+        default_stem_suffix="neutral_comparison",
+        title="公司API neutral baseline",
+        second_panel_title="相对 neutral_pool 增量",
+        result_prefix="company_neutral_comparison",
+        metric="company_backtest_neutral_comparison",
+        style="manual svg two-panel line figure for company API neutral baseline",
+        cumulative_definition=(
+            "top panel: cumulative company API profit for model and neutral pool; "
+            "bottom panel: cumulative model profit minus neutral-pool profit, in bps"
+        ),
     )
-    write_json(
-        trace,
-        {
-            "input": str(input_path) if input_path is not None else None,
-            "plot_data": str(plot_data_path),
-            "figure": str(figure),
-            "variant_label": variant_label,
-            "series": list(pools),
-            "included_dates": sorted(csv_data["week_start"].dropna().astype(str).unique()),
-            "metric": "company_backtest_neutral_comparison",
-            "style": "manual svg two-panel line figure for company API neutral baseline",
-            "cumulative_definition": (
-                "top panel: cumulative company API profit for model and neutral pool; "
-                "bottom panel: cumulative model profit minus neutral-pool profit, in bps"
-            ),
-            "x_label_mode": x_label_mode,
-        },
-        ensure_ascii=True,
-    )
-    return {
-        "company_neutral_comparison_plot_data": str(plot_data_path),
-        "company_neutral_comparison_figure": str(figure),
-        "company_neutral_comparison_trace": str(trace),
-    }
 
 
 def _write_cumulative_pool_internal_plot(
@@ -874,52 +852,3 @@ def _write_horizon_excess_rank_ic_plots(
         outputs[f"{slug}_excess_rank_ic_plot_data"] = str(plot_data)
         outputs[f"{slug}_excess_rank_ic_figure"] = str(figure)
     return outputs
-
-
-def _pool_group_slug(pools: tuple[str, ...]) -> str:
-    if pools == PLOT_POOLS:
-        return "universe_sml"
-    return slug_label("_".join(pools))
-
-
-def _pool_group_title(pools: tuple[str, ...]) -> str:
-    if pools == PLOT_POOLS:
-        return "universe / S / M / L"
-    labels = {
-        "pool_S": "S",
-        "pool_M": "M",
-        "pool_L": "L",
-    }
-    return " / ".join(labels.get(pool, pool) for pool in pools)
-
-
-def _summary_months(month_summary: pd.DataFrame) -> list[str]:
-    return sorted(month_summary["test_month"].astype(str).unique())
-
-
-def _write_plot_trace(
-    path: Path,
-    *,
-    input_path: Path | None,
-    plot_data: Path,
-    figure: Path,
-    variant_label: str,
-    included_months: list[str],
-    metric: str,
-    pools: tuple[str, ...] = PLOT_POOLS,
-) -> None:
-    write_json(
-        path,
-        {
-            "input": str(input_path) if input_path is not None else None,
-            "plot_data": str(plot_data),
-            "figure": str(figure),
-            "variant_label": variant_label,
-            "series": list(pools),
-            "included_months": included_months,
-            "mean": "simple average across monthly summary rows",
-            "metric": metric,
-            "style": "manual svg two-panel figure for selected pools",
-        },
-        ensure_ascii=True,
-    )

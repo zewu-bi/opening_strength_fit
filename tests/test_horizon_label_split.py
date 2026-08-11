@@ -6,11 +6,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from opening_strength_fit.commands.horizon_label_split import (
-    OUTPUT_COLUMNS,
-    split_label_year,
-)
+from opening_strength_fit.commands.horizon_label_split import split_label_year
 from opening_strength_fit.io import read_frame, write_frame_atomic
+from opening_strength_fit.label_splitting import OUTPUT_COLUMNS
 
 
 def test_split_label_year_writes_three_training_datasets_without_valid_flags(

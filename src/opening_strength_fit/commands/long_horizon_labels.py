@@ -1,19 +1,12 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import pandas as pd
 import pyarrow.parquet as pq
 
-from opening_strength_fit.commands.training_dataset_build import (
-    KEY_COLUMNS,
-    RAW_LABEL_TICK_COLUMNS,
-    _build_label_base,
-    _normalize_keys,
-    _validate_output_keys,
-    compute_short_label_set,
-)
 from opening_strength_fit.config import (
     config_float,
     config_int,
@@ -27,10 +20,20 @@ from opening_strength_fit.training_dataset_features import (
     decode_clickhouse_text,
     normalize_clickhouse_date,
 )
+from opening_strength_fit.training_dataset_labels import (
+    KEY_COLUMNS,
+    RAW_LABEL_TICK_COLUMNS,
+    build_label_base,
+    compute_clock_vwap_label_set,
+    normalize_dataset_keys,
+    validate_dataset_keys,
+)
 
 STATE_TICK_COLUMNS = ("Symbol", "ExchTimeOffsetUs", "Volume", "Turnover")
 LABEL_COLUMNS = ("label_hold_10m", "label_hold_1h", "label_same_day_close")
 VALID_COLUMNS = ("valid_hold_10m", "valid_hold_1h", "valid_same_day_close")
+
+_LONG_LABEL_WORKER_STATE: dict[str, object] | None = None
 
 
 def _years(config: dict) -> tuple[int, ...]:
@@ -68,9 +71,7 @@ def _state_ticks(base_ticks: pd.DataFrame, paths: list[Path]) -> pd.DataFrame:
     parts.extend(read_frame(path, columns=list(STATE_TICK_COLUMNS)) for path in paths)
     state = pd.concat(parts, ignore_index=True)
     state["Symbol"] = decode_clickhouse_text(state["Symbol"])
-    state["ExchTimeOffsetUs"] = pd.to_numeric(
-        state["ExchTimeOffsetUs"], errors="coerce"
-    )
+    state["ExchTimeOffsetUs"] = pd.to_numeric(state["ExchTimeOffsetUs"], errors="coerce")
     state = state.dropna(subset=["Symbol", "ExchTimeOffsetUs"])
     return (
         state.sort_values(["Symbol", "ExchTimeOffsetUs"], kind="mergesort")
@@ -119,12 +120,14 @@ def same_day_close_label(
 
 
 def _reuse_next_close(base: pd.DataFrame, source_path: Path) -> pd.DataFrame:
-    source = _normalize_keys(
+    source = normalize_dataset_keys(
         read_frame(source_path, columns=[*KEY_COLUMNS, "label_next_close"])
     )
     duplicate = source.duplicated(list(KEY_COLUMNS), keep=False)
     if duplicate.any():
-        raise SystemExit(f"next-close source has {int(duplicate.sum())} duplicate keys: {source_path}")
+        raise SystemExit(
+            f"next-close source has {int(duplicate.sum())} duplicate keys: {source_path}"
+        )
     merged = base[list(KEY_COLUMNS)].merge(
         source,
         on=list(KEY_COLUMNS),
@@ -142,6 +145,79 @@ def _reuse_next_close(base: pd.DataFrame, source_path: Path) -> pd.DataFrame:
     return merged
 
 
+def _initialize_long_label_worker(
+    base_year_root: Path,
+    state_year_roots: list[Path],
+    clocks: tuple[str, ...],
+    horizons: tuple[int, ...],
+    feature_tick_start_offset_us: int,
+    entry_delay_seconds: int,
+    sell_window_seconds: int,
+    volume_unit_multiplier: float,
+    fee_bps: float,
+    tradable: tuple[str, ...],
+) -> None:
+    global _LONG_LABEL_WORKER_STATE
+    close_reference = read_frame(
+        base_year_root / "close_reference.parquet",
+        columns=["TradingDay", "Symbol", "ClosePrice"],
+    )
+    _LONG_LABEL_WORKER_STATE = {
+        "base_year_root": base_year_root,
+        "state_year_roots": state_year_roots,
+        "clocks": clocks,
+        "horizons": horizons,
+        "feature_tick_start_offset_us": feature_tick_start_offset_us,
+        "entry_delay_seconds": entry_delay_seconds,
+        "sell_window_seconds": sell_window_seconds,
+        "volume_unit_multiplier": volume_unit_multiplier,
+        "fee_bps": fee_bps,
+        "tradable": tradable,
+        "close_reference": close_reference,
+    }
+
+
+def _build_long_label_worker(trading_day: str) -> pd.DataFrame:
+    if _LONG_LABEL_WORKER_STATE is None:
+        raise RuntimeError("long-label worker was not initialized")
+    state = _LONG_LABEL_WORKER_STATE
+    base_year_root = state["base_year_root"]
+    base_path = _tick_path(base_year_root, trading_day)
+    base_ticks = read_frame(base_path, columns=list(RAW_LABEL_TICK_COLUMNS))
+    base = build_label_base(
+        base_ticks,
+        trading_day=trading_day,
+        decision_times=state["clocks"],
+        feature_tick_start_offset_us=state["feature_tick_start_offset_us"],
+        entry_delay_seconds=state["entry_delay_seconds"],
+    )
+    state_paths = [_tick_path(root, trading_day) for root in state["state_year_roots"]]
+    projected = _state_ticks(base_ticks, state_paths)
+    timed = compute_clock_vwap_label_set(
+        base,
+        projected,
+        horizons=state["horizons"],
+        sell_window_seconds=state["sell_window_seconds"],
+        volume_unit_multiplier=state["volume_unit_multiplier"],
+        fee_bps=state["fee_bps"],
+        tradable_statuses=state["tradable"],
+    ).rename(
+        columns={
+            "label_short_10m": "label_hold_10m",
+            "valid_short_10m": "valid_hold_10m",
+            "label_short_60m": "label_hold_1h",
+            "valid_short_60m": "valid_hold_1h",
+        }
+    )
+    same_close = same_day_close_label(
+        base,
+        state["close_reference"],
+        tradable_statuses=state["tradable"],
+        fee_bps=state["fee_bps"],
+    )
+    return timed.merge(same_close, on=list(KEY_COLUMNS), validate="one_to_one")
+
+
 def build_label_year(
     config: dict,
     config_path: Path,
@@ -150,12 +226,11 @@ def build_label_year(
     start_date: str,
     end_date: str,
     overwrite: bool,
+    workers: int = 1,
 ) -> dict[str, object]:
     base_root_value = config_str(config, "dataset", "raw_source_root", "").strip()
     output_root_value = config_str(config, "dataset", "label_output_root", "").strip()
-    next_close_root_value = config_str(
-        config, "dataset", "next_close_label_root", ""
-    ).strip()
+    next_close_root_value = config_str(config, "dataset", "next_close_label_root", "").strip()
     if not base_root_value or not output_root_value or not next_close_root_value:
         raise SystemExit(
             "[dataset] requires raw_source_root, label_output_root, and next_close_label_root"
@@ -175,67 +250,50 @@ def build_label_year(
     horizons = tuple(int(value) for value in config_list(config, "dataset", "horizons_seconds", []))
     if horizons != (600, 3600):
         raise SystemExit("long label horizons must be [600, 3600]")
-    tradable = tuple(
-        config_list(config, "dataset", "tradable_statuses", ["T0", "20", "TRADE"])
-    )
+    tradable = tuple(config_list(config, "dataset", "tradable_statuses", ["T0", "20", "TRADE"]))
     fee_bps = config_float(config, "dataset", "fee_bps", 0.0)
     days = _trading_days(base_year_root, start_date, end_date)
     if not days:
         raise SystemExit(f"no raw tick days in {start_date}..{end_date}")
-    close_reference = read_frame(
-        base_year_root / "close_reference.parquet",
-        columns=["TradingDay", "Symbol", "ClosePrice"],
+    if workers < 1:
+        raise SystemExit("long-label workers must be >= 1")
+    worker_args = (
+        base_year_root,
+        state_year_roots,
+        clocks,
+        horizons,
+        config_int(config, "dataset", "feature_tick_start_offset_us", 0),
+        config_int(config, "dataset", "entry_delay_seconds", 6),
+        config_int(config, "dataset", "sell_window_seconds", 60),
+        config_float(config, "dataset", "volume_unit_multiplier", 1.0),
+        fee_bps,
+        tradable,
     )
-
     parts = []
-    for index, trading_day in enumerate(days, start=1):
-        base_path = _tick_path(base_year_root, trading_day)
-        base_ticks = read_frame(base_path, columns=list(RAW_LABEL_TICK_COLUMNS))
-        base = _build_label_base(
-            base_ticks,
-            trading_day=trading_day,
-            decision_times=clocks,
-            feature_tick_start_offset_us=config_int(
-                config, "dataset", "feature_tick_start_offset_us", 0
-            ),
-            entry_delay_seconds=config_int(config, "dataset", "entry_delay_seconds", 6),
+    if workers == 1:
+        _initialize_long_label_worker(*worker_args)
+        built_parts = (_build_long_label_worker(day) for day in days)
+    else:
+        executor = ProcessPoolExecutor(
+            max_workers=workers,
+            initializer=_initialize_long_label_worker,
+            initargs=worker_args,
         )
-        state_paths = [_tick_path(root, trading_day) for root in state_year_roots]
-        state = _state_ticks(base_ticks, state_paths)
-        timed = compute_short_label_set(
-            base,
-            state,
-            horizons=horizons,
-            sell_window_seconds=config_int(config, "dataset", "sell_window_seconds", 60),
-            volume_unit_multiplier=config_float(
-                config, "dataset", "volume_unit_multiplier", 1.0
-            ),
-            fee_bps=fee_bps,
-            tradable_statuses=tradable,
-        ).rename(
-            columns={
-                "label_short_10m": "label_hold_10m",
-                "valid_short_10m": "valid_hold_10m",
-                "label_short_60m": "label_hold_1h",
-                "valid_short_60m": "valid_hold_1h",
-            }
-        )
-        same_close = same_day_close_label(
-            base,
-            close_reference,
-            tradable_statuses=tradable,
-            fee_bps=fee_bps,
-        )
-        part = timed.merge(same_close, on=list(KEY_COLUMNS), validate="one_to_one")
-        parts.append(part)
-        print(
-            f"long labels year={year} day={index}/{len(days)} date={trading_day} "
-            f"rows={len(part)}",
-            flush=True,
-        )
+        built_parts = executor.map(_build_long_label_worker, days, chunksize=1)
+    try:
+        for index, (trading_day, part) in enumerate(zip(days, built_parts, strict=True), start=1):
+            parts.append(part)
+            print(
+                f"long labels year={year} day={index}/{len(days)} date={trading_day} "
+                f"rows={len(part)} workers={workers}",
+                flush=True,
+            )
+    finally:
+        if workers > 1:
+            executor.shutdown(wait=True, cancel_futures=True)
 
-    output = _normalize_keys(pd.concat(parts, ignore_index=True))
-    _validate_output_keys(output, clocks)
+    output = normalize_dataset_keys(pd.concat(parts, ignore_index=True))
+    validate_dataset_keys(output, clocks)
     reused = _reuse_next_close(output, next_close_path)
     output = output.merge(reused, on=list(KEY_COLUMNS), validate="one_to_one")
     ordered_columns = [
@@ -273,6 +331,7 @@ def build_label_year(
         "decision_times": list(clocks),
         "source_raw_root": str(base_root),
         "state_raw_roots": [str(root) for root in state_roots],
+        "build_workers": int(workers),
         "next_close_source": str(next_close_path),
         "definitions": {
             "entry": "decision_target_timestamp+6s clock state from base raw PVC",
@@ -299,6 +358,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--year", type=int, required=True)
     parser.add_argument("--start-date", default="")
     parser.add_argument("--end-date", default="")
+    parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--overwrite", action="store_true")
     return parser
 
@@ -319,6 +379,7 @@ def main() -> None:
         start_date=start_date,
         end_date=end_date,
         overwrite=bool(args.overwrite),
+        workers=int(args.workers),
     )
 
 

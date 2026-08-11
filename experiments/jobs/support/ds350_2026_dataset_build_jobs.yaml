@@ -1,0 +1,231 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-ds-feat350-w0931-0940-2026-v1
+  namespace: bizewu
+  labels: {app: os-ds-feat350-w0931-0940-2026-v1}
+spec:
+  activeDeadlineSeconds: 432000
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 172800
+  template:
+    metadata:
+      labels: {app: os-ds-feat350-w0931-0940-2026-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: kubernetes.io/hostname, operator: NotIn, values: [node7, node8]}
+      containers:
+        - name: builder
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260804-training-datasets-v2
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              CONFIG=/tmp/opening_0931_0940_features_350_2026.toml
+              cp experiments/runs/opening_0931_0940_features_350.toml "${CONFIG}"
+              sed -E -i 's/^years = \[.*\]/years = [2025, 2026]/' "${CONFIG}"
+              exec osf-build-training-datasets \
+                --config "${CONFIG}" \
+                --kind features \
+                --year 2026 \
+                --date-start 2026-01-01 \
+                --date-end 2026-06-30 \
+                --overwrite
+          volumeMounts: [{name: output, mountPath: /mnt/output}]
+          resources:
+            requests: {cpu: "8", memory: 128Gi}
+            limits: {cpu: "24", memory: 384Gi}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-ds-label5-w0931-0940-2026-v1
+  namespace: bizewu
+  labels: {app: os-ds-label5-w0931-0940-2026-v1}
+spec:
+  activeDeadlineSeconds: 259200
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 172800
+  template:
+    metadata:
+      labels: {app: os-ds-label5-w0931-0940-2026-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: kubernetes.io/hostname, operator: NotIn, values: [node7, node8]}
+      containers:
+        - name: builder
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260804-training-datasets-v2
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              CONFIG=/tmp/opening_0931_0940_labels_5_2026.toml
+              cp experiments/runs/opening_0931_0940_labels_5.toml "${CONFIG}"
+              sed -E -i 's/^years = \[.*\]/years = [2026]/' "${CONFIG}"
+              exec osf-build-training-datasets \
+                --config "${CONFIG}" \
+                --kind labels \
+                --year 2026 \
+                --date-start 2026-01-01 \
+                --date-end 2026-06-30 \
+                --overwrite
+          volumeMounts: [{name: output, mountPath: /mnt/output}]
+          resources:
+            requests: {cpu: "4", memory: 8Gi}
+            limits: {cpu: "12", memory: 32Gi}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-ds-labelsplit-w0931-0940-2026-v1
+  namespace: bizewu
+  labels: {app: os-ds-labelsplit-w0931-0940-2026-v1}
+spec:
+  activeDeadlineSeconds: 86400
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 172800
+  template:
+    metadata:
+      labels: {app: os-ds-labelsplit-w0931-0940-2026-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: kubernetes.io/hostname, operator: NotIn, values: [node7, node8]}
+      containers:
+        - name: splitter
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260804-horizon-labels-v3
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              CONFIG=/tmp/opening_0931_0940_labels_horizon_split_2026.toml
+              cp experiments/runs/opening_0931_0940_labels_horizon_split.toml "${CONFIG}"
+              sed -E -i 's/^years = \[.*\]/years = [2026]/' "${CONFIG}"
+              exec osf-split-horizon-labels --config "${CONFIG}" --year 2026 --overwrite
+          volumeMounts: [{name: output, mountPath: /mnt/output}]
+          resources:
+            requests: {cpu: "4", memory: 8Gi}
+            limits: {cpu: "12", memory: 32Gi}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-long-labels-w0931-0940-2026-v1
+  namespace: bizewu
+  labels: {app: os-long-labels-w0931-0940-2026-v1}
+spec:
+  activeDeadlineSeconds: 259200
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 172800
+  template:
+    metadata:
+      labels: {app: os-long-labels-w0931-0940-2026-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: kubernetes.io/hostname, operator: NotIn, values: [node7, node8]}
+      containers:
+        - name: builder
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:f04ef3ab7372000162e1b92bf86e96f5f6e0e36f15c163d75c9a3c1cc554ab09
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              CONFIG=/tmp/opening_0931_0940_labels_10m_1h_close_2026.toml
+              cp experiments/runs/opening_0931_0940_labels_10m_1h_close.toml "${CONFIG}"
+              sed -E -i 's/^years = \[.*\]/years = [2026]/' "${CONFIG}"
+              exec osf-build-long-horizon-labels \
+                --config "${CONFIG}" \
+                --year 2026 \
+                --start-date 2026-01-01 \
+                --end-date 2026-06-30 \
+                --overwrite
+          volumeMounts: [{name: output, mountPath: /mnt/output}]
+          resources:
+            requests: {cpu: "4", memory: 8Gi}
+            limits: {cpu: "12", memory: 32Gi}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-long-labelsplit-w0931-0940-2026-v1
+  namespace: bizewu
+  labels: {app: os-long-labelsplit-w0931-0940-2026-v1}
+spec:
+  activeDeadlineSeconds: 86400
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 172800
+  template:
+    metadata:
+      labels: {app: os-long-labelsplit-w0931-0940-2026-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: kubernetes.io/hostname, operator: NotIn, values: [node7, node8]}
+      containers:
+        - name: splitter
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:f04ef3ab7372000162e1b92bf86e96f5f6e0e36f15c163d75c9a3c1cc554ab09
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              CONFIG=/tmp/opening_0931_0940_labels_10m_1h_close_split_2026.toml
+              cp experiments/runs/opening_0931_0940_labels_10m_1h_close_split.toml "${CONFIG}"
+              sed -E -i 's/^years = \[.*\]/years = [2026]/' "${CONFIG}"
+              exec osf-split-long-horizon-labels --config "${CONFIG}" --year 2026 --overwrite
+          volumeMounts: [{name: output, mountPath: /mnt/output}]
+          resources:
+            requests: {cpu: "4", memory: 8Gi}
+            limits: {cpu: "12", memory: 32Gi}

@@ -1,0 +1,209 @@
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] loss preflight passed
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] split_training_dataset:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   feature_path: /mnt/output/opening_strength_fit/datasets/opening_0931_0940_features_350
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   label_path: /mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_hclose_v1
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   date_start: 2023-01-01
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   date_end: 2026-06-30
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] feature_pvc_part:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   file: /mnt/output/opening_strength_fit/datasets/opening_0931_0940_features_350/year=2023/features.parquet
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   rows: 12096570
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   columns: 353
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] feature_pvc_part:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   file: /mnt/output/opening_strength_fit/datasets/opening_0931_0940_features_350/year=2024/features.parquet
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   rows: 12333410
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   columns: 353
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] feature_pvc_part:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   file: /mnt/output/opening_strength_fit/datasets/opening_0931_0940_features_350/year=2025/features.parquet
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   rows: 12482460
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   columns: 353
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] feature_pvc_part:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   file: /mnt/output/opening_strength_fit/datasets/opening_0931_0940_features_350/year=2026/features.parquet
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   rows: 5856610
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   columns: 353
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] label_pvc_part:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   file: /mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_hclose_v1/year=2023/labels.parquet
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   rows: 12096570
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   columns: 6
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] label_pvc_part:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   file: /mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_hclose_v1/year=2024/labels.parquet
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   rows: 12333410
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   columns: 6
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] label_pvc_part:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   file: /mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_hclose_v1/year=2025/labels.parquet
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   rows: 12482460
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   columns: 6
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] label_pvc_part:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   file: /mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_hclose_v1/year=2026/labels.parquet
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   rows: 5856610
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   columns: 6
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] feature_label_join:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   feature_path: /mnt/output/opening_strength_fit/datasets/opening_0931_0940_features_350
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   label_path: /mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_hclose_v1
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   rows: 42769050
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   valid_target_rows: 42574529
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   feature_only: 0
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   label_only: 0
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   alignment: trusted_sampled_order
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] dataset:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   rows: 42769050
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   columns: 359
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   date_min: 2023-01-03
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   date_max: 2026-06-30
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   n_dates: 840
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   n_symbols: 5344
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   non_null_labels: 42590664
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   valid_labels: 42574529
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   label_nan_rate: 0.004170913312313461
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] split_plan:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   windows: 1
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   first_test: 2026-01-05
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   last_test: 2026-06-30
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   mode: rolling_monthly
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_training_storage:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   rows: 36696100
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   features: 350
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   train_rows: 36446100
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   validation_rows: 250000
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   device: cuda
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   storage: cuda_resident
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   tensor_gib: 48.53
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   cuda_free_gib: 78.83
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   cuda_total_gib: 79.25
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   reserve_gib: 12.00
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   preparation_seconds: 231.7
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   storage_transfer_seconds: 4.7
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=1/30 train_loss=0.441084883 validation_loss=0.441924168 best_epoch=1 seconds=14.4
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=2/30 train_loss=0.439656861 validation_loss=0.440765219 best_epoch=2 seconds=13.8
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=3/30 train_loss=0.438689109 validation_loss=0.439730629 best_epoch=3 seconds=13.7
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=4/30 train_loss=0.437933069 validation_loss=0.438906488 best_epoch=4 seconds=13.7
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=5/30 train_loss=0.437327874 validation_loss=0.438355113 best_epoch=5 seconds=13.8
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=6/30 train_loss=0.436804549 validation_loss=0.437838195 best_epoch=6 seconds=13.9
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=7/30 train_loss=0.43636229 validation_loss=0.437537398 best_epoch=7 seconds=13.9
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=8/30 train_loss=0.435945866 validation_loss=0.436975027 best_epoch=8 seconds=14.6
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=9/30 train_loss=0.435546127 validation_loss=0.436809766 best_epoch=9 seconds=15.6
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=10/30 train_loss=0.435180982 validation_loss=0.436250039 best_epoch=10 seconds=16.5
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=11/30 train_loss=0.434841216 validation_loss=0.435959531 best_epoch=11 seconds=16.3
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=12/30 train_loss=0.434493981 validation_loss=0.435728293 best_epoch=12 seconds=16.8
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=13/30 train_loss=0.434152068 validation_loss=0.435351445 best_epoch=13 seconds=16.8
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=14/30 train_loss=0.433830506 validation_loss=0.435253742 best_epoch=14 seconds=16.9
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=15/30 train_loss=0.433494745 validation_loss=0.43480484 best_epoch=15 seconds=18.8
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=16/30 train_loss=0.433171885 validation_loss=0.434524746 best_epoch=16 seconds=17.0
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=17/30 train_loss=0.432869346 validation_loss=0.434289484 best_epoch=17 seconds=17.0
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=18/30 train_loss=0.432544213 validation_loss=0.434003109 best_epoch=18 seconds=19.7
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=19/30 train_loss=0.432250301 validation_loss=0.433657324 best_epoch=19 seconds=17.6
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=20/30 train_loss=0.431934488 validation_loss=0.433325973 best_epoch=20 seconds=17.1
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=21/30 train_loss=0.431614522 validation_loss=0.433247363 best_epoch=21 seconds=17.6
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=22/30 train_loss=0.431328636 validation_loss=0.432824762 best_epoch=22 seconds=17.9
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=23/30 train_loss=0.431037467 validation_loss=0.432697664 best_epoch=23 seconds=16.4
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=24/30 train_loss=0.430718671 validation_loss=0.432322199 best_epoch=24 seconds=17.1
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=25/30 train_loss=0.430449892 validation_loss=0.432143574 best_epoch=25 seconds=19.8
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=26/30 train_loss=0.430132203 validation_loss=0.43189277 best_epoch=26 seconds=18.4
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=27/30 train_loss=0.429839465 validation_loss=0.431653457 best_epoch=27 seconds=16.8
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=28/30 train_loss=0.429545662 validation_loss=0.431547687 best_epoch=28 seconds=17.2
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=29/30 train_loss=0.429305265 validation_loss=0.431035121 best_epoch=29 seconds=17.6
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] torch_epoch: epoch=30/30 train_loss=0.429039507 validation_loss=0.430780578 best_epoch=30 seconds=19.8
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] train_stats[2026]:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   rows: 36696100
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   dates: 726
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   symbols: 5308
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   features: 350
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   device: cuda
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   torch_cuda_available: True
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   torch_device_name: NVIDIA A100 80GB PCIe
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   epochs_trained: 30
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   best_epoch: 30
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   train_loss: 0.42903950665305024
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   validation_loss: 0.430780578125
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   loss: huber
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   huber_beta: 1.0
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   mse_blend_weight: 0.2
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   validation_rows: 250000
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   training_tensor_storage: cuda_resident
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   training_tensor_required_bytes: 52106462000
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   cuda_memory_free_bytes_before_storage: 84647215104
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   cuda_memory_total_bytes: 85094825984
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   cuda_resident_reserve_bytes: 12884901888
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   vectorized_index_batches: True
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   num_workers_ignored: 0
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   training_preparation_seconds: 236.437612720998
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   training_storage_transfer_seconds: 4.688845155003946
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   training_epoch_seconds: [14.362714120012242, 13.773112210008549, 13.667544919997454, 13.718409010005416, 13.801274807017762, 13.874249663989758, 13.947951662994456, 14.649077716981992, 15.60066039999947, 16.5237017859763, 16.346506801986834, 16.807350080023753, 16.76505389099475, 16.9023492919805, 18.821770212001866, 16.96469028800493, 16.952916554990225, 19.682378919009352, 17.615778956009308, 17.053123763995245, 17.608152175991563, 17.927045021002414, 16.449958771001548, 17.1276612910151, 19.79124181799125, 18.370975352008827, 16.77424022401101, 17.221910728985677, 17.627989620988956, 19.761131182982353]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   feature_standardization: global_zscore
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   standardization_group_col:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   standardization_groups: 0
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   feature_value_transform: none
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   feature_value_transform_group_cols: []
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   feature_value_transform_rank_method:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   feature_value_transform_tick_size:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   gate_diagnostics_rows: 200000
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   gate_groups: [{'name': 'preopen_auction', 'features': 11, 'embedding_dim': 16, 'gate_mean': 0.37127198203935186, 'gate_std': 0.18967665855446963, 'gate_min': 6.090326509576415e-30, 'gate_max': 1.0}, {'name': 'limit_price_state', 'features': 3, 'embedding_dim': 16, 'gate_mean': 0.29378162536159064, 'gate_std': 0.1426338676212477, 'gate_min': 7.954184533254249e-11, 'gate_max': 1.0}, {'name': 'book_depth_level', 'features': 50, 'embedding_dim': 48, 'gate_mean': 0.20592549396271925, 'gate_std': 0.05673184072036696, 'gate_min': 9.494268851995002e-06, 'gate_max': 1.0}, {'name': 'book_shape_spread_gap', 'features': 46, 'embedding_dim': 48, 'gate_mean': 0.22807443882620068, 'gate_std': 0.04987146500118525, 'gate_min': 7.75680502711841e-19, 'gate_max': 1.0}, {'name': 'book_imbalance_pressure', 'features': 25, 'embedding_dim': 32, 'gate_mean': 0.0687168296390843, 'gate_std': 0.04609372634343455, 'gate_min': 5.691513371708368e-10, 'gate_max': 0.9999986886978149}, {'name': 'trade_activity', 'features': 32, 'embedding_dim': 32, 'gate_mean': 0.6178375286559443, 'gate_std': 0.14791932593857074, 'gate_min': 1.4134516668207198e-08, 'gate_max': 1.0}, {'name': 'trade_price_impact', 'features': 24, 'embedding_dim': 32, 'gate_mean': 0.33276011487550816, 'gate_std': 0.12492367265554195, 'gate_min': 2.2764235836802982e-05, 'gate_max': 1.0}, {'name': 'postopen_price_path', 'features': 28, 'embedding_dim': 48, 'gate_mean': 0.24307802388091507, 'gate_std': 0.05272902945550621, 'gate_min': 3.67365887710136e-10, 'gate_max': 1.0}, {'name': 'postopen_liquidity_change', 'features': 38, 'embedding_dim': 32, 'gate_mean': 0.20471223457021662, 'gate_std': 0.05772265837344833, 'gate_min': 9.614876452593169e-26, 'gate_max': 0.9999994039535522}, {'name': 'historical_surprise', 'features': 29, 'embedding_dim': 48, 'gate_mean': 0.4758716031998946, 'gate_std': 0.08990675948991948, 'gate_min': 0.0, 'gate_max': 0.997509241104126}, {'name': 'path_shape_confirmation', 'features': 23, 'embedding_dim': 48, 'gate_mean': 0.18170059568235258, 'gate_std': 0.07376671546220645, 'gate_min': 4.991194891447898e-19, 'gate_max': 0.9999185800552368}, {'name': 'other', 'features': 41, 'embedding_dim': 24, 'gate_mean': 0.21268871499250996, 'gate_std': 0.057008715889699864, 'gate_min': 7.83975488694022e-12, 'gate_max': 1.0}]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   feature_names: ['exch_time_offset_us', 'trade_num', 'avg_ask_price', 'total_ask_volume', 'total_ask_count', 'avg_bid_price', 'total_bid_volume', 'total_bid_count', 'ask_volume_1', 'ask_count_1', 'bid_volume_1', 'bid_count_1', 'ask_volume_2', 'ask_count_2', 'bid_volume_2', 'bid_count_2', 'ask_volume_3', 'ask_count_3', 'bid_volume_3', 'bid_count_3', 'ask_volume_4', 'ask_count_4', 'bid_volume_4', 'bid_count_4', 'ask_volume_5', 'ask_count_5', 'bid_volume_5', 'bid_count_5', 'ask_volume_6', 'ask_count_6', 'bid_volume_6', 'bid_count_6', 'ask_volume_7', 'ask_count_7', 'bid_volume_7', 'bid_count_7', 'ask_volume_8', 'ask_count_8', 'bid_volume_8', 'bid_count_8', 'ask_volume_9', 'ask_count_9', 'bid_volume_9', 'bid_count_9', 'ask_volume_10', 'ask_count_10', 'bid_volume_10', 'bid_count_10', 'mid_price', 'spread_bps', 'bid_depth_10', 'ask_depth_10', 'depth_imbalance_10', 'depth_imbalance_1', 'bid_gap_2_bps', 'ask_gap_2_bps', 'bid_gap_3_bps', 'ask_gap_3_bps', 'bid_gap_4_bps', 'ask_gap_4_bps', 'bid_gap_5_bps', 'ask_gap_5_bps', 'bid_gap_6_bps', 'ask_gap_6_bps', 'bid_gap_7_bps', 'ask_gap_7_bps', 'bid_gap_8_bps', 'ask_gap_8_bps', 'bid_gap_9_bps', 'ask_gap_9_bps', 'bid_gap_10_bps', 'ask_gap_10_bps', 'volume_diff_1t', 'turnover_diff_1t', 'trade_vwap_1t', 'volume_diff_3t', 'turnover_diff_3t', 'trade_vwap_3t', 'volume_diff_10t', 'turnover_diff_10t', 'trade_vwap_10t', 'volume_diff_30t', 'turnover_diff_30t', 'trade_vwap_30t', 'return_1t', 'return_3t', 'return_10t', 'return_30t', 'preopen_volume', 'preopen_turnover', 'preopen_last_price', 'preopen_depth_imbalance_10', 'auction_price_range_bps', 'auction_last_position_in_range', 'postopen_minutes_since_0930', 'postopen_ask_volume_1_diff_1m', 'postopen_ask_volume_1_rel_1m', 'postopen_ask_volume_1_diff_3m', 'postopen_ask_volume_1_rel_3m', 'postopen_ask_volume_1_diff_5m', 'postopen_ask_volume_1_rel_5m', 'postopen_bid_volume_1_diff_1m', 'postopen_bid_volume_1_rel_1m', 'postopen_bid_volume_1_diff_3m', 'postopen_bid_volume_1_rel_3m', 'postopen_bid_volume_1_diff_5m', 'postopen_bid_volume_1_rel_5m', 'postopen_ask_depth_10_diff_1m', 'postopen_ask_depth_10_rel_1m', 'postopen_ask_depth_10_diff_3m', 'postopen_ask_depth_10_rel_3m', 'postopen_ask_depth_10_diff_5m', 'postopen_ask_depth_10_rel_5m', 'postopen_bid_depth_10_diff_1m', 'postopen_bid_depth_10_rel_1m', 'postopen_bid_depth_10_diff_3m', 'postopen_bid_depth_10_rel_3m', 'postopen_bid_depth_10_diff_5m', 'postopen_bid_depth_10_rel_5m', 'postopen_depth_imbalance_1_diff_1m', 'postopen_depth_imbalance_1_rel_1m', 'postopen_depth_imbalance_1_diff_3m', 'postopen_depth_imbalance_1_rel_3m', 'postopen_depth_imbalance_1_diff_5m', 'postopen_depth_imbalance_1_rel_5m', 'postopen_depth_imbalance_10_diff_1m', 'postopen_depth_imbalance_10_rel_1m', 'postopen_depth_imbalance_10_diff_3m', 'postopen_depth_imbalance_10_rel_3m', 'postopen_depth_imbalance_10_diff_5m', 'postopen_depth_imbalance_10_rel_5m', 'postopen_spread_bps_diff_1m', 'postopen_spread_bps_rel_1m', 'postopen_spread_bps_diff_3m', 'postopen_spread_bps_rel_3m', 'postopen_spread_bps_diff_5m', 'postopen_spread_bps_rel_5m', 'postopen_mid_price_diff_1m', 'postopen_mid_price_rel_1m', 'postopen_mid_price_diff_3m', 'postopen_mid_price_rel_3m', 'postopen_mid_price_diff_5m', 'postopen_mid_price_rel_5m', 'postopen_ask_price_1_diff_1m', 'postopen_ask_price_1_rel_1m', 'postopen_ask_price_1_diff_3m', 'postopen_ask_price_1_rel_3m', 'postopen_ask_price_1_diff_5m', 'postopen_ask_price_1_rel_5m', 'postopen_bid_price_1_diff_1m', 'postopen_bid_price_1_rel_1m', 'postopen_bid_price_1_diff_3m', 'postopen_bid_price_1_rel_3m', 'postopen_bid_price_1_diff_5m', 'postopen_bid_price_1_rel_5m', 'postopen_volume_diff_1m', 'postopen_volume_rel_1m', 'postopen_volume_diff_3m', 'postopen_volume_rel_3m', 'postopen_volume_diff_5m', 'postopen_volume_rel_5m', 'postopen_turnover_diff_1m', 'postopen_turnover_rel_1m', 'postopen_turnover_diff_3m', 'postopen_turnover_rel_3m', 'postopen_turnover_diff_5m', 'postopen_turnover_rel_5m', 'postopen_ask1_depth_share', 'postopen_bid1_depth_share', 'postopen_top_depth_share_imbalance', 'postopen_ask_gap_mean_2_10', 'postopen_ask_gap_std_2_10', 'postopen_bid_gap_mean_2_10', 'postopen_bid_gap_std_2_10', 'postopen_spread_x_imbalance_1', 'postopen_trade_vs_ask1_queue', 'postopen_v2_ask_depth_3', 'postopen_v2_bid_depth_3', 'postopen_v2_depth_imbalance_3', 'postopen_v2_ask1_share_depth_3', 'postopen_v2_bid1_share_depth_3', 'postopen_v2_ask_gap_max_3_bps', 'postopen_v2_bid_gap_max_3_bps', 'postopen_v2_ask_depth_5', 'postopen_v2_bid_depth_5', 'postopen_v2_depth_imbalance_5', 'postopen_v2_ask1_share_depth_5', 'postopen_v2_bid1_share_depth_5', 'postopen_v2_ask_gap_max_5_bps', 'postopen_v2_bid_gap_max_5_bps', 'postopen_v2_ask_depth_10', 'postopen_v2_bid_depth_10', 'postopen_v2_depth_imbalance_10', 'postopen_v2_ask1_share_depth_10', 'postopen_v2_bid1_share_depth_10', 'postopen_v2_ask_gap_max_10_bps', 'postopen_v2_bid_gap_max_10_bps', 'postopen_v2_ask_depth_concentration_3_10', 'postopen_v2_bid_depth_concentration_3_10', 'postopen_v2_depth_concentration_imbalance_3_10', 'postopen_v2_ask_gap_curve_2_10_bps', 'postopen_v2_bid_gap_curve_2_10_bps', 'postopen_v2_trade_volume_to_ask_depth10_1t', 'postopen_v2_trade_volume_to_bid_depth10_1t', 'postopen_v2_trade_turnover_to_depth_notional_1t', 'postopen_v2_trade_vwap_vs_mid_1t_bps', 'postopen_v2_trade_vwap_vs_ask1_1t_bps', 'postopen_v2_trade_volume_to_ask_depth10_3t', 'postopen_v2_trade_volume_to_bid_depth10_3t', 'postopen_v2_trade_turnover_to_depth_notional_3t', 'postopen_v2_trade_vwap_vs_mid_3t_bps', 'postopen_v2_trade_vwap_vs_ask1_3t_bps', 'postopen_v2_trade_volume_to_ask_depth10_10t', 'postopen_v2_trade_volume_to_bid_depth10_10t', 'postopen_v2_trade_turnover_to_depth_notional_10t', 'postopen_v2_trade_vwap_vs_mid_10t_bps', 'postopen_v2_trade_vwap_vs_ask1_10t_bps', 'postopen_v2_trade_volume_to_ask_depth10_30t', 'postopen_v2_trade_volume_to_bid_depth10_30t', 'postopen_v2_trade_turnover_to_depth_notional_30t', 'postopen_v2_trade_vwap_vs_mid_30t_bps', 'postopen_v2_trade_vwap_vs_ask1_30t_bps', 'postopen_v2_ask_depth_10_from_open_diff', 'postopen_v2_ask_depth_10_from_open_rel', 'postopen_v2_ask_depth_10_diff_1m', 'postopen_v2_ask_depth_10_rel_1m', 'postopen_v2_ask_depth_10_diff_2m', 'postopen_v2_ask_depth_10_rel_2m', 'postopen_v2_ask_depth_10_diff_3m', 'postopen_v2_ask_depth_10_rel_3m', 'postopen_v2_ask_depth_10_diff_5m', 'postopen_v2_ask_depth_10_rel_5m', 'postopen_v2_bid_depth_10_from_open_diff', 'postopen_v2_bid_depth_10_from_open_rel', 'postopen_v2_bid_depth_10_diff_1m', 'postopen_v2_bid_depth_10_rel_1m', 'postopen_v2_bid_depth_10_diff_2m', 'postopen_v2_bid_depth_10_rel_2m', 'postopen_v2_bid_depth_10_diff_3m', 'postopen_v2_bid_depth_10_rel_3m', 'postopen_v2_bid_depth_10_diff_5m', 'postopen_v2_bid_depth_10_rel_5m', 'postopen_v2_depth_imbalance_1_from_open_diff', 'postopen_v2_depth_imbalance_1_from_open_rel', 'postopen_v2_depth_imbalance_1_diff_1m', 'postopen_v2_depth_imbalance_1_rel_1m', 'postopen_v2_depth_imbalance_1_diff_2m', 'postopen_v2_depth_imbalance_1_rel_2m', 'postopen_v2_depth_imbalance_1_diff_3m', 'postopen_v2_depth_imbalance_1_rel_3m', 'postopen_v2_depth_imbalance_1_diff_5m', 'postopen_v2_depth_imbalance_1_rel_5m', 'postopen_v2_depth_imbalance_10_from_open_diff', 'postopen_v2_depth_imbalance_10_from_open_rel', 'postopen_v2_depth_imbalance_10_diff_1m', 'postopen_v2_depth_imbalance_10_rel_1m', 'postopen_v2_depth_imbalance_10_diff_2m', 'postopen_v2_depth_imbalance_10_rel_2m', 'postopen_v2_depth_imbalance_10_diff_3m', 'postopen_v2_depth_imbalance_10_rel_3m', 'postopen_v2_depth_imbalance_10_diff_5m', 'postopen_v2_depth_imbalance_10_rel_5m', 'postopen_v2_spread_bps_from_open_diff', 'postopen_v2_spread_bps_from_open_rel', 'postopen_v2_mid_price_from_open_diff', 'postopen_v2_mid_price_from_open_rel', 'postopen_v2_ask_price_1_from_open_diff', 'postopen_v2_ask_price_1_from_open_rel', 'postopen_v2_bid_price_1_from_open_diff', 'postopen_v2_bid_price_1_from_open_rel', 'postopen_v2_spread_compression_1m', 'postopen_v2_queue_ask1_replenish_vs_trade_1m', 'postopen_v2_queue_bid1_replenish_vs_trade_1m', 'path_shape_mid_drawdown_from_open_high_bps', 'path_shape_mid_recovery_from_open_low_bps', 'path_shape_mid_from_first_bps', 'path_shape_mid_new_high_flag', 'path_shape_mid_new_low_flag', 'path_shape_return_positive_fraction', 'path_shape_mid_move_2m_bps', 'path_shape_mid_position_roll2', 'path_shape_mid_move_3m_bps', 'path_shape_return_accel_1m_vs_3m', 'path_shape_mid_position_roll3', 'path_shape_mid_move_5m_bps', 'path_shape_mid_position_roll5', 'path_shape_spread_compress_after_upmove', 'path_shape_imbalance_slope_roll2', 'path_shape_imbalance_slope_confirm_return_roll2', 'path_shape_imbalance_slope_roll3', 'path_shape_imbalance_slope_confirm_return_roll3', 'path_shape_imbalance_slope_roll5', 'path_shape_imbalance_slope_confirm_return_roll5', 'path_shape_bid_depth_support_after_upmove', 'path_shape_ask_depth_fade_after_upmove', 'path_shape_depth_support_imbalance_after_upmove', 'hist_surprise_spread_bps_20d_zscore', 'hist_surprise_spread_bps_20d_ratio', 'hist_surprise_spread_bps_60d_zscore', 'hist_surprise_spread_bps_60d_ratio', 'hist_surprise_bid_depth_10_60d_zscore', 'hist_surprise_ask_depth_10_20d_zscore', 'hist_surprise_depth_imbalance_10_20d_ratio', 'hist_surprise_depth_imbalance_10_60d_zscore', 'hist_surprise_depth_imbalance_10_60d_ratio', 'hist_surprise_depth_imbalance_1_20d_ratio', 'hist_surprise_depth_imbalance_1_60d_zscore', 'hist_surprise_depth_imbalance_1_60d_ratio', 'hist_surprise_volume_diff_1t_20d_zscore', 'hist_surprise_volume_diff_1t_60d_zscore', 'hist_surprise_trade_vwap_1t_20d_zscore', 'hist_surprise_trade_vwap_1t_20d_ratio', 'hist_surprise_trade_vwap_1t_60d_zscore', 'hist_surprise_trade_vwap_1t_60d_ratio', 'hist_surprise_volume_diff_3t_20d_zscore', 'hist_surprise_volume_diff_3t_60d_zscore', 'hist_surprise_postopen_v2_trade_turnover_to_depth_notional_1t_20d_zscore', 'hist_surprise_postopen_v2_trade_turnover_to_depth_notional_1t_60d_zscore', 'hist_surprise_postopen_v2_trade_vwap_vs_ask1_1t_bps_20d_ratio', 'hist_surprise_postopen_v2_trade_vwap_vs_ask1_1t_bps_60d_zscore', 'hist_surprise_postopen_v2_trade_vwap_vs_ask1_1t_bps_60d_ratio', 'hist_surprise_postopen_v2_spread_compression_1m_20d_zscore', 'hist_surprise_postopen_v2_spread_compression_1m_20d_ratio', 'hist_surprise_postopen_v2_spread_compression_1m_60d_zscore', 'hist_surprise_postopen_v2_spread_compression_1m_60d_ratio', 'multi_den_ratio_preopen_turnover_to_float_market_cap', 'multi_den_ratio_preopen_turnover_to_hist_avg_daily_turnover_60d', 'multi_den_ratio_turnover_diff_1t_to_float_market_cap', 'multi_den_ratio_turnover_diff_1t_to_hist_avg_daily_turnover_60d', 'multi_den_ratio_postopen_turnover_diff_1m_to_float_market_cap', 'multi_den_ratio_postopen_turnover_diff_1m_to_hist_avg_daily_turnover_60d', 'multi_den_ratio_postopen_turnover_diff_3m_to_float_market_cap', 'multi_den_ratio_postopen_turnover_diff_3m_to_hist_avg_daily_turnover_60d', 'multi_den_ratio_postopen_turnover_diff_5m_to_float_market_cap', 'multi_den_ratio_postopen_turnover_diff_5m_to_hist_avg_daily_turnover_60d', 'multi_den_ratio_preopen_volume_to_float_shares', 'multi_den_ratio_preopen_volume_to_hist_avg_daily_volume_60d', 'multi_den_ratio_volume_diff_1t_to_float_shares', 'multi_den_ratio_volume_diff_1t_to_hist_avg_daily_volume_60d', 'multi_den_ratio_postopen_volume_diff_1m_to_float_shares', 'multi_den_ratio_postopen_volume_diff_1m_to_hist_avg_daily_volume_60d', 'multi_den_ratio_postopen_volume_diff_3m_to_float_shares', 'multi_den_ratio_postopen_volume_diff_3m_to_hist_avg_daily_volume_60d', 'multi_den_ratio_postopen_volume_diff_5m_to_float_shares', 'multi_den_ratio_postopen_volume_diff_5m_to_hist_avg_daily_volume_60d', 'multi_den_ratio_ask_depth_10_to_float_shares', 'multi_den_ratio_ask_depth_10_to_hist_avg_daily_volume_60d', 'multi_den_ratio_bid_depth_10_to_float_shares', 'multi_den_ratio_bid_depth_10_to_hist_avg_daily_volume_60d', 'multi_den_ratio_postopen_turnover_diff_1m_to_xs_median']
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   purge_train_sessions: 1
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   purged_train_dates: ['2025-12-31']
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] prediction_metrics[2026]:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   rows: 5826911
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   dates: 113
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   symbols: 5217
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   sample_grain: date x symbol x opening_tick
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   ic_grouping: date,decision_target_timestamp
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   ic_groups: 1130
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   overall_ic: 0.006680694968999148
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   overall_rank_ic: 0.015751585257268056
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   group_ic_mean: 0.006947075077623194
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   group_ic_std: 0.0660304821531372
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   group_ic_ir: 0.10521012191780775
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   group_rank_ic_mean: 0.023226830119779444
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   group_rank_ic_std: 0.0941425019321479
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   group_rank_ic_ir: 0.24671991548004435
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   daily_ic_mean: 0.008533705276802797
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   daily_ic_std: 0.06220530056485676
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   daily_ic_ir: 0.13718614329184614
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   daily_rank_ic_mean: 0.027172623526864875
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   daily_rank_ic_std: 0.09101933807634909
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   daily_rank_ic_ir: 0.29853681757245765
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   mean_label: -6.600587221328169e-05
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   win_rate: 0.4594327938079027
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] top_score_summary[2026,top_n=100]:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   trades: 113000
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   groups: 1130
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   group_cols: date,decision_target_timestamp
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   mean_return: 0.0027620650362223387
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   median_return: 0.0
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   win_rate: 0.4819203539823009
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   return_std: 0.04068073257803917
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] evaluation_settings:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   score_bucket_mode: cross_section
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   score_bucket_group_cols: date,decision_target_timestamp
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   selection_mode: cross_section
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   selection_group_cols: date,decision_target_timestamp
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   ic_mode: cross_section
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   ic_group_cols: date,decision_target_timestamp
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   top_n: 100
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   score_bins: 10
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   stock_pool_enabled: False
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   stock_pool_name:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   stock_pool_path:
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   stock_pool_date_lag_sessions: 0
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   stock_pool_filter_train: False
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   stock_pool_filter_selection: False
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   stock_pool_add_feature: False
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]   stock_pool_annotate_predictions: True
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer]
+[pod/os-nn-ds350-close-loss-2026h1-v1-0-jgnrt/trainer] wrote outputs: /mnt/output/opening_strength_fit/nn/holdout/nn_ds350_w0931_hclose_huber_train2023_2025_test2026h1_purge1_v1

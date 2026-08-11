@@ -8,7 +8,8 @@ from opening_strength_fit.analysis import write_json
 from opening_strength_fit.config import config_int, config_str, load_toml, run_id
 from opening_strength_fit.execution_diagnostics import (
     DEFAULT_ASK_LEVELS,
-    DiagnosticCase,
+    diagnostic_case_from_values,
+    diagnostic_cases_from_config,
     run_ask_level_attribution_case,
     write_success_marker,
 )
@@ -36,51 +37,6 @@ def _output_root(args: argparse.Namespace, config: dict, run_name: str) -> Path:
     )
 
 
-def _config_cases(config: dict, *, output_root: Path) -> list[DiagnosticCase]:
-    section = config.get("ask_level_attribution", {})
-    inputs = section.get("inputs", []) if isinstance(section, dict) else []
-    if not isinstance(inputs, list):
-        raise SystemExit("[ask_level_attribution].inputs must be an array of tables")
-    cases = []
-    for index, item in enumerate(inputs):
-        if not isinstance(item, dict):
-            raise SystemExit("each [[ask_level_attribution.inputs]] entry must be a table")
-        name = str(item.get("name", f"case_{index}")).strip()
-        selected_path = str(item.get("selected_path", "")).strip()
-        prediction_root = str(item.get("prediction_root", "")).strip()
-        if not selected_path or not prediction_root:
-            raise SystemExit(
-                "each [[ask_level_attribution.inputs]] entry requires selected_path "
-                "and prediction_root"
-            )
-        case_output_dir = str(item.get("output_dir", "")).strip()
-        cases.append(
-            DiagnosticCase(
-                name=name,
-                selected_path=Path(selected_path),
-                prediction_root=Path(prediction_root),
-                output_dir=Path(case_output_dir) if case_output_dir else output_root / name,
-            )
-        )
-    return cases
-
-
-def _arg_case(args: argparse.Namespace, *, output_root: Path) -> list[DiagnosticCase]:
-    if not (args.selected_path or args.prediction_root):
-        return []
-    if not args.selected_path or not args.prediction_root:
-        raise SystemExit("--selected-path and --prediction-root must be supplied together")
-    name = args.name or "case"
-    return [
-        DiagnosticCase(
-            name=name,
-            selected_path=Path(args.selected_path),
-            prediction_root=Path(args.prediction_root),
-            output_dir=Path(args.case_output_dir) if args.case_output_dir else output_root,
-        )
-    ]
-
-
 def main() -> None:
     args = parse_args()
     config = load_toml(args.config) if args.config else {}
@@ -89,8 +45,13 @@ def main() -> None:
     )
     output_root = _output_root(args, config, run_name)
     output_root.mkdir(parents=True, exist_ok=True)
-    cases = _config_cases(config, output_root=output_root) or _arg_case(
-        args,
+    cases = diagnostic_cases_from_config(
+        config, section_name="ask_level_attribution", output_root=output_root
+    ) or diagnostic_case_from_values(
+        selected_path=args.selected_path,
+        prediction_root=args.prediction_root,
+        name=args.name,
+        case_output_dir=args.case_output_dir,
         output_root=output_root,
     )
     if not cases:

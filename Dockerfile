@@ -14,9 +14,10 @@ RUN apt-get update \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Keep heavyweight runtime dependencies below source layers so source-only builds reuse them.
+# `core` builds a minimal local image; `cluster` preserves every production adapter.
+ARG DEPENDENCY_PROFILE=cluster
 COPY pyproject.toml requirements.lock ./
-RUN python -c 'import tomllib; project = tomllib.load(open("pyproject.toml", "rb"))["project"]; print("\n".join(project.get("dependencies", [])))' \
+RUN python -c 'import os, tomllib; project = tomllib.load(open("pyproject.toml", "rb"))["project"]; profile = os.environ["DEPENDENCY_PROFILE"]; optional = project.get("optional-dependencies", {}); assert profile == "core" or profile in optional, f"unknown dependency profile: {profile}"; print("\n".join([*project.get("dependencies", []), *optional.get(profile, [])]))' \
         > /tmp/runtime-requirements.txt \
     && python -m pip install \
         -c requirements.lock \
@@ -41,7 +42,12 @@ RUN test -n "$CACHE_BUST"
 ARG SOURCE_REVISION
 RUN test -n "$SOURCE_REVISION"
 ENV OPENING_STRENGTH_SOURCE_REVISION=${SOURCE_REVISION}
+LABEL org.opencontainers.image.revision=${SOURCE_REVISION}
 
-COPY . .
+COPY experiments/runs ./experiments/runs
+COPY experiments/canonical ./experiments/canonical
+COPY experiments/config_templates ./experiments/config_templates
+COPY experiments/scripts ./experiments/scripts
+COPY experiments/incubator.toml ./experiments/incubator.toml
 
-CMD ["osf-train", "--help"]
+CMD ["osf", "--help"]

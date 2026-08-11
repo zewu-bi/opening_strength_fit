@@ -15,3 +15,4 @@ def test_local_environment_files_are_excluded_from_docker_context() -> None:
     assert ".env" in patterns
     assert ".env.*" in patterns
     assert "!.env.example" in patterns
+    assert {"build", "dist", "output", "experiments/results"} <= patterns

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 
 import matplotlib
@@ -16,23 +15,17 @@ from opening_strength_fit.analysis import (
     clock_range,
     write_json,
 )
-from opening_strength_fit.analysis import (
-    load_or_fetch_next_close_labels as shared_load_or_fetch_next_close_labels,
-)
-from opening_strength_fit.clickhouse_ticks import (
-    DEFAULT_CLICKHOUSE_TICK_HOST,
-    DEFAULT_CLICKHOUSE_TICK_TABLE,
-)
-from opening_strength_fit.commands.next_close_label_cache import fetch_next_close_labels
 from opening_strength_fit.io import read_frame
 from opening_strength_fit.model import corr
+from opening_strength_fit.next_close_labels import (
+    add_next_close_label_arguments,
+    load_or_fetch_next_close_labels_from_args,
+)
 
 DEFAULT_INPUT = (
     "output/legacy/predictions/lgbm_opening_1y_next_month_delay2/predictions_all.parquet"
 )
 DEFAULT_OUTPUT_DIR = "output/legacy/reports/experiment0_delay2_four_panel_baseline"
-DEFAULT_CLOSE_OFFSET_US = 54_000_000_000
-DEFAULT_CLOSE_LOOKBACK_SECONDS = 1_800
 STALE_OUTPUTS = ("next_close_top100_return_by_minute.png",)
 
 
@@ -50,41 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--title", default="Delay2 baseline signal panels")
     parser.add_argument("--start-clock", default="09:30")
     parser.add_argument("--end-clock", default="09:40")
-    parser.add_argument(
-        "--next-close-label-input",
-        default="",
-        help=(
-            "Optional parquet/csv with date, symbol, decision_target_timestamp, "
-            "and alpha_return_next_close. Defaults to cached labels in output-dir."
-        ),
-    )
-    parser.add_argument("--clickhouse-host", default=os.environ.get("CLICKHOUSE_HOST", ""))
-    parser.add_argument(
-        "--clickhouse-port",
-        type=int,
-        default=int(os.environ.get("CLICKHOUSE_PORT", "8123")),
-    )
-    parser.add_argument("--clickhouse-user", default=os.environ.get("CLICKHOUSE_USER", ""))
-    parser.add_argument(
-        "--clickhouse-password",
-        default=os.environ.get("CLICKHOUSE_PASSWORD", ""),
-    )
-    parser.add_argument(
-        "--clickhouse-table",
-        default=os.environ.get("CLICKHOUSE_TICK_TABLE", DEFAULT_CLICKHOUSE_TICK_TABLE),
-    )
-    parser.add_argument("--close-offset-us", type=int, default=DEFAULT_CLOSE_OFFSET_US)
-    parser.add_argument(
-        "--close-lookback-seconds",
-        type=int,
-        default=DEFAULT_CLOSE_LOOKBACK_SECONDS,
-    )
-    parser.add_argument(
-        "--calendar-days-after",
-        type=int,
-        default=10,
-        help="Calendar-day padding after the sample window for next-close labels.",
-    )
+    add_next_close_label_arguments(parser, include_connection=True)
     return parser.parse_args()
 
 
@@ -111,39 +70,6 @@ def load_predictions(path: Path, clocks: list[str], score_col: str) -> pd.DataFr
     )
     frame["clock"] = frame["decision_target_timestamp"].dt.strftime("%H:%M")
     return frame.loc[frame["clock"].isin(clocks)].copy()
-
-
-def load_or_fetch_next_close_labels(
-    predictions: pd.DataFrame,
-    *,
-    args: argparse.Namespace,
-    output_dir: Path,
-) -> pd.DataFrame:
-    def _fetch(base: pd.DataFrame) -> pd.DataFrame:
-        if not args.clickhouse_user or not args.clickhouse_password:
-            raise SystemExit(
-                "next-close labels not found. Pass --next-close-label-input or set "
-                "CLICKHOUSE_USER and CLICKHOUSE_PASSWORD to fetch labels."
-            )
-        return fetch_next_close_labels(
-            base[["date", "symbol", "decision_target_timestamp", "buy_price"]].copy(),
-            host=args.clickhouse_host or DEFAULT_CLICKHOUSE_TICK_HOST,
-            port=int(args.clickhouse_port),
-            username=args.clickhouse_user,
-            password=args.clickhouse_password,
-            table=args.clickhouse_table,
-            close_offset_us=int(args.close_offset_us),
-            close_lookback_seconds=int(args.close_lookback_seconds),
-            calendar_days_after=int(args.calendar_days_after),
-            fee_bps=0.0,
-        )
-
-    return shared_load_or_fetch_next_close_labels(
-        predictions,
-        output_dir=output_dir,
-        label_input=args.next_close_label_input,
-        fetch_labels=_fetch,
-    )
 
 
 def summarize_by_minute(
@@ -271,7 +197,7 @@ def main() -> None:
 
     clocks = clock_range(args.start_clock, args.end_clock)
     predictions = load_predictions(input_path, clocks, args.score_col)
-    next_close_labels = load_or_fetch_next_close_labels(
+    next_close_labels = load_or_fetch_next_close_labels_from_args(
         predictions,
         args=args,
         output_dir=output_dir,

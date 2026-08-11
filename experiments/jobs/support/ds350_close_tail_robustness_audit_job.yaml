@@ -1,0 +1,123 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-audit-ds350-close-tail-v2
+  namespace: bizewu
+  labels:
+    app: os-audit-ds350-close-tail-v2
+spec:
+  activeDeadlineSeconds: 10800
+  backoffLimit: 1
+  completionMode: Indexed
+  completions: 2
+  parallelism: 2
+  ttlSecondsAfterFinished: 172800
+  template:
+    metadata:
+      labels:
+        app: os-audit-ds350-close-tail-v2
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      nodeSelector:
+        has_gpu: "true"
+      tolerations:
+        - key: has_gpu
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+      volumes:
+        - name: output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+      containers:
+        - name: audit
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:1c35beb1275aca13e5a71fd03bc13ae703078b29b3e2a744c77e386a32c4917a
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          envFrom:
+            - secretRef:
+                name: xy-fit-ceph-credentials
+          env:
+            - name: JOB_COMPLETION_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.annotations['batch.kubernetes.io/job-completion-index']"
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              CASES=(w0931_0940_hclose w1001_1010_hclose)
+              CASE="${CASES[${JOB_COMPLETION_INDEX:?missing index}]}"
+              python - "${CASE}" <<'PY'
+              import sys
+              from pathlib import Path
+
+              import numpy as np
+              import pandas as pd
+
+              from opening_strength_fit.stock_pool import DEFAULT_STOCK_POOL_PATHS, load_stock_pool, stock_pool_membership_mask
+
+              case = sys.argv[1]
+              root = Path("/mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1") / case
+              columns = ["date", "symbol", "decision_target_timestamp", "prediction", "label"]
+              frame = pd.concat(
+                  (pd.read_parquet(path, columns=columns) for path in sorted(root.glob("month_*/predictions.parquet"))),
+                  ignore_index=True,
+              )
+              frame["date"] = pd.to_datetime(frame["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+              frame["decision_target_timestamp"] = pd.to_datetime(frame["decision_target_timestamp"], errors="coerce")
+              pool = load_stock_pool(DEFAULT_STOCK_POOL_PATHS["L"])
+              work = frame.loc[stock_pool_membership_mask(frame, pool, date_lag_sessions=0)].copy()
+              work = work.dropna(subset=["prediction", "label"])
+              keys = ["date", "decision_target_timestamp"]
+              work["rank"] = work.groupby(keys, sort=False)["prediction"].rank(ascending=False, method="first")
+
+              records = []
+              for (date, clock), item in work.groupby(keys, sort=False):
+                  y = pd.to_numeric(item["label"], errors="coerce")
+                  selected = item["rank"].le(100)
+                  q01, q05, q95, q99 = y.quantile([0.01, 0.05, 0.95, 0.99]).to_numpy()
+                  y_w1 = y.clip(q01, q99)
+                  y_w5 = y.clip(q05, q95)
+                  records.append(
+                      {
+                          "date": date,
+                          "quarter": str(pd.Timestamp(date).to_period("Q")),
+                          "clock": clock,
+                          "raw_excess_bps": float((y.loc[selected].mean() - y.mean()) * 10_000),
+                          "winsor_1pct_excess_bps": float((y_w1.loc[selected].mean() - y_w1.mean()) * 10_000),
+                          "winsor_5pct_excess_bps": float((y_w5.loc[selected].mean() - y_w5.mean()) * 10_000),
+                          "median_spread_bps": float((y.loc[selected].median() - y.median()) * 10_000),
+                          "selected_q10_bps": float(y.loc[selected].quantile(0.10) * 10_000),
+                          "selected_q50_bps": float(y.loc[selected].quantile(0.50) * 10_000),
+                          "selected_q90_bps": float(y.loc[selected].quantile(0.90) * 10_000),
+                          "pool_q10_bps": float(y.quantile(0.10) * 10_000),
+                          "pool_q50_bps": float(y.quantile(0.50) * 10_000),
+                          "pool_q90_bps": float(y.quantile(0.90) * 10_000),
+                          "selected_abs_gt_5pct": float(y.loc[selected].abs().gt(0.05).mean()),
+                          "pool_abs_gt_5pct": float(y.abs().gt(0.05).mean()),
+                      }
+                  )
+
+              metrics = pd.DataFrame(records)
+              quarterly = metrics.groupby("quarter", as_index=False).mean(numeric_only=True)
+              overall = quarterly.mean(numeric_only=True)
+              print(f"TAIL_AUDIT_BEGIN={case}")
+              print("QUARTER_EQUAL_OVERALL")
+              print(overall.to_frame("value").to_csv())
+              print("BY_QUARTER")
+              print(quarterly.to_csv(index=False))
+              print(f"TAIL_AUDIT_END={case}")
+              PY
+          volumeMounts:
+            - name: output
+              mountPath: /mnt/output
+          resources:
+            requests:
+              cpu: "8"
+              memory: 192Gi
+            limits:
+              cpu: "16"
+              memory: 320Gi

@@ -79,65 +79,6 @@ def load_horizon_plot_data(
     return sort_month_major(combined)
 
 
-def load_cumulative_plot_data(
-    *,
-    backtests_root: Path,
-    directions: tuple[DirectionSpec, ...],
-    pool: str,
-    include_baseline_pool: bool,
-    include_baseline_universe: bool,
-    baseline_run_id: str,
-    baseline_label: str = "baseline",
-) -> pd.DataFrame:
-    required = {
-        "pool",
-        "week_start",
-        "short_internal_excess_bps",
-        "next_internal_excess_bps",
-        "short_cumulative_internal_excess_bps",
-        "next_cumulative_internal_excess_bps",
-    }
-    frames = []
-    if include_baseline_pool:
-        frames.append(
-            _load_one_cumulative_plot_data(
-                path=backtests_root / baseline_run_id / "daily_cumulative_plot_data.csv",
-                source_pool=pool,
-                key="baseline_pool_l",
-                label=baseline_label,
-                required=required,
-            )
-        )
-    if include_baseline_universe:
-        frames.append(
-            _load_one_cumulative_plot_data(
-                path=backtests_root / baseline_run_id / "daily_cumulative_plot_data.csv",
-                source_pool="universe",
-                key="baseline_universe",
-                label=f"{baseline_label} universe",
-                required=required,
-                next_only=True,
-            )
-        )
-    for direction in directions:
-        path = backtests_root / direction.run_id / "daily_cumulative_plot_data.csv"
-        frames.append(
-            _load_one_cumulative_plot_data(
-                path=path,
-                source_pool=pool,
-                key=direction.key,
-                label=direction.label,
-                required=required,
-            )
-        )
-    combined = pd.concat(frames, ignore_index=True)
-    combined["week_start"] = pd.to_datetime(combined["week_start"], errors="coerce")
-    combined = combined.dropna(subset=["week_start"]).sort_values(["pool", "week_start"])
-    combined = _normalize_cumulative_decision_bps(combined)
-    combined["week_start"] = combined["week_start"].dt.strftime("%Y-%m-%d")
-    return combined
-
-
 def load_realized_cumulative_plot_data(
     *,
     backtests_root: Path,
@@ -407,42 +348,6 @@ def load_capacity_cumulative_plot_data(
     return pd.concat(frames, ignore_index=True)
 
 
-def _load_one_cumulative_plot_data(
-    *,
-    path: Path,
-    source_pool: str,
-    key: str,
-    label: str,
-    required: set[str],
-    next_only: bool = False,
-) -> pd.DataFrame:
-    frame = pd.read_csv(path)
-    missing = sorted(required - set(frame.columns))
-    if missing:
-        raise ValueError(f"{path} missing columns: {missing}")
-    item = frame.loc[frame["pool"].astype(str).eq(source_pool)].copy()
-    if item.empty:
-        raise ValueError(f"{path} has no rows for pool {source_pool!r}")
-    item["pool"] = key
-    item["pool_label"] = label
-    item["variant"] = label
-    if next_only:
-        item["short_internal_excess_bps"] = pd.NA
-        item["short_cumulative_internal_excess_bps"] = pd.NA
-    return item[
-        [
-            "pool",
-            "pool_label",
-            "week_start",
-            "short_internal_excess_bps",
-            "next_internal_excess_bps",
-            "variant",
-            "short_cumulative_internal_excess_bps",
-            "next_cumulative_internal_excess_bps",
-        ]
-    ]
-
-
 def _load_one_realized_plot_data(
     *,
     path: Path,
@@ -590,89 +495,6 @@ def _resolve_pool_turnover_path(
 
 def cumulative_sum_bps(return_bps: pd.Series) -> pd.Series:
     return pd.to_numeric(return_bps, errors="coerce").fillna(0.0).cumsum()
-
-
-def _normalize_cumulative_decision_bps(frame: pd.DataFrame) -> pd.DataFrame:
-    data = frame.copy()
-    columns = [
-        "short_internal_excess_bps",
-        "next_internal_excess_bps",
-        "short_cumulative_internal_excess_bps",
-        "next_cumulative_internal_excess_bps",
-    ]
-    for column in columns:
-        data[column] = pd.to_numeric(data[column], errors="coerce") / CUMULATIVE_DECISION_NORMALIZER
-    return data
-
-
-def relative_to_baseline_cumulative_data(
-    cumulative_data: pd.DataFrame,
-    *,
-    directions: tuple[DirectionSpec, ...],
-    baseline_key: str,
-) -> pd.DataFrame:
-    data = cumulative_data.copy()
-    data["week_start"] = pd.to_datetime(data["week_start"], errors="coerce")
-    data = data.dropna(subset=["week_start"])
-    baseline = data.loc[data["pool"].astype(str).eq(baseline_key)].copy()
-    if baseline.empty:
-        raise ValueError(f"cumulative data has no baseline rows for {baseline_key!r}")
-
-    baseline = baseline[
-        [
-            "week_start",
-            "short_internal_excess_bps",
-            "next_internal_excess_bps",
-        ]
-    ].rename(
-        columns={
-            "short_internal_excess_bps": "baseline_short_internal_excess_bps",
-            "next_internal_excess_bps": "baseline_next_internal_excess_bps",
-        }
-    )
-
-    frames = []
-    for direction in directions:
-        item = data.loc[data["pool"].astype(str).eq(direction.key)].copy()
-        if item.empty:
-            raise ValueError(f"cumulative data has no rows for direction {direction.key!r}")
-        item = item.merge(baseline, on="week_start", how="inner")
-        if item.empty:
-            raise ValueError(
-                f"direction {direction.key!r} has no dates in common with baseline {baseline_key!r}"
-            )
-        item["short_relative_excess_bps"] = (
-            item["short_internal_excess_bps"] - item["baseline_short_internal_excess_bps"]
-        )
-        item["next_relative_excess_bps"] = (
-            item["next_internal_excess_bps"] - item["baseline_next_internal_excess_bps"]
-        )
-        item = item.sort_values("week_start")
-        item["short_cumulative_relative_excess_bps"] = item["short_relative_excess_bps"].cumsum()
-        item["next_cumulative_relative_excess_bps"] = item["next_relative_excess_bps"].cumsum()
-        item["pool"] = direction.key
-        item["pool_label"] = direction.label
-        item["variant"] = direction.label
-        frames.append(
-            item[
-                [
-                    "pool",
-                    "pool_label",
-                    "week_start",
-                    "short_relative_excess_bps",
-                    "next_relative_excess_bps",
-                    "variant",
-                    "short_cumulative_relative_excess_bps",
-                    "next_cumulative_relative_excess_bps",
-                ]
-            ]
-        )
-
-    combined = pd.concat(frames, ignore_index=True)
-    combined["week_start"] = pd.to_datetime(combined["week_start"], errors="coerce").dt.strftime(
-        "%Y-%m-%d"
-    )
-    return combined
 
 
 def line_axis(values: pd.Series) -> tuple[float, float]:

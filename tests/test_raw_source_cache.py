@@ -6,18 +6,18 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from opening_strength_fit.commands.raw_source_cache import (
+from opening_strength_fit.config import load_toml
+from opening_strength_fit.raw_source import (
     CALENDAR_COLUMNS,
     CLOSE_REFERENCE_COLUMNS,
     DAILY_REFERENCE_COLUMNS,
     TICK_COLUMNS,
-    _parse_windows,
     close_reference_sql,
     label_coverage,
+    parse_tick_windows,
     stream_parquet_atomic,
     tick_source_sql,
 )
-from opening_strength_fit.config import load_toml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -171,7 +171,7 @@ def test_raw_source_configs(
 ) -> None:
     config = load_toml(PROJECT_ROOT / "experiments" / "runs" / config_name)
 
-    assert _parse_windows(config) == expected_windows
+    assert parse_tick_windows(config) == expected_windows
     assert config["raw_source"]["years"] == list(range(2019, 2026))
     assert config["raw_source"]["output_root"].endswith(expected_root)
     assert config["k8s"]["shard_parallelism"] == 2

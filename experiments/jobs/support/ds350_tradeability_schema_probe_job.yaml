@@ -1,0 +1,51 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-ds350-tradeability-schema-probe-v1
+  namespace: bizewu
+spec:
+  activeDeadlineSeconds: 1800
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 172800
+  template:
+    metadata:
+      labels: {app: os-ds350-tradeability-schema-probe-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+      containers:
+        - name: probe
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:8eb66ef731709af980fa7e047ccb59748c0ed8f4ed36aa3460ee9b1f4a9fe0b6
+          imagePullPolicy: Always
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              python - <<'PY'
+              from pathlib import Path
+              import pyarrow.parquet as pq
+
+              root = Path("/mnt/output/opening_strength_fit")
+              print("HOLDOUT_DIRS")
+              for path in sorted((root / "nn/holdout").glob("*")):
+                  print(path)
+              paths = [
+                  root / "nn/holdout/nn_ds350_w0931_hclose_train2023_2025_test2026h1_purge1_v1/predictions_unfiltered.parquet",
+                  root / "datasets/opening_0931_0940_labels_hclose_v1/year=2026/labels.parquet",
+                  root / "datasets/opening_0931_0940_labels_h1m_v2/year=2026/labels.parquet",
+                  root / "datasets/opening_0931_0940_features_350/year=2026/features.parquet",
+                  root / "nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/w0931_0940_hclose/month_2022-01/predictions.parquet",
+              ]
+              for path in paths:
+                  print(f"FILE={path} exists={path.exists()}")
+                  if path.exists():
+                      print(pq.read_schema(path))
+              PY
+          volumeMounts:
+            - {name: output, mountPath: /mnt/output}
+          resources:
+            requests: {cpu: "1", memory: 4Gi}
+            limits: {cpu: "2", memory: 8Gi}

@@ -1,0 +1,9 @@
+scope,sign_quadrant,rows,entry_to_same_day_close_bps,same_day_close_to_next_close_bps,entry_to_next_close_bps,share_pct
+universe,day_strong_then_overnight_reversal,266440,343.10806,-376.7808,-49.78639,27.49638802889577
+universe,day_and_overnight_strong,209557,349.2156,421.36115,789.677,21.62610939112487
+universe,day_reversal_and_overnight_weak,268096,-265.03592,-347.06445,-601.49194,27.667285861713108
+universe,day_reversal_then_overnight_strong,224907,-268.65118,337.6743,58.784027,23.210216718266256
+pool_L,day_strong_then_overnight_reversal,245276,261.3962,-268.76282,-15.765619,25.312280701754386
+pool_L,day_and_overnight_strong,221872,273.9455,328.0226,613.68353,22.897007223942207
+pool_L,day_reversal_and_overnight_weak,256756,-208.17076,-255.60858,-457.66888,26.49700722394221
+pool_L,day_reversal_then_overnight_strong,245096,-216.99017,274.89493,51.100636,25.2937048503612

@@ -8,7 +8,6 @@ import pandas as pd
 
 from opening_strength_fit.analysis import (
     NEXT_CLOSE_LABEL_COL,
-    normalize_next_close_labels,
 )
 from opening_strength_fit.clickhouse_ticks import (
     DEFAULT_CLICKHOUSE_TICK_HOST,
@@ -26,15 +25,18 @@ from opening_strength_fit.config import (
 from opening_strength_fit.horizon_clickhouse_labels import (
     DEFAULT_CLOSE_LOOKBACK_SECONDS,
     DEFAULT_CLOSE_OFFSET_US,
-    compute_clickhouse_close_labels,
 )
-from opening_strength_fit.horizons import HorizonSpec
 from opening_strength_fit.io import frame_columns, read_frame, write_frame, write_json
+from opening_strength_fit.next_close_labels import fetch_next_close_labels
 from opening_strength_fit.reports import print_mapping
-from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns
+from opening_strength_fit.schema import (
+    DECISION_KEY_COLUMNS,
+    ensure_timestamp_columns,
+    standardize_columns,
+)
 
 DEFAULT_DECISION_TIMES = tuple(f"09:{minute:02d}:00" for minute in range(31, 41))
-KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
+KEY_COLUMNS = DECISION_KEY_COLUMNS
 
 
 def _available_columns(path: Path) -> set[str]:
@@ -84,35 +86,6 @@ def _read_base_frame(
         )
         .drop_duplicates(list(KEY_COLUMNS))
     )
-
-
-def fetch_next_close_labels(
-    base: pd.DataFrame,
-    *,
-    host: str,
-    port: int,
-    username: str,
-    password: str,
-    table: str,
-    close_offset_us: int = DEFAULT_CLOSE_OFFSET_US,
-    close_lookback_seconds: int = DEFAULT_CLOSE_LOOKBACK_SECONDS,
-    calendar_days_after: int = 14,
-    fee_bps: float = 0.0,
-) -> pd.DataFrame:
-    labels = compute_clickhouse_close_labels(
-        base[[*KEY_COLUMNS, "buy_price"]].copy(),
-        [HorizonSpec(name="next_close", label="next close", seconds=None)],
-        host=host or DEFAULT_CLICKHOUSE_TICK_HOST,
-        port=int(port),
-        username=username,
-        password=password,
-        table=table,
-        close_offset_us=int(close_offset_us),
-        close_lookback_seconds=int(close_lookback_seconds),
-        calendar_days_after=int(calendar_days_after),
-        fee_bps=float(fee_bps),
-    )
-    return normalize_next_close_labels(labels, key_columns=KEY_COLUMNS)
 
 
 def build_next_close_label_cache(

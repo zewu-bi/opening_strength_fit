@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from pathlib import Path
 
-from opening_strength_fit.commands.artifact_sync_artifacts import (
+from opening_strength_fit.artifact_catalog import (
     STRATEGY_ACCEPTANCE_ARTIFACTS,
     is_capacity_acceptance,
     is_capacity_audit,
@@ -14,8 +15,12 @@ from opening_strength_fit.commands.artifact_sync_artifacts import (
     is_pool_internal_analysis,
     is_rolling_validation,
     is_score_risk_sweep,
+)
+from opening_strength_fit.commands.artifact_sync_artifacts import (
+    combine_rolling_validation_shards as combine_rolling_validation_shards,
+)
+from opening_strength_fit.commands.artifact_sync_artifacts import (
     local_artifact_dir,
-    pull_artifact_set,
     pull_capacity_acceptance_artifacts,
     pull_capacity_audit_artifacts,
     pull_exposure_audit_artifacts,
@@ -23,13 +28,10 @@ from opening_strength_fit.commands.artifact_sync_artifacts import (
     pull_feature_hygiene_artifacts,
     pull_gap_attribution_artifacts,
     pull_pool_internal_analysis_artifacts,
+    pull_required_artifact_set,
     pull_rolling_validation_artifacts,
     pull_score_risk_artifacts,
-    record_artifact_fetch,
     record_lightweight_artifacts,
-)
-from opening_strength_fit.commands.artifact_sync_artifacts import (
-    combine_rolling_validation_shards as combine_rolling_validation_shards,
 )
 from opening_strength_fit.commands.artifact_sync_artifacts import (
     pull_rolling_validation_shards as pull_rolling_validation_shards,
@@ -66,19 +68,14 @@ def pull_strategy_acceptance_artifacts(
     pod_name: str,
     output_root: Path | None,
 ) -> list[Path]:
-    output_dir, pulled, missing = pull_artifact_set(
+    return pull_required_artifact_set(
         hfcli,
         spec,
         pod_name,
         output_root,
         STRATEGY_ACCEPTANCE_ARTIFACTS,
+        "strategy-acceptance",
     )
-    if not pulled:
-        raise SystemExit(
-            f"{spec.run_id}: no strategy-acceptance artifacts found under {spec.pvc_dir}"
-        )
-    record_artifact_fetch(spec, output_dir, pulled, missing)
-    return pulled
 
 
 def parse_run(value: str) -> tuple[str, str]:
@@ -125,7 +122,34 @@ def validate_specs(specs: list[RunSpec]) -> None:
             )
 
 
-def main() -> None:
+@dataclass(frozen=True)
+class SyncPlan:
+    specs: list[RunSpec]
+    fetch_metrics: bool
+    fetch_predictions: bool
+    fetch_artifacts: bool
+    fetch_next_close_labels: bool
+    record: bool
+    metrics_dir: Path
+    metric_shards_root: Path
+    predictions_root: Path
+    artifacts_root: Path | None
+    next_close_labels_root: Path
+    records_dir: Path
+
+    @property
+    def needs_pod(self) -> bool:
+        return any(
+            (
+                self.fetch_metrics,
+                self.fetch_predictions,
+                self.fetch_artifacts,
+                self.fetch_next_close_labels,
+            )
+        )
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Sync K8s PVC metrics and lightweight analysis artifacts."
     )
@@ -209,54 +233,202 @@ def main() -> None:
         ),
     )
     parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args()
+    return parser
 
-    specs: list[RunSpec] = []
-    if args.config:
-        specs.extend(args.config)
-    if args.run:
-        specs.extend(ad_hoc_run_spec(label, pvc_dir, args.namespace) for label, pvc_dir in args.run)
+
+def resolve_sync_plan(args: argparse.Namespace) -> SyncPlan:
+    specs: list[RunSpec] = list(args.config or [])
+    specs.extend(
+        ad_hoc_run_spec(label, pvc_dir, args.namespace) for label, pvc_dir in (args.run or [])
+    )
     if not specs:
         raise SystemExit("pass at least one --config or --run")
     validate_specs(specs)
 
-    no_action = not (
-        args.metrics
-        or args.predictions
-        or args.artifacts
-        or args.analysis_artifacts
-        or args.next_close_labels
-        or args.record
-        or args.all
+    no_action = not any(
+        (
+            args.metrics,
+            args.predictions,
+            args.artifacts,
+            args.analysis_artifacts,
+            args.next_close_labels,
+            args.record,
+            args.all,
+        )
     )
-    fetch_metrics_flag = args.all or args.metrics or no_action
-    fetch_predictions_flag = args.predictions
-    fetch_artifacts_flag = args.all or args.artifacts or args.analysis_artifacts or no_action
-    fetch_next_close_labels_flag = args.next_close_labels
-    record_flag = args.all or args.record or no_action
-    if args.allow_partial:
-        record_flag = False
-
-    records_dir = Path(args.records_dir)
     metrics_dir = Path(args.metrics_dir)
     if args.allow_partial and args.metrics_dir == DEFAULT_METRICS_DIR:
         metrics_dir = Path(args.partial_metrics_dir)
-    metric_shards_root = Path(args.metric_shards_root)
-    predictions_root = Path(args.predictions_root)
-    artifacts_root = Path(args.artifacts_root) if args.artifacts_root else None
-    next_close_labels_root = Path(args.next_close_labels_root)
-    needs_pod = (
-        fetch_metrics_flag
-        or fetch_predictions_flag
-        or fetch_artifacts_flag
-        or fetch_next_close_labels_flag
+    return SyncPlan(
+        specs=specs,
+        fetch_metrics=args.all or args.metrics or no_action,
+        fetch_predictions=args.predictions,
+        fetch_artifacts=args.all or args.artifacts or args.analysis_artifacts or no_action,
+        fetch_next_close_labels=args.next_close_labels,
+        record=(args.all or args.record or no_action) and not args.allow_partial,
+        metrics_dir=metrics_dir,
+        metric_shards_root=Path(args.metric_shards_root),
+        predictions_root=Path(args.predictions_root),
+        artifacts_root=Path(args.artifacts_root) if args.artifacts_root else None,
+        next_close_labels_root=Path(args.next_close_labels_root),
+        records_dir=Path(args.records_dir),
     )
+
+
+def print_sync_plan(args: argparse.Namespace, plan: SyncPlan, pod_name: str) -> None:
+    print("sync_plan:")
+    print(f"  pod: {pod_name or '<none>'}")
+    print(f"  metrics: {plan.fetch_metrics}")
+    print(f"  metrics_dir: {plan.metrics_dir}")
+    print(f"  predictions: {plan.fetch_predictions}")
+    print(f"  artifacts: {plan.fetch_artifacts}")
+    if plan.fetch_artifacts or plan.record:
+        for spec in plan.specs:
+            print(f"  artifact_dir[{spec.run_id}]: {local_artifact_dir(spec, plan.artifacts_root)}")
+    print(f"  next_close_labels: {plan.fetch_next_close_labels}")
+    print(f"  record: {plan.record}")
+    print(f"  allow_partial: {args.allow_partial}")
+    for spec in plan.specs:
+        print(f"  {spec.run_id}: {spec.pvc_dir}")
+
+
+def pull_metrics_for_specs(args: argparse.Namespace, plan: SyncPlan, pod_name: str) -> None:
+    if not plan.fetch_metrics:
+        return
+    print("pulled_metrics:")
+    for spec in plan.specs:
+        if (
+            spec.kind == "pool_internal_analysis" or is_non_standard_artifact_run(spec)
+        ) and not args.metrics:
+            print(f"  {spec.run_id}: skipped metrics for {spec.kind}")
+            continue
+        paths = pull_metrics(
+            args.hfcli,
+            spec,
+            pod_name,
+            plan.metrics_dir,
+            allow_partial=args.allow_partial,
+            raw_root=plan.metric_shards_root,
+        )
+        print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
+
+
+def pull_predictions_for_specs(args: argparse.Namespace, plan: SyncPlan, pod_name: str) -> None:
+    if not plan.fetch_predictions:
+        return
+    print("pulled_predictions:")
+    for spec in plan.specs:
+        path = fetch_predictions(
+            args.hfcli,
+            spec,
+            pod_name,
+            plan.predictions_root,
+            allow_partial=args.allow_partial,
+        )
+        print(f"  {spec.run_id}: {path}")
+
+
+def pull_artifacts_for_spec(
+    args: argparse.Namespace,
+    plan: SyncPlan,
+    spec: RunSpec,
+    pod_name: str,
+) -> list[Path] | None:
+    common = (args.hfcli, spec, pod_name, plan.artifacts_root)
+    if is_pool_internal_analysis(spec):
+        return pull_pool_internal_analysis_artifacts(*common)
+    if not is_non_standard_artifact_run(spec):
+        return None
+    if is_score_risk_sweep(spec):
+        return pull_score_risk_artifacts(*common)
+    if is_rolling_validation(spec):
+        return pull_rolling_validation_artifacts(*common)
+    if is_gap_attribution(spec):
+        return pull_gap_attribution_artifacts(*common)
+    if is_capacity_acceptance(spec):
+        return pull_capacity_acceptance_artifacts(*common)
+    if is_capacity_audit(spec):
+        return pull_capacity_audit_artifacts(*common)
+    if spec.kind == "strategy_acceptance":
+        return pull_strategy_acceptance_artifacts(*common)
+    if is_exposure_audit(spec):
+        return pull_exposure_audit_artifacts(*common)
+    if is_feature_hygiene(spec):
+        return pull_feature_hygiene_artifacts(*common)
+    return pull_feature_audit_artifacts(*common)
+
+
+def pull_artifacts_for_specs(args: argparse.Namespace, plan: SyncPlan, pod_name: str) -> None:
+    if not plan.fetch_artifacts:
+        return
+    print("pulled_artifacts:")
+    for spec in plan.specs:
+        paths = pull_artifacts_for_spec(args, plan, spec, pod_name)
+        if paths is None:
+            if args.artifacts:
+                print(f"  {spec.run_id}: no artifact sync configured")
+            continue
+        print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
+
+
+def pull_next_close_labels_for_specs(
+    args: argparse.Namespace,
+    plan: SyncPlan,
+    pod_name: str,
+) -> None:
+    if not plan.fetch_next_close_labels:
+        return
+    print("pulled_next_close_labels:")
+    for spec in plan.specs:
+        paths = pull_next_close_labels(
+            args.hfcli,
+            spec,
+            pod_name,
+            plan.next_close_labels_root,
+            label_pvc_dir=args.next_close_label_pvc_dir,
+        )
+        print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
+
+
+def record_synced_results(args: argparse.Namespace, plan: SyncPlan) -> None:
+    if not plan.record:
+        return
+    statuses = collect_run_statuses(Path(args.runs_dir))
+    print("recorded_metrics:")
+    for spec in plan.specs:
+        if spec.kind == "pool_internal_analysis" and not args.metrics:
+            print(f"  {spec.run_id}: no metrics to record for {spec.kind}")
+            continue
+        paths = record_metrics(spec.run_id, plan.metrics_dir, plan.records_dir)
+        status = statuses.get(spec.run_id, "")
+        if paths:
+            print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
+            if status and status != "completed":
+                print(f"  {spec.run_id}: config status is {status!r}; confirm before final archive")
+        elif is_non_standard_artifact_run(spec) and not args.metrics:
+            print(f"  {spec.run_id}: no metrics to record for {spec.kind}")
+        else:
+            print(f"  {spec.run_id}: missing {plan.metrics_dir / f'{spec.run_id}{METRICS_SUFFIX}'}")
+    print("recorded_artifacts:")
+    for spec in plan.specs:
+        paths = record_lightweight_artifacts(spec, plan.artifacts_root, plan.records_dir)
+        if paths:
+            print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
+        elif is_pool_internal_analysis(spec):
+            print(f"  {spec.run_id}: no pool-internal analysis artifacts to record")
+        elif is_non_standard_artifact_run(spec):
+            print(f"  {spec.run_id}: no lightweight artifacts to record")
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    plan = resolve_sync_plan(args)
     pod_name = args.pod
     created_temp_pod = False
-    if needs_pod and not pod_name:
+    if plan.needs_pod and not pod_name:
         pod_name = ensure_temp_pod(
             args.hfcli,
-            specs[0],
+            plan.specs[0],
             args.timeout,
             "opening-strength-sync-artifacts",
             dry_run=args.dry_run,
@@ -264,182 +436,18 @@ def main() -> None:
         created_temp_pod = not args.dry_run
 
     if args.dry_run:
-        print("sync_plan:")
-        print(f"  pod: {pod_name or '<none>'}")
-        print(f"  metrics: {fetch_metrics_flag}")
-        print(f"  metrics_dir: {metrics_dir}")
-        print(f"  predictions: {fetch_predictions_flag}")
-        print(f"  artifacts: {fetch_artifacts_flag}")
-        if fetch_artifacts_flag or record_flag:
-            for spec in specs:
-                print(f"  artifact_dir[{spec.run_id}]: {local_artifact_dir(spec, artifacts_root)}")
-        print(f"  next_close_labels: {fetch_next_close_labels_flag}")
-        print(f"  record: {record_flag}")
-        print(f"  allow_partial: {args.allow_partial}")
-        for spec in specs:
-            print(f"  {spec.run_id}: {spec.pvc_dir}")
+        print_sync_plan(args, plan, pod_name)
         return
 
-    statuses = collect_run_statuses(Path(args.runs_dir))
     try:
-        if fetch_metrics_flag:
-            print("pulled_metrics:")
-            for spec in specs:
-                if spec.kind == "pool_internal_analysis" and not args.metrics:
-                    print(f"  {spec.run_id}: skipped metrics for {spec.kind}")
-                    continue
-                if is_non_standard_artifact_run(spec) and not args.metrics:
-                    print(f"  {spec.run_id}: skipped metrics for {spec.kind}")
-                    continue
-                paths = pull_metrics(
-                    args.hfcli,
-                    spec,
-                    pod_name,
-                    metrics_dir,
-                    allow_partial=args.allow_partial,
-                    raw_root=metric_shards_root,
-                )
-                print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
-        if fetch_predictions_flag:
-            print("pulled_predictions:")
-            for spec in specs:
-                if (is_score_risk_sweep(spec) or is_gap_attribution(spec)) and not args.predictions:
-                    print(f"  {spec.run_id}: skipped predictions for {spec.kind}")
-                    continue
-                path = fetch_predictions(
-                    args.hfcli,
-                    spec,
-                    pod_name,
-                    predictions_root,
-                    allow_partial=args.allow_partial,
-                )
-                print(f"  {spec.run_id}: {path}")
-        if fetch_artifacts_flag:
-            print("pulled_artifacts:")
-            for spec in specs:
-                if is_pool_internal_analysis(spec):
-                    paths = pull_pool_internal_analysis_artifacts(
-                        args.hfcli,
-                        spec,
-                        pod_name,
-                        artifacts_root,
-                    )
-                    print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
-                    continue
-                if not is_non_standard_artifact_run(spec):
-                    if args.artifacts:
-                        print(f"  {spec.run_id}: no artifact sync configured")
-                    continue
-                if is_score_risk_sweep(spec):
-                    paths = pull_score_risk_artifacts(
-                        args.hfcli,
-                        spec,
-                        pod_name,
-                        artifacts_root,
-                    )
-                elif is_rolling_validation(spec):
-                    paths = pull_rolling_validation_artifacts(
-                        args.hfcli,
-                        spec,
-                        pod_name,
-                        artifacts_root,
-                    )
-                elif is_gap_attribution(spec):
-                    paths = pull_gap_attribution_artifacts(
-                        args.hfcli,
-                        spec,
-                        pod_name,
-                        artifacts_root,
-                    )
-                elif is_capacity_acceptance(spec):
-                    paths = pull_capacity_acceptance_artifacts(
-                        args.hfcli,
-                        spec,
-                        pod_name,
-                        artifacts_root,
-                    )
-                elif is_capacity_audit(spec):
-                    paths = pull_capacity_audit_artifacts(
-                        args.hfcli,
-                        spec,
-                        pod_name,
-                        artifacts_root,
-                    )
-                elif spec.kind == "strategy_acceptance":
-                    paths = pull_strategy_acceptance_artifacts(
-                        args.hfcli,
-                        spec,
-                        pod_name,
-                        artifacts_root,
-                    )
-                elif is_exposure_audit(spec):
-                    paths = pull_exposure_audit_artifacts(
-                        args.hfcli,
-                        spec,
-                        pod_name,
-                        artifacts_root,
-                    )
-                elif is_feature_hygiene(spec):
-                    paths = pull_feature_hygiene_artifacts(
-                        args.hfcli,
-                        spec,
-                        pod_name,
-                        artifacts_root,
-                    )
-                else:
-                    paths = pull_feature_audit_artifacts(
-                        args.hfcli,
-                        spec,
-                        pod_name,
-                        artifacts_root,
-                    )
-                print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
-        if fetch_next_close_labels_flag:
-            print("pulled_next_close_labels:")
-            for spec in specs:
-                paths = pull_next_close_labels(
-                    args.hfcli,
-                    spec,
-                    pod_name,
-                    next_close_labels_root,
-                    label_pvc_dir=args.next_close_label_pvc_dir,
-                )
-                print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
+        pull_metrics_for_specs(args, plan, pod_name)
+        pull_predictions_for_specs(args, plan, pod_name)
+        pull_artifacts_for_specs(args, plan, pod_name)
+        pull_next_close_labels_for_specs(args, plan, pod_name)
     finally:
         if created_temp_pod:
-            delete_temp_pod(args.hfcli, specs[0].namespace, pod_name)
-
-    if record_flag:
-        print("recorded_metrics:")
-        for spec in specs:
-            if spec.kind == "pool_internal_analysis" and not args.metrics:
-                print(f"  {spec.run_id}: no metrics to record for {spec.kind}")
-                continue
-            paths = record_metrics(spec.run_id, metrics_dir, records_dir)
-            status = statuses.get(spec.run_id, "")
-            if paths:
-                print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
-                if status and status != "completed":
-                    print(
-                        f"  {spec.run_id}: config status is {status!r}; confirm before final archive"
-                    )
-            elif is_non_standard_artifact_run(spec) and not args.metrics:
-                print(f"  {spec.run_id}: no metrics to record for {spec.kind}")
-            else:
-                print(f"  {spec.run_id}: missing {metrics_dir / f'{spec.run_id}{METRICS_SUFFIX}'}")
-        print("recorded_artifacts:")
-        for spec in specs:
-            paths = record_lightweight_artifacts(
-                spec,
-                artifacts_root,
-                records_dir,
-            )
-            if paths:
-                print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
-            elif is_pool_internal_analysis(spec):
-                print(f"  {spec.run_id}: no pool-internal analysis artifacts to record")
-            elif is_non_standard_artifact_run(spec):
-                print(f"  {spec.run_id}: no lightweight artifacts to record")
+            delete_temp_pod(args.hfcli, plan.specs[0].namespace, pod_name)
+    record_synced_results(args, plan)
 
 
 if __name__ == "__main__":

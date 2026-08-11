@@ -190,6 +190,57 @@ def publish_cache_manifest(
     return manifest
 
 
+def _validate_manifest_cache_file(
+    cache_path: Path,
+    cache_file: object,
+    errors: list[str],
+) -> None:
+    if not isinstance(cache_file, dict) or cache_file.get("bytes") is None:
+        return
+    try:
+        actual_bytes = cache_path.stat().st_size
+    except OSError as error:
+        errors.append(f"cannot stat cache file: {error}")
+        return
+    try:
+        expected_bytes = int(cache_file["bytes"])
+    except (TypeError, ValueError):
+        errors.append(f"invalid manifest cache_file.bytes={cache_file['bytes']!r}")
+        return
+    if actual_bytes != expected_bytes:
+        errors.append(f"cache file bytes {actual_bytes} != manifest bytes {expected_bytes}")
+
+
+def _validate_manifest_columns(
+    cache_path: Path,
+    manifest_columns: set[str],
+    errors: list[str],
+) -> None:
+    try:
+        actual_columns = frame_columns(cache_path)
+    except SystemExit as error:
+        errors.append(f"cannot inspect cache file schema: {error}")
+        return
+    missing_actual_columns = sorted(set(REQUIRED_LABELED_CACHE_COLUMNS) - actual_columns)
+    if missing_actual_columns:
+        errors.append(
+            "required columns missing from cache file: " + ", ".join(missing_actual_columns)
+        )
+    if not manifest_columns or actual_columns == manifest_columns:
+        return
+    missing_from_cache = sorted(manifest_columns - actual_columns)
+    extra_in_cache = sorted(actual_columns - manifest_columns)
+    detail_parts = []
+    if missing_from_cache:
+        detail_parts.append("missing in cache: " + ", ".join(missing_from_cache))
+    if extra_in_cache:
+        detail_parts.append("extra in cache: " + ", ".join(extra_in_cache))
+    errors.append(
+        "manifest schema columns do not match cache file"
+        + (f" ({'; '.join(detail_parts)})" if detail_parts else "")
+    )
+
+
 def validate_cache_manifest(
     cache_path: str | Path,
     config: dict,
@@ -228,45 +279,8 @@ def validate_cache_manifest(
         errors.append(f"required columns missing: {', '.join(missing_columns)}")
 
     cache_path = Path(cache_path)
-    cache_file = manifest.get("cache_file", {})
-    if isinstance(cache_file, dict) and cache_file.get("bytes") is not None:
-        try:
-            actual_bytes = cache_path.stat().st_size
-        except OSError as error:
-            errors.append(f"cannot stat cache file: {error}")
-        else:
-            try:
-                expected_bytes = int(cache_file["bytes"])
-            except (TypeError, ValueError):
-                errors.append(f"invalid manifest cache_file.bytes={cache_file['bytes']!r}")
-            else:
-                if actual_bytes != expected_bytes:
-                    errors.append(
-                        f"cache file bytes {actual_bytes} != manifest bytes {expected_bytes}"
-                    )
-
-    try:
-        actual_columns = frame_columns(cache_path)
-    except SystemExit as error:
-        errors.append(f"cannot inspect cache file schema: {error}")
-    else:
-        missing_actual_columns = sorted(set(REQUIRED_LABELED_CACHE_COLUMNS) - actual_columns)
-        if missing_actual_columns:
-            errors.append(
-                "required columns missing from cache file: " + ", ".join(missing_actual_columns)
-            )
-        if manifest_columns and actual_columns != manifest_columns:
-            missing_from_cache = sorted(manifest_columns - actual_columns)
-            extra_in_cache = sorted(actual_columns - manifest_columns)
-            detail_parts = []
-            if missing_from_cache:
-                detail_parts.append("missing in cache: " + ", ".join(missing_from_cache))
-            if extra_in_cache:
-                detail_parts.append("extra in cache: " + ", ".join(extra_in_cache))
-            errors.append(
-                "manifest schema columns do not match cache file"
-                + (f" ({'; '.join(detail_parts)})" if detail_parts else "")
-            )
+    _validate_manifest_cache_file(cache_path, manifest.get("cache_file", {}), errors)
+    _validate_manifest_columns(cache_path, manifest_columns, errors)
 
     if version >= MANIFEST_VERSION:
         actual_fingerprint = str(manifest.get("config_fingerprint", ""))

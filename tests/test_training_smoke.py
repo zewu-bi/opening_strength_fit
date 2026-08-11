@@ -122,3 +122,81 @@ enabled = false
         "feature_liquidity",
         "feature_signal",
     ]
+
+
+def test_training_diagnostic_can_save_unfiltered_predictions_and_purge_train_tail(
+    tmp_path: Path,
+) -> None:
+    input_path = tmp_path / "tiny_labeled.parquet"
+    output_dir = tmp_path / "out"
+    config_path = tmp_path / "tiny_training_diagnostic.toml"
+    frame = _tiny_labeled_frame()
+    invalid_index = frame.index[-1]
+    frame.loc[invalid_index, "valid_label"] = False
+    frame.to_parquet(input_path, index=False)
+    config_path.write_text(
+        f"""
+[run]
+id = "tiny_training_diagnostic"
+
+[data]
+source = "labeled_pvc"
+labeled_path = "{input_path.as_posix()}"
+
+[window]
+mode = "chronological"
+test_start_date = "2022-01-05"
+test_end_date = "2022-01-06"
+purge_train_sessions = 1
+
+[model]
+name = "ridge"
+alpha = 1.0
+
+[features]
+include_feature_prefixes = ["feature_"]
+
+[evaluation]
+top_n = 1
+score_bins = 3
+bucket_mode = "daily"
+selection_mode = "cross_section"
+ic_mode = "cross_section"
+
+[output]
+write_unfiltered_predictions = true
+
+[universe]
+enabled = false
+""".strip(),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "opening_strength_fit.commands.experiment_run",
+            "--config",
+            str(config_path),
+            "--output-dir",
+            str(output_dir),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    filtered = pd.read_parquet(output_dir / "predictions.parquet")
+    unfiltered = pd.read_parquet(output_dir / "predictions_unfiltered.parquet")
+    metrics_payload = json.loads((output_dir / "metrics.json").read_text(encoding="utf-8"))
+    assert len(unfiltered) == 6
+    assert len(filtered) == 5
+    assert int(unfiltered["valid_label"].sum()) == 5
+    assert metrics_payload["train_stats_by_window"]["2022-01"]["rows"] == 3
+    assert metrics_payload["train_stats_by_window"]["2022-01"]["purge_train_sessions"] == 1
+    assert metrics_payload["train_stats_by_window"]["2022-01"]["purged_train_dates"] == [
+        "2022-01-04"
+    ]

@@ -2,7 +2,9 @@
 id = "opening_0931_0940_features_350"
 kind = "training_feature_dataset"
 description = "Build the model-ready canonical 350-feature annual dataset for 09:31-09:40 from raw PVC data."
-status = "running"
+status = "completed"
+closed_at = "2026-08-11"
+status_reason = "Governance reconciliation: completed downstream artifacts prove this prerequisite or analysis finished."
 
 [dataset]
 years = [2019, 2020, 2021, 2022, 2023, 2024, 2025]

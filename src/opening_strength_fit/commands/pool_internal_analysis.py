@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import shutil
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -10,20 +11,22 @@ import pandas as pd
 
 from opening_strength_fit.analysis import KEY_COLUMNS, NEXT_CLOSE_LABEL_COL, write_json
 from opening_strength_fit.io import read_frame
+from opening_strength_fit.io.frames import csv_ready
+from opening_strength_fit.pool_internal_artifacts import record_pool_internal_outputs
 from opening_strength_fit.pool_internal_company import (
     COMPANY_API_TIMES,
     COMPANY_SCORE_AGGS,
     COMPANY_SCORE_TRANSFORMS,
-    build_company_neutral_score_matrix,  # noqa: F401
-    build_company_score_matrix,  # noqa: F401
-    company_backtest_neutral_comparison_plot_data,  # noqa: F401
-    company_backtest_relative_plot_data,  # noqa: F401
-    create_company_backtest_payload,  # noqa: F401
-    decode_company_backtest_result,  # noqa: F401
-    filter_company_backtest_scores,  # noqa: F401
-    normalize_clock,  # noqa: F401
+    build_company_neutral_score_matrix,
+    build_company_score_matrix,
+    company_backtest_neutral_comparison_plot_data,
+    company_backtest_relative_plot_data,
+    create_company_backtest_payload,
+    decode_company_backtest_result,
+    filter_company_backtest_scores,
+    normalize_clock,
     run_company_backtest_analysis,
-    write_company_api_outputs,  # noqa: F401
+    write_company_api_outputs,
 )
 from opening_strength_fit.pool_internal_eval import (
     evaluate_pool,
@@ -57,6 +60,20 @@ from opening_strength_fit.stock_pool import (
 
 DEFAULT_POOLS = ("universe", "S", "M", "L")
 BACKTEST_MODES = ("self", "company-api", "both")
+
+__all__ = [
+    "build_company_neutral_score_matrix",
+    "build_company_score_matrix",
+    "company_backtest_neutral_comparison_plot_data",
+    "company_backtest_relative_plot_data",
+    "create_company_backtest_payload",
+    "decode_company_backtest_result",
+    "filter_company_backtest_scores",
+    "main",
+    "normalize_clock",
+    "parse_args",
+    "write_company_api_outputs",
+]
 
 
 def parse_args() -> argparse.Namespace:
@@ -281,14 +298,6 @@ def read_next_close_labels(path: str, *, years: set[str], next_label_col: str) -
     return labels.drop_duplicates(list(KEY_COLUMNS), keep="last")
 
 
-def _csv_ready(frame: pd.DataFrame) -> pd.DataFrame:
-    out = frame.copy()
-    for column in out.columns:
-        if pd.api.types.is_datetime64_any_dtype(out[column]):
-            out[column] = out[column].dt.strftime("%Y-%m-%d")
-    return out
-
-
 def write_weekly_outputs(
     group_metrics: pd.DataFrame,
     output_dir: Path,
@@ -308,8 +317,8 @@ def write_weekly_outputs(
     weekly_path = output_dir / "weekly_pool_internal_summary.csv"
     overall_path = output_dir / "weekly_pool_internal_overall_summary.csv"
     worst_path = output_dir / "weekly_worst_windows.csv"
-    _csv_ready(daily).to_csv(daily_path, index=False, float_format="%.6f")
-    _csv_ready(weekly).to_csv(weekly_path, index=False, float_format="%.6f")
+    csv_ready(daily).to_csv(daily_path, index=False, float_format="%.6f")
+    csv_ready(weekly).to_csv(weekly_path, index=False, float_format="%.6f")
     overall.to_csv(overall_path, index=False, float_format="%.6f")
     worst.to_csv(worst_path, index=False, float_format="%.6f")
     plot_paths = write_weekly_pool_internal_rolling_plot(
@@ -350,96 +359,145 @@ def write_weekly_outputs(
     }
 
 
-def record_pool_internal_outputs(
-    *,
+@dataclass
+class _SelfAnalysis:
+    frame: pd.DataFrame = field(default_factory=pd.DataFrame)
+    missing_next: int = 0
+    summary: pd.DataFrame = field(default_factory=pd.DataFrame)
+    report_plots: dict[str, str] = field(default_factory=dict)
+    weekly_outputs: dict[str, str] = field(default_factory=dict)
+
+
+def _run_self_analysis(
+    args: argparse.Namespace,
+    predictions: pd.DataFrame,
+    pools: tuple[str, ...],
     output_dir: Path,
-    records_dir: Path,
-    record_prefix: str,
-    report_plots: dict[str, str],
-    record_subdir: str = "",
-) -> list[Path]:
-    backtests_dir = records_dir / "backtests" / record_subdir
+    plot_pools: tuple[str, ...],
+) -> _SelfAnalysis:
+    report_plots: dict[str, str] = {}
+    weekly_outputs: dict[str, str] = {}
+    years = set(pd.to_datetime(predictions["date"], errors="coerce").dt.strftime("%Y").dropna())
+    labels = read_next_close_labels(
+        args.next_close_label_input,
+        years=years,
+        next_label_col=args.next_label_col,
+    )
+    frame = predictions.merge(labels, on=list(KEY_COLUMNS), how="left")
+    missing_next = int(frame[args.next_label_col].isna().sum())
+    if missing_next:
+        print(f"warning: missing next-close labels for {missing_next} prediction rows")
+    print(
+        f"analysis_frame: prediction_rows={len(predictions)} "
+        f"label_rows={len(labels)} joined_rows={len(frame)}"
+    )
 
-    def record_name(suffix: str) -> str:
-        return suffix if record_subdir else f"{record_prefix}_{suffix}"
+    group_frames = []
+    for pool in pools:
+        if pool == "universe":
+            pool_frame = frame
+            pool_name = "universe"
+        else:
+            pool_path = DEFAULT_STOCK_POOL_PATHS[pool]
+            print(f"loading_stock_pool: pool={pool} path={pool_path}")
+            pool_frame = frame.loc[
+                stock_pool_membership_mask(
+                    frame,
+                    load_stock_pool(pool_path),
+                    date_lag_sessions=args.pool_date_lag_sessions,
+                )
+            ].copy()
+            pool_name = f"pool_{pool}"
+        print(f"evaluating_pool: pool={pool_name} rows={len(pool_frame)}")
+        group_frames.append(
+            evaluate_pool(
+                pool_frame,
+                pool_name=pool_name,
+                score_col=args.score_col,
+                short_label_col=args.short_label_col,
+                next_label_col=args.next_label_col,
+                top_n=args.top_n,
+            )
+        )
 
-    records = [
-        (output_dir / "pool_internal_summary.csv", record_name("pool_internal_summary.csv")),
-        (
-            output_dir / "pool_internal_quarter_summary.csv",
-            record_name("pool_internal_quarter_summary.csv"),
-        ),
-        (
-            output_dir / "daily_pool_internal_summary.csv",
-            record_name("daily_pool_internal_summary.csv"),
-        ),
-        (
-            output_dir / "pool_internal_month_summary.csv",
-            record_name("pool_internal_month_summary.csv"),
-        ),
-        (
-            output_dir / "pool_internal_clock_summary.csv",
-            record_name("pool_internal_clock_summary.csv"),
-        ),
-        (
-            output_dir / "pool_internal_group_metrics.csv",
-            record_name("pool_internal_group_metrics.csv"),
-        ),
-        (
-            output_dir / "pool_internal_halfyear_summary.csv",
-            record_name("pool_internal_halfyear_summary.csv"),
-        ),
-        (
-            output_dir / "pool_internal_year_summary.csv",
-            record_name("pool_internal_year_summary.csv"),
-        ),
-        (output_dir / "pool_internal_trace.json", record_name("pool_internal_trace.json")),
-    ]
-    plot_records = {
-        "pool_internal_plot_data": record_name("pool_internal_plot_data.csv"),
-        "pool_internal_figure": record_name("pool_internal_with_mean.svg"),
-        "rank_ic_plot_data": record_name("rank_ic_plot_data.csv"),
-        "rank_ic_figure": record_name("rank_ic_with_mean.svg"),
-        "short_excess_rank_ic_plot_data": record_name("short_excess_rank_ic_plot_data.csv"),
-        "short_excess_rank_ic_figure": record_name("short_excess_rank_ic_with_mean.svg"),
-        "next_excess_rank_ic_plot_data": record_name("next_excess_rank_ic_plot_data.csv"),
-        "next_excess_rank_ic_figure": record_name("next_excess_rank_ic_with_mean.svg"),
-        "daily_cumulative_plot_data": record_name("daily_cumulative_plot_data.csv"),
-        "daily_cumulative_figure": record_name("daily_cumulative.svg"),
-        "company_backtest_plot_data": record_name("company_backtest_plot_data.csv"),
-        "company_backtest_figure": record_name("company_backtest.svg"),
-    }
-    for key, name in plot_records.items():
-        if key in report_plots:
-            records.append((Path(report_plots[key]), name))
-    for key, name in plot_records.items():
-        if not key.endswith("_plot_data") or key not in report_plots:
-            continue
-        trace_path = _plot_trace_path(Path(report_plots[key]))
-        if trace_path.exists():
-            trace_name = name.replace("_plot_data.csv", "_trace.json")
-            if trace_name == "pool_internal_trace.json" or trace_name.endswith(
-                "_pool_internal_trace.json"
-            ):
-                trace_name = record_name("pool_internal_with_mean_trace.json")
-            records.append((trace_path, trace_name))
+    group_metrics = pd.concat(group_frames, ignore_index=True) if group_frames else pd.DataFrame()
+    month_summary = summarize_groups(group_metrics, ["pool", "test_month"])
+    quarterly = quarter_summary(group_metrics)
+    clock_summary = summarize_groups(group_metrics, ["pool", "clock"])
+    halfyear = halfyear_summary(month_summary)
+    yearly = year_summary(month_summary)
+    summary = summarize_groups(group_metrics, ["pool"])
+    if not summary.empty:
+        summary = summary.merge(positive_month_summary(month_summary), on="pool", how="left")
+        summary = summary.merge(positive_clock_summary(clock_summary), on="pool", how="left")
+        if args.run_id:
+            summary.insert(1, "run_id", args.run_id)
+        if args.variant:
+            summary.insert(1, "variant", args.variant)
 
-    copied: list[Path] = []
-    for source, name in records:
-        if not source.exists():
-            continue
-        destination = backtests_dir / name
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
-        copied.append(destination)
-    return copied
+    group_metrics.to_csv(output_dir / "pool_internal_group_metrics.csv", index=False)
+    month_summary_path = output_dir / "pool_internal_month_summary.csv"
+    month_summary.to_csv(month_summary_path, index=False)
+    quarter_summary_path = output_dir / "pool_internal_quarter_summary.csv"
+    quarterly.to_csv(quarter_summary_path, index=False)
+    clock_summary.to_csv(output_dir / "pool_internal_clock_summary.csv", index=False)
+    halfyear.to_csv(output_dir / "pool_internal_halfyear_summary.csv", index=False)
+    yearly.to_csv(output_dir / "pool_internal_year_summary.csv", index=False)
+    summary.to_csv(output_dir / "pool_internal_summary.csv", index=False)
+    daily = pd.DataFrame()
+    if not group_metrics.empty:
+        daily = build_daily_summary(group_metrics, pools=plot_pools)
+    daily_summary_path = output_dir / "daily_pool_internal_summary.csv"
+    csv_ready(daily).to_csv(daily_summary_path, index=False)
 
+    if args.report_dir:
+        plot_prefix = args.plot_prefix or slug_label(args.variant or args.run_id)
+        plot_variant_label = args.plot_variant_label or args.variant or args.run_id or plot_prefix
+        plot_summary = quarterly if args.plot_period == "quarter" else month_summary
+        plot_summary_path = (
+            quarter_summary_path if args.plot_period == "quarter" else month_summary_path
+        )
+        report_plots = write_universe_sml_pool_internal_plots(
+            plot_summary,
+            Path(args.report_dir),
+            input_path=plot_summary_path,
+            output_prefix=plot_prefix,
+            variant_label=plot_variant_label,
+            pools=plot_pools,
+        )
+        if not daily.empty:
+            report_plots.update(
+                write_daily_pool_internal_cumulative_plot(
+                    daily,
+                    Path(args.report_dir) / "cumulative",
+                    input_path=daily_summary_path,
+                    output_prefix=plot_prefix,
+                    output_name=f"{plot_prefix}_{'_'.join(plot_pools)}_daily_cumulative",
+                    variant_label=plot_variant_label,
+                    pools=plot_pools,
+                    x_label_mode="years_only",
+                )
+            )
+    if args.weekly_report_dir:
+        weekly_outputs = write_weekly_outputs(
+            group_metrics,
+            Path(args.weekly_report_dir),
+            output_prefix=args.weekly_output_prefix
+            or args.plot_prefix
+            or args.variant
+            or args.run_id,
+            variant_label=args.plot_variant_label or args.variant or args.run_id,
+            pools=plot_pools,
+            rolling_weeks=args.weekly_rolling_weeks,
+        )
 
-def _plot_trace_path(plot_data_path: Path) -> Path:
-    name = plot_data_path.name
-    if name.endswith("_plot_data.csv"):
-        return plot_data_path.with_name(name.replace("_plot_data.csv", "_trace.json"))
-    return plot_data_path.with_suffix(".json")
+    return _SelfAnalysis(
+        frame=frame,
+        missing_next=missing_next,
+        summary=summary,
+        report_plots=report_plots,
+        weekly_outputs=weekly_outputs,
+    )
 
 
 def main() -> None:
@@ -462,138 +520,18 @@ def main() -> None:
     else:
         predictions = read_prediction_scores(args.predictions, score_col=args.score_col)
 
-    frame = pd.DataFrame()
-    missing_next = 0
-    group_metrics = pd.DataFrame()
-    month_summary = pd.DataFrame()
-    quarterly = pd.DataFrame()
-    clock_summary = pd.DataFrame()
-    halfyear = pd.DataFrame()
-    yearly = pd.DataFrame()
-    summary = pd.DataFrame()
     plot_pools = tuple("universe" if pool == "universe" else f"pool_{pool}" for pool in pools)
-    report_plots = {}
-    weekly_outputs = {}
+    analysis = (
+        _run_self_analysis(args, predictions, pools, output_dir, plot_pools)
+        if run_self
+        else _SelfAnalysis()
+    )
+    frame = analysis.frame
+    missing_next = analysis.missing_next
+    summary = analysis.summary
+    report_plots = analysis.report_plots
+    weekly_outputs = analysis.weekly_outputs
     company_trace: dict[str, Any] = {}
-
-    if run_self:
-        years = set(pd.to_datetime(predictions["date"], errors="coerce").dt.strftime("%Y").dropna())
-        labels = read_next_close_labels(
-            args.next_close_label_input,
-            years=years,
-            next_label_col=args.next_label_col,
-        )
-        frame = predictions.merge(labels, on=list(KEY_COLUMNS), how="left")
-        missing_next = int(frame[args.next_label_col].isna().sum())
-        if missing_next:
-            print(f"warning: missing next-close labels for {missing_next} prediction rows")
-        print(
-            f"analysis_frame: prediction_rows={len(predictions)} "
-            f"label_rows={len(labels)} joined_rows={len(frame)}"
-        )
-
-        group_frames = []
-        for pool in pools:
-            if pool == "universe":
-                pool_frame = frame
-                pool_name = "universe"
-            else:
-                pool_path = DEFAULT_STOCK_POOL_PATHS[pool]
-                print(f"loading_stock_pool: pool={pool} path={pool_path}")
-                pool_frame = frame.loc[
-                    stock_pool_membership_mask(
-                        frame,
-                        load_stock_pool(pool_path),
-                        date_lag_sessions=args.pool_date_lag_sessions,
-                    )
-                ].copy()
-                pool_name = f"pool_{pool}"
-            print(f"evaluating_pool: pool={pool_name} rows={len(pool_frame)}")
-            group_frames.append(
-                evaluate_pool(
-                    pool_frame,
-                    pool_name=pool_name,
-                    score_col=args.score_col,
-                    short_label_col=args.short_label_col,
-                    next_label_col=args.next_label_col,
-                    top_n=args.top_n,
-                )
-            )
-
-        group_metrics = (
-            pd.concat(group_frames, ignore_index=True) if group_frames else pd.DataFrame()
-        )
-        month_summary = summarize_groups(group_metrics, ["pool", "test_month"])
-        quarterly = quarter_summary(group_metrics)
-        clock_summary = summarize_groups(group_metrics, ["pool", "clock"])
-        halfyear = halfyear_summary(month_summary)
-        yearly = year_summary(month_summary)
-        summary = summarize_groups(group_metrics, ["pool"])
-        if not summary.empty:
-            summary = summary.merge(positive_month_summary(month_summary), on="pool", how="left")
-            summary = summary.merge(positive_clock_summary(clock_summary), on="pool", how="left")
-            if args.run_id:
-                summary.insert(1, "run_id", args.run_id)
-            if args.variant:
-                summary.insert(1, "variant", args.variant)
-
-        group_metrics.to_csv(output_dir / "pool_internal_group_metrics.csv", index=False)
-        month_summary_path = output_dir / "pool_internal_month_summary.csv"
-        month_summary.to_csv(month_summary_path, index=False)
-        quarter_summary_path = output_dir / "pool_internal_quarter_summary.csv"
-        quarterly.to_csv(quarter_summary_path, index=False)
-        clock_summary.to_csv(output_dir / "pool_internal_clock_summary.csv", index=False)
-        halfyear.to_csv(output_dir / "pool_internal_halfyear_summary.csv", index=False)
-        yearly.to_csv(output_dir / "pool_internal_year_summary.csv", index=False)
-        summary.to_csv(output_dir / "pool_internal_summary.csv", index=False)
-        daily = pd.DataFrame()
-        if not group_metrics.empty:
-            daily = build_daily_summary(group_metrics, pools=plot_pools)
-        daily_summary_path = output_dir / "daily_pool_internal_summary.csv"
-        _csv_ready(daily).to_csv(daily_summary_path, index=False)
-
-        if args.report_dir:
-            plot_prefix = args.plot_prefix or slug_label(args.variant or args.run_id)
-            plot_variant_label = (
-                args.plot_variant_label or args.variant or args.run_id or plot_prefix
-            )
-            plot_summary = quarterly if args.plot_period == "quarter" else month_summary
-            plot_summary_path = (
-                quarter_summary_path if args.plot_period == "quarter" else month_summary_path
-            )
-            report_plots = write_universe_sml_pool_internal_plots(
-                plot_summary,
-                Path(args.report_dir),
-                input_path=plot_summary_path,
-                output_prefix=plot_prefix,
-                variant_label=plot_variant_label,
-                pools=plot_pools,
-            )
-            if not daily.empty:
-                report_plots.update(
-                    write_daily_pool_internal_cumulative_plot(
-                        daily,
-                        Path(args.report_dir) / "cumulative",
-                        input_path=daily_summary_path,
-                        output_prefix=plot_prefix,
-                        output_name=f"{plot_prefix}_{'_'.join(plot_pools)}_daily_cumulative",
-                        variant_label=plot_variant_label,
-                        pools=plot_pools,
-                        x_label_mode="years_only",
-                    )
-                )
-        if args.weekly_report_dir:
-            weekly_outputs = write_weekly_outputs(
-                group_metrics,
-                Path(args.weekly_report_dir),
-                output_prefix=args.weekly_output_prefix
-                or args.plot_prefix
-                or args.variant
-                or args.run_id,
-                variant_label=args.plot_variant_label or args.variant or args.run_id,
-                pools=plot_pools,
-                rolling_weeks=args.weekly_rolling_weeks,
-            )
 
     if run_company:
         company_output_dir = (

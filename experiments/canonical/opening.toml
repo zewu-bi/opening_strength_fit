@@ -42,6 +42,16 @@ test_months = 6
 test_start_month = "2022-01"
 test_end_month = "2025-12"
 
+[research_matrix]
+name = "opening_label_matrix"
+status = "authoritative_diagnostic"
+promoted_at = "2026-08-11"
+source_run_id = "nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1"
+evidence = "experiments/evidence/backtests/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1"
+case_count = 15
+fold_count = 120
+promotion_scope = "Research matrix only; opening_model remains the canonical signal until strategy acceptance is complete."
+
 [naming]
 new_file_prefix = "opening"
 generic_version_suffixes_allowed = false

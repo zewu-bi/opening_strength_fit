@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
-import shutil
 from pathlib import Path
+
+from opening_strength_fit.artifact_catalog import (
+    artifact_file_manifest,
+    copy_artifact_specs,
+    copy_csv_columns,
+    require_file,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 CANONICAL_RUN_ID = (
@@ -103,49 +108,13 @@ CUMULATIVE_COLUMNS = (
 )
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _require(path: Path) -> None:
-    if not path.is_file():
-        raise FileNotFoundError(f"required four-figure source is missing: {path}")
-
-
-def _write_compact_cumulative(source: Path, destination: Path) -> int:
-    _require(source)
-    with source.open(newline="", encoding="utf-8") as source_handle:
-        reader = csv.DictReader(source_handle)
-        missing = [
-            column for column in CUMULATIVE_COLUMNS if column not in (reader.fieldnames or ())
-        ]
-        if missing:
-            raise ValueError(f"{source}: missing cumulative columns: {missing}")
-        with destination.open("w", newline="", encoding="utf-8") as destination_handle:
-            writer = csv.DictWriter(
-                destination_handle,
-                fieldnames=CUMULATIVE_COLUMNS,
-                lineterminator="\n",
-            )
-            writer.writeheader()
-            row_count = 0
-            for row in reader:
-                writer.writerow({column: row[column] for column in CUMULATIVE_COLUMNS})
-                row_count += 1
-    return row_count
-
-
 def _write_scope_rows(
     source: Path,
     destination: Path,
     *,
     scope: str,
 ) -> int:
-    _require(source)
+    require_file(source)
     with source.open(newline="", encoding="utf-8") as source_handle:
         reader = csv.DictReader(source_handle)
         if "scope" not in (reader.fieldnames or ()):
@@ -172,17 +141,13 @@ def build_bundle(root: Path = ROOT) -> Path:
     destination = root / BUNDLE_RELATIVE_DIR
     destination.mkdir(parents=True, exist_ok=True)
 
-    sources: dict[str, str] = {}
-    for relative_source, output_name in COPY_SPECS:
-        source = root / relative_source
-        _require(source)
-        shutil.copyfile(source, destination / output_name)
-        sources[output_name] = relative_source.as_posix()
+    sources = copy_artifact_specs(root, destination, COPY_SPECS)
 
     cumulative_source = root / CUMULATIVE_SOURCE
-    cumulative_rows = _write_compact_cumulative(
+    cumulative_rows = copy_csv_columns(
         cumulative_source,
         destination / CUMULATIVE_OUTPUT,
+        CUMULATIVE_COLUMNS,
     )
     sources[CUMULATIVE_OUTPUT] = CUMULATIVE_SOURCE.as_posix()
 
@@ -195,13 +160,13 @@ def build_bundle(root: Path = ROOT) -> Path:
     sources[FULL_POOL_BUCKET_OUTPUT] = FULL_POOL_BUCKET_SOURCE.as_posix()
 
     journey_cumulative_source = root / JOURNEY_CUMULATIVE_SOURCE
-    journey_cumulative_rows = _write_compact_cumulative(
+    journey_cumulative_rows = copy_csv_columns(
         journey_cumulative_source,
         destination / JOURNEY_CUMULATIVE_OUTPUT,
+        CUMULATIVE_COLUMNS,
     )
     sources[JOURNEY_CUMULATIVE_OUTPUT] = JOURNEY_CUMULATIVE_SOURCE.as_posix()
 
-    output_names = sorted(sources)
     manifest = {
         "schema_version": 1,
         "canonical_candidate": "clock6_v4_multiden",
@@ -211,14 +176,7 @@ def build_bundle(root: Path = ROOT) -> Path:
         "cumulative_rows": cumulative_rows,
         "full_pool_bucket_rows": full_pool_bucket_rows,
         "journey_cumulative_rows": journey_cumulative_rows,
-        "files": {
-            name: {
-                "source": sources[name],
-                "sha256": _sha256(destination / name),
-                "bytes": (destination / name).stat().st_size,
-            }
-            for name in output_names
-        },
+        "files": artifact_file_manifest(destination, sources),
     }
     (destination / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",

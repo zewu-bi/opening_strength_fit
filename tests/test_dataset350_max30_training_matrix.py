@@ -10,6 +10,7 @@ MAX30_JOBS = (
     ROOT / "experiments/jobs/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1_sharded_job.yaml"
 )
 MAX30_QUEUE = ROOT / "experiments/scripts/run_ds350_label15_max30_training_queue.sh"
+MAX30_ANALYSIS = ROOT / "experiments/jobs/support/ds350_label15_pool_internal_analysis_job.yaml"
 
 MAX30_ROOT = (
     "/mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1"
@@ -74,3 +75,11 @@ def test_max30_queue_runs_all_fifteen_labels_with_at_most_eight_gpus() -> None:
     assert 'if [[ "${SUCCEEDED:-0}" -ge 8 ]]' in text
     assert "all 15 ds350 max-30 label jobs observed complete" in text
     assert "os-nn-ds350-w0931-h1m-v2" not in text
+
+
+def test_label15_pool_analysis_reads_the_authoritative_max30_root() -> None:
+    text = MAX30_ANALYSIS.read_text()
+
+    assert MAX30_ROOT in text
+    assert BASELINE_ROOT not in text
+    assert "mse_max30_v1" in text

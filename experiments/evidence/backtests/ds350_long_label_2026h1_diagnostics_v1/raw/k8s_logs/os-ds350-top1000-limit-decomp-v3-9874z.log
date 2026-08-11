@@ -1,0 +1,31 @@
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] progress fold=1/8 rows=3633703
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] progress fold=2/8 rows=4049229
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] progress fold=3/8 rows=3944512
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] progress fold=4/8 rows=4264551
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] progress fold=5/8 rows=4052213
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] progress fold=6/8 rows=4317448
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] progress fold=7/8 rows=4056597
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] progress fold=8/8 rows=4372583
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] SUMMARY
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] ranking,bucket,groups,mean_excess_bps,limit_share_pct,limit_contribution_bps,nonlimit_contribution_bps,nonlimit_conditional_excess_bps
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] exclude_final_limit_then_rerank,1,9690,-11.138754704775781,0.0,0.0,-11.138754704775781,-11.138754704775781
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] exclude_final_limit_then_rerank,2,9690,3.633330276821321,0.0,0.0,3.633330276821321,3.633330276821321
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] exclude_final_limit_then_rerank,3,9690,4.565018499388814,0.0,0.0,4.565018499388814,4.565018499388814
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] exclude_final_limit_then_rerank,4,9690,4.2054492945009,0.0,0.0,4.2054492945009,4.2054492945009
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] exclude_final_limit_then_rerank,5,9690,4.029141315227014,0.0,0.0,4.029141315227014,4.029141315227014
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] exclude_final_limit_then_rerank,6,9690,3.5577193122666806,0.0,0.0,3.5577193122666806,3.5577193122666806
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] exclude_final_limit_then_rerank,7,9690,3.514157021033251,0.0,0.0,3.514157021033251,3.514157021033251
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] exclude_final_limit_then_rerank,8,9690,3.178145992536015,0.0,0.0,3.178145992536015,3.178145992536015
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] exclude_final_limit_then_rerank,9,9690,2.9373497012459326,0.0,0.0,2.9373497012459326,2.9373497012459326
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] exclude_final_limit_then_rerank,10,9690,2.897393329289871,0.0,0.0,2.897393329289871,2.897393329289871
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] original,1,9690,17.61245395977953,4.617440660474716,30.750801014381686,-13.13834705460216,-11.789473144949458
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] original,2,9690,9.206085931799441,1.4251805985552115,6.2297798434024045,2.976306088397036,3.7629666968873856
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] original,3,9690,5.991945167559738,0.9593395252837977,1.959952804681757,4.031992362877981,4.523430770738014
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] original,4,9690,4.591839193484938,0.7743034055727555,0.3544341289842544,4.237405064500684,4.561460142329221
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] original,5,9690,3.2920630520849645,0.6414860681114551,-0.7639360560352252,4.055999108120189,4.249975186449394
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] original,6,9690,2.10327541326661,0.5810113519091847,-1.4456764910730564,3.548951904339666,3.657138000183591
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] original,7,9690,1.7498185379263398,0.5325077399380805,-1.929486634834788,3.679305172761128,3.70767104534399
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] original,8,9690,0.9995739757343566,0.4868937048503612,-2.3878183571567324,3.3873923328910895,3.3355768677185913
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] original,9,9690,0.4420725884044864,0.47316821465428277,-2.439266081796785,2.8813386702012713,2.8378231967102594
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis] original,10,9690,0.7952786803987755,0.4518059855521156,-2.6611608179174846,3.4564394983162603,3.395666426446981
+[pod/os-ds350-top1000-limit-decomp-v3-9874z/analysis]

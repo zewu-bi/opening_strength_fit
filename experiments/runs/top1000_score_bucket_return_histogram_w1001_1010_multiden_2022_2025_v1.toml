@@ -3,6 +3,8 @@ id = "top1000_score_bucket_return_histogram_w1001_1010_multiden_2022_2025_v1"
 kind = "pool_internal_analysis"
 description = "Canonical ten-curve Top1000 score-bucket next-excess return distribution for the 10:01-10:10 multi-denominator window."
 status = "canceled"
+closed_at = "2026-07-30"
+status_reason = "Canceled during diagnostic iteration and replaced by the v3 output."
 
 [window]
 mode = "rolling_monthly"

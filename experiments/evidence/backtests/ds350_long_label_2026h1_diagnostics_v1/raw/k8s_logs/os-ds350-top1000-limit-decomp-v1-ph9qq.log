@@ -1,0 +1,13 @@
+[pod/os-ds350-top1000-limit-decomp-v1-ph9qq/analysis] progress fold=1/8 rows=3633703
+[pod/os-ds350-top1000-limit-decomp-v1-ph9qq/analysis] progress fold=2/8 rows=4049229
+[pod/os-ds350-top1000-limit-decomp-v1-ph9qq/analysis] progress fold=3/8 rows=3944512
+[pod/os-ds350-top1000-limit-decomp-v1-ph9qq/analysis] progress fold=4/8 rows=4264551
+[pod/os-ds350-top1000-limit-decomp-v1-ph9qq/analysis] Traceback (most recent call last):
+[pod/os-ds350-top1000-limit-decomp-v1-ph9qq/analysis]   File "/opt/analysis/analyze_ds350_top1000_limit_decomposition.py", line 241, in <module>
+[pod/os-ds350-top1000-limit-decomp-v1-ph9qq/analysis]     main()
+[pod/os-ds350-top1000-limit-decomp-v1-ph9qq/analysis]   File "/opt/analysis/analyze_ds350_top1000_limit_decomposition.py", line 204, in main
+[pod/os-ds350-top1000-limit-decomp-v1-ph9qq/analysis]     part = _bucket_metrics(frame, remove_limits_before_ranking=remove_limits)
+[pod/os-ds350-top1000-limit-decomp-v1-ph9qq/analysis]            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[pod/os-ds350-top1000-limit-decomp-v1-ph9qq/analysis]   File "/opt/analysis/analyze_ds350_top1000_limit_decomposition.py", line 141, in _bucket_metrics
+[pod/os-ds350-top1000-limit-decomp-v1-ph9qq/analysis]     raise AssertionError("bucket contribution decomposition did not reconcile")
+[pod/os-ds350-top1000-limit-decomp-v1-ph9qq/analysis] AssertionError: bucket contribution decomposition did not reconcile

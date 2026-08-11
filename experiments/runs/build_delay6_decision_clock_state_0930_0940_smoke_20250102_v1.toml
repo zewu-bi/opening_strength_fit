@@ -2,7 +2,9 @@
 id = "build_delay6_decision_clock_state_0930_0940_smoke_20250102_v1"
 kind = "labeled_cache"
 description = "One-day smoke for corrected 09:30-09:40 decision clock-state sampling and decision-clock +6s labels."
-status = "running"
+status = "completed"
+closed_at = "2026-08-11"
+status_reason = "Governance reconciliation: completed downstream artifacts prove this prerequisite or analysis finished."
 
 [data]
 source = "clickhouse"

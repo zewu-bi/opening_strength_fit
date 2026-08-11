@@ -7,10 +7,11 @@ import pandas as pd
 
 from opening_strength_fit.commands.long_horizon_label_split import split_label_year
 from opening_strength_fit.commands.long_horizon_labels import same_day_close_label
-from opening_strength_fit.commands.long_label_raw_source import TICK_COLUMNS, tick_source_sql
-from opening_strength_fit.commands.training_dataset_build import compute_short_label_set
+from opening_strength_fit.commands.long_label_raw_source import TICK_COLUMNS
 from opening_strength_fit.config import load_toml
 from opening_strength_fit.io import read_frame, write_frame_atomic
+from opening_strength_fit.raw_source import tick_source_sql
+from opening_strength_fit.training_dataset_labels import compute_clock_vwap_label_set
 
 
 def _offset(clock: str) -> int:
@@ -19,7 +20,11 @@ def _offset(clock: str) -> int:
 
 
 def test_projected_long_label_raw_query_keeps_only_cumulative_trade_state() -> None:
-    sql = tick_source_sql("stock.tick", ((_offset("10:19:00"), _offset("11:12:00")),))
+    sql = tick_source_sql(
+        "stock.tick",
+        ((_offset("10:19:00"), _offset("11:12:00")),),
+        output_columns=TICK_COLUMNS,
+    )
 
     assert TICK_COLUMNS == (
         "TradingDay",
@@ -60,7 +65,7 @@ def test_timed_vwap_and_same_day_close_labels_use_clock6_buy_price() -> None:
             "Turnover": [1000.0, 1101.0, 2020.0, 2122.0],
         }
     )
-    timed = compute_short_label_set(
+    timed = compute_clock_vwap_label_set(
         base,
         state,
         horizons=(600, 3600),
@@ -82,9 +87,7 @@ def test_timed_vwap_and_same_day_close_labels_use_clock6_buy_price() -> None:
         tradable_statuses=("T0", "20", "TRADE"),
         fee_bps=0.0,
     )
-    np.testing.assert_allclose(
-        same_close.loc[0, "label_same_day_close"], 0.03, rtol=0, atol=1e-12
-    )
+    np.testing.assert_allclose(same_close.loc[0, "label_same_day_close"], 0.03, rtol=0, atol=1e-12)
 
 
 def test_long_label_split_reuses_next_close_for_three_mixed_roots(tmp_path: Path) -> None:

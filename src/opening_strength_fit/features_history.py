@@ -7,26 +7,6 @@ from opening_strength_fit.feature_utils import _numeric_series, safe_divide
 from opening_strength_fit.schema import ensure_timestamp_columns, frame_clock_series
 
 
-def _rolling_linear_slope(values: pd.Series, window: int) -> pd.Series:
-    if window < 2:
-        return pd.Series(np.nan, index=values.index, dtype="float64")
-
-    values = _numeric_series(values)
-    rolling = values.rolling(window=window, min_periods=window)
-    rolling_sum = rolling.sum()
-    valid_window = rolling.count().eq(float(window))
-
-    weighted_sum = pd.Series(0.0, index=values.index, dtype="float64")
-    for offset in range(window - 1):
-        weight = float(window - 1 - offset)
-        weighted_sum = weighted_sum + values.shift(offset) * weight
-
-    x_mean = float(window - 1) / 2.0
-    denom = float(window * (window**2 - 1)) / 12.0
-    slope = (weighted_sum - x_mean * rolling_sum) / denom
-    return slope.where(valid_window)
-
-
 def _grouped_rolling_linear_slope(
     values: pd.Series,
     group_keys: list[pd.Series],

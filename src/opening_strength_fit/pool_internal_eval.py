@@ -1,21 +1,11 @@
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 
+from opening_strength_fit.model_metrics import corr
 from opening_strength_fit.prediction_frames import clock_label
 
 GROUP_COLS = ("date", "decision_target_timestamp")
-
-
-def finite_corr(left: pd.Series, right: pd.Series, *, method: str = "spearman") -> float:
-    values = pd.DataFrame({"left": left, "right": right}).replace([np.inf, -np.inf], np.nan)
-    values = values.dropna()
-    if len(values) < 2:
-        return float("nan")
-    if values["left"].nunique(dropna=True) < 2 or values["right"].nunique(dropna=True) < 2:
-        return float("nan")
-    return float(values["left"].corr(values["right"], method=method))
 
 
 def evaluate_pool(
@@ -54,8 +44,8 @@ def evaluate_pool(
     rank_ic = group.apply(
         lambda item: pd.Series(
             {
-                "short_rank_ic": finite_corr(item[score_col], item[short_label_col]),
-                "next_rank_ic": finite_corr(item[score_col], item[next_label_col]),
+                "short_rank_ic": corr(item[score_col], item[short_label_col], "spearman"),
+                "next_rank_ic": corr(item[score_col], item[next_label_col], "spearman"),
             }
         )
     )
@@ -126,36 +116,33 @@ def summarize_groups(
     return out
 
 
-def positive_month_summary(month_summary: pd.DataFrame) -> pd.DataFrame:
-    if month_summary.empty:
+def _positive_period_summary(summary: pd.DataFrame, period: str) -> pd.DataFrame:
+    if summary.empty:
         return pd.DataFrame()
     return (
-        month_summary.groupby("pool", sort=False)
+        summary.groupby("pool", sort=False)
         .agg(
-            short_positive_months=(
-                "short_internal_excess_bps",
-                lambda value: int((value > 0).sum()),
-            ),
-            next_positive_months=("next_internal_excess_bps", lambda value: int((value > 0).sum())),
+            **{
+                f"short_positive_{period}": (
+                    "short_internal_excess_bps",
+                    lambda value: int((value > 0).sum()),
+                ),
+                f"next_positive_{period}": (
+                    "next_internal_excess_bps",
+                    lambda value: int((value > 0).sum()),
+                ),
+            }
         )
         .reset_index()
     )
+
+
+def positive_month_summary(month_summary: pd.DataFrame) -> pd.DataFrame:
+    return _positive_period_summary(month_summary, "months")
 
 
 def positive_clock_summary(clock_summary: pd.DataFrame) -> pd.DataFrame:
-    if clock_summary.empty:
-        return pd.DataFrame()
-    return (
-        clock_summary.groupby("pool", sort=False)
-        .agg(
-            short_positive_clocks=(
-                "short_internal_excess_bps",
-                lambda value: int((value > 0).sum()),
-            ),
-            next_positive_clocks=("next_internal_excess_bps", lambda value: int((value > 0).sum())),
-        )
-        .reset_index()
-    )
+    return _positive_period_summary(clock_summary, "clocks")
 
 
 def halfyear_summary(month_summary: pd.DataFrame) -> pd.DataFrame:

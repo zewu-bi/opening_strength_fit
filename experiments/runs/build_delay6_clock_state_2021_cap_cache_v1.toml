@@ -2,7 +2,9 @@
 id = "build_delay6_clock_state_2021_cap_cache_v1"
 kind = "labeled_cache"
 description = "Build the 2021 fixed-wall-clock entry cache: decision state +6s, point-in-time state at entry and outcome boundaries, unique exchange-timestamp revisions, indicative-auction transforms, and strict T-1 market-cap/share enrichment."
-status = "running"
+status = "completed"
+closed_at = "2026-08-11"
+status_reason = "Governance reconciliation: completed downstream artifacts prove this prerequisite or analysis finished."
 
 [data]
 source = "clickhouse"

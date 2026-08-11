@@ -4,6 +4,7 @@ import json
 import os
 import re
 from collections.abc import Mapping, Sequence
+from contextlib import contextmanager
 
 import numpy as np
 import pandas as pd
@@ -119,17 +120,28 @@ def get_tick_client(
     )
 
 
-def tick_window_sql(table: str = DEFAULT_CLICKHOUSE_TICK_TABLE) -> str:
-    table = _validate_table_name(table)
-    return f"""select *
-from {table}
-where (
-    Symbol = {{symbol:String}}
-    and TradingDay = {{trading_day:String}}
-    and ExchTimeOffsetUs >= {{start_offset_us:UInt64}}
-    and ExchTimeOffsetUs <= {{end_offset_us:UInt64}}
-)
-order by ExchTimeOffsetUs"""
+@contextmanager
+def managed_tick_client(
+    *,
+    host: str = DEFAULT_CLICKHOUSE_TICK_HOST,
+    port: int = DEFAULT_CLICKHOUSE_TICK_PORT,
+    username: str = "",
+    password: str = "",
+):
+    username = username or os.environ.get("CLICKHOUSE_USER", "")
+    password = password or os.environ.get("CLICKHOUSE_PASSWORD", "")
+    if not username or not password:
+        raise SystemExit("ClickHouse credentials are missing; set CLICKHOUSE_USER/PASSWORD")
+    client = get_tick_client(
+        host=host,
+        port=int(port),
+        username=username,
+        password=password,
+    )
+    try:
+        yield client
+    finally:
+        client.close()
 
 
 def tick_day_window_sql(
@@ -155,26 +167,6 @@ where (
     {where}
 )
 order by Symbol, ExchTimeOffsetUs"""
-
-
-def query_tick_window(
-    client,
-    *,
-    symbol: str,
-    trading_day: str,
-    table: str = DEFAULT_CLICKHOUSE_TICK_TABLE,
-    start_offset_us: int = DEFAULT_TICK_START_OFFSET_US,
-    end_offset_us: int = DEFAULT_TICK_END_OFFSET_US,
-) -> pd.DataFrame:
-    return client.query_df(
-        tick_window_sql(table),
-        parameters={
-            "symbol": symbol,
-            "trading_day": trading_day,
-            "start_offset_us": int(start_offset_us),
-            "end_offset_us": int(end_offset_us),
-        },
-    )
 
 
 def query_tick_day_window(

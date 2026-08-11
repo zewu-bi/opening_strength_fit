@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable
 from pathlib import Path
 
 import pandas as pd
@@ -20,6 +21,20 @@ def _unique_directory_files(files: list[Path]) -> list[Path]:
         seen.add(target)
         unique.append(file)
     return unique
+
+
+def frame_files(path: str | Path) -> list[Path]:
+    path = Path(path)
+    if path.is_file():
+        return [path]
+    if not path.exists():
+        raise SystemExit(f"input path does not exist: {path}")
+    files = _unique_directory_files(list(path.rglob("*.parquet")))
+    if not files:
+        files = _unique_directory_files(list(path.rglob("*.csv")) + list(path.rglob("*.csv.gz")))
+    if not files:
+        raise SystemExit(f"no parquet/csv files found under directory: {path}")
+    return files
 
 
 def _filter_frame(frame: pd.DataFrame, filters: FrameFilters | None) -> pd.DataFrame:
@@ -72,13 +87,7 @@ def read_frame(
         raise SystemExit(f"input path does not exist: {path}")
 
     if path.is_dir():
-        files = _unique_directory_files(list(path.rglob("*.parquet")))
-        if not files:
-            files = _unique_directory_files(
-                list(path.rglob("*.csv")) + list(path.rglob("*.csv.gz"))
-            )
-        if not files:
-            raise SystemExit(f"no parquet/csv files found under directory: {path}")
+        files = frame_files(path)
         frames = [_read_frame_file(file, columns=columns, filters=filters) for file in files]
         return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
@@ -90,13 +99,7 @@ def frame_columns(path: str | Path) -> set[str]:
     if not path.exists():
         raise SystemExit(f"input path does not exist: {path}")
     if path.is_dir():
-        files = _unique_directory_files(list(path.rglob("*.parquet")))
-        if not files:
-            files = _unique_directory_files(
-                list(path.rglob("*.csv")) + list(path.rglob("*.csv.gz"))
-            )
-        if not files:
-            raise SystemExit(f"no parquet/csv files found under directory: {path}")
+        files = frame_files(path)
         columns: set[str] = set()
         for file in files:
             columns |= frame_columns(file)
@@ -112,6 +115,37 @@ def frame_columns(path: str | Path) -> set[str]:
     raise SystemExit(f"unsupported input format: {path.suffix}")
 
 
+def available_frame_columns(files: Iterable[Path]) -> set[str]:
+    columns: set[str] = set()
+    for file in files:
+        columns |= frame_columns(file)
+    return columns
+
+
+def read_frame_files(
+    files: list[Path],
+    *,
+    columns: list[str],
+    required: Iterable[str],
+) -> pd.DataFrame:
+    required_set = set(required)
+    frames = []
+    for file in files:
+        available = frame_columns(file)
+        missing = sorted(required_set - available)
+        if missing:
+            raise SystemExit(f"{file}: missing required columns: {missing}")
+        frame = read_frame(file, columns=[column for column in columns if column in available])
+        for column in columns:
+            if column not in frame.columns:
+                frame[column] = pd.NA
+        print(f"  {file}: rows={len(frame)}")
+        frames.append(frame[columns])
+    if not frames:
+        raise SystemExit("no input files supplied")
+    return pd.concat(frames, ignore_index=True)
+
+
 def write_frame(df: pd.DataFrame, path: str | Path, *, index: bool = False) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -123,6 +157,13 @@ def write_frame(df: pd.DataFrame, path: str | Path, *, index: bool = False) -> N
         df.to_csv(path, index=index)
         return
     raise SystemExit(f"unsupported output format: {path.suffix}")
+
+
+def csv_ready(frame: pd.DataFrame) -> pd.DataFrame:
+    out = frame.copy()
+    for column in out.select_dtypes(include=["datetime", "datetimetz"]).columns:
+        out[column] = out[column].dt.strftime("%Y-%m-%d")
+    return out
 
 
 def write_frame_atomic(df: pd.DataFrame, path: str | Path, *, index: bool = False) -> None:

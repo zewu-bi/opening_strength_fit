@@ -18,9 +18,6 @@ spec:
         - name: run-config
           configMap:
             name: os-audit-hist-path-hygiene-c09-config
-        - name: hygiene-audit-code
-          configMap:
-            name: os-audit-hist-path-hygiene-c09-code
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -69,18 +66,6 @@ spec:
             - name: run-config
               mountPath: /app/opening_strength_fit/experiments/runs/lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1.toml
               subPath: lgbm_delay2_36m_2022_2025_fullxs_hist_path_feature_hygiene_corr09_v1.toml
-              readOnly: true
-            - name: hygiene-audit-code
-              mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/commands/feature_hygiene_audit.py
-              subPath: feature_hygiene_audit.py
-              readOnly: true
-            - name: hygiene-audit-code
-              mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/feature_hygiene.py
-              subPath: feature_hygiene.py
-              readOnly: true
-            - name: hygiene-audit-code
-              mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/io.py
-              subPath: io.py
               readOnly: true
           resources:
             requests:

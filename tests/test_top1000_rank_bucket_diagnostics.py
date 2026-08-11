@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -8,20 +7,16 @@ import pandas as pd
 import pytest
 from matplotlib.figure import Figure
 
-SCRIPT_PATH = (
-    Path(__file__).parents[1] / "experiments" / "scripts" / "run_top1000_rank_bucket_diagnostics.py"
+from opening_strength_fit.legacy.top1000_rank_data import (
+    TOP1000_RETURN_HISTOGRAM_X_LIMIT_BPS,
+    TOP1000_RETURN_HISTOGRAM_Y_LIMITS,
+    TOP1000_SCORE_BUCKETS,
+    load_ranked_pool_shard,
 )
-SCRIPT_SPEC = importlib.util.spec_from_file_location("top1000_rank_bucket_diagnostics", SCRIPT_PATH)
-assert SCRIPT_SPEC is not None and SCRIPT_SPEC.loader is not None
-SCRIPT_MODULE = importlib.util.module_from_spec(SCRIPT_SPEC)
-SCRIPT_SPEC.loader.exec_module(SCRIPT_MODULE)
-
-TOP1000_RETURN_HISTOGRAM_X_LIMIT_BPS = SCRIPT_MODULE.TOP1000_RETURN_HISTOGRAM_X_LIMIT_BPS
-TOP1000_RETURN_HISTOGRAM_Y_LIMITS = SCRIPT_MODULE.TOP1000_RETURN_HISTOGRAM_Y_LIMITS
-TOP1000_SCORE_BUCKETS = SCRIPT_MODULE.TOP1000_SCORE_BUCKETS
-plot_score_bucket_histograms = SCRIPT_MODULE.plot_score_bucket_histograms
-plot_score_bucket_histograms_full_scale = SCRIPT_MODULE.plot_score_bucket_histograms_full_scale
-load_ranked_pool_shard = SCRIPT_MODULE.load_ranked_pool_shard
+from opening_strength_fit.legacy.top1000_return_histograms import (
+    plot_score_bucket_histograms,
+    plot_score_bucket_histograms_full_scale,
+)
 
 
 def _histogram() -> pd.DataFrame:

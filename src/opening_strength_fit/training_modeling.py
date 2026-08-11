@@ -284,6 +284,8 @@ def fit_single_prediction_model(
             validation_max_rows=config_int(config, "model", "validation_max_rows", 250_000),
             early_stopping_patience=config_int(config, "model", "early_stopping_patience", 2),
             loss=config_str(config, "model", "loss", "mse"),
+            huber_beta=config_float(config, "model", "huber_beta", 1.0),
+            mse_blend_weight=config_float(config, "model", "mse_blend_weight", 0.2),
             device=config_str(config, "model", "device", "auto"),
             random_state=config_int(config, "model", "random_state", 7),
             num_workers=config_int(config, "model", "num_workers", 0),
@@ -634,6 +636,8 @@ def model_config_payload(config: dict, alpha: float) -> dict[str, object]:
                 2,
             ),
             "loss": config_str(config, "model", "loss", "mse"),
+            "huber_beta": config_float(config, "model", "huber_beta", 1.0),
+            "mse_blend_weight": config_float(config, "model", "mse_blend_weight", 0.2),
             "device": config_str(config, "model", "device", "auto"),
             "random_state": config_int(config, "model", "random_state", 7),
             "num_workers": config_int(config, "model", "num_workers", 0),
@@ -777,6 +781,18 @@ def fit_predict_partition(
     # below actually release the wide frame before test prediction starts.
     train = partition.pop(0)
     test = partition.pop(0)
+    purge_train_sessions = config_int(config, "window", "purge_train_sessions", 0)
+    purged_train_dates: list[str] = []
+    if purge_train_sessions < 0:
+        raise ValueError("[window].purge_train_sessions must be non-negative")
+    if purge_train_sessions:
+        train_dates = sorted(train["date"].dropna().astype(str).unique())
+        if purge_train_sessions >= len(train_dates):
+            raise ValueError(
+                "[window].purge_train_sessions must leave at least one training session"
+            )
+        purged_train_dates = train_dates[-purge_train_sessions:]
+        train = train.loc[~train["date"].astype(str).isin(purged_train_dates)]
     stock_pool_settings = stock_pool_settings or stock_pool_config_from_mapping(config)
     train = filter_configured_stock_pool_train(train, stock_pool_settings, stock_pool)
     model, train_stats = fit_prediction_model(
@@ -785,12 +801,19 @@ def fit_predict_partition(
         config=config,
         alpha=alpha,
     )
-    train_stats = {**train_stats, "feature_names": list(model.features)}
+    train_stats = {
+        **train_stats,
+        "feature_names": list(model.features),
+        "purge_train_sessions": int(purge_train_sessions),
+        "purged_train_dates": purged_train_dates,
+    }
     # The fitted Torch model owns no reference to the host training frame. Release
     # it before allocating prediction/evaluation buffers for the test period.
     del train
     gc.collect()
     predictions = predict_frame(model, test)
+    if config_bool(config, "output", "write_unfiltered_predictions", False):
+        write_frame(predictions, output_dir / "predictions_unfiltered.parquet")
     if "valid_label" in predictions.columns:
         predictions = predictions.loc[predictions["valid_label"]].copy()
     predictions, selection_predictions, stock_pool_summary = configured_stock_pool_selection_frame(

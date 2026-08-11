@@ -3,6 +3,8 @@ id = "build_delay2_18m_mixed_w030_target_v1"
 kind = "cache_transform"
 description = "Superseded 18-month mixed cache build; the exact rows are covered by the canonical 2013-2025 v1 mixed annual shards."
 status = "superseded"
+closed_at = "2026-07-17"
+status_reason = "Replaced by the corrected target and later clock-state cache lineage."
 
 [target_cache]
 input_path = "/mnt/output/opening_strength_fit/cache/opening_18m_202008_202201_delay2_labeled.parquet"

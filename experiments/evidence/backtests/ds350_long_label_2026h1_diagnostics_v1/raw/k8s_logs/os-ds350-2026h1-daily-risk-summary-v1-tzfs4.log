@@ -1,0 +1,101 @@
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis] {
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   "entry_to_same_day_close_pool_raw_bps": {
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "days": 110,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "mean": -2.742705600581561,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "std": 111.20960559737813,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "t_stat": -0.25866235981719804,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "positive_day_pct": 54.54545454545454,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "p05": -204.269871131502,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "median": 12.62093765807933,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "p95": 147.54861176743057
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   },
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   "entry_to_same_day_close_selected_raw_bps": {
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "days": 110,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "mean": 33.7711852476808,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "std": 141.62621993924975,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "t_stat": 2.5009152906964567,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "positive_day_pct": 64.54545454545455,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "p05": -189.9890277981758,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "median": 57.9594770013684,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "p95": 232.3942607045173
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   },
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   "entry_to_same_day_close_excess_bps": {
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "days": 110,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "mean": 36.513890848262356,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "std": 81.92081446875962,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "t_stat": 4.674769416187975,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "positive_day_pct": 70.9090909090909,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "p05": -97.0056423969655,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "median": 36.353982305199594,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "p95": 165.02861105585077
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   },
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   "entry_to_same_day_close_limit_excess_contribution_bps": {
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "days": 110,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "mean": 36.633517530802685,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "std": 21.154005651997597,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "t_stat": 18.162781062826284,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "positive_day_pct": 100.0,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "p05": 10.443429882778167,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "median": 35.131684833004286,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "p95": 70.75723756373061
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   },
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   "entry_to_same_day_close_nonlimit_excess_contribution_bps": {
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "days": 110,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "mean": -0.1196268994536869,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "std": 73.63962386405831,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "t_stat": -0.01703780438338505,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "positive_day_pct": 50.0,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "p05": -121.18360278690466,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "median": 0.5960009381291558,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "p95": 128.952520556931
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   },
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   "entry_to_same_day_close_reselected_no_limit_excess_bps": {
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "days": 110,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "mean": 1.836321234703064,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "std": 77.5345458984375,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "t_stat": 0.24839894742688154,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "positive_day_pct": 51.81818181818182,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "p05": -125.67713012695313,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "median": 5.07777214050293,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "p95": 132.436042022705
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   },
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   "selected_limit_share_pct": {
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "days": 110,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "mean": 6.665454545454547,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "std": 2.9867117435734127,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "t_stat": 23.40630199546692,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "positive_day_pct": 100.0,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "p05": 2.79,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "median": 6.2,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "p95": 11.565
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   },
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   "candidate_limit_share_pct": {
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "days": 110,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "mean": 1.7199109205507421,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "std": 0.6106607130004829,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "t_stat": 29.53944396839989,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "positive_day_pct": 100.0,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "p05": 0.8674275474004838,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "median": 1.611306123026575,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "p95": 2.7786147434820543
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   },
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   "correlations": {
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "excess_vs_all_a_background": 0.05375131422587361,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "excess_vs_candidate_limit_share": 0.2136603849641685,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "excess_vs_selected_limit_share": 0.46091592694609435
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   },
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   "best_days": {
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "2026-01-12": 290.1080721001134,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "2026-06-24": 214.93118382589046,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "2026-06-15": 211.86107701111806,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "2026-06-02": 184.67310866296117,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "2026-03-04": 180.51143574706572
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   },
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   "worst_days": {
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "2026-06-12": -194.05899116518398,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "2026-01-16": -170.04227215152693,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "2026-01-15": -155.84686216603131,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "2026-06-29": -125.12960080174885,
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]     "2026-06-05": -116.26950799227981
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis]   }
+[pod/os-ds350-2026h1-daily-risk-summary-v1-tzfs4/analysis] }

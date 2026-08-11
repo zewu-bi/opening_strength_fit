@@ -1,10 +1,10 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: os-analyze-ds350-label15-v1
+  name: os-analyze-ds350-label15-v2
   namespace: bizewu
   labels:
-    app: os-analyze-ds350-label15-v1
+    app: os-analyze-ds350-label15-v2
     osf-matrix: ds350-label15-v1
 spec:
   activeDeadlineSeconds: 86400
@@ -16,7 +16,7 @@ spec:
   template:
     metadata:
       labels:
-        app: os-analyze-ds350-label15-v1
+        app: os-analyze-ds350-label15-v2
         osf-matrix: ds350-label15-v1
     spec:
       restartPolicy: Never
@@ -101,11 +101,11 @@ spec:
                 *) echo "unsupported CASE=${CASE}" >&2; exit 2 ;;
               esac
 
-              ROOT=/mnt/output/opening_strength_fit/nn/nn_ds350_label12_36m_grouped_gated_v2_mse_v1
+              ROOT=/mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1
               PREDICTIONS="${ROOT}/${CASE}"
               NEXT_LABELS="/mnt/output/opening_strength_fit/cache/opening_2019_2025_next_close_decision_clock_state_clock6_${WINDOW}"
               OUT="${PREDICTIONS}/analysis/pool_internal_top100_horizon_v1"
-              RUN_ID="nn_ds350_${CASE}_36m_grouped_gated_v2_mse_v1"
+              RUN_ID="nn_ds350_${CASE}_36m_grouped_gated_v2_mse_max30_v1"
 
               for TEST_START in 2022-01 2022-07 2023-01 2023-07 2024-01 2024-07 2025-01 2025-07; do
                 test -f "${PREDICTIONS}/month_${TEST_START}/predictions.parquet"

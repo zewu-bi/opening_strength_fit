@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-import hashlib
 import json
-import shutil
 from pathlib import Path
 
 import pandas as pd
+
+from opening_strength_fit.artifact_catalog import (
+    artifact_file_manifest,
+    copy_artifact_specs,
+    copy_csv_columns,
+    require_file,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 RUN_ID = "nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1"
@@ -59,13 +64,11 @@ COPY_SPECS = (
         "03_top1000_bucket_curve.csv",
     ),
     (
-        TOP1000_DIR
-        / "top1000_distribution/top1000_score_bucket_return_100bps_counts.svg",
+        TOP1000_DIR / "top1000_distribution/top1000_score_bucket_return_100bps_counts.svg",
         "04_top1000_return_distribution.svg",
     ),
     (
-        TOP1000_DIR
-        / "top1000_distribution/top1000_score_bucket_return_100bps_counts.csv",
+        TOP1000_DIR / "top1000_distribution/top1000_score_bucket_return_100bps_counts.csv",
         "04_top1000_return_distribution.csv",
     ),
     (
@@ -89,31 +92,6 @@ CUMULATIVE_COLUMNS = (
     "next_cumulative_net_return_bps",
     "next_cumulative_alpha_bps",
 )
-
-
-def _require(path: Path) -> None:
-    if not path.is_file():
-        raise FileNotFoundError(f"required max-30 evidence source is missing: {path}")
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _copy(source: Path, destination: Path) -> None:
-    _require(source)
-    if source.suffix.lower() == ".svg":
-        lines = source.read_text(encoding="utf-8").splitlines()
-        destination.write_text(
-            "\n".join(line.rstrip() for line in lines) + "\n",
-            encoding="utf-8",
-        )
-    else:
-        shutil.copyfile(source, destination)
 
 
 def _case_parts(case: str) -> tuple[str, str]:
@@ -147,9 +125,7 @@ def _training_fold_summary(source_root: Path) -> pd.DataFrame:
                     "gpu": stats["torch_device_name"],
                     "training_tensor_storage": stats["training_tensor_storage"],
                     "training_preparation_seconds": stats["training_preparation_seconds"],
-                    "training_storage_transfer_seconds": stats[
-                        "training_storage_transfer_seconds"
-                    ],
+                    "training_storage_transfer_seconds": stats["training_storage_transfer_seconds"],
                     "mean_epoch_seconds": (
                         sum(epoch_seconds) / len(epoch_seconds) if epoch_seconds else None
                     ),
@@ -173,14 +149,9 @@ def _combined_case_csv(source_root: Path, filename: str) -> pd.DataFrame:
         if filename == "metrics_by_year.csv":
             paths = sorted((source_root / case).glob(f"month_*/{filename}"))
         else:
-            paths = [
-                source_root
-                / case
-                / "analysis/pool_internal_top100_horizon_v1"
-                / filename
-            ]
+            paths = [source_root / case / "analysis/pool_internal_top100_horizon_v1" / filename]
         for path in paths:
-            _require(path)
+            require_file(path)
             frame = pd.read_csv(path)
             frame.insert(0, "horizon", horizon)
             frame.insert(0, "window", window)
@@ -189,15 +160,6 @@ def _combined_case_csv(source_root: Path, filename: str) -> pd.DataFrame:
                 frame.insert(3, "test_fold", path.parent.name.removeprefix("month_"))
             frames.append(frame)
     return pd.concat(frames, ignore_index=True)
-
-
-def _write_compact_cumulative(source: Path, destination: Path) -> None:
-    _require(source)
-    frame = pd.read_csv(source)
-    missing = sorted(set(CUMULATIVE_COLUMNS) - set(frame.columns))
-    if missing:
-        raise ValueError(f"{source} missing cumulative columns: {missing}")
-    frame.loc[:, list(CUMULATIVE_COLUMNS)].to_csv(destination, index=False)
 
 
 def _matrix_table(pool_summary: pd.DataFrame, folds: pd.DataFrame) -> pd.DataFrame:
@@ -287,13 +249,13 @@ def build_bundle(root: Path = ROOT) -> Path:
     destination = root / BUNDLE_DIR
     destination.mkdir(parents=True, exist_ok=True)
 
-    sources: dict[str, str] = {}
-    for relative_source, output_name in COPY_SPECS:
-        source = root / relative_source
-        _copy(source, destination / output_name)
-        sources[output_name] = relative_source.as_posix()
+    sources = copy_artifact_specs(root, destination, COPY_SPECS)
 
-    _write_compact_cumulative(root / CUMULATIVE_SOURCE, destination / "02_top100_cumulative.csv")
+    copy_csv_columns(
+        root / CUMULATIVE_SOURCE,
+        destination / "02_top100_cumulative.csv",
+        CUMULATIVE_COLUMNS,
+    )
     sources["02_top100_cumulative.csv"] = CUMULATIVE_SOURCE.as_posix()
 
     folds = _training_fold_summary(source_root)
@@ -325,14 +287,7 @@ def build_bundle(root: Path = ROOT) -> Path:
         "baseline_run_id": BASELINE_RUN_ID,
         "four_figure_case": "w0931_0940_h1m",
         "four_figure_comparison_run_id": COMPARISON_RUN_ID,
-        "files": {
-            name: {
-                "source": sources[name],
-                "sha256": _sha256(destination / name),
-                "bytes": (destination / name).stat().st_size,
-            }
-            for name in sorted(sources)
-        },
+        "files": artifact_file_manifest(destination, sources),
     }
     (destination / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",

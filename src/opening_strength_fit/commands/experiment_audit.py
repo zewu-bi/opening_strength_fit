@@ -24,6 +24,7 @@ KNOWN_STATUSES = {*ACTIVE_STATUSES, COMPLETED_STATUS, *INACTIVE_STATUSES}
 LOCAL_ONLY_RUN_KINDS = {"comparison_analysis", "opening_limit_audit", "realistic_acceptance"}
 METRICS_SUFFIX = "_metrics_by_year.csv"
 REQUIRED_RUN_FIELDS = ("id", "kind", "description", "status")
+REQUIRED_INACTIVE_RUN_FIELDS = ("closed_at", "status_reason")
 REQUIRED_METRICS_COLUMNS = ("run_id", "test_year", "model_name", "rows")
 
 
@@ -46,15 +47,20 @@ def collect_runs(runs_dir: Path) -> dict[str, RunRecord]:
     for path in sorted(runs_dir.glob("*.toml")):
         config = load_toml(path)
         run_section = config.get("run", {})
+        status = str(run_section.get("status", ""))
+        required_fields = (
+            (*REQUIRED_RUN_FIELDS, *REQUIRED_INACTIVE_RUN_FIELDS)
+            if status in INACTIVE_STATUSES
+            else REQUIRED_RUN_FIELDS
+        )
         missing_fields = tuple(
-            field for field in REQUIRED_RUN_FIELDS if not str(run_section.get(field, "")).strip()
+            field for field in required_fields if not str(run_section.get(field, "")).strip()
         )
         run_id = str(run_section.get("id") or path.stem)
         output = config.get("output", {})
         data = config.get("data", {})
         model = str(config.get("model", {}).get("name", "ridge"))
         evaluation = config.get("evaluation", {})
-        status = str(run_section.get("status", ""))
         kind = str(run_section.get("kind", ""))
         pvc_dir = run_output_dir(config, run_id)
         runs[run_id] = RunRecord(
@@ -247,6 +253,11 @@ def main() -> None:
         action="store_true",
         help="Fail when a completed training run is absent from the local metrics mirror.",
     )
+    parser.add_argument(
+        "--summary-only",
+        action="store_true",
+        help="Suppress the per-run table while retaining validation, warnings, and counts.",
+    )
     args = parser.parse_args()
 
     runs = collect_runs(Path(args.runs_dir))
@@ -286,7 +297,7 @@ def main() -> None:
             warnings.append(
                 f"{run_id}: has job yaml but no metrics yet; status={record.status!r} is plausible"
             )
-        if has_metrics and not is_completed:
+        if has_metrics and is_running:
             warnings.append(
                 f"{run_id}: metrics exist but status={record.status!r}; update status to completed after confirming results"
             )
@@ -313,7 +324,8 @@ def main() -> None:
         errors.append(f"{run_id}: metrics csv has no matching run config")
 
     print("experiment_alignment:")
-    print_table(records)
+    if not args.summary_only:
+        print_table(records)
     print_summary(records, require_metrics=args.require_metrics)
     if warnings:
         print("\nalignment_warnings:")

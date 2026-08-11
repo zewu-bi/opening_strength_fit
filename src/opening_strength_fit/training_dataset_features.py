@@ -17,6 +17,7 @@ from opening_strength_fit.feature_utils import safe_divide
 from opening_strength_fit.features import build_feature_frame, build_preopen_features
 from opening_strength_fit.io import read_frame
 from opening_strength_fit.sampling import sample_labeled_frame
+from opening_strength_fit.schema import normalize_date_series
 from opening_strength_fit.training_labeled import _apply_feature_transforms_from_config
 
 RAW_FEATURE_TICK_COLUMNS = tuple(column for column in TICK_FIELD_DESC if column != "LocalTimeStamp")
@@ -28,12 +29,7 @@ def decode_clickhouse_text(values: pd.Series) -> pd.Series:
     )
 
 
-def normalize_clickhouse_date(values: pd.Series) -> pd.Series:
-    if pd.api.types.is_numeric_dtype(values):
-        parsed = pd.to_datetime(values, unit="D", origin="unix", errors="coerce")
-    else:
-        parsed = pd.to_datetime(values, errors="coerce")
-    return parsed.dt.strftime("%Y-%m-%d")
+normalize_clickhouse_date = normalize_date_series
 
 
 def _positive_scaled(values: pd.Series, multiplier: float) -> pd.Series:

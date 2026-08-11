@@ -4,8 +4,6 @@ from pathlib import Path
 
 import pandas as pd
 
-from opening_strength_fit.analysis import KEY_COLUMNS
-from opening_strength_fit.io import read_frame
 from opening_strength_fit.pvc_layout import prediction_shard_dirs
 from opening_strength_fit.schema import normalize_decision_keys
 
@@ -70,17 +68,3 @@ def normalize_keys(frame: pd.DataFrame) -> pd.DataFrame:
 def clock_label(values: pd.Series) -> pd.Series:
     timestamps = pd.to_datetime(values, errors="coerce")
     return timestamps.dt.strftime("%H:%M")
-
-
-def read_prediction_frames(
-    paths: list[str],
-    *,
-    score_col: str,
-    label_col: str,
-) -> pd.DataFrame:
-    required = [*KEY_COLUMNS, score_col, label_col]
-    files = [file for raw in paths for file in prediction_files(Path(raw))]
-    frames = [read_frame(file, columns=required) for file in files]
-    if not frames:
-        raise SystemExit("no prediction files supplied")
-    return normalize_keys(pd.concat(frames, ignore_index=True))

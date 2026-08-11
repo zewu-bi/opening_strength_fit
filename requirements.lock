@@ -37,7 +37,6 @@ scipy==1.17.1
 setuptools==82.0.1
 six==1.17.0
 threadpoolctl==3.6.0
-tqdm==4.67.3
 typing_extensions==4.15.0
 urllib3==2.7.0
 wheel==0.47.0

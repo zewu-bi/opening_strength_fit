@@ -1,0 +1,310 @@
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis] {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]   "status": "ok",
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]   "scope": "strict 2026H1; excludes dates preceding a ClickHouse tick gap",
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]   "excluded_dates": [
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "2026-03-18",
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "2026-04-22",
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "2026-05-06"
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]   ],
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]   "return_definitions": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "entry_to_same_day_close": "entry at decision time + 6 seconds to same-day close",
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "same_day_close_to_next_close": "same-day close to next trading-day close; compounded from labels",
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "entry_to_next_close": "entry at decision time + 6 seconds to next trading-day close"
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]   },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]   "selection_scopes": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "all_a": "all eligible A-share candidates; no stock-pool overlay",
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "pool_L_same_day": "Pool L members on the same date (date_lag_sessions=0)"
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]   },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]   "stock_pool": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "path": "lml.bzw@ssd/data/pool_L.parquet",
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "first_date": "2020-01-02",
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "last_date": "2025-12-31",
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "dates": 1455,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "symbols": 5420,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "matched_rows": 0,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "all_rows": 5701110
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]   },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]   "summary": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "all_a": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       "groups": 1100,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       "dates": 110,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       "selected_limit_share_pct": 6.665454545454545,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       "candidate_limit_share_pct": 1.7199109205507417,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       "entry_to_same_day_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "pool_raw_bps": -2.7427056005815627,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "selected_raw_bps": 33.7711852476808,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "excess_bps": 36.513890848262356,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "limit_excess_contribution_bps": 36.63351753080269,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "nonlimit_excess_contribution_bps": -0.11962689945368435,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "reselected_no_limit_excess_bps": 1.8363196849822998,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "positive5_share_pct": 13.13318809617511,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "positive5_gross_contribution_bps": 109.99435584554442,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "selected_valid_rows": 99.91
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       "same_day_close_to_next_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "pool_raw_bps": 2.342347435438043,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "selected_raw_bps": -5.244841229741988,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "excess_bps": -7.587188665180028,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "limit_excess_contribution_bps": 6.999011259862426,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "nonlimit_excess_contribution_bps": -14.586199755439312,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "reselected_no_limit_excess_bps": -15.082655906677246,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "positive5_share_pct": 15.797332953583847,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "positive5_gross_contribution_bps": 142.64315305441718,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "selected_valid_rows": 99.66181818181818
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       "entry_to_next_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "pool_raw_bps": -0.5332052158899767,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "selected_raw_bps": 28.36351317665352,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "excess_bps": 28.89671839254349,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "limit_excess_contribution_bps": 44.016510299458,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "nonlimit_excess_contribution_bps": -15.119792030141014,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "reselected_no_limit_excess_bps": -13.67680549621582,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "positive5_share_pct": 21.38529129285536,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "positive5_gross_contribution_bps": 224.57747176782524,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "selected_valid_rows": 99.66181818181818
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       }
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "pool_L_same_day": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       "status": "empty"
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     }
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]   },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]   "monthly": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "all_a": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       "2026-01": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "groups": 200,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "dates": 20,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "selected_limit_share_pct": 7.59,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "candidate_limit_share_pct": 1.873104112080959,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "entry_to_same_day_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "pool_raw_bps": 27.496610515066376,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_raw_bps": 52.08147333137394,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "excess_bps": 24.584862816307567,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "limit_excess_contribution_bps": 44.47536356985311,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "nonlimit_excess_contribution_bps": -19.890501089568442,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "reselected_no_limit_excess_bps": -16.248031616210938,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_share_pct": 15.874925788497217,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_gross_contribution_bps": 137.3806914507742,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_valid_rows": 99.91
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "same_day_close_to_next_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "pool_raw_bps": 16.712077795302026,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_raw_bps": -15.762175288154438,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "excess_bps": -32.47425308345646,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "limit_excess_contribution_bps": 9.2191200038712,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "nonlimit_excess_contribution_bps": -41.69337360337313,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "reselected_no_limit_excess_bps": -45.615692138671875,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_share_pct": 17.361508350919248,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_gross_contribution_bps": 170.34184320852867,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_valid_rows": 99.71
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "entry_to_next_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "pool_raw_bps": 44.133918231759274,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_raw_bps": 35.69381965499352,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "excess_bps": -8.440098576765745,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "limit_excess_contribution_bps": 53.97015619060389,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "nonlimit_excess_contribution_bps": -62.41025331474419,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "reselected_no_limit_excess_bps": -62.93965148925781,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_share_pct": 22.98841861705632,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_gross_contribution_bps": 262.8248571866552,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_valid_rows": 99.71
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         }
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       "2026-02": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "groups": 140,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "dates": 14,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "selected_limit_share_pct": 6.392857142857143,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "candidate_limit_share_pct": 1.454166834777163,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "entry_to_same_day_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "pool_raw_bps": 14.490451915394793,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_raw_bps": 42.319033626751896,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "excess_bps": 27.828581711357103,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "limit_excess_contribution_bps": 34.05579309811669,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "nonlimit_excess_contribution_bps": -6.227211810826894,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "reselected_no_limit_excess_bps": -5.119153022766113,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_share_pct": 11.486724386724388,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_gross_contribution_bps": 94.12656013540719,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_valid_rows": 99.9
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "same_day_close_to_next_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "pool_raw_bps": 33.41816806112735,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_raw_bps": 17.185619389027515,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "excess_bps": -16.232548672099842,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "limit_excess_contribution_bps": 4.516914162477073,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "nonlimit_excess_contribution_bps": -20.74946317225891,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "reselected_no_limit_excess_bps": -18.97903060913086,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_share_pct": 15.296794475365905,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_gross_contribution_bps": 138.77549015793218,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_valid_rows": 99.83571428571429
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "entry_to_next_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "pool_raw_bps": 47.447613550011205,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_raw_bps": 57.76776516594789,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "excess_bps": 10.32015161593668,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "limit_excess_contribution_bps": 38.56168989132556,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "nonlimit_excess_contribution_bps": -28.241538785688476,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "reselected_no_limit_excess_bps": -25.252988815307617,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_share_pct": 19.982358571134085,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_gross_contribution_bps": 201.26459459198705,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_valid_rows": 99.83571428571429
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         }
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       "2026-03": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "groups": 200,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "dates": 20,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "selected_limit_share_pct": 5.84,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "candidate_limit_share_pct": 1.3445617965868149,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "entry_to_same_day_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "pool_raw_bps": -47.71034904134727,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_raw_bps": -13.192133171107582,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "excess_bps": 34.51821587023969,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "limit_excess_contribution_bps": 35.7538619618569,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "nonlimit_excess_contribution_bps": -1.2356455294364888,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "reselected_no_limit_excess_bps": -2.574247121810913,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_share_pct": 10.759545454545455,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_gross_contribution_bps": 88.12935823819251,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_valid_rows": 99.955
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "same_day_close_to_next_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "pool_raw_bps": -7.80520655086713,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_raw_bps": -58.85963846791949,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "excess_bps": -51.054431917052355,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "limit_excess_contribution_bps": 5.480392617309572,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "nonlimit_excess_contribution_bps": -56.53482490311795,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "reselected_no_limit_excess_bps": -58.7516975402832,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_share_pct": 12.229843331271901,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_gross_contribution_bps": 101.11977448100481,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_valid_rows": 99.785
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "entry_to_next_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "pool_raw_bps": -55.17922368097327,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_raw_bps": -71.78720471810783,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "excess_bps": -16.60798103713455,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "limit_excess_contribution_bps": 41.895831698631056,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "nonlimit_excess_contribution_bps": -58.50381287631766,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "reselected_no_limit_excess_bps": -62.023704528808594,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_share_pct": 16.67066378066378,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_gross_contribution_bps": 163.1466561824028,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_valid_rows": 99.785
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         }
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       "2026-04": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "groups": 190,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "dates": 19,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "selected_limit_share_pct": 5.673684210526316,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "candidate_limit_share_pct": 1.529840025604755,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "entry_to_same_day_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "pool_raw_bps": 24.180172813303688,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_raw_bps": 56.781190059695874,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "excess_bps": 32.60101724639218,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "limit_excess_contribution_bps": 29.18369017302392,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "nonlimit_excess_contribution_bps": 3.417326861883188,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "reselected_no_limit_excess_bps": 5.511369705200195,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_share_pct": 11.75204678362573,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_gross_contribution_bps": 94.77552156224016,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_valid_rows": 99.91052631578947
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "same_day_close_to_next_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "pool_raw_bps": 40.022761143119325,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_raw_bps": 37.69474891292408,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "excess_bps": -2.328012230195235,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "limit_excess_contribution_bps": 5.941827694051588,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "nonlimit_excess_contribution_bps": -8.269839594445086,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "reselected_no_limit_excess_bps": -3.247485399246216,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_share_pct": 15.39612350643891,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_gross_contribution_bps": 131.7324865386017,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_valid_rows": 99.10526315789474
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "entry_to_next_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "pool_raw_bps": 64.20491274275504,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_raw_bps": 94.8685417255669,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "excess_bps": 30.663628982811822,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "limit_excess_contribution_bps": 35.71711930740138,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "nonlimit_excess_contribution_bps": -5.053490824837885,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "reselected_no_limit_excess_bps": 2.0305986404418945,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_share_pct": 21.21442687337268,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_gross_contribution_bps": 212.2483790105734,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_valid_rows": 99.10526315789474
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         }
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       "2026-05": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "groups": 160,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "dates": 16,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "selected_limit_share_pct": 7.675,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "candidate_limit_share_pct": 1.901683853879853,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "entry_to_same_day_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "pool_raw_bps": -36.792683806959495,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_raw_bps": 13.706680714491416,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "excess_bps": 50.4993645214509,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "limit_excess_contribution_bps": 40.72055364537434,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "nonlimit_excess_contribution_bps": 9.778810871081864,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "reselected_no_limit_excess_bps": 13.826156616210938,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_share_pct": 13.31395202020202,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_gross_contribution_bps": 114.82040142687508,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_valid_rows": 99.90625
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "same_day_close_to_next_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "pool_raw_bps": -41.787861525422244,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_raw_bps": -23.274639594660265,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "excess_bps": 18.51322193076198,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "limit_excess_contribution_bps": 6.526115242737522,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "nonlimit_excess_contribution_bps": 11.987107247013272,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "reselected_no_limit_excess_bps": 8.523823738098145,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_share_pct": 15.640972222222222,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_gross_contribution_bps": 137.8482127016542,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_valid_rows": 99.78125
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "entry_to_next_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "pool_raw_bps": -79.132429815706,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_raw_bps": -10.45975481456316,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "excess_bps": 68.67267500114288,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "limit_excess_contribution_bps": 46.817199639401736,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "nonlimit_excess_contribution_bps": 21.855474796706886,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "reselected_no_limit_excess_bps": 22.386240005493164,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_share_pct": 21.38787878787879,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_gross_contribution_bps": 222.62145748117354,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_valid_rows": 99.78125
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         }
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       "2026-06": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "groups": 210,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "dates": 21,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "selected_limit_share_pct": 6.880952380952381,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "candidate_limit_share_pct": 2.142125964370374,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "entry_to_same_day_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "pool_raw_bps": 1.3795469097476565,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_raw_bps": 49.829885747569,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "excess_bps": 48.450338837821356,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "limit_excess_contribution_bps": 35.34773060795326,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "nonlimit_excess_contribution_bps": 13.102607356127587,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "reselected_no_limit_excess_bps": 15.436872482299805,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_share_pct": 14.992143004387904,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_gross_contribution_bps": 125.40690356296608,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_valid_rows": 99.87619047619047
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "same_day_close_to_next_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "pool_raw_bps": -22.86477319803844,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_raw_bps": 15.766622503451496,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "excess_bps": 38.631395701489936,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "limit_excess_contribution_bps": 9.30245799122819,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "nonlimit_excess_contribution_bps": 29.328938942160317,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "reselected_no_limit_excess_bps": 29.48969078063965,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_share_pct": 18.521074591303922,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_gross_contribution_bps": 171.91280821544137,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_valid_rows": 99.79523809523809
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         "entry_to_next_close": {
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "pool_raw_bps": -21.704167596420184,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_raw_bps": 66.5694867913401,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "excess_bps": 88.27365438776027,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "limit_excess_contribution_bps": 45.56820264790804,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "nonlimit_excess_contribution_bps": 42.705451068093986,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "reselected_no_limit_excess_bps": 45.31424331665039,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_share_pct": 25.436533479222305,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "positive5_gross_contribution_bps": 274.84403723295844,
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]           "selected_valid_rows": 99.79523809523809
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]         }
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]       }
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     },
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]     "pool_L_same_day": {}
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis]   }
+[pod/os-ds350-2026h1-limit-attribution-v3-wjzgg/analysis] }

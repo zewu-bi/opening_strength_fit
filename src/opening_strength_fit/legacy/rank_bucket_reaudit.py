@@ -19,6 +19,7 @@ from opening_strength_fit.legacy.multiscale_bucket_diag import (
     spearman_rank_ic,
     write_frame,
 )
+from opening_strength_fit.model_metrics import array_corr
 from opening_strength_fit.stock_pool import load_stock_pool
 
 BUCKET_COUNTS = (10, 20, 50)
@@ -47,25 +48,15 @@ def numpy_average_ranks(values: np.ndarray) -> np.ndarray:
     return ranks
 
 
-def pearson_ic(scores: np.ndarray, outcomes: np.ndarray) -> float:
-    valid = np.isfinite(scores) & np.isfinite(outcomes)
-    if valid.sum() < 3:
-        return math.nan
-    scores = scores[valid]
-    outcomes = outcomes[valid]
-    if np.ptp(scores) == 0 or np.ptp(outcomes) == 0:
-        return math.nan
-    return float(np.corrcoef(scores, outcomes)[0, 1])
-
-
 def numpy_rank_ic(scores: np.ndarray, outcomes: np.ndarray) -> float:
     valid = np.isfinite(scores) & np.isfinite(outcomes)
     if valid.sum() < 3:
         return math.nan
-    return pearson_ic(
-        numpy_average_ranks(scores[valid]),
-        numpy_average_ranks(outcomes[valid]),
-    )
+    score_ranks = numpy_average_ranks(scores[valid])
+    outcome_ranks = numpy_average_ranks(outcomes[valid])
+    if np.ptp(score_ranks) == 0 or np.ptp(outcome_ranks) == 0:
+        return math.nan
+    return float(np.corrcoef(score_ranks, outcome_ranks)[0, 1])
 
 
 def build_group_ic_diagnostics(frame: pd.DataFrame, *, variant: str) -> pd.DataFrame:
@@ -95,7 +86,7 @@ def build_group_ic_diagnostics(frame: pd.DataFrame, *, variant: str) -> pd.DataF
                     "independent_rank_ic": independent_ic,
                     "reverse_score_rank_ic": reverse_ic,
                     "excess_rank_ic": excess_ic,
-                    "score_rank_raw_return_pearson_ic": pearson_ic(
+                    "score_rank_raw_return_pearson_ic": array_corr(
                         numpy_average_ranks(scores), labels
                     ),
                     "implementation_abs_diff": abs(rank_ic - independent_ic),

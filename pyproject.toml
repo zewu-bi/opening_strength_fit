@@ -8,30 +8,47 @@ version = "0.1.0"
 description = "A-share opening-stage signal research pipeline."
 readme = "README.md"
 requires-python = ">=3.12"
+classifiers = ["Private :: Do Not Upload"]
 dependencies = [
+  "numpy",
+  "pandas",
+  "pyarrow",
+  "scikit-learn",
+]
+
+[project.optional-dependencies]
+data = [
+  "boto3",
+  "clickhouse-connect",
+  "requests",
+]
+models = [
+  "lightgbm",
+]
+plots = [
+  "matplotlib",
+]
+dev = [
   "boto3",
   "clickhouse-connect",
   "lightgbm",
   "matplotlib",
-  "numpy",
-  "pandas",
-  "pyarrow",
-  "requests",
-  "scikit-learn",
-  "tqdm",
-]
-
-[project.optional-dependencies]
-dev = [
   "pytest",
   "pytest-cov",
+  "requests",
   "ruff",
 ]
 cluster = [
+  "boto3",
+  "clickhouse-connect",
   "hfcli",
+  "lightgbm",
+  "matplotlib",
+  "requests",
 ]
 
 [project.scripts]
+osf = "opening_strength_fit.cli:main"
 osf-analyze-capacity-acceptance = "opening_strength_fit.commands.capacity_acceptance_analysis:main"
 osf-analyze-pool-internal-top100 = "opening_strength_fit.commands.pool_internal_analysis:main"
 osf-analyze-realistic-acceptance = "opening_strength_fit.commands.realistic_acceptance_analysis:main"
@@ -42,6 +59,7 @@ osf-audit-exposure = "opening_strength_fit.commands.exposure_audit:main"
 osf-audit-feature-dependence = "opening_strength_fit.commands.feature_dependence_audit:main"
 osf-audit-feature-hygiene = "opening_strength_fit.commands.feature_hygiene_audit:main"
 osf-audit-strategy-acceptance = "opening_strength_fit.commands.strategy_acceptance:main"
+osf-audit-storage = "opening_strength_fit.commands.storage_audit:main"
 osf-build-labeled-cache = "opening_strength_fit.commands.labeled_cache_build:main"
 osf-build-long-horizon-labels = "opening_strength_fit.commands.long_horizon_labels:main"
 osf-build-long-label-raw-source = "opening_strength_fit.commands.long_label_raw_source:main"
@@ -87,6 +105,7 @@ branch = true
 source = ["opening_strength_fit"]
 
 [tool.coverage.report]
+fail_under = 55
 show_missing = true
 skip_covered = true
 
@@ -96,8 +115,11 @@ target-version = "py312"
 exclude = ["experiments/archive"]
 
 [tool.ruff.lint]
-select = ["B", "E", "F", "I", "UP"]
+select = ["B", "C901", "E", "F", "I", "UP"]
 ignore = ["E501"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 20
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["B017"]

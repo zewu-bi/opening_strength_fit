@@ -1,34 +1,61 @@
 import argparse
 import os
 import textwrap
-from datetime import date
 from pathlib import Path
 
-import pandas as pd
-
 from opening_strength_fit.commands.k8s_analysis_rendering import render_pool_internal_analysis_job
-from opening_strength_fit.commands.k8s_rendering_common import (
-    avoid_nodes_affinity_yaml as _avoid_nodes_affinity_yaml,
-)
-from opening_strength_fit.commands.k8s_rendering_common import (
-    env_from_secrets_yaml as _env_from_secrets_yaml,
-)
-from opening_strength_fit.commands.k8s_rendering_common import k8s_job_name as _k8s_job_name
-from opening_strength_fit.commands.k8s_rendering_common import (
-    node_selector_yaml as _node_selector_yaml,
-)
-from opening_strength_fit.commands.k8s_rendering_common import (
-    training_config_map_mount_yaml as _training_config_map_mount_yaml,
-)
-from opening_strength_fit.commands.k8s_rendering_common import (
-    training_config_map_volume_yaml as _training_config_map_volume_yaml,
-)
-from opening_strength_fit.commands.k8s_rendering_common import (
-    wait_for_specific_paths_yaml as _wait_for_specific_paths_yaml,
-)
 from opening_strength_fit.config import config_value as get
 from opening_strength_fit.config import load_toml, run_id, slug
 from opening_strength_fit.k8s import KUBERNETES_NAME_LIMIT
+from opening_strength_fit.k8s_rendering_support import k8s_job_name as _k8s_job_name
+from opening_strength_fit.k8s_rendering_support import (
+    training_config_map_mount_yaml as _training_config_map_mount_yaml,
+)
+from opening_strength_fit.k8s_rendering_support import (
+    training_config_map_volume_yaml as _training_config_map_volume_yaml,
+)
+from opening_strength_fit.k8s_training_support import (
+    gpu_opencl_bootstrap_yaml as _gpu_opencl_bootstrap_yaml,
+)
+from opening_strength_fit.k8s_training_support import (
+    gpu_resource_line as _gpu_resource_line,
+)
+from opening_strength_fit.k8s_training_support import (
+    k8s_env_from as _k8s_env_from,
+)
+from opening_strength_fit.k8s_training_support import (
+    month_windows_from_config as _month_windows_from_config,
+)
+from opening_strength_fit.k8s_training_support import (
+    rolling_completion_files as _rolling_completion_files,
+)
+from opening_strength_fit.k8s_training_support import (
+    scheduler_yaml as _scheduler_yaml,
+)
+from opening_strength_fit.k8s_training_support import (
+    shard_job_mode as _shard_job_mode,
+)
+from opening_strength_fit.k8s_training_support import (
+    shard_parallelism as _shard_parallelism,
+)
+from opening_strength_fit.k8s_training_support import (
+    shell_file_check as _shell_file_check,
+)
+from opening_strength_fit.k8s_training_support import (
+    training_command_yaml as _training_command_yaml,
+)
+from opening_strength_fit.k8s_training_support import (
+    wait_for_paths_script as _wait_for_paths_script,
+)
+from opening_strength_fit.k8s_training_support import (
+    wait_for_paths_yaml as _wait_for_paths_yaml,
+)
+from opening_strength_fit.k8s_training_support import (
+    window_mode as _window_mode,
+)
+from opening_strength_fit.k8s_training_support import (
+    year_from_config as _year_from_config,
+)
 from opening_strength_fit.pvc_layout import (
     output_layout,
     rolling_shard_dir_name,
@@ -102,248 +129,6 @@ def training_command(config: dict) -> str:
     }:
         return "osf-train"
     raise SystemExit(f"Unsupported model.name for k8s rendering: {model_name}")
-
-
-def _rolling_completion_files(config: dict, command: str) -> list[str]:
-    run_kind = str(get(config, "run", "kind", "")).strip().lower()
-    if run_kind == "capacity_acceptance":
-        return ["capacity_acceptance_trace.json", "capacity_acceptance_daily_summary.csv"]
-    if run_kind == "capacity_audit":
-        return ["capacity_audit_trace.json", "capacity_audit_summary.csv"]
-    if run_kind == "strategy_acceptance":
-        return ["_SUCCESS", "strategy_acceptance_summary.csv"]
-    if run_kind == "ask_level_attribution":
-        return ["ask_level_attribution_trace.json", "_SUCCESS"]
-    if run_kind == "execution_context":
-        return ["execution_context_trace.json", "_SUCCESS"]
-    if run_kind == "exposure_input":
-        return ["exposure_input_trace.json", "exposure_input.parquet"]
-    if run_kind == "exposure_audit":
-        return ["exposure_audit_trace.json", "exposure_audit_summary.csv"]
-    if run_kind == "alpha_conditioned_rolling_validation":
-        return ["rolling_summary.csv"]
-    if run_kind == "feature_audit":
-        return ["feature_audit_trace.json", "feature_audit_metrics.csv"]
-    if run_kind == "feature_hygiene":
-        return ["feature_hygiene_trace.json", "feature_hygiene.csv"]
-    if command == "osf-train":
-        return ["_SUCCESS", "metrics_by_year.csv", "predictions.parquet"]
-    return ["metrics_by_year.csv"]
-
-
-def _shell_file_check(files: list[str]) -> str:
-    return " && ".join(f'[ -f "${{OUT}}/{file}" ]' for file in files)
-
-
-def _gpu_count(resources: dict) -> str:
-    gpu_limit = str(resources.get("gpu_limit", resources.get("nvidia_gpu", "0")) or "0")
-    if gpu_limit in {"", "0", "0.0", "none", "None"}:
-        return ""
-    return gpu_limit
-
-
-def _gpu_resource_line(resources: dict, indent: int = 14) -> str:
-    gpu_count = _gpu_count(resources)
-    if not gpu_count:
-        return ""
-    return f'{" " * indent}nvidia.com/gpu: "{gpu_count}"\n'
-
-
-def _gpu_tolerations_yaml(resources: dict, indent: int = 14) -> str:
-    if not _gpu_count(resources):
-        return ""
-    return textwrap.indent(
-        textwrap.dedent(
-            """\
-            tolerations:
-              - key: has_gpu
-                operator: Equal
-                value: "true"
-                effect: NoSchedule
-            """
-        ),
-        " " * indent,
-    )
-
-
-def _gpu_opencl_bootstrap_yaml(resources: dict, indent: int) -> str:
-    if not _gpu_count(resources):
-        return ""
-    return textwrap.indent(
-        textwrap.dedent(
-            """\
-            mkdir -p /etc/OpenCL/vendors
-            echo libnvidia-opencl.so.1 > /etc/OpenCL/vendors/nvidia.icd
-            """
-        ),
-        " " * indent,
-    )
-
-
-def _wait_for_paths_script(config: dict) -> str:
-    paths = get(config, "k8s", "wait_for_paths", []) or []
-    if isinstance(paths, str):
-        paths = paths.replace(",", " ").split()
-    paths = [str(path).strip() for path in paths if str(path).strip()]
-    if not paths:
-        return ""
-
-    timeout_seconds = int(get(config, "k8s", "wait_for_path_timeout_seconds", 21600))
-    interval_seconds = int(get(config, "k8s", "wait_for_path_interval_seconds", 60))
-    return _wait_for_specific_paths_yaml(
-        paths,
-        timeout_seconds=timeout_seconds,
-        interval_seconds=interval_seconds,
-        indent=0,
-    )
-
-
-def _wait_for_paths_yaml(config: dict, indent: int) -> str:
-    script = _wait_for_paths_script(config)
-    if not script:
-        return ""
-    return textwrap.indent(script, " " * indent)
-
-
-def _scheduler_yaml(config: dict, resources: dict, indent: int = 14) -> str:
-    return (
-        _node_selector_yaml(config, indent=indent)
-        + _avoid_nodes_affinity_yaml(config, indent=indent)
-        + _gpu_tolerations_yaml(
-            resources,
-            indent=indent,
-        )
-    )
-
-
-def _training_command_yaml(
-    *,
-    command: str,
-    config_path: Path,
-    output_dir: str,
-    resources: dict,
-    wait_for_paths: str = "",
-    indent: int = 18,
-) -> str:
-    if _gpu_count(resources) or wait_for_paths.strip():
-        preamble_lines: list[str] = []
-        if _gpu_count(resources):
-            preamble_lines.extend(
-                [
-                    "mkdir -p /etc/OpenCL/vendors",
-                    "echo libnvidia-opencl.so.1 > /etc/OpenCL/vendors/nvidia.icd",
-                ]
-            )
-        if wait_for_paths.strip():
-            preamble_lines.extend(wait_for_paths.rstrip().splitlines())
-        lines = [
-            "command:",
-            "  - /bin/bash",
-            "  - -lc",
-            "  - |",
-            "    set -euo pipefail",
-        ]
-        lines.extend(f"    {line}" for line in preamble_lines)
-        lines.extend(
-            [
-                f"    exec {command} \\",
-                f"      --config {config_path.as_posix()} \\",
-                f"      --output-dir {output_dir}",
-            ]
-        )
-        return textwrap.indent("\n".join(lines) + "\n", " " * indent)
-    return textwrap.indent(
-        textwrap.dedent(
-            f"""\
-            command:
-              - {command}
-              - --config
-              - {config_path.as_posix()}
-              - --output-dir
-              - {output_dir}
-            """
-        ),
-        " " * indent,
-    )
-
-
-def _year_from_config(config: dict, key: str) -> int:
-    value = get(config, "window", key, None)
-    if not value:
-        raise SystemExit(
-            f"--sharded requires [window].{key}; set explicit test_start_date/test_end_date"
-        )
-    return date.fromisoformat(str(value)).year
-
-
-def _month_range_from_config(config: dict) -> list[str]:
-    start = get(config, "window", "test_start_month", None)
-    end = get(config, "window", "test_end_month", None)
-    if not start or not end:
-        raise SystemExit(
-            "--sharded monthly requires [window].test_start_month and [window].test_end_month"
-        )
-    return [str(month) for month in pd.period_range(str(start), str(end), freq="M")]
-
-
-def _month_windows_from_config(config: dict) -> list[tuple[str, str]]:
-    months = _month_range_from_config(config)
-    test_months = int(get(config, "window", "test_months", 1) or 1)
-    stride_months = int(get(config, "window", "test_stride_months", test_months) or test_months)
-    if test_months < 1:
-        raise SystemExit("[window].test_months must be >= 1")
-    if stride_months < 1:
-        raise SystemExit("[window].test_stride_months must be >= 1")
-
-    first = pd.Period(months[0], freq="M")
-    last = pd.Period(months[-1], freq="M")
-    windows: list[tuple[str, str]] = []
-    test_start = first
-    while test_start <= last:
-        test_end = test_start + test_months - 1
-        if test_end > last:
-            break
-        windows.append((str(test_start), str(test_end)))
-        test_start += stride_months
-    if not windows:
-        raise SystemExit(
-            "sharded rolling monthly produced no test windows; check "
-            "[window].test_months/test_stride_months/test_start_month/test_end_month"
-        )
-    return windows
-
-
-def _shard_parallelism(config: dict, resources: dict) -> int:
-    raw = get(config, "k8s", "shard_parallelism", resources.get("shard_parallelism", 1))
-    return max(1, int(raw or 1))
-
-
-def _shard_job_mode(config: dict) -> str:
-    mode = str(get(config, "k8s", "shard_job_mode", "indexed") or "indexed")
-    mode = mode.strip().lower().replace("-", "_")
-    if mode not in {"indexed", "separate"}:
-        raise SystemExit("k8s.shard_job_mode must be 'indexed' or 'separate'")
-    return mode
-
-
-def _window_mode(config: dict) -> str:
-    return str(get(config, "window", "mode", "chronological"))
-
-
-def _k8s_env_from(config: dict, indent: int = 18) -> str:
-    secret_names = []
-    clickhouse_secret = str(get(config, "k8s", "clickhouse_secret", "") or "")
-    if clickhouse_secret:
-        secret_names.append(clickhouse_secret)
-    env_secrets = get(config, "k8s", "env_secrets", []) or []
-    if isinstance(env_secrets, str):
-        secret_names.extend(env_secrets.replace(",", " ").split())
-    else:
-        secret_names.extend(str(item) for item in env_secrets)
-    ceph_secret = str(get(config, "k8s", "ceph_secret", "") or "")
-    if ceph_secret:
-        secret_names.append(ceph_secret)
-    return _env_from_secrets_yaml(secret_names, indent=indent)
 
 
 def render_training_job(config_path: Path, config: dict, image: str) -> str:

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-import csv
-import hashlib
 import json
-import shutil
 from pathlib import Path
+
+from opening_strength_fit.artifact_catalog import (
+    artifact_file_manifest,
+    copy_artifact_specs,
+    copy_csv_columns,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 V4_RUN_ID = (
@@ -91,66 +94,15 @@ CUMULATIVE_COLUMNS = (
 )
 
 
-def _require(path: Path) -> None:
-    if not path.is_file():
-        raise FileNotFoundError(f"required v6 four-figure source is missing: {path}")
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _copy_artifact(source: Path, destination: Path) -> None:
-    if source.suffix.lower() != ".svg":
-        shutil.copyfile(source, destination)
-        return
-    lines = source.read_text(encoding="utf-8").splitlines()
-    destination.write_text(
-        "\n".join(line.rstrip() for line in lines) + "\n",
-        encoding="utf-8",
-    )
-
-
-def _write_compact_cumulative(source: Path, destination: Path) -> int:
-    _require(source)
-    with source.open(newline="", encoding="utf-8") as source_handle:
-        reader = csv.DictReader(source_handle)
-        missing = [
-            column for column in CUMULATIVE_COLUMNS if column not in (reader.fieldnames or ())
-        ]
-        if missing:
-            raise ValueError(f"{source}: missing cumulative columns: {missing}")
-        with destination.open("w", newline="", encoding="utf-8") as destination_handle:
-            writer = csv.DictWriter(
-                destination_handle,
-                fieldnames=CUMULATIVE_COLUMNS,
-                lineterminator="\n",
-            )
-            writer.writeheader()
-            rows = 0
-            for row in reader:
-                writer.writerow({column: row[column] for column in CUMULATIVE_COLUMNS})
-                rows += 1
-    return rows
-
-
 def build_bundle(root: Path = ROOT) -> Path:
     destination = root / BUNDLE_DIR
     destination.mkdir(parents=True, exist_ok=True)
-    sources: dict[str, str] = {}
-    for relative_source, output_name in COPY_SPECS:
-        source = root / relative_source
-        _require(source)
-        _copy_artifact(source, destination / output_name)
-        sources[output_name] = relative_source.as_posix()
+    sources = copy_artifact_specs(root, destination, COPY_SPECS)
 
-    cumulative_rows = _write_compact_cumulative(
+    cumulative_rows = copy_csv_columns(
         root / CUMULATIVE_SOURCE,
         destination / CUMULATIVE_OUTPUT,
+        CUMULATIVE_COLUMNS,
     )
     sources[CUMULATIVE_OUTPUT] = CUMULATIVE_SOURCE.as_posix()
 
@@ -167,14 +119,7 @@ def build_bundle(root: Path = ROOT) -> Path:
         ),
         "cumulative_compact_columns": list(CUMULATIVE_COLUMNS),
         "cumulative_rows": cumulative_rows,
-        "files": {
-            name: {
-                "source": sources[name],
-                "sha256": _sha256(destination / name),
-                "bytes": (destination / name).stat().st_size,
-            }
-            for name in sorted(sources)
-        },
+        "files": artifact_file_manifest(destination, sources),
     }
     (destination / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",

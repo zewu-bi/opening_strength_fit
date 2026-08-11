@@ -7,6 +7,13 @@ import numpy as np
 import pandas as pd
 
 from opening_strength_fit.analysis import KEY_COLUMNS
+from opening_strength_fit.feature_utils import (
+    finite_numeric,
+)
+from opening_strength_fit.feature_utils import (
+    weighted_share_stats as _share_stats,
+)
+from opening_strength_fit.schema import normalize_decision_keys
 
 GROUP_COLS = ("date", "decision_target_timestamp")
 
@@ -68,14 +75,7 @@ _DERIVED_EXPOSURE_BY_COLUMN = {spec.column: spec for spec in DERIVED_EXPOSURES}
 
 
 def normalize_audit_frame(frame: pd.DataFrame) -> pd.DataFrame:
-    out = frame.copy()
-    out["date"] = pd.to_datetime(out["date"], errors="coerce").dt.strftime("%Y-%m-%d")
-    out["symbol"] = out["symbol"].astype(str)
-    out["decision_target_timestamp"] = pd.to_datetime(
-        out["decision_target_timestamp"],
-        errors="coerce",
-    )
-    return out.dropna(subset=list(KEY_COLUMNS)).copy()
+    return normalize_decision_keys(frame, key_columns=KEY_COLUMNS, drop_missing=True)
 
 
 def category_for_exposure(column: str) -> str:
@@ -171,10 +171,6 @@ def add_derived_exposure_columns(
         out[spec.column] = finite_numeric(out[spec.source_column]).abs()
         derived_sources[spec.column] = spec.source_column
     return out, derived_sources
-
-
-def finite_numeric(values: pd.Series) -> pd.Series:
-    return pd.to_numeric(values, errors="coerce").replace([np.inf, -np.inf], np.nan)
 
 
 def finite_mean(values: pd.Series) -> float:
@@ -530,29 +526,6 @@ def category_summary(exposure_summary: pd.DataFrame) -> pd.DataFrame:
         )
         .reset_index()
     )
-
-
-def _share_stats(values: pd.Series, weights: pd.Series) -> dict[str, float]:
-    weights = finite_numeric(weights).clip(lower=0.0)
-    valid = values.notna() & weights.notna() & weights.gt(0.0)
-    if not valid.any():
-        return {
-            "unique": 0.0,
-            "max_share": float("nan"),
-            "top5_share": float("nan"),
-            "hhi": float("nan"),
-            "effective_count": float("nan"),
-        }
-    shares = weights.loc[valid].groupby(values.loc[valid].astype(str)).sum()
-    shares = shares / shares.sum()
-    hhi = float((shares**2).sum())
-    return {
-        "unique": float(len(shares)),
-        "max_share": float(shares.max()),
-        "top5_share": float(shares.sort_values(ascending=False).head(5).sum()),
-        "hhi": hhi,
-        "effective_count": float(1.0 / hhi) if hhi > 0 else float("nan"),
-    }
 
 
 def daily_concentration(

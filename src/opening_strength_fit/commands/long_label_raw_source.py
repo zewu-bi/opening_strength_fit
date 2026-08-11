@@ -5,22 +5,21 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 
-import pandas as pd
-
 from opening_strength_fit.clickhouse_ticks import (
     DEFAULT_CLICKHOUSE_TICK_HOST,
     DEFAULT_CLICKHOUSE_TICK_PORT,
     DEFAULT_CLICKHOUSE_TICK_TABLE,
-    get_tick_client,
-    validate_table_name,
-)
-from opening_strength_fit.commands.raw_source_cache import (
-    _parse_windows,
-    stream_parquet_atomic,
-    trading_dates_sql,
+    managed_tick_client,
 )
 from opening_strength_fit.config import config_str, load_toml, run_id
 from opening_strength_fit.io.json import write_json
+from opening_strength_fit.raw_source import (
+    parse_raw_source_years,
+    parse_tick_windows,
+    query_trading_dates,
+    stream_parquet_atomic,
+    tick_source_sql,
+)
 from opening_strength_fit.universe import DEFAULT_A_SHARE_SYMBOL_REGEX
 
 RAW_SOURCE_SCHEMA_VERSION = "long_label_raw_source_v1"
@@ -33,72 +32,6 @@ TICK_COLUMNS = (
 )
 
 
-def tick_source_sql(table: str, windows: tuple[tuple[int, int], ...]) -> str:
-    table = validate_table_name(table)
-    window_sql = "\n        or ".join(
-        "(ExchTimeOffsetUs >= "
-        f"{{window_start_{index}:UInt64}} and ExchTimeOffsetUs <= "
-        f"{{window_end_{index}:UInt64}})"
-        for index, _ in enumerate(windows)
-    )
-    projection = ",\n        ".join(TICK_COLUMNS)
-    outer_projection = ",\n    ".join(TICK_COLUMNS)
-    return f"""select
-    {outer_projection}
-from (
-    select
-        {projection},
-        LocalTimeStamp,
-        TradeNum,
-        LastPrice,
-        AskPrice1,
-        BidPrice1
-    from {table}
-    where TradingDay = {{trading_day:Date}}
-      and match(Symbol, {{symbol_regex:String}})
-      and (
-        {window_sql}
-      )
-    order by
-        Symbol,
-        ExchTimeOffsetUs,
-        arrayMax(mapValues(LocalTimeStamp)) desc,
-        TradeNum desc,
-        Volume desc,
-        Turnover desc,
-        LastPrice desc,
-        AskPrice1 desc,
-        BidPrice1 desc
-    limit 1 by Symbol, ExchTimeOffsetUs
-)
-order by Symbol, ExchTimeOffsetUs
-format Parquet"""
-
-
-def _years(config: dict) -> tuple[int, ...]:
-    section = config.get("raw_source", {})
-    values = section.get("years", []) if isinstance(section, dict) else []
-    years = tuple(int(value) for value in values)
-    if not years or len(set(years)) != len(years):
-        raise SystemExit("[raw_source].years must contain unique years")
-    return years
-
-
-def _trading_dates(client, *, table: str, year: int, symbol_regex: str) -> list[str]:
-    frame = client.query_df(
-        trading_dates_sql(table),
-        parameters={
-            "start_date": f"{year}-01-01",
-            "end_date": f"{year}-12-31",
-            "symbol_regex": symbol_regex,
-        },
-    )
-    if frame.empty or "TradingDay" not in frame:
-        raise RuntimeError(f"no trading dates found for {year}")
-    dates = pd.to_datetime(frame["TradingDay"], errors="coerce").dropna()
-    return sorted({str(value.date()) for value in dates})
-
-
 def build_year(
     client,
     *,
@@ -109,16 +42,14 @@ def build_year(
     overwrite: bool,
 ) -> dict[str, object]:
     table = config_str(config, "raw_source", "tick_table", DEFAULT_CLICKHOUSE_TICK_TABLE)
-    symbol_regex = config_str(
-        config, "raw_source", "symbol_regex", DEFAULT_A_SHARE_SYMBOL_REGEX
-    )
-    windows = _parse_windows(config)
+    symbol_regex = config_str(config, "raw_source", "symbol_regex", DEFAULT_A_SHARE_SYMBOL_REGEX)
+    windows = parse_tick_windows(config)
     year_root = output_root / f"year={year}"
     success_path = year_root / "_SUCCESS"
     if overwrite and success_path.exists():
         success_path.unlink()
 
-    dates = _trading_dates(client, table=table, year=year, symbol_regex=symbol_regex)
+    dates = query_trading_dates(client, table=table, year=year, symbol_regex=symbol_regex)
     parameters: dict[str, object] = {"symbol_regex": symbol_regex}
     for index, (start, end) in enumerate(windows):
         parameters[f"window_start_{index}"] = start
@@ -131,7 +62,7 @@ def build_year(
         output_path = year_root / "ticks" / f"date={trading_day}.parquet"
         metadata = stream_parquet_atomic(
             client,
-            query=tick_source_sql(table, windows),
+            query=tick_source_sql(table, windows, output_columns=TICK_COLUMNS),
             parameters={**parameters, "trading_day": trading_day},
             output_path=output_path,
             expected_columns=TICK_COLUMNS,
@@ -198,7 +129,7 @@ def main() -> None:
     args = build_parser().parse_args()
     config_path = Path(args.config)
     config = load_toml(config_path)
-    years = _years(config)
+    years = parse_raw_source_years(config)
     selected = (int(args.year),) if args.year is not None else years
     unknown = sorted(set(selected).difference(years))
     if unknown:
@@ -207,17 +138,10 @@ def main() -> None:
         args.output_root
         or config_str(config, "raw_source", "output_root", "output/long_label_raw_source")
     )
-    username = os.environ.get("CLICKHOUSE_USER", "")
-    password = os.environ.get("CLICKHOUSE_PASSWORD", "")
-    if not username or not password:
-        raise SystemExit("ClickHouse credentials are missing; set CLICKHOUSE_USER/PASSWORD")
-    client = get_tick_client(
+    with managed_tick_client(
         host=args.clickhouse_host or DEFAULT_CLICKHOUSE_TICK_HOST,
         port=int(args.clickhouse_port),
-        username=username,
-        password=password,
-    )
-    try:
+    ) as client:
         for year in selected:
             build_year(
                 client,
@@ -227,8 +151,6 @@ def main() -> None:
                 output_root=output_root,
                 overwrite=bool(args.overwrite),
             )
-    finally:
-        client.close()
 
 
 if __name__ == "__main__":

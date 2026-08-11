@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from functools import cached_property
 
 import numpy as np
@@ -245,15 +246,6 @@ def _historical_daily_activity_reference(frame: pd.DataFrame, kind: str) -> pd.S
         if values.notna().any():
             return values
     return pd.Series(np.nan, index=frame.index, dtype="float64")
-
-
-def _same_side_count(frame: pd.DataFrame, column: str) -> pd.Series:
-    if column.startswith(("ask_", "postopen_ask_", "postopen_v2_ask_", "total_ask_")):
-        return _positive(_clean_values(frame, "total_ask_count"))
-    if column.startswith(("bid_", "postopen_bid_", "postopen_v2_bid_", "total_bid_")):
-        return _positive(_clean_values(frame, "total_bid_count"))
-    total = _clean_values(frame, "total_ask_count") + _clean_values(frame, "total_bid_count")
-    return _positive(total)
 
 
 def _total_book_count(frame: pd.DataFrame) -> pd.Series:
@@ -634,24 +626,15 @@ def _mechanismized_v3_feature_series(
     return values
 
 
-def transform_mechanismized_feature_values(
+def _transform_mechanismized_values(
     frame: pd.DataFrame,
     *,
     columns: tuple[str, ...],
-    group_cols: tuple[str, ...] = ("date", "decision_target_timestamp"),
-    rank_method: str = "average",
-    tick_size: float = 0.01,
-    cross_sectional_mode: str = "rank_centered",
+    group_cols: tuple[str, ...],
+    rank_method: str,
+    cross_sectional_mode: str,
+    transform: Callable[[str], pd.Series],
 ) -> pd.DataFrame:
-    """Replace configured values with mechanism-aware dimensionless values.
-
-    The transform keeps feature names unchanged. Raw price levels become bps/tick
-    quantities; share-volume features become notional/log pressure or relative
-    book depth; amount/count fields become monotone scale-compressed values. A
-    final within-cross-section transform makes the model input unit-free while
-    preserving the selector's cross-sectional comparison.
-    """
-
     source_columns = [
         column
         for column in dict.fromkeys(str(column) for column in columns)
@@ -667,13 +650,8 @@ def transform_mechanismized_feature_values(
 
     out = frame.copy()
     for column in source_columns:
-        transformed = _mechanismized_feature_series(
-            frame,
-            column,
-            tick_size=float(tick_size),
-        )
         out[column] = (
-            pd.to_numeric(transformed, errors="coerce")
+            pd.to_numeric(transform(column), errors="coerce")
             .replace([np.inf, -np.inf], np.nan)
             .astype("float32")
         )
@@ -688,6 +666,29 @@ def transform_mechanismized_feature_values(
         group_cols=group_cols,
         mode=normalized_cross_sectional_mode,
         rank_method=rank_method,
+    )
+
+
+def transform_mechanismized_feature_values(
+    frame: pd.DataFrame,
+    *,
+    columns: tuple[str, ...],
+    group_cols: tuple[str, ...] = ("date", "decision_target_timestamp"),
+    rank_method: str = "average",
+    tick_size: float = 0.01,
+    cross_sectional_mode: str = "rank_centered",
+) -> pd.DataFrame:
+    """Replace configured values with mechanism-aware dimensionless values."""
+
+    return _transform_mechanismized_values(
+        frame,
+        columns=columns,
+        group_cols=group_cols,
+        rank_method=rank_method,
+        cross_sectional_mode=cross_sectional_mode,
+        transform=lambda column: _mechanismized_feature_series(
+            frame, column, tick_size=float(tick_size)
+        ),
     )
 
 
@@ -700,50 +701,17 @@ def transform_mechanismized_v2_feature_values(
     tick_size: float = 0.01,
     cross_sectional_mode: str = "none",
 ) -> pd.DataFrame:
-    """Replace values with semantic-preserving dimensionless values.
+    """Replace values with semantic-preserving dimensionless values."""
 
-    V2 keeps the same feature names but avoids changing feature meaning:
-    share-volume flow stays share activity, turnover stays notional activity,
-    aggregate book depth stays liquidity depth, and level queue sizes become
-    structure shares of the current side depth.
-    """
-
-    source_columns = [
-        column
-        for column in dict.fromkeys(str(column) for column in columns)
-        if column in frame.columns
-    ]
-    source_columns = [
-        column
-        for column in source_columns
-        if pd.api.types.is_numeric_dtype(frame[column]) or pd.api.types.is_bool_dtype(frame[column])
-    ]
-    if not source_columns:
-        return frame.copy()
-
-    out = frame.copy()
-    for column in source_columns:
-        transformed = _mechanismized_v2_feature_series(
-            frame,
-            column,
-            tick_size=float(tick_size),
-        )
-        out[column] = (
-            pd.to_numeric(transformed, errors="coerce")
-            .replace([np.inf, -np.inf], np.nan)
-            .astype("float32")
-        )
-
-    normalized_cross_sectional_mode = str(cross_sectional_mode or "none").strip().lower()
-    normalized_cross_sectional_mode = normalized_cross_sectional_mode.replace("-", "_")
-    if normalized_cross_sectional_mode in {"", "none", "identity", "raw", "off", "false"}:
-        return out
-    return transform_cross_sectional_feature_values(
-        out,
-        columns=tuple(source_columns),
+    return _transform_mechanismized_values(
+        frame,
+        columns=columns,
         group_cols=group_cols,
-        mode=normalized_cross_sectional_mode,
         rank_method=rank_method,
+        cross_sectional_mode=cross_sectional_mode,
+        transform=lambda column: _mechanismized_v2_feature_series(
+            frame, column, tick_size=float(tick_size)
+        ),
     )
 
 
@@ -756,53 +724,21 @@ def transform_mechanismized_v3_feature_values(
     tick_size: float = 0.01,
     cross_sectional_mode: str = "none",
 ) -> pd.DataFrame:
-    """Replace values with strict ratio-style dimensionless values.
+    """Replace values with strict ratio-style dimensionless values."""
 
-    V3 avoids log/log1p transforms. Price fields become bps/tick ratios,
-    queue fields become same-side depth shares, share-volume/depth fields use
-    total-share, market-cap-implied share, or historical daily activity
-    denominators, and turnover fields use market-cap or historical daily
-    turnover denominators before any explicit cross-sectional transform.
-    """
-
-    source_columns = [
-        column
-        for column in dict.fromkeys(str(column) for column in columns)
-        if column in frame.columns
-    ]
-    source_columns = [
-        column
-        for column in source_columns
-        if pd.api.types.is_numeric_dtype(frame[column]) or pd.api.types.is_bool_dtype(frame[column])
-    ]
-    if not source_columns:
-        return frame.copy()
-
-    out = frame.copy()
     references = _MechanismizedV3References(frame)
-    for column in source_columns:
-        transformed = _mechanismized_v3_feature_series(
+    return _transform_mechanismized_values(
+        frame,
+        columns=columns,
+        group_cols=group_cols,
+        rank_method=rank_method,
+        cross_sectional_mode=cross_sectional_mode,
+        transform=lambda column: _mechanismized_v3_feature_series(
             frame,
             column,
             tick_size=float(tick_size),
             references=references,
-        )
-        out[column] = (
-            pd.to_numeric(transformed, errors="coerce")
-            .replace([np.inf, -np.inf], np.nan)
-            .astype("float32")
-        )
-
-    normalized_cross_sectional_mode = str(cross_sectional_mode or "none").strip().lower()
-    normalized_cross_sectional_mode = normalized_cross_sectional_mode.replace("-", "_")
-    if normalized_cross_sectional_mode in {"", "none", "identity", "raw", "off", "false"}:
-        return out
-    return transform_cross_sectional_feature_values(
-        out,
-        columns=tuple(source_columns),
-        group_cols=group_cols,
-        mode=normalized_cross_sectional_mode,
-        rank_method=rank_method,
+        ),
     )
 
 

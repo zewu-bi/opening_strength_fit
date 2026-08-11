@@ -1,0 +1,25 @@
+[run]
+id = "ds350_long_label_2026h1_diagnostics_v1"
+kind = "comparison_analysis"
+description = "Compact closeout of ds350 long-label causality, limit-tail attribution, strict 2026H1 holdout, loss, and corrected capacity diagnostics."
+status = "completed"
+
+[diagnostics]
+historical_training_run_ids = [
+  "nn_ds350_label12_36m_grouped_gated_v2_mse_v1",
+  "nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1",
+]
+holdout_sample = "train 2023-2025; purge one session; strict 2026H1 all-A"
+topics = [
+  "future-label availability",
+  "fold-boundary purge",
+  "final-limit attribution",
+  "Top100 label overlap",
+  "next-session return path",
+  "loss-function comparison",
+  "displayed-depth capacity",
+]
+
+[output]
+local_dir = "output/artifacts/ds350_long_label_2026h1_diagnostics_v1"
+evidence_dir = "experiments/evidence/backtests/ds350_long_label_2026h1_diagnostics_v1"

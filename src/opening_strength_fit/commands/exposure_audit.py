@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import argparse
-import shutil
-from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
 
 from opening_strength_fit.analysis import KEY_COLUMNS, write_json
+from opening_strength_fit.artifact_catalog import record_requested_artifacts
 from opening_strength_fit.commands.arguments import CommandArguments
 from opening_strength_fit.config import config_str, load_toml, run_id
 from opening_strength_fit.exposure_audit import (
@@ -26,7 +25,13 @@ from opening_strength_fit.exposure_audit import (
     summarize_exposure_groups,
     summarize_industry_groups,
 )
-from opening_strength_fit.io import frame_columns, read_frame
+from opening_strength_fit.io import (
+    available_frame_columns,
+    frame_columns,
+    frame_files,
+    read_frame,
+    read_frame_files,
+)
 from opening_strength_fit.prediction_frames import prediction_files
 from opening_strength_fit.stock_pool import (
     DEFAULT_STOCK_POOL_PATHS,
@@ -93,57 +98,12 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _frame_files(path: Path) -> list[Path]:
-    if path.is_file():
-        return [path]
-    if not path.exists():
-        raise SystemExit(f"input path does not exist: {path}")
-    files = sorted(path.rglob("*.parquet"))
-    if not files:
-        files = sorted(path.rglob("*.csv")) + sorted(path.rglob("*.csv.gz"))
-    if not files:
-        raise SystemExit(f"no parquet/csv files found under: {path}")
-    return files
-
-
 def _prediction_files(paths: list[str]) -> list[Path]:
     return [file for raw in paths for file in prediction_files(Path(raw))]
 
 
 def _generic_files(paths: list[str]) -> list[Path]:
-    return [file for raw in paths for file in _frame_files(Path(raw))]
-
-
-def _available_columns(files: list[Path]) -> set[str]:
-    columns: set[str] = set()
-    for file in files:
-        columns |= frame_columns(file)
-    return columns
-
-
-def _read_files(
-    files: list[Path],
-    *,
-    columns: list[str],
-    required: Iterable[str],
-) -> pd.DataFrame:
-    required_set = set(required)
-    frames: list[pd.DataFrame] = []
-    for file in files:
-        available = frame_columns(file)
-        missing = sorted(required_set - available)
-        if missing:
-            raise SystemExit(f"{file}: missing required columns: {missing}")
-        read_columns = [column for column in columns if column in available]
-        frame = read_frame(file, columns=read_columns)
-        for column in columns:
-            if column not in frame.columns:
-                frame[column] = pd.NA
-        print(f"  {file}: rows={len(frame)}")
-        frames.append(frame[columns])
-    if not frames:
-        raise SystemExit("no input files supplied")
-    return pd.concat(frames, ignore_index=True)
+    return [file for raw in paths for file in frame_files(raw)]
 
 
 def _normalize_support_frame(frame: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
@@ -232,10 +192,12 @@ def _load_audit_frame(
 ) -> tuple[pd.DataFrame, list[str], dict[str, object]]:
     prediction_files_list = _prediction_files(prediction_paths)
     print(f"reading_predictions: files={len(prediction_files_list)}")
-    prediction_available = _available_columns(prediction_files_list)
+    prediction_available = available_frame_columns(prediction_files_list)
 
     exposure_files_list = _generic_files(exposure_paths) if exposure_paths else []
-    exposure_available = _available_columns(exposure_files_list) if exposure_files_list else set()
+    exposure_available = (
+        available_frame_columns(exposure_files_list) if exposure_files_list else set()
+    )
     available = prediction_available | exposure_available
 
     if exposure_columns:
@@ -294,7 +256,7 @@ def _load_audit_frame(
         prediction_columns.append(industry_col)
 
     predictions = normalize_audit_frame(
-        _read_files(
+        read_frame_files(
             prediction_files_list,
             columns=prediction_columns,
             required=prediction_required,
@@ -388,25 +350,6 @@ def _write_outputs(
     daily.to_csv(output_dir / "exposure_audit_daily_concentration.csv", index=False)
     concentration.to_csv(output_dir / "exposure_audit_concentration_summary.csv", index=False)
     write_json(output_dir / "exposure_audit_trace.json", trace, ensure_ascii=True)
-
-
-def record_exposure_audit_outputs(
-    *,
-    output_dir: Path,
-    records_dir: Path,
-    record_prefix: str,
-) -> list[Path]:
-    archive_dir = records_dir / "backtests" / record_prefix
-    copied: list[Path] = []
-    for name in OUTPUT_FILES:
-        source = output_dir / name
-        if not source.exists():
-            continue
-        destination = archive_dir / name
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
-        copied.append(destination)
-    return copied
 
 
 def main() -> None:
@@ -540,15 +483,13 @@ def main() -> None:
         trace=trace,
     )
 
-    record_paths: list[Path] = []
     records_dir = arguments.string("records_dir")
-    if records_dir:
-        record_prefix = arguments.string("record_prefix") or run_name
-        record_paths = record_exposure_audit_outputs(
-            output_dir=output_dir,
-            records_dir=Path(records_dir),
-            record_prefix=record_prefix,
-        )
+    record_paths = record_requested_artifacts(
+        output_dir=output_dir,
+        records_dir=records_dir,
+        record_prefix=arguments.string("record_prefix") or run_name,
+        names=OUTPUT_FILES,
+    )
 
     print("\nexposure_audit_summary:")
     display_cols = [

@@ -15,5 +15,10 @@ RUN test -n "$CACHE_BUST"
 ARG SOURCE_REVISION
 RUN test -n "$SOURCE_REVISION"
 ENV OPENING_STRENGTH_SOURCE_REVISION=${SOURCE_REVISION}
+LABEL org.opencontainers.image.revision=${SOURCE_REVISION}
 
-COPY . .
+COPY experiments/runs ./experiments/runs
+COPY experiments/canonical ./experiments/canonical
+COPY experiments/config_templates ./experiments/config_templates
+COPY experiments/scripts ./experiments/scripts
+COPY experiments/incubator.toml ./experiments/incubator.toml

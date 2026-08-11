@@ -12,9 +12,15 @@ Current canonical evidence:
 
 Current diagnostic evidence:
 
+- [ds350 historical max-10 15-label matrix](backtests/nn_ds350_label12_36m_grouped_gated_v2_mse_v1/) —
+  completed 120-fold historical budget archive and the source of the quarter-equal
+  `09:31-09:40 / close = 24.87 bps` result; retained as a superseded comparison only
 - [ds350 max-30 15-label matrix](backtests/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/) —
   authoritative 15-label result archive; includes all 120 rolling folds plus the standard four-figure
   acceptance bundle for `09:31-09:40 / 1m`
+- [ds350 long-label and strict-2026H1 diagnostics](backtests/ds350_long_label_2026h1_diagnostics_v1/) —
+  compact closeout of future-information, limit-tail, Top100 overlap, return-path, strict holdout,
+  loss-function, Pool-L availability, and corrected capacity audits, with cluster logs and checksums
 - [archived v4 multiden four-figure acceptance](backtests/nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_grouped_gated_v2_mech_v3_gelu_mse_v1/) —
   previous signal baseline
 - [archived v4 multiden unified strategy acceptance](backtests/strategy_acceptance_clock6_v4_multiden_2022_2025_v1/) —

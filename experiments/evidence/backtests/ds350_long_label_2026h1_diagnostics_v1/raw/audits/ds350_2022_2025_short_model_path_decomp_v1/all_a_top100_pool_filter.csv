@@ -1,0 +1,3 @@
+pool_membership,rows,share_of_all_a_top100_pct,entry_to_same_day_close_bps,same_day_close_to_next_close_bps,entry_to_next_close_bps,overnight_negative_pct,overnight_le_minus300_pct,overnight_p05_bps
+rejected_by_pool_L,566383,58.45025799793602,38.48021,-58.974094,-20.59001,57.29974240046046,30.724262557315456,-946.3565734863281
+accepted_by_pool_L,402617,41.54974200206398,28.771067,11.365675,40.94674,52.15875136916722,19.50712463706202,-636.2403564453125

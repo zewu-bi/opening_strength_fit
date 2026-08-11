@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from opening_strength_fit.alpha_conditioning import (  # noqa: E402
+from opening_strength_fit.alpha_conditioning import (
     KEY_COLUMNS,
     add_alpha_conditioned_risk_targets,
     add_group_rank,
@@ -15,31 +15,33 @@ from opening_strength_fit.alpha_conditioning import (  # noqa: E402
     predict_model_score,
 )
 from opening_strength_fit.analysis import write_json
-from opening_strength_fit.commands.learned_risk_layer import (
-    load_or_fetch_next_close_labels,  # noqa: E402
-)
-from opening_strength_fit.config import (  # noqa: E402
+from opening_strength_fit.config import (
     config_int,
     config_str,
     load_toml,
     run_id,
 )
-from opening_strength_fit.io import write_frame  # noqa: E402
-from opening_strength_fit.reports import dataset_summary, print_mapping  # noqa: E402
-from opening_strength_fit.score_variant_eval import (  # noqa: E402
+from opening_strength_fit.io import write_frame
+from opening_strength_fit.next_close_labels import add_next_close_label_arguments
+from opening_strength_fit.reports import dataset_summary, print_mapping
+from opening_strength_fit.risk_labels import (
+    load_risk_next_close_labels,
+    next_close_label_request,
+)
+from opening_strength_fit.score_variant_eval import (
     score_variants,
     summarize_group_metrics,
 )
-from opening_strength_fit.stock_pool import (  # noqa: E402
+from opening_strength_fit.stock_pool import (
     apply_stock_pool_cli_overrides,
     load_configured_stock_pool,
     stock_pool_config_from_mapping,
     stock_pool_membership_mask,
     stock_pool_runtime_summary,
 )
-from opening_strength_fit.training_args import build_training_parser  # noqa: E402
-from opening_strength_fit.training_data import load_labeled_pvc_frame  # noqa: E402
-from opening_strength_fit.training_windows import date_splits  # noqa: E402
+from opening_strength_fit.training_args import build_training_parser
+from opening_strength_fit.training_data import load_labeled_pvc_frame
+from opening_strength_fit.training_windows import date_splits
 
 DEFAULT_VARIANTS = (
     {"variant": "alpha_rank", "risk_model": "", "penalty": 0.0, "candidate_alpha_rank_min": 0.0},
@@ -72,10 +74,7 @@ DEFAULT_VARIANTS = (
 
 def parse_args() -> argparse.Namespace:
     parser = build_training_parser("Rolling validation for alpha-conditioned Top100 risk scores.")
-    parser.add_argument("--next-close-label-input", default="")
-    parser.add_argument("--close-offset-us", type=int, default=54_000_000_000)
-    parser.add_argument("--close-lookback-seconds", type=int, default=1_800)
-    parser.add_argument("--calendar-days-after", type=int, default=10)
+    add_next_close_label_arguments(parser, include_connection=False)
     return parser.parse_args()
 
 
@@ -123,10 +122,9 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     labeled = load_labeled_pvc_frame(args, config)
-    labels = load_or_fetch_next_close_labels(
+    labels = load_risk_next_close_labels(
         labeled,
-        args=args,
-        config=config,
+        request=next_close_label_request(args, config),
         output_dir=output_dir,
     )
     labeled = labeled.merge(labels, on=list(KEY_COLUMNS), how="inner")

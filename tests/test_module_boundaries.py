@@ -7,7 +7,6 @@ import opening_strength_fit.features as features
 import opening_strength_fit.model as model
 import opening_strength_fit.optimization_acceptance_plots as acceptance_plots
 from opening_strength_fit.legacy import multiscale_bucket_diag as multiscale_legacy
-from opening_strength_fit.legacy import old_nn_multiscale_bucket_diag as old_command_legacy
 from opening_strength_fit.torch_model import architectures as torch_architectures
 from opening_strength_fit.torch_model import prediction as torch_prediction
 from opening_strength_fit.torch_model import preprocessing as torch_preprocessing
@@ -101,7 +100,6 @@ def test_compatibility_modules_stay_thin() -> None:
 
 def test_archived_diagnostics_remain_directly_importable() -> None:
     assert callable(multiscale_legacy.run_multiscale_bucket_diagnostics)
-    assert callable(old_command_legacy.main)
     assert callable(acceptance_plots.write_optimization_direction_plots)
 
 

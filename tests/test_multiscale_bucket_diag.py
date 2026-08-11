@@ -8,7 +8,6 @@ import pytest
 
 from opening_strength_fit.legacy.multiscale_bucket_diag import (
     add_ic_rows,
-    fixed_score_spearman,
     load_ranked_pool_shard,
     spearman_rank_ic,
 )
@@ -21,17 +20,6 @@ def test_spearman_rank_ic_matches_pandas_with_ties() -> None:
     expected = pd.Series(scores).corr(pd.Series(outcomes), method="spearman")
 
     assert spearman_rank_ic(scores, outcomes) == pytest.approx(expected)
-
-
-def test_fixed_score_spearman_uses_average_ranks_for_outcome_ties() -> None:
-    outcomes_in_score_order = np.array([2.0, 1.0, 1.0, 0.0])
-    descending_scores = pd.Series([4.0, 3.0, 2.0, 1.0])
-    expected = descending_scores.corr(
-        pd.Series(outcomes_in_score_order),
-        method="spearman",
-    )
-
-    assert fixed_score_spearman(outcomes_in_score_order) == pytest.approx(expected)
 
 
 def test_add_ic_rows_uses_original_prediction_values() -> None:

@@ -2,7 +2,9 @@
 id = "build_v6_w1401_1410_short_h180_vwap60_labels_v1"
 kind = "short_label_cache"
 description = "Build standalone 14:01-14:10 short labels: clock+6s entry, hold 180s, then sell over the following 60s cumulative-volume VWAP window."
-status = "running"
+status = "completed"
+closed_at = "2026-08-11"
+status_reason = "Governance reconciliation: completed downstream artifacts prove this prerequisite or analysis finished."
 
 [short_labels]
 input_path = "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v6_decision_clock_state_clock6_1401_1410_from_start_auction_reuse_mcap_lag1/opening_2019_label_v6_decision_clock_state_clock6_1401_1410_from_start_auction_reuse_mcap_lag1.parquet"

@@ -9,9 +9,9 @@ import pandas as pd
 
 from opening_strength_fit.commands.next_close_label_cache import (  # noqa: E402
     _read_base_frame,
-    fetch_next_close_labels,
     main,
 )
+from opening_strength_fit.next_close_labels import fetch_next_close_labels
 
 
 class NextCloseLabelCacheTest(unittest.TestCase):
@@ -61,7 +61,7 @@ class NextCloseLabelCacheTest(unittest.TestCase):
         returned["alpha_return_next_close"] = [0.01, float("inf")]
 
         with patch(
-            "opening_strength_fit.commands.next_close_label_cache.compute_clickhouse_close_labels",
+            "opening_strength_fit.next_close_labels.compute_clickhouse_close_labels",
             return_value=returned,
         ):
             labels = fetch_next_close_labels(
@@ -128,7 +128,7 @@ class NextCloseLabelCacheTest(unittest.TestCase):
                     ],
                 ),
                 patch(
-                    "opening_strength_fit.commands.next_close_label_cache.compute_clickhouse_close_labels",
+                    "opening_strength_fit.next_close_labels.compute_clickhouse_close_labels",
                     return_value=returned,
                 ),
             ):

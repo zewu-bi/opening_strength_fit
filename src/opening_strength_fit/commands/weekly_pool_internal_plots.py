@@ -7,6 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from opening_strength_fit.analysis import write_json
+from opening_strength_fit.io.frames import csv_ready
 from opening_strength_fit.pool_internal_plots import (
     slug_label,
     write_weekly_pool_internal_rolling_plot,
@@ -49,14 +50,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _csv_ready(frame: pd.DataFrame) -> pd.DataFrame:
-    out = frame.copy()
-    for column in out.columns:
-        if pd.api.types.is_datetime64_any_dtype(out[column]):
-            out[column] = out[column].dt.strftime("%Y-%m-%d")
-    return out
-
-
 def main() -> None:
     args = parse_args()
     pools = normalize_pools(args.pool)
@@ -76,8 +69,8 @@ def main() -> None:
     weekly_path = output_dir / "weekly_pool_internal_summary.csv"
     overall_path = output_dir / "weekly_pool_internal_overall_summary.csv"
     worst_path = output_dir / "weekly_worst_windows.csv"
-    _csv_ready(daily).to_csv(daily_path, index=False, float_format="%.6f")
-    _csv_ready(weekly).to_csv(weekly_path, index=False, float_format="%.6f")
+    csv_ready(daily).to_csv(daily_path, index=False, float_format="%.6f")
+    csv_ready(weekly).to_csv(weekly_path, index=False, float_format="%.6f")
     overall.to_csv(overall_path, index=False, float_format="%.6f")
     worst.to_csv(worst_path, index=False, float_format="%.6f")
 

@@ -7,28 +7,38 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from opening_strength_fit.commands.raw_source_cache import (
-    DAILY_REFERENCE_COLUMNS,
-    TICK_COLUMNS,
-)
 from opening_strength_fit.commands.short_label_cache import compute_short_vwap_labels
 from opening_strength_fit.commands.training_dataset_build import (
-    KEY_COLUMNS,
     _apply_post_sample_feature_transforms_from_config,
-    _build_label_base,
     _drop_features_from_config,
-    _filter_decision_clocks,
-    _mixed_label,
-    compute_short_label_set,
 )
 from opening_strength_fit.config import load_toml
 from opening_strength_fit.feature_config import feature_filters_from_config
 from opening_strength_fit.model_features import feature_columns
 from opening_strength_fit.model_preprocessing import lightgbm_feature_value_frame
+from opening_strength_fit.raw_source import (
+    DAILY_REFERENCE_COLUMNS,
+    TICK_COLUMNS,
+)
 from opening_strength_fit.training_dataset_features import (
     build_raw_feature_day,
     decode_clickhouse_text,
     normalize_clickhouse_date,
+)
+from opening_strength_fit.training_dataset_labels import (
+    KEY_COLUMNS,
+)
+from opening_strength_fit.training_dataset_labels import (
+    build_label_base as _build_label_base,
+)
+from opening_strength_fit.training_dataset_labels import (
+    compute_clock_vwap_label_set as compute_short_label_set,
+)
+from opening_strength_fit.training_dataset_labels import (
+    filter_decision_clocks as _filter_decision_clocks,
+)
+from opening_strength_fit.training_dataset_labels import (
+    mixed_target_label as _mixed_label,
 )
 
 CANONICAL_CONFIG = Path(

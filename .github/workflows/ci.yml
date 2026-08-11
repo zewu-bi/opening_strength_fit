@@ -21,10 +21,10 @@ jobs:
           ruff check .
           ruff format --check .
       - name: Test
-        run: python -m pytest -q
+        run: python -m pytest -q --cov=opening_strength_fit --cov-report=term-missing --cov-fail-under=55
       - name: Public smoke example
         run: make smoke PYTHON=python
       - name: Contracts
         run: |
-          python -m opening_strength_fit.commands.experiment_audit
+          python -m opening_strength_fit.commands.experiment_audit --summary-only
           python -m opening_strength_fit.commands.project_contracts

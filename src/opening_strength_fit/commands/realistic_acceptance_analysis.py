@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from opening_strength_fit.analysis import write_json
+from opening_strength_fit.artifact_catalog import record_requested_artifacts
 from opening_strength_fit.capacity_acceptance import load_label_frame
 from opening_strength_fit.commands.arguments import CommandArguments
 from opening_strength_fit.config import load_toml, run_id
@@ -156,25 +157,6 @@ def _constraints(arguments: CommandArguments) -> RealisticExecutionConstraints:
     )
 
 
-def record_realistic_acceptance_outputs(
-    *,
-    output_dir: Path,
-    records_dir: Path,
-    record_prefix: str,
-) -> list[Path]:
-    destination_dir = records_dir / "backtests" / record_prefix
-    destination_dir.mkdir(parents=True, exist_ok=True)
-    copied = []
-    for name in ARTIFACTS:
-        source = output_dir / name
-        if not source.exists():
-            continue
-        destination = destination_dir / name
-        shutil.copy2(source, destination)
-        copied.append(destination)
-    return copied
-
-
 def main() -> None:
     args = parse_args()
     config = load_toml(args.config) if args.config else {}
@@ -261,14 +243,14 @@ def main() -> None:
     write_json(trace_path, trace, ensure_ascii=True)
 
     records_dir = arguments.string("records_dir")
-    record_paths: list[Path] = []
+    record_prefix = arguments.string("record_prefix") or run_name
+    record_paths = record_requested_artifacts(
+        output_dir=output_dir,
+        records_dir=records_dir,
+        record_prefix=record_prefix,
+        names=ARTIFACTS,
+    )
     if records_dir:
-        record_prefix = arguments.string("record_prefix") or run_name
-        record_paths = record_realistic_acceptance_outputs(
-            output_dir=output_dir,
-            records_dir=Path(records_dir),
-            record_prefix=record_prefix,
-        )
         trace["record_paths"] = [str(path) for path in record_paths]
         write_json(trace_path, trace, ensure_ascii=True)
         destination = Path(records_dir) / "backtests" / record_prefix / trace_path.name

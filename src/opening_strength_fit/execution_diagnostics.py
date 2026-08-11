@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from opening_strength_fit.analysis import KEY_COLUMNS, write_json
+from opening_strength_fit.feature_utils import finite_numeric
 from opening_strength_fit.io import frame_columns, read_frame, write_frame
 from opening_strength_fit.prediction_frames import prediction_files
 from opening_strength_fit.schema import normalize_decision_keys
@@ -34,8 +35,59 @@ class DiagnosticCase:
     output_dir: Path
 
 
-def finite_numeric(values: pd.Series) -> pd.Series:
-    return pd.to_numeric(values, errors="coerce").replace([np.inf, -np.inf], np.nan)
+def diagnostic_cases_from_config(
+    config: dict,
+    *,
+    section_name: str,
+    output_root: Path,
+) -> list[DiagnosticCase]:
+    section = config.get(section_name, {})
+    inputs = section.get("inputs", []) if isinstance(section, dict) else []
+    if not isinstance(inputs, list):
+        raise SystemExit(f"[{section_name}].inputs must be an array of tables")
+    cases = []
+    for index, item in enumerate(inputs):
+        if not isinstance(item, dict):
+            raise SystemExit(f"each [[{section_name}.inputs]] entry must be a table")
+        name = str(item.get("name", f"case_{index}")).strip()
+        selected_path = str(item.get("selected_path", "")).strip()
+        prediction_root = str(item.get("prediction_root", "")).strip()
+        if not selected_path or not prediction_root:
+            raise SystemExit(
+                f"each [[{section_name}.inputs]] entry requires selected_path and prediction_root"
+            )
+        case_output_dir = str(item.get("output_dir", "")).strip()
+        cases.append(
+            DiagnosticCase(
+                name=name,
+                selected_path=Path(selected_path),
+                prediction_root=Path(prediction_root),
+                output_dir=Path(case_output_dir) if case_output_dir else output_root / name,
+            )
+        )
+    return cases
+
+
+def diagnostic_case_from_values(
+    *,
+    selected_path: str,
+    prediction_root: str,
+    name: str,
+    case_output_dir: str,
+    output_root: Path,
+) -> list[DiagnosticCase]:
+    if not (selected_path or prediction_root):
+        return []
+    if not selected_path or not prediction_root:
+        raise SystemExit("--selected-path and --prediction-root must be supplied together")
+    return [
+        DiagnosticCase(
+            name=name or "case",
+            selected_path=Path(selected_path),
+            prediction_root=Path(prediction_root),
+            output_dir=Path(case_output_dir) if case_output_dir else output_root,
+        )
+    ]
 
 
 def normalize_keys(frame: pd.DataFrame) -> pd.DataFrame:

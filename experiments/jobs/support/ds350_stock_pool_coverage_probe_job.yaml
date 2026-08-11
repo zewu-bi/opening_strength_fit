@@ -1,0 +1,34 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-ds350-stock-pool-coverage-probe-v1
+  namespace: bizewu
+spec:
+  activeDeadlineSeconds: 1800
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 172800
+  template:
+    metadata:
+      labels: {app: os-ds350-stock-pool-coverage-probe-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      containers:
+        - name: probe
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:8eb66ef731709af980fa7e047ccb59748c0ed8f4ed36aa3460ee9b1f4a9fe0b6
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          envFrom:
+            - secretRef: {name: xy-fit-ceph-credentials}
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              python - <<'PY'
+              from opening_strength_fit.stock_pool import DEFAULT_STOCK_POOL_PATHS, load_stock_pool
+              for name, path in DEFAULT_STOCK_POOL_PATHS.items():
+                  pool = load_stock_pool(path)
+                  print(name, pool.index.min(), pool.index.max(), len(pool), len(pool.columns))
+              PY
+          resources:
+            requests: {cpu: "1", memory: 2Gi}
+            limits: {cpu: "2", memory: 4Gi}

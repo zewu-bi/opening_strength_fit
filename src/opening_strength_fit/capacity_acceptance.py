@@ -24,6 +24,23 @@ SELECTED_REQUIRED_COLUMNS = (
 )
 
 
+def add_daily_return_columns(daily: pd.DataFrame, capacity_total_notional: float) -> pd.DataFrame:
+    total = float(capacity_total_notional)
+    daily["week_start"] = pd.to_datetime(daily["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    daily["capacity_total_notional"] = total
+    daily["capacity_daily_capital_fraction"] = daily["target_notional"] / total
+    daily["gross_next_return_bps"] = (
+        daily["gross_pnl"] / daily["target_notional"] * RETURN_BPS_DENOMINATOR
+    )
+    daily["fee_bps"] = daily["fee_pnl"] / daily["target_notional"] * RETURN_BPS_DENOMINATOR
+    daily["next_net_return_bps"] = (
+        daily["net_pnl"] / daily["target_notional"] * RETURN_BPS_DENOMINATOR
+    )
+    daily["next_capital_net_return_bps"] = daily["net_pnl"] / total * RETURN_BPS_DENOMINATOR
+    daily["next_net_pnl"] = daily["net_pnl"]
+    return daily
+
+
 def normalize_key_columns(frame: pd.DataFrame) -> pd.DataFrame:
     return normalize_decision_keys(frame, key_columns=KEY_COLUMNS)
 
@@ -114,23 +131,10 @@ def summarize_capacity_acceptance(
         selected_allocated_notional=("allocated_notional", "sum"),
         selected_rows=("allocated_notional", "size"),
     )
-    daily = daily.join(daily_targets, how="left").reset_index()
-    daily["week_start"] = pd.to_datetime(daily["date"], errors="coerce").dt.strftime("%Y-%m-%d")
-    daily["capacity_total_notional"] = float(capacity_total_notional)
-    daily["capacity_daily_capital_fraction"] = daily["target_notional"] / float(
-        capacity_total_notional
+    daily = add_daily_return_columns(
+        daily.join(daily_targets, how="left").reset_index(),
+        capacity_total_notional,
     )
-    daily["gross_next_return_bps"] = (
-        daily["gross_pnl"] / daily["target_notional"] * RETURN_BPS_DENOMINATOR
-    )
-    daily["fee_bps"] = daily["fee_pnl"] / daily["target_notional"] * RETURN_BPS_DENOMINATOR
-    daily["next_net_return_bps"] = (
-        daily["net_pnl"] / daily["target_notional"] * RETURN_BPS_DENOMINATOR
-    )
-    daily["next_capital_net_return_bps"] = (
-        daily["net_pnl"] / float(capacity_total_notional) * RETURN_BPS_DENOMINATOR
-    )
-    daily["next_net_pnl"] = daily["net_pnl"]
     return daily[
         [
             "pool",
@@ -156,14 +160,17 @@ def summarize_capacity_acceptance(
 def summarize_capacity_acceptance_overall(daily: pd.DataFrame) -> pd.DataFrame:
     if daily.empty:
         return pd.DataFrame()
-    out = daily.groupby("pool", sort=False).agg(
-        days=("date", "nunique"),
-        capacity_decision_groups=("capacity_decision_groups", "sum"),
-        mean_selected_rows=("selected_rows", "mean"),
-        mean_target_notional=("target_notional", "mean"),
-        mean_capacity_daily_capital_fraction=("capacity_daily_capital_fraction", "mean"),
-        mean_next_net_return_bps=("next_net_return_bps", "mean"),
-        final_next_cumulative_net_return_bps=("next_capital_net_return_bps", "sum"),
-        total_net_pnl=("next_net_pnl", "sum"),
+    return (
+        daily.groupby("pool", sort=False)
+        .agg(
+            days=("date", "nunique"),
+            capacity_decision_groups=("capacity_decision_groups", "sum"),
+            mean_selected_rows=("selected_rows", "mean"),
+            mean_target_notional=("target_notional", "mean"),
+            mean_capacity_daily_capital_fraction=("capacity_daily_capital_fraction", "mean"),
+            mean_next_net_return_bps=("next_net_return_bps", "mean"),
+            final_next_cumulative_net_return_bps=("next_capital_net_return_bps", "sum"),
+            total_net_pnl=("next_net_pnl", "sum"),
+        )
+        .reset_index()
     )
-    return out.reset_index()

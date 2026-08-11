@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import re
 from pathlib import Path
 
 import numpy as np
@@ -46,193 +45,68 @@ from opening_strength_fit.clickhouse_ticks import (
 from opening_strength_fit.config import (
     config_bool,
     config_float,
-    config_float_mapping,
     config_int,
     config_list,
-    config_optional_int,
     config_str,
     config_value,
     run_id,
 )
-from opening_strength_fit.dataset import load_ticks
 from opening_strength_fit.feature_config import feature_filters_from_config
-from opening_strength_fit.features import mechanismized_feature_value_reference_columns
 from opening_strength_fit.io import frame_columns, read_frame, write_frame_atomic
-from opening_strength_fit.model import PREDICTION_CONTEXT_COLUMNS, feature_columns
+from opening_strength_fit.model import feature_columns
 from opening_strength_fit.reports import dataset_summary, print_mapping
-from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns
+from opening_strength_fit.schema import (
+    DECISION_KEY_COLUMNS,
+    ensure_timestamp_columns,
+    standardize_columns,
+)
 from opening_strength_fit.training_labeled import (
     apply_candidate_filter_from_config,
     build_labeled_frame_from_config,
     filter_labeled_frame,
-    looks_labeled,
+)
+from opening_strength_fit.training_pvc_columns import (
+    labeled_pvc_read_columns as _labeled_pvc_read_columns,
+)
+from opening_strength_fit.training_pvc_reuse import (
+    attach_reused_labeled_features as _attach_reused_labeled_features,
+)
+from opening_strength_fit.training_sources import (
+    clickhouse_date_bounds as _clickhouse_date_bounds,
+)
+from opening_strength_fit.training_sources import (
+    clickhouse_setting as _clickhouse_setting,
+)
+from opening_strength_fit.training_sources import (
+    input_kind as _input_kind,
+)
+from opening_strength_fit.training_sources import (
+    load_training_frame,
+    resolve_cache_path,
+    resolve_data_source,
 )
 from opening_strength_fit.training_windows import (
-    period_end_date,
     resolve_window_mode,
     rolling_monthly_date_bounds,
-    test_year_from_args,
 )
 from opening_strength_fit.universe import DEFAULT_A_SHARE_SYMBOL_REGEX, load_symbol_list
 
-DATASET_JOIN_KEYS = ("date", "symbol", "decision_target_timestamp")
+DATASET_JOIN_KEYS = DECISION_KEY_COLUMNS
 
-
-def _input_kind(args: argparse.Namespace, config: dict) -> str:
-    return args.input_kind or config_str(config, "data", "input_kind", "auto")
-
-
-def load_training_frame(path: str, args: argparse.Namespace, config: dict) -> pd.DataFrame:
-    frame = load_ticks(path)
-    kind = _input_kind(args, config)
-    if kind == "labeled" or (kind == "auto" and looks_labeled(frame)):
-        return filter_labeled_frame(frame, config)
-    if kind not in {"auto", "raw_ticks"}:
-        raise SystemExit(f"unknown data.input_kind={kind!r}; expected auto, raw_ticks, or labeled")
-    return build_labeled_frame_from_config(frame, config)
-
-
-def resolve_data_source(args: argparse.Namespace, config: dict, tick_path: str) -> str:
-    if args.input:
-        return "path"
-    if getattr(args, "labeled_input", None):
-        return "labeled_pvc"
-    feature_input = getattr(args, "feature_input", None)
-    label_input = getattr(args, "label_input", None)
-    if bool(feature_input) != bool(label_input):
-        raise SystemExit("pass --feature-input and --label-input together")
-    if feature_input and label_input:
-        return "labeled_pvc"
-    source = args.data_source or config_str(config, "data", "source", "auto")
-    source = source.strip().lower()
-    if source == "auto":
-        labeled_path = os.environ.get("OPENING_STRENGTH_LABELED_PATH", "") or config_value(
-            config, "data", "labeled_path", ""
-        )
-        feature_path = config_value(config, "data", "feature_path", "")
-        label_path = config_value(config, "data", "label_path", "")
-        if labeled_path or (feature_path and label_path):
-            return "labeled_pvc"
-        return "path" if tick_path else "clickhouse"
-    if source in {"path", "clickhouse", "labeled_pvc"}:
-        return source
-    raise SystemExit(
-        f"unknown data.source={source!r}; expected auto, path, clickhouse, or labeled_pvc"
-    )
-
-
-def _clickhouse_date_bounds(args: argparse.Namespace, config: dict) -> tuple[str, str]:
-    explicit_start = config_value(
-        config,
-        "data",
-        "start_date",
-        config_value(config, "clickhouse", "start_date", None),
-    )
-    explicit_end = config_value(
-        config,
-        "data",
-        "end_date",
-        config_value(config, "clickhouse", "end_date", None),
-    )
-    if explicit_start and explicit_end:
-        return str(pd.Timestamp(explicit_start).date()), str(pd.Timestamp(explicit_end).date())
-
-    window_mode = resolve_window_mode(args, config)
-    if window_mode == "rolling_monthly":
-        train_months = (
-            args.train_months
-            if args.train_months is not None
-            else config_int(config, "window", "train_months", 12)
-        )
-        first_test_month = args.test_start_month or config_value(
-            config, "window", "test_start_month", None
-        )
-        last_test_month = args.test_end_month or config_value(
-            config, "window", "test_end_month", None
-        )
-        if not first_test_month or not last_test_month:
-            raise SystemExit(
-                "ClickHouse rolling_monthly source needs [window].test_start_month "
-                "and [window].test_end_month, or CLI overrides."
-            )
-        first_period = pd.Period(first_test_month, freq="M")
-        last_period = pd.Period(last_test_month, freq="M")
-        start_period = first_period - int(train_months)
-        return str(start_period.to_timestamp().date()), period_end_date(last_period)
-
-    if window_mode == "rolling_annual":
-        train_start_year = (
-            args.train_start_year
-            if args.train_start_year is not None
-            else config_optional_int(config, "window", "train_start_year", None)
-        )
-        first_test_year = test_year_from_args(args, config, "start")
-        last_test_year = test_year_from_args(args, config, "end")
-        if train_start_year is None or first_test_year is None or last_test_year is None:
-            raise SystemExit(
-                "ClickHouse rolling_annual source needs train_start_year and test start/end years."
-            )
-        return f"{int(train_start_year):04d}-01-01", f"{int(last_test_year):04d}-12-31"
-
-    train_start_date = config_value(
-        config,
-        "window",
-        "train_start_date",
-        config_value(config, "data", "train_start_date", None),
-    )
-    test_start_date = args.test_start_date or config_value(
-        config,
-        "window",
-        "test_start_date",
-        None,
-    )
-    test_end_date = args.test_end_date or config_value(
-        config,
-        "window",
-        "test_end_date",
-        None,
-    )
-    start_date = explicit_start or train_start_date
-    end_date = explicit_end or test_end_date
-    if not start_date or not end_date:
-        raise SystemExit(
-            "ClickHouse chronological source needs [data].start_date/[data].end_date "
-            "or [window].train_start_date plus test_start_date/test_end_date."
-        )
-    if test_start_date and str(pd.Timestamp(start_date).date()) >= str(
-        pd.Timestamp(test_start_date).date()
-    ):
-        raise SystemExit("ClickHouse chronological train source must start before test_start_date")
-    return str(pd.Timestamp(start_date).date()), str(pd.Timestamp(end_date).date())
-
-
-def _clickhouse_setting(
-    args: argparse.Namespace,
-    config: dict,
-    arg_name: str,
-    config_key: str,
-    env_name: str,
-    default,
-):
-    arg_value = getattr(args, arg_name)
-    if arg_value not in (None, ""):
-        return arg_value
-    env_value = os.getenv(env_name)
-    if env_value not in (None, ""):
-        return env_value
-    return config_value(config, "clickhouse", config_key, default)
-
-
-def resolve_cache_path(config: dict) -> Path | None:
-    raw = config_value(
-        config,
-        "cache",
-        "labeled_path",
-        config_value(config, "cache", "path", ""),
-    )
-    if raw in (None, ""):
-        return None
-    return Path(str(raw))
+__all__ = [
+    "_attach_reused_labeled_features",
+    "_clickhouse_date_bounds",
+    "_clickhouse_setting",
+    "_input_kind",
+    "_labeled_pvc_files",
+    "_labeled_pvc_path",
+    "_labeled_pvc_read_columns",
+    "load_clickhouse_labeled_frame",
+    "load_labeled_pvc_frame",
+    "load_training_frame",
+    "resolve_cache_path",
+    "resolve_data_source",
+]
 
 
 def _labeled_pvc_path(args: argparse.Namespace, config: dict) -> Path:
@@ -273,285 +147,6 @@ def _labeled_pvc_date_filters(
         ("date", ">=", start_date),
         ("date", "<=", end_date),
     ], {"date_start": start_date, "date_end": end_date}
-
-
-def _mapping_keys(mapping: dict[str, object]) -> tuple[str, ...]:
-    return tuple(str(key) for key in mapping.keys())
-
-
-def _existing_columns(available: set[str], columns: list[str] | tuple[str, ...]) -> list[str]:
-    return [column for column in columns if column in available]
-
-
-def _matching_existing_columns(
-    available: set[str],
-    *,
-    prefixes: tuple[str, ...] = (),
-    patterns: tuple[str, ...] = (),
-) -> list[str]:
-    compiled = [re.compile(pattern) for pattern in patterns]
-    out = []
-    for column in sorted(available):
-        if prefixes and column.startswith(prefixes):
-            out.append(column)
-            continue
-        if compiled and any(pattern.search(column) for pattern in compiled):
-            out.append(column)
-    return out
-
-
-def _postopen_decision_source_columns(config: dict) -> tuple[str, ...]:
-    if not config_bool(config, "features", "include_postopen_decision", False):
-        return ()
-    return (
-        "ask_volume_1",
-        "bid_volume_1",
-        "ask_depth_10",
-        "bid_depth_10",
-        "depth_imbalance_1",
-        "depth_imbalance_10",
-        "spread_bps",
-        "mid_price",
-        "ask_price_1",
-        "bid_price_1",
-        "volume",
-        "turnover",
-        "volume_diff_1t",
-        *(f"ask_gap_{level}_bps" for level in range(2, 11)),
-        *(f"bid_gap_{level}_bps" for level in range(2, 11)),
-    )
-
-
-def _postopen_v2_source_columns(config: dict, available: set[str]) -> list[str]:
-    if not config_bool(config, "features", "include_postopen_v2", False):
-        return []
-    source = [
-        "ask_price_1",
-        "bid_price_1",
-        "ask_volume_1",
-        "bid_volume_1",
-        "mid_price",
-        "spread_bps",
-        "volume",
-        "turnover",
-    ]
-    source.extend(
-        _matching_existing_columns(
-            available,
-            prefixes=(
-                "ask_price_",
-                "bid_price_",
-                "ask_volume_",
-                "bid_volume_",
-                "ask_count_",
-                "bid_count_",
-                "ask_gap_",
-                "bid_gap_",
-                "ask_depth_",
-                "bid_depth_",
-                "depth_imbalance_",
-                "volume_diff_",
-                "turnover_diff_",
-                "trade_vwap_",
-                "return_",
-            ),
-        )
-    )
-    return source
-
-
-def _cross_sectional_relative_source_columns(config: dict, available: set[str]) -> list[str]:
-    if not config_bool(config, "features", "include_cross_sectional_relative", False):
-        return []
-    source = []
-    source.extend(config_list(config, "features", "cross_sectional_relative_group_cols", []))
-    source.extend(config_list(config, "features", "cross_sectional_relative_columns", []))
-    source.extend(
-        _matching_existing_columns(
-            available,
-            prefixes=tuple(
-                config_list(config, "features", "cross_sectional_relative_prefixes", [])
-            ),
-            patterns=tuple(config_list(config, "features", "cross_sectional_relative_regexes", [])),
-        )
-    )
-    return source
-
-
-def _historical_surprise_source_columns(config: dict, available: set[str]) -> list[str]:
-    if not config_bool(config, "features", "include_historical_same_minute_surprise", False):
-        return []
-    source = []
-    source.extend(config_list(config, "features", "historical_surprise_columns", []))
-    source.extend(
-        _matching_existing_columns(
-            available,
-            prefixes=tuple(config_list(config, "features", "historical_surprise_prefixes", [])),
-            patterns=tuple(config_list(config, "features", "historical_surprise_regexes", [])),
-        )
-    )
-    return source
-
-
-def _multi_denominator_source_columns(config: dict) -> list[str]:
-    if not config_bool(config, "features", "include_multi_denominator_features", False):
-        return []
-    source = [
-        "volume",
-        "turnover",
-        "float_shares",
-        "float_market_cap",
-        *config_list(config, "features", "multi_denominator_turnover_columns", []),
-        *config_list(config, "features", "multi_denominator_volume_columns", []),
-        *config_list(config, "features", "multi_denominator_depth_columns", []),
-        *config_list(
-            config,
-            "features",
-            "multi_denominator_cross_sectional_median_columns",
-            [],
-        ),
-        *config_list(
-            config,
-            "features",
-            "multi_denominator_cross_sectional_group_cols",
-            ["date", "decision_target_timestamp"],
-        ),
-    ]
-    return list(dict.fromkeys(source))
-
-
-def _price_scale_source_columns(config: dict) -> list[str]:
-    if not config_bool(config, "features", "include_price_scale_features", False):
-        return []
-    source = [
-        config_str(config, "features", "price_scale_price_col", "ask_price_1"),
-        "ask_price_1",
-        "bid_price_1",
-        "spread_abs",
-        "ask_volume_1",
-        "bid_volume_1",
-        "ask_depth_3",
-        "bid_depth_3",
-        "ask_depth_10",
-        "bid_depth_10",
-        "postopen_v2_ask_depth_3",
-        "postopen_v2_bid_depth_3",
-        "postopen_v2_ask_depth_10",
-        "postopen_v2_bid_depth_10",
-        "volume_diff_1t",
-        "volume_diff_3t",
-    ]
-    source.extend(f"ask_price_{level}" for level in range(2, 11))
-    source.extend(f"bid_price_{level}" for level in range(2, 11))
-    source.extend(config_list(config, "features", "price_scale_interaction_columns", []))
-    return source
-
-
-def _target_transform_source_columns(config: dict) -> list[str]:
-    if not config_bool(config, "target_transform", "enabled", False):
-        return []
-    return [
-        config_str(config, "target_transform", "source_col", "target_label"),
-        *config_list(
-            config,
-            "target_transform",
-            "group_cols",
-            ["date", "decision_target_timestamp"],
-        ),
-    ]
-
-
-def _guard_condition_columns(config: dict, section: str) -> tuple[str, ...]:
-    return (
-        *_mapping_keys(config_float_mapping(config, section, "min")),
-        *_mapping_keys(config_float_mapping(config, section, "max")),
-        *_mapping_keys(config_float_mapping(config, section, "rank_min")),
-        *_mapping_keys(config_float_mapping(config, section, "rank_max")),
-        *tuple(config_list(config, section, "rank_columns", [])),
-        *tuple(config_list(config, section, "rank_group_cols", [])),
-    )
-
-
-def _labeled_pvc_read_columns(path: Path, config: dict) -> list[str] | None:
-    feature_filters = feature_filters_from_config(config)
-    has_include_filter = bool(
-        feature_filters["include_columns"]
-        or feature_filters["include_prefixes"]
-        or feature_filters["include_patterns"]
-    )
-    explicit = tuple(config_list(config, "data", "read_columns", []))
-    if not has_include_filter and not explicit:
-        return None
-
-    available = frame_columns(path)
-    target_col = config_str(config, "model", "target_col", "label")
-    sample_weight_col = config_str(config, "model", "sample_weight_col", "")
-    sample_weight_output_col = config_str(
-        config,
-        "sample_weight",
-        "output_col",
-        "sample_weight",
-    )
-    required = [
-        "date",
-        "symbol",
-        "timestamp",
-        "decision_time",
-        "decision_target_timestamp",
-        "decision_lag_seconds",
-        "status",
-        "label",
-        "valid_label",
-        "gross_label",
-        target_col,
-        sample_weight_col,
-        sample_weight_output_col,
-        *_target_transform_source_columns(config),
-        *PREDICTION_CONTEXT_COLUMNS,
-        *_guard_condition_columns(config, "candidate_filter"),
-        *_guard_condition_columns(config, "sample_weight"),
-        *_guard_condition_columns(config, "guard_features"),
-    ]
-
-    selected = []
-    selected.extend(explicit)
-    selected.extend(required)
-    selected.extend(feature_filters["include_columns"])
-    selected.extend(_postopen_decision_source_columns(config))
-    selected.extend(_postopen_v2_source_columns(config, available))
-    selected.extend(_price_scale_source_columns(config))
-    selected.extend(_cross_sectional_relative_source_columns(config, available))
-    selected.extend(_historical_surprise_source_columns(config, available))
-    selected.extend(_multi_denominator_source_columns(config))
-    value_transform = config_str(config, "features", "feature_value_transform", "")
-    value_transform = value_transform.strip().lower().replace("-", "_")
-    if value_transform.startswith(("mechanismized_v3", "mechanism_aware_v3")) or config_bool(
-        config,
-        "features",
-        "include_historical_daily_activity_references",
-        False,
-    ):
-        selected.extend(
-            [
-                config_str(config, "features", "historical_daily_activity_volume_col", "volume"),
-                config_str(
-                    config,
-                    "features",
-                    "historical_daily_activity_turnover_col",
-                    "turnover",
-                ),
-            ]
-        )
-    if value_transform.startswith(("mechanismized", "mechanism_aware")):
-        selected.extend(mechanismized_feature_value_reference_columns())
-    selected.extend(
-        _matching_existing_columns(
-            available,
-            prefixes=feature_filters["include_prefixes"],
-            patterns=feature_filters["include_patterns"],
-        )
-    )
-    return list(dict.fromkeys(_existing_columns(available, selected)))
 
 
 def _labeled_pvc_files(path: Path) -> list[Path]:
@@ -872,144 +467,6 @@ def _load_labeled_cache(path: Path, config: dict) -> pd.DataFrame:
 
 def _write_labeled_cache(labeled: pd.DataFrame, path: Path) -> None:
     write_frame_atomic(labeled, path)
-
-
-def _normalized_reuse_keys(frame: pd.DataFrame, key_columns: list[str]) -> pd.DataFrame:
-    out = frame.copy(deep=False)
-    if "date" in key_columns:
-        parsed = pd.to_datetime(out["date"], errors="coerce")
-        out = out.copy()
-        out["date"] = parsed.dt.strftime("%Y-%m-%d")
-    if "symbol" in key_columns:
-        if out is frame:
-            out = out.copy()
-        out["symbol"] = out["symbol"].astype("string")
-    return out
-
-
-def _attach_reused_labeled_features(labeled: pd.DataFrame, config: dict) -> pd.DataFrame:
-    source_path_raw = config_str(config, "features", "reuse_labeled_path", "").strip()
-    if not source_path_raw:
-        return labeled
-
-    source_path = Path(source_path_raw)
-    if not source_path.exists():
-        raise SystemExit(f"reused labeled feature source does not exist: {source_path}")
-
-    key_columns = config_list(
-        config,
-        "features",
-        "reuse_key_columns",
-        ["date", "symbol"],
-    )
-    explicit_columns = config_list(
-        config,
-        "features",
-        "reuse_feature_columns",
-        [],
-    )
-    prefixes = tuple(
-        config_list(
-            config,
-            "features",
-            "reuse_feature_prefixes",
-            ["preopen_", "auction_"],
-        )
-    )
-    available = frame_columns(source_path)
-    missing_keys = [column for column in key_columns if column not in available]
-    if missing_keys:
-        raise SystemExit(
-            f"reused labeled feature source is missing key columns {missing_keys}: {source_path}"
-        )
-    missing_explicit = [column for column in explicit_columns if column not in available]
-    if missing_explicit:
-        raise SystemExit(
-            "reused labeled feature source is missing requested columns "
-            f"{missing_explicit}: {source_path}"
-        )
-    reused_columns = list(
-        dict.fromkeys(
-            explicit_columns
-            + sorted(
-                column for column in available if prefixes and str(column).startswith(prefixes)
-            )
-        )
-    )
-    if not reused_columns:
-        raise SystemExit(
-            "reused labeled feature source produced no columns for "
-            f"prefixes={list(prefixes)}: {source_path}"
-        )
-    collisions = [
-        column
-        for column in reused_columns
-        if column in labeled.columns and column not in key_columns
-    ]
-    if collisions:
-        raise SystemExit(
-            f"reused labeled feature columns already exist in destination frame: {collisions}"
-        )
-
-    source = read_frame(source_path, columns=key_columns + reused_columns)
-    source = _normalized_reuse_keys(standardize_columns(source), key_columns)
-    destination = _normalized_reuse_keys(labeled, key_columns)
-    if source[key_columns].isna().any(axis=None):
-        raise SystemExit(f"reused labeled feature source has null keys: {source_path}")
-
-    if config_bool(config, "features", "reuse_require_constant", True):
-        duplicate_source = source.loc[source.duplicated(key_columns, keep=False)]
-        if not duplicate_source.empty:
-            nonconstant = (
-                duplicate_source.groupby(key_columns, sort=False, dropna=False)[reused_columns]
-                .nunique(dropna=False)
-                .gt(1)
-            )
-            bad_columns = nonconstant.columns[nonconstant.any(axis=0)].tolist()
-            if bad_columns:
-                raise SystemExit(
-                    "reused labeled features are not constant within key "
-                    f"{key_columns}: {bad_columns}"
-                )
-
-    source = source.drop_duplicates(key_columns, keep="first")
-    source["_reused_labeled_feature_match"] = True
-    join_mode = config_str(config, "features", "reuse_join", "inner").strip().lower()
-    if join_mode not in {"inner", "left"}:
-        raise SystemExit("[features].reuse_join must be 'inner' or 'left'")
-    rows_before = len(destination)
-    merged = destination.merge(
-        source,
-        on=key_columns,
-        how=join_mode,
-        validate="many_to_one",
-    )
-    matched_rows = int(merged["_reused_labeled_feature_match"].fillna(False).sum())
-    if join_mode == "left" and config_bool(
-        config,
-        "features",
-        "reuse_require_full_match",
-        True,
-    ):
-        unmatched_rows = len(merged) - matched_rows
-        if unmatched_rows:
-            raise SystemExit(
-                f"reused labeled features have {unmatched_rows} unmatched destination rows"
-            )
-    merged = merged.drop(columns="_reused_labeled_feature_match")
-    print_mapping(
-        "reused_labeled_features",
-        {
-            "path": str(source_path),
-            "keys": key_columns,
-            "columns": len(reused_columns),
-            "rows_before": rows_before,
-            "rows_after": len(merged),
-            "matched_rows": matched_rows,
-            "join": join_mode,
-        },
-    )
-    return merged
 
 
 def _cache_ready_paths(cache_path: Path, config: dict, *, cache_write: bool) -> tuple[Path, ...]:

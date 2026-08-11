@@ -4,8 +4,11 @@ import argparse
 from pathlib import Path
 
 import pandas as pd
-from run_top1000_rank_bucket_diagnostics import (
+
+from opening_strength_fit.legacy.top1000_rank_data import (
     TOP1000_RETURN_HISTOGRAM_BIN_WIDTH_BPS,
+)
+from opening_strength_fit.legacy.top1000_return_histograms import (
     plot_score_bucket_histograms,
     plot_score_bucket_histograms_full_scale,
 )

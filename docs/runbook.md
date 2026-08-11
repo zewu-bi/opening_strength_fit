@@ -1,7 +1,7 @@
 # Runbook
 
-本文只保留可执行流程。研究判断见 [project brief](project_brief.md)，实验事实见
-[experiment log](experiment_log.md)，目录契约见 [experiments README](../experiments/README.md)。
+本文只保留可执行流程和必须随流程检查的工程合同。研究判断见 [project brief](project_brief.md)，实验事实见
+[experiment log](experiment_log.md)。
 
 ## 1. 本地复现
 
@@ -16,6 +16,17 @@ make contracts
 ```
 
 `make smoke` 使用 `examples/smoke/` 的小型输入，不访问 ClickHouse、S3 或 PVC。
+
+安装面按职责拆分：`-e .` 是 core；`.[data]`、`.[models]`、`.[plots]` 按需增加 adapter、LightGBM 和
+绘图；`.[dev]` 用于 CI/开发；`.[cluster]` 用于完整集群镜像。Torch/CUDA wheel 按目标节点单独安装。
+
+本地产物只做 read-only 清单，不自动删除：
+
+```bash
+osf audit storage --older-than-days 30
+```
+
+确认具体目录可重建且无需保留后，再单独发起删除；Git 历史、PVC 和对象存储不属于此命令范围。
 
 ## 2. 外部数据
 
@@ -42,20 +53,28 @@ data.source = path          读取本地 parquet/csv
 4. 等待所有 shard 和 `_SUCCESS`，再运行分析/验收。
 5. 同步 compact evidence，运行 contracts，更新 experiment log。
 
-失败实验也保留配置，用 `canceled` 或 `superseded`。命名规则见
-[canonical README](../experiments/canonical/README.md)。
+状态只允许 `queued`、`running`、`completed`、`canceled`、`superseded`；inactive run 必须同时记录
+`closed_at` 和 `status_reason`。失败实验仍保留配置、Job 和 trace，不覆盖历史输入或输出。
+
+新任务使用 `opening_<window>_<semantic_change>`；`opening_base/cache/model` 和
+`opening_label_matrix` 是逻辑短名，长 run id/PVC 路径是不可变来源。同名语义变化必须新建 run，promotion
+同时更新 `experiments/canonical/opening.toml`、project brief、experiment log、evidence 和测试。
+
+尚未形成正式 workflow 的一次性 probe/audit 登记在 `experiments/incubator.toml`，必须声明 owner、目的、
+复审日期、晋级条件和精确资产。到期、复用、用于结论或被调度后，只能提升为 package command + run，
+或者连同结论归档。
 
 ## 4. Cache 与 label
 
 ```bash
 osf-probe-clickhouse-data --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD>
-osf-build-raw-source-cache --config experiments/runs/opening_<window>_raw_source.toml --year <YYYY>
-osf-build-training-datasets --config experiments/runs/opening_<window>_features_350.toml --kind features --year <YYYY>
-osf-build-training-datasets --config experiments/runs/opening_<window>_labels_5.toml --kind labels --year <YYYY>
-osf-split-horizon-labels --config experiments/runs/opening_<window>_labels_horizon_split.toml --year <YYYY>
-osf-build-long-label-raw-source --config experiments/runs/opening_0931_1010_long_label_raw_source_v1.toml --year <YYYY>
-osf-build-long-horizon-labels --config experiments/runs/opening_<window>_labels_10m_1h_close.toml --year <YYYY>
-osf-split-long-horizon-labels --config experiments/runs/opening_<window>_labels_10m_1h_close_split.toml --year <YYYY>
+osf data build-raw --config experiments/runs/opening_<window>_raw_source.toml --year <YYYY>
+osf data build-dataset --config experiments/runs/opening_<window>_features_350.toml --kind features --year <YYYY>
+osf data build-dataset --config experiments/runs/opening_<window>_labels_5.toml --kind labels --year <YYYY>
+osf data split-labels --config experiments/runs/opening_<window>_labels_horizon_split.toml --year <YYYY>
+osf data build-long-raw --config experiments/runs/opening_0931_1010_long_label_raw_source_v1.toml --year <YYYY>
+osf data build-long-labels --config experiments/runs/opening_<window>_labels_10m_1h_close.toml --year <YYYY>
+osf data split-long-labels --config experiments/runs/opening_<window>_labels_10m_1h_close_split.toml --year <YYYY>
 ```
 
 后续实验从一个最终 label 的独立目录取数：
@@ -75,7 +94,7 @@ osf-split-long-horizon-labels --config experiments/runs/opening_<window>_labels_
 训练直接传入同窗口的 feature 与最终 label，不再生成合并 cache：
 
 ```bash
-osf-train \
+osf train \
   --config experiments/runs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1.toml \
   --feature-input /mnt/output/opening_strength_fit/datasets/opening_<window>_features_350 \
   --label-input /mnt/output/opening_strength_fit/datasets/opening_<window>_labels_<horizon>_<version> \
@@ -93,7 +112,8 @@ osf-train \
 这组 NN 必须使用向量化训练路径。训练集标准化后，完整 float32 feature/label tensor 一次搬到 GPU，
 每个 epoch 只生成一个整块随机索引 tensor，再用 GPU `index_select` 切 batch；不得恢复
 `TensorDataset -> Subset -> DataLoader` 的逐行 Python 取数。loss 只在每个 epoch 结束时同步回 CPU。
-配置固定 `training_tensor_storage = "cuda_resident"`，显存不足时直接失败，不允许静默退回慢路径；
+权威矩阵配置固定 `training_tensor_storage = "cuda_resident"`，显存不足时直接失败，不允许静默退回慢路径；
+其他 run 可显式选择 host/vectorized 路径，但必须形成独立资源/方法 lineage。
 Job 只允许 `A100-80`、`H100-80` 和 `H20`，排除 32GB 5090。
 
 2026-08-05 用最大 2025-07 fold 实测：36,119,812 个训练样本、350 个特征，训练 tensor
@@ -159,18 +179,22 @@ systemd-run --user --unit os-nn-ds350-label15-max30-queue-reverse \
 IMAGE=<registry>/<repository>:<immutable-tag>
 
 docker build \
+  --build-arg DEPENDENCY_PROFILE=cluster \
   --build-arg CACHE_BUST=<version> \
   --build-arg SOURCE_REVISION=$(git rev-parse HEAD) \
   -t "$IMAGE" .
 
-osf-render-k8s-job --config experiments/runs/<run_id>.toml --image "$IMAGE" --sharded
+osf experiment render-job --config experiments/runs/<run_id>.toml --image "$IMAGE" --sharded
 <kubectl-wrapper> apply --dry-run=client -f experiments/jobs/<run_id>_sharded_job.yaml
 <kubectl-wrapper> apply -f experiments/jobs/<run_id>_sharded_job.yaml
 ```
 
+本地只运行 core workflow 时可用 `DEPENDENCY_PROFILE=core`。镜像默认只包含 package、run/canonical/
+template 和 experiment scripts；不要把测试、docs、output、results 或整个 checkout 加回 runtime 层。
+
 ```bash
-osf-rolling-job-status --config experiments/runs/<run_id>.toml
-osf-rolling-job-status --config experiments/runs/<run_id>.toml --tail 160
+osf experiment status --config experiments/runs/<run_id>.toml
+osf experiment status --config experiments/runs/<run_id>.toml --tail 160
 ```
 
 Job `Complete` 后仍要检查 shard 输出、metrics 和 trace。
@@ -178,15 +202,19 @@ Job `Complete` 后仍要检查 shard 输出、metrics 和 trace。
 ## 6. 分析与 evidence
 
 ```bash
-osf-render-k8s-job --config experiments/runs/<run_id>.toml --analysis --image <cpu-image>
-osf-sync-experiment-artifacts --config experiments/runs/<run_id>.toml --all
-osf-audit-experiments --require-metrics
-osf-check-project-contracts
+osf experiment render-job --config experiments/runs/<run_id>.toml --analysis --image <cpu-image>
+osf experiment sync --config experiments/runs/<run_id>.toml --all
+osf experiment audit --summary-only
+osf experiment audit --require-metrics
+osf audit contracts
 ```
 
 原始同步结果留在 ignored mirror；Git 只保留 summary、trace、小型审计表和标准图。正式信号比较固定使用
 short IC/Top100 excess、费用后累和、Top1000 分桶和收益分布四图。证据范围见
 [evidence README](../experiments/evidence/README.md)。
+
+evidence 单文件不得超过 1MB，不接收 Parquet、pickle、模型或逐行 replay。正式 Kubernetes Job 必须使用
+package 入口并设置 `ttlSecondsAfterFinished`；TTL 只清理 Job 对象，不替代 PVC 和 evidence 保留策略。
 
 ## 7. 容量与策略验收
 

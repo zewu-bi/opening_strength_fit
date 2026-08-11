@@ -1,12 +1,12 @@
 # Experiment Log
 
-> Last reconciled: 2026-08-06
+> Last reconciled: 2026-08-11
 >
-> Coverage: 2026-05-20 through 2026-08-06
+> Coverage: 2026-05-20 through 2026-08-11
 
 本文件是实验事实账本，按时间记录假设、结果、状态和决策。当前研究口径见
-[project_brief.md](project_brief.md)，执行命令见 [runbook.md](runbook.md)，历史长记录见
-[archive README](archive/README.md)。
+[project_brief.md](project_brief.md)，执行命令见 [runbook.md](runbook.md)，历史长记录见 Git 历史和
+`experiments/archive/`。
 
 ## 证据规则
 
@@ -28,6 +28,8 @@ run 状态由 `osf-audit-experiments` 从 TOML 审计，不在文档中复制完
 | 2026-08-05 | 前两窗口 10m/1h/当日收盘 label | `completed`; 6 labels × 7 years | 10m/1h 用持有期后 60 秒 VWAP，收盘 label 用当日收盘价；next-close 逐 key 复用既有数据 |
 | 2026-08-05 | 新分层数据 15-label max-10 NN 矩阵 | `superseded`; 15 runs × 8 shards | 只保留为 v6 同预算复现与 epoch 敏感性对照，不再作为当前结果口径 |
 | 2026-08-06 | 15-label max-30 NN 矩阵 | `completed`; 15 runs × 8 shards；当前权威结果 | case 排序与正负方向稳健；1h/close 的较低 Top100 excess 是最终结果的一部分，不回退到 max-10 |
+| 2026-08-11 | ds350 长 label、涨停尾部与严格 2026H1 留出诊断 | `completed`；compact evidence 已归档 | 未发现能解释信号的 selection-time future-label 泄露；收益高度依赖最终涨停尾部，且 ask1 深度显著限制可成交容量 |
+| 2026-08-11 | 全量 registry 对账与工程治理 | `completed=280, canceled=3, superseded=20, active=0` | stale active 全部依据下游证据 closeout；进行中 ds350 诊断进入限时 incubator；新增 `opening_label_matrix` canonical scope，不覆盖 `opening_model` |
 
 ## 决策时间线
 
@@ -144,6 +146,43 @@ max-30 的较低绝对 Top100 收益。Decision：max-30 是当前权威训练�
 后续可以把 early stopping validation 改为训练窗口尾部的时间块，但这属于下一版方法改进，不改变
 本批结果以 max-30 为准。
 
+### 长 label、涨停尾部与严格 2026H1 留出诊断（2026-08-11，已完成）
+
+本轮先固定并分开三组容易混淆的数字：历史 max-10 的 `09:31-09:40 / close` quarter-equal
+短期超额为 `24.8666 bps`；历史 max-30 limit audit 为 `20.8461 bps`；训练 2023-2025、purge one
+session、严格验证 2026H1 的全 A close 模型为 `36.5139 bps`。三者训练预算或样本期不同，不能互换。
+
+因果链检查保留了不先看未来 label availability 的 Top100、缺失收益置零、fold boundary purge、重训
+复现和 2026 数据集 schema/key-order 审计。因果 Top100 相对旧 valid-filter Top100 的重合约
+`99.8%`，max-30 历史 close 在 purge-one + missing-zero 下仍为 `22.3698 bps`；这排除了“选股前先按
+未来 label 是否存在过滤”作为高收益主因。重训并非 bit-identical（close score correlation `0.7960`、
+Top100 overlap `73.50%`），因此结论是没有发现该类泄露，而不是宣称已形式化证明整个链路无任何风险。
+
+收益结构本身非常非线性。历史 max-30 的 close Top100 最终涨停股只占 `3.82%`，却贡献
+`26.78 bps`；剔除最终涨停并在原 Top100 内看剩余贡献接近零。严格 2026H1 close 模型最终涨停占
+`6.67%`，同日贡献 `36.63 bps`，非涨停贡献 `-0.12 bps`，排除涨停后重选为 `+1.85 bps`。这解释了
+低截面 IC 与高 Top100 均值可以并存：均值由稀少的极右尾决定，IC 衡量的是全截面整体排序。
+
+严格 2026H1 的 1m 模型同日 close 超额为 `33.67 bps`，涨停占比更高（`10.23%`），但非涨停贡献
+`-14.17 bps`；close 模型选到的涨停更少，却保留更多进场后上涨空间。两个模型 Top100 仅重合
+`20.44%`。次日路径也不是“前一日涨停后继续单向上涨”：close 模型 close→next open 超额
+`-40.75 bps`，next open→next close `+33.28 bps`，合成 close→next close `-8.57 bps`。历史
+2022-2025 全 A close 模型相应为 `-60.39 / +28.97 / -32.28 bps`，反转主要发生在隔夜跳空，次日
+日内只是部分回补。
+
+损失函数只改单变量的 2026H1 对照中，MSE / Huber / Huber80-MSE20 的 close 超额分别为
+`36.51 / 28.05 / 32.47 bps`，IC 为 `0.0116 / 0.0251 / 0.0234`。Huber 降低了同日尾部依赖并提高
+IC，但仍未产生强非涨停收益，暂不晋级为替代模型。容量 v2 修正 turnover 单位后，在 10 亿资金、20
+slice、每股 50 万上限、25% 展示深度参与且不从 rank101 补位的口径下，1m/close 固定 Top100 的
+ask1+turnover 平均 fill 仅 `17.22% / 14.60%`；此前 turnover-only 的 `95.89% / 90.74%` 明显高估。
+
+Decision：研究结果按严格 OOS/因果诊断保留，但高 paper excess 不等于同容量可交易收益；后续验收必须
+同时报告最终涨停/非涨停贡献、排除涨停后重选、ask1/ask10 可成交量和次日分段路径。完整 compact
+结果、原始 trace、K8s 日志与校验和见
+[`ds350_long_label_2026h1_diagnostics_v1`](../experiments/evidence/backtests/ds350_long_label_2026h1_diagnostics_v1/)，
+历史 `24.87 bps` 的独立来源见
+[`nn_ds350_label12_36m_grouped_gated_v2_mse_v1`](../experiments/evidence/backtests/nn_ds350_label12_36m_grouped_gated_v2_mse_v1/)。
+
 ### Ordinary 328 mech v3 cap-cache（2026-07-21，已完成）
 
 最终完成的是 `mech328_v3_capcache_896` 单 shard 归因性重跑，而非早期 `histavg_activity` 任务：
@@ -258,5 +297,8 @@ multiden supersede，当前只作历史基线。
 
 Run status 只允许 `queued`、`running`、`completed`、`canceled`、`superseded`；未知状态必须使 audit 失败。
 训练 run 完成时应有 metrics，artifact-only run 按 kind 验收 summary、trace 和成功标记。
+
+2026-08-11 registry 对账后正式 run 无 queued/running；当前探索资产见 `experiments/incubator.toml`。inactive
+run 必须记录 `closed_at` 和 `status_reason`，避免“active”长期失真。
 
 新记录先更新 TOML status 与 trace，再在本文件对应日期增加一条结论；不要维护重复的全量 run/path 索引。

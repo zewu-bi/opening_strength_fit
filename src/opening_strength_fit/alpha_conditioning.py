@@ -16,8 +16,9 @@ from opening_strength_fit.feature_config import (
 )
 from opening_strength_fit.labels import finite_numeric_series
 from opening_strength_fit.model import RidgePredictionModel, fit_lightgbm_frame
+from opening_strength_fit.schema import DECISION_KEY_COLUMNS
 
-KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
+KEY_COLUMNS = DECISION_KEY_COLUMNS
 
 
 def section_value(config: dict, section: str, fallback_section: str, key: str, default):
