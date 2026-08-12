@@ -33,7 +33,11 @@ mount_path = "/mnt/output"
 image_pull_secret = "highfort"
 avoid_nodes = ["node7", "node8"]
 shard_parallelism = 7
+active_deadline_seconds = 86400
+backoff_limit = 2
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:f04ef3ab7372000162e1b92bf86e96f5f6e0e36f15c163d75c9a3c1cc554ab09"
+render_mode = "indexed"
+render_sha256 = "a1a51dfc487b0b9b7f1b184b67a389bd1532271cedd34d43cf8e71f572a946f8"
 
 [k8s.resources]
 cpu_request = "4"

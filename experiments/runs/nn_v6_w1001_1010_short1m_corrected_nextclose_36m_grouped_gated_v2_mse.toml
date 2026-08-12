@@ -188,11 +188,6 @@ pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260731-corrected-label-matrix"
-shard_job_mode = "separate"
-config_map_name = "os-nn-v6-1001-1010-short1m-config"
-config_map_volume_name = "run-config"
-config_map_mount_path = "/app/opening_strength_fit/experiments/runs/nn_v6_w1001_1010_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml"
-config_map_sub_path = "nn_v6_w1001_1010_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml"
 avoid_nodes = ["node6", "node7", "node8", "node12", "node17", "node19", "node20", "node22", "node24", "node25", "node26", "node27", "node28"]
 wait_for_paths = [
   "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short1m_corrected_nextclose/opening_2019_target_v6_w1001_1010_short1m_corrected_nextclose.parquet",
@@ -213,6 +208,8 @@ wait_for_paths = [
 wait_for_path_timeout_seconds = 604800
 wait_for_path_interval_seconds = 120
 shard_parallelism = 8
+render_mode = "sharded"
+render_sha256 = "6f756e42cb4b64ba9125662cc20f3716f5aa943a354c8cb1eb1ff7831e9430da"
 
 [k8s.node_selector]
 has_gpu = "true"
@@ -226,6 +223,10 @@ gpu_limit = 1
 
 [analysis.pool_internal]
 enabled = true
+node_selector = { "kubernetes.io/hostname" = "node14" }
+tolerate_gpu_nodes = true
+render_mode = "analysis"
+render_sha256 = "2a4ad8f769ca5e6c45f4fc7f16cc5d6f4047ef3321adcd5b502f19345a1721dc"
 job_name = "os-analyze-nn-v6-1001-1010-short1m"
 variant = "nn_v6_w1001_1010_short1m_corrected_nextclose_grouped_gated_v2_mech_v3_gelu_mse"
 plot_prefix = "nn_v6_w1001_1010_short1m_corrected_nextclose_grouped_gated_v2_mech_v3_gelu_mse"

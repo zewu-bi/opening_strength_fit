@@ -1,6 +1,0 @@
-# New runs should opt into the structured PVC layout and omit output.k8s_dir.
-# The renderer derives runs/<category>/<run.id>/fold_<start>_<end>/ from run.kind and model.name.
-# New opening run ids use opening_<window>_<semantic_change>; do not add generic v1/v2/v6 suffixes.
-[output]
-layout = "v2"
-write_split_artifacts = false

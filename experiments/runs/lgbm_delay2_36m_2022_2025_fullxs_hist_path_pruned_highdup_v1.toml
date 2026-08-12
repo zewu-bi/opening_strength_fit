@@ -132,6 +132,12 @@ pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260618-hist-path-v1"
+config_map_name = "os-lgbm-hist-path-prunedup-config"
+config_map_volume_name = "run-config"
+config_map_mount_path = "/app/opening_strength_fit/experiments/runs/lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1.toml"
+config_map_sub_path = "lgbm_delay2_36m_2022_2025_fullxs_hist_path_pruned_highdup_v1.toml"
+render_mode = "sharded"
+render_sha256 = "aca7c394f541a05e40342f585efe326738d0ce6e4e584d7049e9707b221f701c"
 avoid_nodes = ["node7", "node8"]
 wait_for_paths = ["/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2019_label_v1_tick2_physical_mixed_w030.parquet", "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2020_label_v1_tick2_physical_mixed_w030.parquet", "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2021_label_v1_tick2_physical_mixed_w030.parquet", "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2022_label_v1_tick2_physical_mixed_w030.parquet", "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2023_label_v1_tick2_physical_mixed_w030.parquet", "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2024_label_v1_tick2_physical_mixed_w030.parquet", "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2025_label_v1_tick2_physical_mixed_w030.parquet"]
 wait_for_path_timeout_seconds = 43200
@@ -146,6 +152,8 @@ memory_limit = "512Gi"
 
 [analysis.pool_internal]
 enabled = true
+render_mode = "analysis"
+render_sha256 = "aabe8f472d887f90a515be72ae6536dfbd4a4887ec0a6436c2d2033e57d51d79"
 job_name = "os-analyze-36m-2225-hist-path-prunedup"
 variant = "hist_path_pruned_highdup"
 plot_prefix = "hist_path_pruned_highdup"

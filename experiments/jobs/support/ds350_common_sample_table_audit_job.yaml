@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-audit-ds350-common-sample-v1
+  namespace: bizewu
+spec:
+  activeDeadlineSeconds: 86400
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 172800
+  template:
+    metadata:
+      labels:
+        app: os-audit-ds350-common-sample-v1
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      volumes:
+        - name: output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+      containers:
+        - name: auditor
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:1c35beb1275aca13e5a71fd03bc13ae703078b29b3e2a744c77e386a32c4917a
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          command: [python, experiments/scripts/audit_ds350_common_sample_table.py]
+          args:
+            - --model-root
+            - /mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1
+            - --output-dir
+            - /mnt/output/opening_strength_fit/runs/analysis/ds350_common_sample_table_v1
+          volumeMounts:
+            - name: output
+              mountPath: /mnt/output
+          resources:
+            requests:
+              cpu: "8"
+              memory: 128Gi
+            limits:
+              cpu: "16"
+              memory: 256Gi

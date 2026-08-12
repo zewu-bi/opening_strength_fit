@@ -44,6 +44,8 @@ pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260528-learned-risk-v1"
+render_mode = "training"
+render_sha256 = "1318d048a596ace7743529d7749da34cdad2f45a4d22c17b578be3a510bd0f3b"
 
 [k8s.node_selector]
 "kubernetes.io/hostname" = "node8"

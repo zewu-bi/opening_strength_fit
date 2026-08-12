@@ -1,5 +1,0 @@
-{
-  "assertion": "limit plus non-limit excess contribution equals total excess within 0.01 bps for every cross-section and outcome",
-  "repair": "zero-fill selected-limit contribution when a Top100 cross-section contains no final-limit stock",
-  "source": "/mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/analysis/limit_nextclose_v2/0931_0940"
-}

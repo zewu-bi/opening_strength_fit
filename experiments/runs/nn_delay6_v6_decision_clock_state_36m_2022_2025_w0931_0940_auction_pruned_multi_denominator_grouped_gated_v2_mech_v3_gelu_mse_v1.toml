@@ -188,6 +188,8 @@ pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260731-v6-w0931-rerun-v1"
+render_mode = "sharded"
+render_sha256 = "58fa1f31a537674f86e05a7db74082a844ab812173fa634215cd0f3c607cf665"
 avoid_nodes = ["node6", "node7", "node8", "node12", "node17", "node19", "node20", "node22", "node24", "node25", "node26", "node27", "node28"]
 wait_for_paths = [
   "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v6_decision_clock_state_clock6_unique_mixed_w030_mcap_lag1/opening_2019_label_v6_decision_clock_state_clock6_unique_mixed_w030_mcap_lag1.parquet",
@@ -214,6 +216,8 @@ gpu_limit = 1
 
 [analysis.pool_internal]
 enabled = true
+render_mode = "analysis"
+render_sha256 = "a2d2b2da8e4333e0e67d20e37632d22e4d10aa96dc47f61a039c7394ff00000e"
 job_name = "os-analyze-nn-v6-w0931-0940-multiden-v1"
 variant = "nn_v6_w0931_0940_auction_pruned_multiden_grouped_gated_v2_mech_v3_gelu_mse"
 plot_prefix = "nn_v6_w0931_0940_auction_pruned_multiden_grouped_gated_v2_mech_v3_gelu_mse"

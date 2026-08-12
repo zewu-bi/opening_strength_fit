@@ -1,5 +1,0 @@
-[model]
-device_type = "gpu"
-
-[k8s.resources]
-gpu_limit = 1

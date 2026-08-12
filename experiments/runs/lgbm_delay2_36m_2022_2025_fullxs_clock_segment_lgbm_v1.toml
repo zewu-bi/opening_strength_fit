@@ -105,6 +105,8 @@ mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 avoid_nodes = ["node7", "node8"]
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260611-fullxs-feat-v1"
+render_mode = "sharded"
+render_sha256 = "611ffa0e2defaa832582d007d8088e920f327cf66c868933a34d8403023860fd"
 wait_for_paths = [
   "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2019_label_v1_tick2_physical_mixed_w030.parquet",
   "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2020_label_v1_tick2_physical_mixed_w030.parquet",
@@ -126,6 +128,8 @@ memory_limit = "512Gi"
 
 [analysis.pool_internal]
 enabled = true
+render_mode = "analysis"
+render_sha256 = "e7921e7bcff2315472942bd69f7d1bfb15c30e9b9db1392c092af2c8e9403bcc"
 job_name = "os-analyze-36m-2225-clock-seg"
 variant = "clock_segment_lgbm"
 plot_prefix = "clock_segment_lgbm"

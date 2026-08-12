@@ -3,10 +3,6 @@
   "archive_id": "nn_ds350_label12_36m_grouped_gated_v2_mse_v1",
   "cases": 15,
   "files": {
-    "README.md": {
-      "bytes": 1589,
-      "sha256": "3a8467ce7ea260d9b30af2f8b4b54ad5975245015e7f10cd165d56fe7c9ea99d"
-    },
     "matrix_group_pooled.csv": {
       "bytes": 1229,
       "sha256": "04bbb3ce48ef425ce3d5768b6f3577204a26ab779fae26ccdb1c7b86b9df6adf"
@@ -35,65 +31,9 @@
       "bytes": 8566,
       "sha256": "ada12a6527f3788827c7d286721528a6c79002b29d2e38a486569000959ee2cb"
     },
-    "traces/w0931_0940_h10m.json": {
-      "bytes": 711,
-      "sha256": "bdca0464cf7be2260eface8f20375f852cba84bcf8c111645ee84e81aea1c92d"
-    },
-    "traces/w0931_0940_h1h.json": {
-      "bytes": 708,
-      "sha256": "7e8dfeff7b361722bc83253b2d8c942a116713cb64bc96dd2d2e56f1e397ac55"
-    },
-    "traces/w0931_0940_h1m.json": {
-      "bytes": 708,
-      "sha256": "c165488700ecdac963d192fceacc2517c4194660dd0d37c33baa31c04d4662f3"
-    },
-    "traces/w0931_0940_h3m.json": {
-      "bytes": 708,
-      "sha256": "f5979306faac38076f3a966446aff96644f27e39bcee02bace27fdee7c025bf6"
-    },
-    "traces/w0931_0940_h5m.json": {
-      "bytes": 708,
-      "sha256": "8a39f6c1fa7904d6e8508de5c8f9730c4716b179b70d2fee925c47e16a164687"
-    },
-    "traces/w0931_0940_hclose.json": {
-      "bytes": 717,
-      "sha256": "4bcb2008588e03410fcd8ecab0edc1bd91553b9865f332913e539cc7ff3bff91"
-    },
-    "traces/w1001_1010_h10m.json": {
-      "bytes": 714,
-      "sha256": "040c483bbde71f7cc137c0828fb352f2d2ac79880deaf2dd88332e990a47e238"
-    },
-    "traces/w1001_1010_h1h.json": {
-      "bytes": 711,
-      "sha256": "3b9544acb22c5620c3ca03292a815c04c40c4054bc6f58062ea0b038e52ebec5"
-    },
-    "traces/w1001_1010_h1m.json": {
-      "bytes": 711,
-      "sha256": "2ed8b1b71f215ac0cb2acccc116d7661b3c31164e36ad5d833f2a2d3badd885d"
-    },
-    "traces/w1001_1010_h3m.json": {
-      "bytes": 711,
-      "sha256": "18a8d1794a268c710ba83924fdf50ad64a050cad222432186c0f1a4c4233723d"
-    },
-    "traces/w1001_1010_h5m.json": {
-      "bytes": 711,
-      "sha256": "5b4783a91998822cbc80336e25968933ce7764e3cd909eba934711d4d9ef7afd"
-    },
-    "traces/w1001_1010_hclose.json": {
-      "bytes": 720,
-      "sha256": "8b579c78b6ec2a83ca32179a41d0debbcaf562d8961ce32d7c73271fb88580f0"
-    },
-    "traces/w1401_1410_h1m.json": {
-      "bytes": 708,
-      "sha256": "3ec5cafe43a33e754d2c2d9cc7d519fee974972440ac5a5499404bce6bbd3d1a"
-    },
-    "traces/w1401_1410_h3m.json": {
-      "bytes": 708,
-      "sha256": "d26a4e17f5e5bf480cc5cc1ba2092a247b2416ee6866e3d8e2a6af901f74e28d"
-    },
-    "traces/w1401_1410_h5m.json": {
-      "bytes": 708,
-      "sha256": "b7f544063bad9a9cc82973f4cf6ae95976e7dd68f71d2b1e36ad54b66bfbfbf9"
+    "traces.json": {
+      "bytes": 9682,
+      "sha256": "ebeabe3733a975d46e4368e9024eee172a099b37a6b0b60fb3e332a5b6fd78f5"
     },
     "training_fold_summary.csv": {
       "bytes": 39348,

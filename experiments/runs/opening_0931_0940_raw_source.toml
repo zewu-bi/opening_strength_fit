@@ -29,8 +29,14 @@ pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 image_pull_secret = "highfort"
 clickhouse_secret = "opening-strength-clickhouse"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260731-raw-source-42ec6bdd"
 avoid_nodes = ["node7", "node8"]
 shard_parallelism = 2
+active_deadline_seconds = 259200
+backoff_limit = 2
+spread_across_nodes = true
+render_mode = "indexed"
+render_sha256 = "e04f621adc8db808923fa53275d051a0dd35d3ae111324ae83663f120e800ca0"
 
 [k8s.resources]
 cpu_request = "2"

@@ -45,6 +45,12 @@ clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260730-short3m-label-v1"
 avoid_nodes = ["node7", "node8"]
 shard_parallelism = 7
+backoff_limit = 1
+spread_across_nodes = true
+wait_for_path_timeout_seconds = 259200
+wait_for_path_interval_seconds = 120
+render_mode = "indexed"
+render_sha256 = "7ca030ecec09089f8dd135d5a036d670d3523e197291769a15dc5d5ac6389cb4"
 
 [k8s.resources]
 cpu_request = "2"

@@ -1,5 +1,0 @@
-metric,old_forward_path,new_backward_price_path,delta,new_over_old
-all_a_daily_rank_ic,0.091529276,0.080573169,-0.010956107,0.880299
-all_a_top100_excess_bps,93.5681,25.4523,-68.1158,0.272019
-pool_l_top100_excess_bps,42.4935,11.1592,-31.3343,0.262610
-all_a_cap95_excess_bps,35.1177,9.3158,-25.8019,0.265274

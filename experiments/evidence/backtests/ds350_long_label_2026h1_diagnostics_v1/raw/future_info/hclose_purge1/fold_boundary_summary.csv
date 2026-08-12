@@ -1,3 +1,0 @@
-case,purge_train_sessions,pool_lag,scope,causal_short_excess_bps,causal_short_excess_missing_zero_bps,decision_filter_short_excess_bps,decision_filter_short_excess_missing_zero_bps,entry_filter_short_excess_bps,entry_filter_short_excess_missing_zero_bps,valid_filter_short_excess_bps,causal_next_excess_bps,decision_filter_next_excess_bps,entry_filter_next_excess_bps,valid_filter_next_excess_bps
-w0931_0940_hclose,1,0,first_test_day,10.650046,10.6234255,10.58425,10.595795,10.580198,10.580198,10.553919,-25.809423,-25.895548,-25.879086,-25.879086
-w0931_0940_hclose,1,0,remaining_days,22.347683,22.321672,22.339132,22.333311,22.341082,22.341082,22.256056,21.99734,21.99259,21.99105,22.005531

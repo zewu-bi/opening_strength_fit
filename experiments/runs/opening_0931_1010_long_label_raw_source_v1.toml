@@ -22,7 +22,11 @@ image_pull_secret = "highfort"
 clickhouse_secret = "opening-strength-clickhouse"
 avoid_nodes = ["node7", "node8"]
 shard_parallelism = 7
+active_deadline_seconds = 259200
+backoff_limit = 2
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:f04ef3ab7372000162e1b92bf86e96f5f6e0e36f15c163d75c9a3c1cc554ab09"
+render_mode = "indexed"
+render_sha256 = "1287f982cd38bf5501ba2ea39b62616286157a25bfb0f901947bfe3bebce97b2"
 
 [k8s.resources]
 cpu_request = "2"

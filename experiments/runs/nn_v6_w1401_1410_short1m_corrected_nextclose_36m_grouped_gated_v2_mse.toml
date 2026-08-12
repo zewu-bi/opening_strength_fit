@@ -188,11 +188,6 @@ pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260731-corrected-label-matrix"
-shard_job_mode = "separate"
-config_map_name = "os-nn-v6-1401-1410-short1m-config"
-config_map_volume_name = "run-config"
-config_map_mount_path = "/app/opening_strength_fit/experiments/runs/nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml"
-config_map_sub_path = "nn_v6_w1401_1410_short1m_corrected_nextclose_36m_grouped_gated_v2_mse.toml"
 avoid_nodes = ["node6", "node7", "node8", "node12", "node17", "node19", "node20", "node22", "node24", "node25", "node26", "node27", "node28"]
 wait_for_paths = [
   "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1401_1410_short1m_corrected_nextclose/opening_2019_target_v6_w1401_1410_short1m_corrected_nextclose.parquet",
@@ -213,6 +208,8 @@ wait_for_paths = [
 wait_for_path_timeout_seconds = 604800
 wait_for_path_interval_seconds = 120
 shard_parallelism = 8
+render_mode = "sharded"
+render_sha256 = "7451a91c23ba63c70b956c16b7e5f642c82e2710a4bba5074448f8c11da9ccb6"
 
 [k8s.node_selector]
 has_gpu = "true"
@@ -226,6 +223,8 @@ gpu_limit = 1
 
 [analysis.pool_internal]
 enabled = true
+render_mode = "analysis"
+render_sha256 = "18ed6ab1cfa54da39c4382491177c6bb433cc3dd0b40a6556ac3211fbe57f2a1"
 job_name = "os-analyze-nn-v6-1401-1410-short1m"
 variant = "nn_v6_w1401_1410_short1m_corrected_nextclose_grouped_gated_v2_mech_v3_gelu_mse"
 plot_prefix = "nn_v6_w1401_1410_short1m_corrected_nextclose_grouped_gated_v2_mech_v3_gelu_mse"

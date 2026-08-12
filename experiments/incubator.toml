@@ -1,64 +1,11 @@
-[campaign]
-default_review_days = 31
-
 [[campaign.entries]]
-id = "ds350-2026h1-diagnostics"
-owner = "opening-strength-fit-maintainers"
-review_by = "2026-09-11"
-purpose = "Time-bounded ds350 label, holdout, limit-state, and source-integrity investigations."
-promote_when = "The workflow is reused, cited as evidence, or becomes part of an acceptance decision."
+id = "ds350_common_sample_table"
+owner = "research"
+review_by = "2026-08-25"
+purpose = "Verify all ds350 horizons on an identical stock/date/decision sample."
+promote_when = "Archive the decision table, then retire the one-off script and Job."
 assets = [
-  "experiments/jobs/support/ds350_script_jobs.toml",
-  "experiments/jobs/support/ds350_2026_dataset_build_jobs.yaml",
-  "experiments/jobs/support/ds350_2026_feature_build_parallel_job.yaml",
-  "experiments/jobs/support/ds350_2026_long_label_build_parallel_job.yaml",
-  "experiments/jobs/support/ds350_2026_pool_source_probe_job.yaml",
-  "experiments/jobs/support/ds350_2026_raw_build_jobs.yaml",
-  "experiments/jobs/support/ds350_2026_source_coverage_probe_job.yaml",
-  "experiments/jobs/support/ds350_2026_source_gap_probe_job.yaml",
-  "experiments/jobs/support/ds350_2026_tick_candidate_probe_job.yaml",
-  "experiments/jobs/support/ds350_2026h1_daily_risk_summary_job.yaml",
-  "experiments/jobs/support/ds350_analysis_result_probe_job.yaml",
-  "experiments/jobs/support/ds350_close_loss_2023_2025_train_2026h1_job.yaml",
-  "experiments/jobs/support/ds350_close_tail_robustness_audit_job.yaml",
-  "experiments/jobs/support/ds350_existing_audit_artifact_probe_job.yaml",
-  "experiments/jobs/support/ds350_future_info_retrain_analysis_job.yaml",
-  "experiments/jobs/support/ds350_future_info_retrain_audit_job.yaml",
-  "experiments/jobs/support/ds350_h1m_2023_2025_train_2026h1_job.yaml",
-  "experiments/jobs/support/ds350_hclose_2023_2025_train_2026h1_job.yaml",
-  "experiments/jobs/support/ds350_long_label_alignment_audit_job.yaml",
-  "experiments/jobs/support/ds350_long_label_metric_audit_job.yaml",
-  "experiments/jobs/support/ds350_max30_schema_probe_job.yaml",
-  "experiments/jobs/support/ds350_stock_pool_coverage_probe_job.yaml",
-  "experiments/jobs/support/ds350_tradeability_schema_probe_job.yaml",
-  "experiments/scripts/analyze_ds350_2022_2025_all_a_overnight.py",
-  "experiments/scripts/analyze_ds350_2026h1_entry_limit_state.py",
-  "experiments/scripts/analyze_ds350_2026h1_holdout.py",
-  "experiments/scripts/analyze_ds350_2026h1_limit_attribution.py",
-  "experiments/scripts/analyze_ds350_2026h1_loss_compare.py",
-  "experiments/scripts/analyze_ds350_2026h1_model_tradeability_compare.py",
-  "experiments/scripts/analyze_ds350_2026h1_top100_capacity.py",
-  "experiments/scripts/analyze_ds350_close_model_next_session_by_limit.py",
-  "experiments/scripts/analyze_ds350_future_info_retrain.py",
-  "experiments/scripts/analyze_ds350_top1000_limit_decomposition.py",
-  "experiments/scripts/analyze_opening_four_pools_overnight.py",
-  "experiments/scripts/analyze_opening_meanabs_top1000.py",
-  "experiments/scripts/analyze_opening_minpath_top1000.py",
-  "experiments/scripts/analyze_opening_top1000_pool_profile.py",
-  "experiments/scripts/analyze_opening_top1000_remainder_day.py",
-  "experiments/scripts/analyze_opening_top1000_style.py",
-  "experiments/scripts/audit_ds350_2026_holdout_dataset.py",
-  "experiments/scripts/audit_ds350_close_limit_fast.py",
-  "experiments/scripts/audit_ds350_label_limit_trap.py",
-  "experiments/scripts/audit_ds350_label_scale.py",
-  "experiments/scripts/audit_ds350_limit_identification.py",
-  "experiments/scripts/audit_ds350_limit_nextclose_attribution.py",
-  "experiments/scripts/audit_ds350_long_label_chain.py",
-  "experiments/scripts/audit_ds350_short_model_forward_returns.py",
-  "experiments/scripts/audit_ds350_short_model_next_session.py",
-  "experiments/scripts/audit_ds350_top100_label_overlap.py",
-  "experiments/scripts/audit_ds350_valid_label_filter.py",
-  "experiments/scripts/build_ds350_research_archive.py",
-  "experiments/scripts/probe_stock_pool_objects.py",
-  "experiments/scripts/repair_ds350_limit_nextclose_summary.py",
+  "experiments/scripts/audit_ds350_common_sample_table.py",
+  "experiments/jobs/support/ds350_common_sample_contribution_audit_job.yaml",
+  "experiments/jobs/support/ds350_common_sample_table_audit_job.yaml",
 ]

@@ -1,8 +1,0 @@
-{
-  "status": "ok",
-  "selection": "Top100 from all eligible A-share predictions; no Pool L overlay",
-  "model": "09:31-09:40 close-label max30 grouped-gated model",
-  "oos": "eight non-overlapping half-year rolling-OOS folds, 2022H1 through 2025H2",
-  "same_day_close_to_next_close": "(1 + label_next_close) / (1 + label_short) - 1",
-  "aggregation": "ten decision groups averaged within day, then days equally weighted"
-}

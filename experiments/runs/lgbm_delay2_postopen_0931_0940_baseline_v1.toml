@@ -96,6 +96,8 @@ pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260527-postopen-0931-v1"
+render_mode = "training"
+render_sha256 = "c260236d6bc8e6925fb110b4797c27cf921131f42832b5d4df8f189ad18fb00f"
 
 [k8s.node_selector]
 "kubernetes.io/hostname" = "node8"

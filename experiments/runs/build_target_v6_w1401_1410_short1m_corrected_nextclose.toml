@@ -46,6 +46,11 @@ config_map_mount_path = "/app/opening_strength_fit/experiments/runs/build_target
 config_map_sub_path = "build_target_v6_w1401_1410_short1m_corrected_nextclose.toml"
 avoid_nodes = ["node7", "node8"]
 shard_parallelism = 7
+spread_across_nodes = true
+wait_for_path_timeout_seconds = 604800
+wait_for_path_interval_seconds = 120
+render_mode = "indexed"
+render_sha256 = "afd33b2e7ca45580b9cce349be1e5916a1a36c2d40df0dde75515909bd586ddc"
 
 [k8s.resources]
 cpu_request = "8"

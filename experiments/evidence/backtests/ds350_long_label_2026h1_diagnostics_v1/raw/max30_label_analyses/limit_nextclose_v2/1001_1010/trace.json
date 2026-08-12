@@ -1,9 +1,0 @@
-{
-  "aggregation": "quarter equal across 16 quarters",
-  "close_to_next_close": "same-day tick close to next trading-day tick close",
-  "contribution": "selected event contribution minus common-pool event contribution",
-  "entry_to_next_close": "entry+6s ask to next trading-day tick close",
-  "event": "same-day final close at upper price limit",
-  "selection": "Top100 within the common valid same-day Pool L universe",
-  "window": "1001_1010"
-}

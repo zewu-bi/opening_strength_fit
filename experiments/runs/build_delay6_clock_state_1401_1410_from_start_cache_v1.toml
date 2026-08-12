@@ -103,6 +103,10 @@ clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260729-clock-window-cache-v1"
 avoid_nodes = ["node7", "node8"]
 shard_parallelism = 7
+backoff_limit = 0
+spread_across_nodes = true
+render_mode = "indexed"
+render_sha256 = "949261084d9f7627d9690f212ea84d80b9f04b7e22c402598d3725bf1734323c"
 
 [k8s.resources]
 cpu_request = "8"

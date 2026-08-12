@@ -167,11 +167,18 @@ k8s_dir = "/mnt/output/opening_strength_fit/runs/analyses/alpha-conditioned-roll
 
 [k8s]
 namespace = "bizewu"
+job_name = "opening-strength-rolling-alpha-conditioned-top100-validation-v"
 image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260529-alpha-conditioned-risk-v2"
+config_map_name = "opening-strength-rolling-validation-v1"
+config_map_volume_name = "rolling-validation-v1-config"
+config_map_mount_path = "/mnt/config"
+command_config_path = "/mnt/config/rolling_alpha_conditioned_top100_validation_v1.toml"
+render_mode = "training"
+render_sha256 = "6a3dabaf3de25c84c02fe0feab67ff1ed8c941b1c86e522938e9d12826b77ea4"
 
 [k8s.node_selector]
 "kubernetes.io/hostname" = "node8"
@@ -181,3 +188,14 @@ cpu_request = "8"
 cpu_limit = "16"
 memory_request = "192Gi"
 memory_limit = "256Gi"
+
+[k8s.sharded]
+render_mode = "sharded"
+render_sha256 = "b5cb5b2e1fee30a6a939dbd812a0270e82d58c0a0cc11c90c305cf8f002fd637"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260529-next-close-finite-v1"
+job_name = "opening-strength-rolling-alpha-conditioned-t-sharded-36699656"
+config_map_name = ""
+config_map_mount_path = ""
+command_config_path = "experiments/runs/rolling_alpha_conditioned_top100_validation_v1.toml"
+shard_parallelism = 1
+replace_existing_shard_output = true

@@ -1,2 +1,0 @@
-case,folds,matched_rows,score_corr_min,score_corr_mean,score_mean_abs_delta_mean,score_max_abs_delta_max,pool_lag0_top100_overlap_mean
-w0931_0940_hclose,8,48154990,0.5547530740613384,0.7960045881732211,0.040600918385654244,22.542968273162842,0.7349987556717477

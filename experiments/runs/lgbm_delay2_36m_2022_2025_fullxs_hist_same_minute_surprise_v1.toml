@@ -116,6 +116,9 @@ mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 avoid_nodes = ["node7", "node8"]
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260611-fullxs-feat-v1"
+completion_files = ["metrics_by_year.csv"]
+render_mode = "sharded"
+render_sha256 = "f52cf5e68310b44a7ec0e4e8b54cc21f3644f45ad0e08f0989e9b87555d62b34"
 wait_for_paths = [
   "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2019_label_v1_tick2_physical_mixed_w030.parquet",
   "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2020_label_v1_tick2_physical_mixed_w030.parquet",
@@ -137,6 +140,8 @@ memory_limit = "512Gi"
 
 [analysis.pool_internal]
 enabled = true
+render_mode = "analysis"
+render_sha256 = "240a52dcd1b396cf643ec76ba8f626674acaa48052d6fcf218c2b1f96a7e7349"
 job_name = "os-analyze-36m-2225-hist-surprise"
 variant = "hist_same_minute_surprise"
 plot_prefix = "hist_same_minute_surprise"

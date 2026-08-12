@@ -42,6 +42,11 @@ mount_path = "/mnt/output"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260731-corrected-label-matrix"
 avoid_nodes = ["node7", "node8"]
 shard_parallelism = 7
+spread_across_nodes = true
+wait_for_path_timeout_seconds = 604800
+wait_for_path_interval_seconds = 120
+render_mode = "indexed"
+render_sha256 = "8e820f1f042b6e434645266da964640bce3776749205e456008335f24af37b9a"
 
 [k8s.resources]
 cpu_request = "8"

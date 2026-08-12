@@ -91,11 +91,19 @@ k8s_dir = "/mnt/output/opening_strength_fit/runs/models/lightgbm/lgbm_delay2_18m
 
 [k8s]
 namespace = "bizewu"
+job_name = "opening-strength-lgbm-delay2-18m-postopen-mi-sharded-8ce0170a"
 image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260602-mixed-label-v1"
+config_map_name = "opening-strength-mixed-w020-w030-configs"
+config_map_volume_name = "opening-strength-config"
+config_map_mount_path = "/mnt/config"
+command_config_path = "/mnt/config/lgbm_delay2_18m_postopen_mixed_w030_rolling_v1.toml"
+completion_files = ["metrics_by_year.csv"]
+render_mode = "sharded"
+render_sha256 = "d2c66cb5fec7bb6f7d8da9b04c287587be1f2d82732a4a71a39b1107566338ec"
 wait_for_paths = ["/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2020_label_v1_tick2_physical_mixed_w030.parquet", "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2021_label_v1_tick2_physical_mixed_w030.parquet", "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2022_label_v1_tick2_physical_mixed_w030.parquet"]
 wait_for_path_timeout_seconds = 43200
 wait_for_path_interval_seconds = 120

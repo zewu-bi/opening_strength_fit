@@ -42,11 +42,6 @@
       "sha256": "b3effda8fb2547b29d131d3bc7537dc50d787ef44765e96359c7555575eb9ac2",
       "source": "experiments/results/backtests/ds350_max30_w0931_h1m_top1000_acceptance_v1/top1000_distribution/top1000_score_bucket_return_100bps_counts.svg"
     },
-    "README.md": {
-      "bytes": 2644,
-      "sha256": "543a592be7d25f122b5836be7e42c85105fffc4a43c7156342cff123054a7782",
-      "source": "generated archive guide"
-    },
     "matrix_summary.csv": {
       "bytes": 1675,
       "sha256": "616c5aede0b0b39cf71370a0449aa5c62fc5523ffa0a7c6e4572a02d3bafe622",

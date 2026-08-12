@@ -87,13 +87,18 @@ k8s_dir = "/mnt/output/opening_strength_fit/cache_builds/build_delay2_2019_aucti
 
 [k8s]
 namespace = "bizewu"
-job_name = "os-cache-auction-fresh-2019"
+job_name = "os-cache-auction-fresh-2019-2025"
 image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260715-auction-fresh-mcap-lag1-v1"
 avoid_nodes = ["node7", "node8"]
+render_mode = "indexed"
+render_sha256 = "2e807d464d4f7b55c40fbb34c1dc2ad76c1b4dc1362dbff6d1bd1a83feda211d"
+years = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+indexed_run_id_template = "build_delay2_{year}_auction_fresh_cache_v1"
+shard_parallelism = 7
 
 [k8s.resources]
 cpu_request = "8"

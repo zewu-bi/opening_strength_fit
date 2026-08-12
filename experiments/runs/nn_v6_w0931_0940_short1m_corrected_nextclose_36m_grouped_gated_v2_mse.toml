@@ -208,6 +208,8 @@ wait_for_paths = [
 wait_for_path_timeout_seconds = 604800
 wait_for_path_interval_seconds = 120
 shard_parallelism = 8
+render_mode = "sharded"
+render_sha256 = "9d8cbc253599d65263696e97be6ed83a9b6e8d71dae7fe96c7328a73888a8fbc"
 
 [k8s.node_selector]
 has_gpu = "true"

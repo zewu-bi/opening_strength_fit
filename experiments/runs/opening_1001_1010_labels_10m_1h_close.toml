@@ -30,6 +30,10 @@ image_pull_secret = "highfort"
 avoid_nodes = ["node7", "node8"]
 shard_parallelism = 7
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:f04ef3ab7372000162e1b92bf86e96f5f6e0e36f15c163d75c9a3c1cc554ab09"
+active_deadline_seconds = 259200
+backoff_limit = 2
+render_mode = "indexed"
+render_sha256 = "f5b7db2f0ad7ead81907012094a77eb4022d0323a459165198a954f4f1ea7b36"
 
 [k8s.resources]
 cpu_request = "4"

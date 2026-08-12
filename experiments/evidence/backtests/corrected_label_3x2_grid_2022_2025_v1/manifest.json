@@ -26,10 +26,6 @@
     "corrected_label_3x2_summary.csv": {
       "bytes": 868,
       "sha256": "49d4d4b144b3850ce1106c929205d43c354df54906657591a3bb65f8f6baa129"
-    },
-    "corrected_label_3x2_summary.md": {
-      "bytes": 529,
-      "sha256": "1c07b5b0e0548baab1827750064c3f1605d1b2b76460f7a052c01576eedf666a"
     }
   },
   "period": "2022-01 through 2025-12",

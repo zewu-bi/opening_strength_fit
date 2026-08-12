@@ -30,3 +30,16 @@ score_bucket_size = 100
 namespace = "bizewu"
 job_name = "os-top1000-hist-multiden-v1"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260721-clock6-multiden-v1"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+env_secrets = ["opening-strength-clickhouse", "xy-fit-ceph-credentials"]
+analysis_config_map = "os-top1000-rank-bucket-script-v1"
+render_mode = "top1000"
+render_sha256 = "3ccb64aef6c769d048c9e2601c1404a3d98b8d52eb014c892a6cf3ed9a9d9a5e"
+
+[k8s.resources]
+cpu_request = "8"
+cpu_limit = "16"
+memory_request = "192Gi"
+memory_limit = "320Gi"

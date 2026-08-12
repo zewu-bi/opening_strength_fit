@@ -32,3 +32,17 @@ output_dir = "/mnt/output/opening_strength_fit/runs/analyses/rank-bucket/top1000
 namespace = "bizewu"
 job_name = "os-top1000-v6-w0931-multiden-v1"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260731-v6-w0931-rerun-v1"
+image_pull_secret = "highfort"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+env_secrets = ["opening-strength-clickhouse", "xy-fit-ceph-credentials"]
+analysis_config_map = "os-top1000-rank-bucket-script-v2"
+avoid_nodes = ["node6", "node7", "node8", "node12", "node17", "node19", "node20", "node22", "node24", "node25", "node26", "node27", "node28"]
+render_mode = "top1000"
+render_sha256 = "d0b9204d55b609a1bde86daa7a0456af53a7c256a0de307ad9572b62b01cf561"
+
+[k8s.resources]
+cpu_request = "8"
+cpu_limit = "16"
+memory_request = "256Gi"
+memory_limit = "384Gi"

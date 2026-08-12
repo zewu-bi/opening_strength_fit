@@ -1,6 +1,4 @@
-section,files,bytes,archive_path
-audits,37,167505,raw/audits
-future_info,21,405379,raw/future_info
-holdout_models,20,122140,raw/holdout_models
-k8s_logs,24,362893,raw/k8s_logs
-max30_label_analyses,20,21842,raw/max30_label_analyses
+section,status,decision_artifact,raw_bundle_git_commit
+strict_holdout,completed,strict_2026h1_model_comparison.csv,830a56b
+loss_comparison,completed,strict_2026h1_loss_comparison.csv,830a56b
+capacity,completed,strict_2026h1_capacity_summary.csv,830a56b

@@ -104,6 +104,10 @@ clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260730-decision-clock-state-v1"
 avoid_nodes = ["node7", "node8"]
 shard_parallelism = 7
+backoff_limit = 1
+spread_across_nodes = true
+render_mode = "indexed"
+render_sha256 = "3745d47b4e25cf6374f2a2c9ec4a7f253488352dfcc86d2fd055bb8101fd8e54"
 
 [k8s.resources]
 cpu_request = "8"

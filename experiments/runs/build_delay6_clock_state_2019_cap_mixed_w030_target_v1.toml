@@ -31,7 +31,7 @@ k8s_dir = "/mnt/output/opening_strength_fit/cache_builds/build_delay6_clock_stat
 
 [k8s]
 namespace = "bizewu"
-job_name = "os-target-clock6-cap-2019"
+job_name = "os-target-clock6-cap-2019-2025"
 image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
@@ -43,6 +43,15 @@ wait_for_paths = [
 wait_for_path_timeout_seconds = 86400
 wait_for_path_interval_seconds = 120
 avoid_nodes = ["node7", "node8"]
+render_mode = "indexed"
+render_sha256 = "d285246a20a17953435ccb2e9baacc95af95f25d9591990ea3b5d63b9b72e73c"
+years = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+indexed_run_id_template = "build_delay6_clock_state_{year}_cap_mixed_w030_target_v1"
+indexed_wait_for_paths = [
+  "/mnt/output/opening_strength_fit/cache/opening_2019_2025_label_v4_clock6_state_unique_base_mcap_lag1/opening_{year}_label_v4_clock6_state_unique_base_mcap_lag1.parquet",
+  "/mnt/output/opening_strength_fit/cache/opening_2013_2025_next_close_labels_v1/opening_{year}_next_close_labels_v1.parquet",
+]
+shard_parallelism = 7
 
 [k8s.resources]
 cpu_request = "8"

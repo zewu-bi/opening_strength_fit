@@ -92,6 +92,10 @@ mount_path = "/mnt/output"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:8eb66ef731709af980fa7e047ccb59748c0ed8f4ed36aa3460ee9b1f4a9fe0b6"
 avoid_nodes = ["node6", "node7", "node8", "node12", "node17", "node19", "node20", "node22", "node24", "node25", "node26", "node27", "node28"]
 shard_parallelism = 8
+active_deadline_seconds = 1209600
+backoff_limit = 8
+render_mode = "matrix"
+render_sha256 = "8b3c2785903d9e70709ca375be7d3d7a42c8915492d638ba99f3ef54609b7b15"
 
 [k8s.node_selector]
 has_gpu = "true"
@@ -105,6 +109,14 @@ cpu_limit = "16"
 memory_request = "256Gi"
 memory_limit = "384Gi"
 gpu_limit = 1
+
+[matrix.render]
+label = "ds350-label15-m30-v1"
+job_prefix = "os-nn-ds350-m30"
+job_version = "v1"
+run_id_template = "nn_ds350_{case}_36m_grouped_gated_v2_mse_max30_v1"
+input_years = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+suspend = true
 
 [[matrix.cases]]
 name = "w0931_0940_h1m"

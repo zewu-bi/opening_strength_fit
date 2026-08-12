@@ -69,6 +69,9 @@ image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260602-gap-risk-attribution-v1"
+render_mode = "training"
+render_sha256 = "bcfae269f688963b5a8129b9e205444f3592dcd14f79d12c26c69651f79f46c7"
 
 [k8s.node_selector]
 "kubernetes.io/hostname" = "node8"

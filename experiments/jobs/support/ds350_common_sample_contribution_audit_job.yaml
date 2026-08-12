@@ -1,0 +1,64 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-audit-ds350-common-contrib-v1
+  namespace: bizewu
+  labels:
+    app: os-audit-ds350-common-contrib-v1
+spec:
+  activeDeadlineSeconds: 86400
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 172800
+  template:
+    metadata:
+      labels:
+        app: os-audit-ds350-common-contrib-v1
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: highfort
+      nodeSelector:
+        has_gpu: "true"
+      tolerations:
+        - key: has_gpu
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+      volumes:
+        - name: output
+          persistentVolumeClaim:
+            claimName: bizewu-private-data
+        - name: script
+          configMap:
+            name: os-audit-ds350-common-contrib-v1
+      containers:
+        - name: analyzer
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:1c35beb1275aca13e5a71fd03bc13ae703078b29b3e2a744c77e386a32c4917a
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          envFrom:
+            - secretRef:
+                name: xy-fit-ceph-credentials
+          command:
+            - /bin/bash
+            - -lc
+          args:
+            - |
+              set -euo pipefail
+              python /work/audit.py \
+                --model-root /mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1 \
+                --raw-source-root /mnt/output/opening_strength_fit/cache/opening_0931_0940_raw_source \
+                --output-dir /mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/analysis/common_sample_table_v2/0931_0940
+          volumeMounts:
+            - name: output
+              mountPath: /mnt/output
+            - name: script
+              mountPath: /work
+              readOnly: true
+          resources:
+            requests:
+              cpu: "8"
+              memory: 256Gi
+            limits:
+              cpu: "16"
+              memory: 384Gi

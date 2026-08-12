@@ -42,6 +42,10 @@ mount_path = "/mnt/output"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260731-v6-w0931-rerun-v1"
 avoid_nodes = ["node7", "node8"]
 shard_parallelism = 7
+backoff_limit = 0
+spread_across_nodes = true
+render_mode = "indexed"
+render_sha256 = "5825924a4c541cc01ad41b0cf0dce01492395be4b9fc422f595584ef790b6513"
 
 [k8s.resources]
 cpu_request = "8"

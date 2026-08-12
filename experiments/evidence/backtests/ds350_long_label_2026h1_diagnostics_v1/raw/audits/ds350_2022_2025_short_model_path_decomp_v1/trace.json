@@ -1,9 +1,0 @@
-{
-  "score": "w0931_0940_h1m rolling-OOS prediction",
-  "selection": "Top100 independently within all-A eligible universe and pool_L for each decision timestamp",
-  "aggregation": "stocks equal weighted within decision group; ten decision groups equal weighted within date; 969 dates equal weighted",
-  "pool": "pool_L, date_lag_sessions=0",
-  "same_day": "decision clock +6s Ask1 to same-day tick close",
-  "pure_overnight": "same-day tick close to next-session tick close",
-  "total_next_close": "decision clock +6s Ask1 to next-session tick close"
-}

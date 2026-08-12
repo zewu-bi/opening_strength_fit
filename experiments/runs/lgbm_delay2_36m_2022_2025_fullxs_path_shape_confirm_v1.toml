@@ -96,7 +96,10 @@ pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 avoid_nodes = ["node7", "node8"]
-helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260611-fullxs-feat-v1"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260611-path-shape-fast-slope-v1"
+completion_files = ["metrics_by_year.csv"]
+render_mode = "sharded"
+render_sha256 = "28ed800108dfd273fbfc8c39186d203074fb4ed69c3b59e8e1ae69f0ed679f55"
 wait_for_paths = [
   "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2019_label_v1_tick2_physical_mixed_w030.parquet",
   "/mnt/output/opening_strength_fit/cache/opening_2013_2025_label_v1_tick2_physical_mixed_w030/opening_2020_label_v1_tick2_physical_mixed_w030.parquet",
@@ -118,6 +121,8 @@ memory_limit = "512Gi"
 
 [analysis.pool_internal]
 enabled = true
+render_mode = "analysis"
+render_sha256 = "b2e28a26af05ecaf5a76c3c85a240d253d18f66e16b410aaf952f2330722b67e"
 job_name = "os-analyze-36m-2225-path-shape"
 variant = "path_shape_confirm"
 plot_prefix = "path_shape_confirm"

@@ -188,7 +188,6 @@ pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
 helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260731-corrected-label-matrix"
-shard_job_mode = "separate"
 avoid_nodes = ["node6", "node7", "node8", "node12", "node17", "node19", "node20", "node22", "node24", "node25", "node26", "node27", "node28"]
 wait_for_paths = [
   "/mnt/output/opening_strength_fit/cache/opening_2019_2025_target_v6_w1001_1010_short3m_corrected_nextclose/opening_2019_target_v6_w1001_1010_short3m_corrected_nextclose.parquet",
@@ -209,6 +208,8 @@ wait_for_paths = [
 wait_for_path_timeout_seconds = 604800
 wait_for_path_interval_seconds = 120
 shard_parallelism = 8
+render_mode = "sharded"
+render_sha256 = "25ae8ee6018b016447a8290dd629b9ed0902815108ec2493cc95aa1003998c5f"
 
 [k8s.node_selector]
 has_gpu = "true"
@@ -222,6 +223,10 @@ gpu_limit = 1
 
 [analysis.pool_internal]
 enabled = true
+node_selector = { "kubernetes.io/hostname" = "node14" }
+tolerate_gpu_nodes = true
+render_mode = "analysis"
+render_sha256 = "00df72ac8e63eb0da3ece9a0daa330f6dd031d044dd555e9e8ddc699d41a1ef9"
 job_name = "os-analyze-nn-v6-1001-1010-short3m"
 variant = "nn_v6_w1001_1010_short3m_corrected_nextclose_grouped_gated_v2_mech_v3_gelu_mse"
 plot_prefix = "nn_v6_w1001_1010_short3m_corrected_nextclose_grouped_gated_v2_mech_v3_gelu_mse"

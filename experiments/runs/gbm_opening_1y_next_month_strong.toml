@@ -109,6 +109,9 @@ image_pull_secret = "highfort"
 pvc = "bizewu-private-data"
 mount_path = "/mnt/output"
 clickhouse_secret = "opening-strength-clickhouse"
+helper_image = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260520-overnight-v1"
+render_mode = "training"
+render_sha256 = "f85ce92738dab2c6f1e83cf4b6e169a0b3d7c012eb8005b1e3f8a4d3d864857c"
 
 [k8s.resources]
 cpu_request = "8"
