@@ -2,20 +2,13 @@ from pathlib import Path
 
 from opening_strength_fit.commands.k8s_rendering_common import avoid_nodes_affinity_yaml
 from opening_strength_fit.config import load_toml
+from opening_strength_fit.k8s_builder_rendering import render_matrix_training_jobs
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "experiments/runs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1.toml"
-W0931_JOBS = ROOT / "experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w0931_jobs.yaml"
-W1001_JOBS = ROOT / "experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w1001_jobs.yaml"
-W1401_JOBS = ROOT / "experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w1401_jobs.yaml"
-H5M_JOBS = ROOT / "experiments/jobs/nn_ds350_label15_36m_grouped_gated_v2_mse_v1_h5m_jobs.yaml"
 LABEL15_QUEUE = ROOT / "experiments/scripts/run_ds350_label15_training_queue.sh"
 LABEL15_ANALYSIS_JOB = (
     ROOT / "experiments/jobs/support/ds350_label15_pool_internal_analysis_job.yaml"
-)
-TRAINING_IMAGE = (
-    "registry.corp.highfortfunds.com/bizewu/opening-strength-fit@"
-    "sha256:cb7120cf0549ddb4a91533587b04aaf38847b5b78c13ddfbe586d10e22b106b4"
 )
 H5M_TRAINING_IMAGE = (
     "registry.corp.highfortfunds.com/bizewu/opening-strength-fit@"
@@ -78,97 +71,29 @@ def test_dataset350_training_matrix_has_all_fifteen_cases() -> None:
     ]
 
 
-def test_dataset350_w0931_uses_one_indexed_job_per_label() -> None:
-    text = W0931_JOBS.read_text()
-    cases = [
-        "w0931_0940_h1m",
-        "w0931_0940_h3m",
-        "w0931_0940_h10m",
-        "w0931_0940_h1h",
-        "w0931_0940_hclose",
-    ]
-    assert "kind: List" in text
-    assert text.count("name: os-nn-ds350-w0931-") == 5
+def test_dataset350_matrix_renderer_preserves_all_fifteen_indexed_jobs() -> None:
+    config = load_toml(CONFIG)
+    text = render_matrix_training_jobs(CONFIG.relative_to(ROOT), config, H5M_TRAINING_IMAGE)
+    cases = [case["name"] for case in config["matrix"]["cases"]]
+
+    assert text.count("kind: Job") == 15
+    assert text.count("name: os-nn-ds350-w") == 15
     assert all(f"osf-case: {case}" in text for case in cases)
-    assert "completionMode: Indexed" in text
-    assert "completions: 8" in text
-    assert "parallelism: 8" in text
-    assert text.count("suspend: true") == 5
+    assert text.count("completionMode: Indexed") == 15
+    assert text.count("completions: 8") == 15
+    assert text.count("parallelism: 8") == 15
+    assert text.count("suspend: true") == 15
     assert "suspend: false" not in text
-    assert 'requests: {cpu: "8", memory: 256Gi' in text
-    assert 'limits: {cpu: "16", memory: 384Gi' in text
-    assert "- key: gpu_model" in text
+    assert text.count('cpu: "8"') == 15
+    assert text.count("memory: 256Gi") == 15
+    assert text.count('cpu: "16"') == 15
+    assert text.count("memory: 384Gi") == 15
+    assert text.count("- key: gpu_model") == 15
     assert all(model in text for model in ("A100-80", "H100-80", "H20"))
-    assert "--feature-input" in text
-    assert "--label-input" in text
-    assert "--run-id" in text
-    assert "h5m" not in text
-    assert text.count(f"image: {TRAINING_IMAGE}") == 1
-
-
-def test_dataset350_w1001_queues_five_indexed_label_jobs() -> None:
-    text = W1001_JOBS.read_text()
-    cases = [
-        "w1001_1010_h1m",
-        "w1001_1010_h3m",
-        "w1001_1010_h10m",
-        "w1001_1010_h1h",
-        "w1001_1010_hclose",
-    ]
-    assert "kind: List" in text
-    assert text.count("name: os-nn-ds350-w1001-") == 5
-    assert all(f"osf-case: {case}" in text for case in cases)
-    assert text.count("suspend: true") == 5
-    assert "suspend: false" not in text
-    assert "completionMode: Indexed" in text
-    assert "completions: 8" in text
-    assert "parallelism: 8" in text
-    assert "opening_1001_1010_features_350" in text
-    assert 'requests: {cpu: "8", memory: 256Gi' in text
-    assert 'limits: {cpu: "16", memory: 384Gi' in text
-    assert "- key: gpu_model" in text
-    assert "h5m" not in text
-    assert text.count(f"image: {TRAINING_IMAGE}") == 1
-
-
-def test_dataset350_w1401_queues_two_indexed_label_jobs() -> None:
-    text = W1401_JOBS.read_text()
-    assert "kind: List" in text
-    assert text.count("name: os-nn-ds350-w1401-") == 2
-    assert "osf-case: w1401_1410_h1m" in text
-    assert "osf-case: w1401_1410_h3m" in text
-    assert text.count("suspend: true") == 2
-    assert "suspend: false" not in text
-    assert "completionMode: Indexed" in text
-    assert "completions: 8" in text
-    assert "parallelism: 8" in text
-    assert "opening_1401_1410_features_350" in text
-    assert "opening_1401_1410_labels_h1m_v2" in text
-    assert "opening_1401_1410_labels_h3m_v2" in text
-    assert 'requests: {cpu: "8", memory: 256Gi' in text
-    assert 'limits: {cpu: "16", memory: 384Gi' in text
-    assert "- key: gpu_model" in text
-    assert "h5m" not in text
-    assert text.count(f"image: {TRAINING_IMAGE}") == 1
-
-
-def test_dataset350_h5m_jobs_cover_all_three_windows() -> None:
-    text = H5M_JOBS.read_text()
-    cases = ["w0931_0940_h5m", "w1001_1010_h5m", "w1401_1410_h5m"]
-    assert "kind: List" in text
-    assert text.count("name: os-nn-ds350-w") == 3
-    assert all(f"osf-case: {case}" in text for case in cases)
-    assert text.count("suspend: true") == 3
-    assert "suspend: false" not in text
-    assert "completionMode: Indexed" in text
-    assert "completions: 8" in text
-    assert "parallelism: 8" in text
-    assert "opening_${WINDOW}_features_350" in text
-    assert "opening_${WINDOW}_labels_h5m_v2" in text
-    assert 'requests: {cpu: "8", memory: 256Gi' in text
-    assert 'limits: {cpu: "16", memory: 384Gi' in text
-    assert "- key: gpu_model" in text
-    assert text.count(f"image: {H5M_TRAINING_IMAGE}") == 1
+    assert text.count("--feature-input") == 15
+    assert text.count("--label-input") == 15
+    assert text.count("--run-id") == 15
+    assert text.count(f"image: {H5M_TRAINING_IMAGE}") == 15
 
 
 def test_dataset350_label15_queue_appends_three_h5m_jobs() -> None:

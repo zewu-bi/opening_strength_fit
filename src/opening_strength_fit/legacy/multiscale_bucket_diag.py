@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -77,6 +78,10 @@ def spearman_rank_ic(scores: np.ndarray, outcomes: np.ndarray) -> float:
     return array_corr(scores, outcomes, "spearman")
 
 
+def fixed_score_spearman(outcomes: np.ndarray) -> float:
+    return spearman_rank_ic(np.arange(len(outcomes), 0, -1, dtype="float64"), outcomes)
+
+
 def summarize_monthly_stability(
     frame: pd.DataFrame,
     group_cols: list[str],
@@ -115,6 +120,13 @@ def summarize_variant_average(frame: pd.DataFrame, key_cols: list[str]) -> pd.Da
             labels = frame.drop_duplicates(key_cols)[key_cols + [label_col]]
             out = out.merge(labels, on=key_cols, how="left")
     return out
+
+
+def with_variant_average(frame: pd.DataFrame, key_cols: list[str]) -> pd.DataFrame:
+    return pd.concat(
+        [frame, summarize_variant_average(frame, key_cols)],
+        ignore_index=True,
+    )
 
 
 def add_bucket_summaries(
@@ -282,22 +294,30 @@ def summarize_ic(rows: list[tuple], columns: list[str], key_cols: list[str]) -> 
 def load_ranked_pool_shard(
     *,
     pred_path: Path,
-    labels: pd.DataFrame,
+    labels: pd.DataFrame | None,
     pool: pd.DataFrame,
-) -> tuple[pd.DataFrame, dict[str, int]]:
-    pred = pd.read_parquet(pred_path, columns=PREDICTION_COLS)
+    prediction_next_label_col: str = "",
+) -> tuple[pd.DataFrame, dict[str, int | str]]:
+    columns = [*PREDICTION_COLS, prediction_next_label_col] if prediction_next_label_col else None
+    pred = pd.read_parquet(pred_path, columns=columns or PREDICTION_COLS)
+    if prediction_next_label_col:
+        pred = pred.rename(columns={prediction_next_label_col: "alpha_return_next_close"})
     pred["date"] = normalize_date(pred["date"])
     pred = pred.loc[stock_pool_membership_mask(pred, pool)].copy()
     pred_rows = len(pred)
     duplicate_keys = int(pred.duplicated(PREDICTION_COLS[:3]).sum())
     if duplicate_keys:
         raise ValueError(f"invalid predictions for {pred_path}: duplicates={duplicate_keys}")
-    frame = pred.merge(labels, on=PREDICTION_COLS[:3], how="left", validate="one_to_one")
+    if prediction_next_label_col:
+        frame = pred
+    else:
+        if labels is None:
+            raise ValueError("separate next-close labels are required")
+        frame = pred.merge(labels, on=PREDICTION_COLS[:3], how="left", validate="one_to_one")
     missing_labels = int(frame["alpha_return_next_close"].isna().sum())
     if missing_labels:
-        raise ValueError(
-            f"invalid prediction/label join for {pred_path}: missing_labels={missing_labels}"
-        )
+        source = "embedded labels" if prediction_next_label_col else "prediction/label join"
+        raise ValueError(f"invalid {source} for {pred_path}: missing_labels={missing_labels}")
     frame["pool_mean"] = frame.groupby(GROUP_COLS, observed=True)[
         "alpha_return_next_close"
     ].transform("mean")
@@ -316,48 +336,87 @@ def load_ranked_pool_shard(
     frame["score_rank"] = grouped.cumcount() + 1
     frame["group_size"] = grouped["symbol"].transform("size")
     frame["month"] = frame["date"].str.slice(0, 7)
-    return frame, {
+    trace: dict[str, int | str] = {
         "prediction_pool_rows": pred_rows,
         "joined_rows": len(frame),
         "groups": int(grouped.ngroups),
         "duplicate_keys": duplicate_keys,
         "missing_labels": missing_labels,
     }
+    if prediction_next_label_col:
+        trace["next_label_source"] = f"prediction:{prediction_next_label_col}"
+    return frame, trace
 
 
-def process_shard(
-    *,
-    pred_path: Path,
-    labels: pd.DataFrame,
-    pool: pd.DataFrame,
+def ranked_pool_shards(
+    prediction_root: Path,
+    next_label_root: Path | None,
+    prediction_next_label_col: str,
+    pool_path: str,
+    run_id: str,
+    months: list[str],
     top_n: int,
-) -> tuple[pd.DataFrame, dict[str, int]]:
-    frame, trace = load_ranked_pool_shard(
-        pred_path=pred_path,
-        labels=labels,
-        pool=pool,
-    )
-    top = frame.loc[frame["score_rank"] <= top_n].copy()
-    top["top_n"] = top_n
-    trace["top_rows"] = len(top)
-    return top[
-        GROUP_COLS
-        + [
-            "month",
-            "score_rank",
-            "prediction",
-            "alpha_return_next_close",
-            "excess_bps",
-            "realized_pool_top5",
-            "realized_pool_top10",
-            "top_n",
-        ]
-    ], trace
+    message: str,
+    *,
+    pool: pd.DataFrame | None = None,
+    require_complete_groups: bool = True,
+) -> Iterator[tuple[str, pd.DataFrame, dict[str, int | str]]]:
+    pool = load_stock_pool(pool_path) if pool is None else pool
+    labels: dict[str, pd.DataFrame] = {}
+    if not prediction_next_label_col and next_label_root is None:
+        raise ValueError("next_label_root is required without embedded prediction labels")
+    for month in months:
+        year = month[:4]
+        if not prediction_next_label_col and year not in labels:
+            assert next_label_root is not None
+            labels = {year: load_label_for_year(next_label_path(next_label_root, year))}
+        pred_path = prediction_path(prediction_root, run_id, month)
+        print(f"{message} shard {month}: {pred_path}", flush=True)
+        frame, trace = load_ranked_pool_shard(
+            pred_path=pred_path,
+            labels=labels.get(year),
+            pool=pool,
+            prediction_next_label_col=prediction_next_label_col,
+        )
+        if require_complete_groups:
+            group_sizes = frame.groupby(GROUP_COLS, observed=True)["group_size"].first()
+            complete_groups = group_sizes.loc[group_sizes.ge(top_n)]
+            trace.update(
+                {
+                    "pool_group_size_min": int(group_sizes.min()),
+                    "pool_groups_total": int(len(group_sizes)),
+                    "pool_groups_with_top_n": int(len(complete_groups)),
+                    "pool_groups_below_top_n": int(len(group_sizes) - len(complete_groups)),
+                }
+            )
+            if complete_groups.empty:
+                raise ValueError(f"no pool group has at least Top{top_n} rows")
+            frame = frame.loc[frame["group_size"].ge(top_n)].copy()
+        yield month, frame, trace
 
 
 def write_frame(path: Path, frame: pd.DataFrame) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     frame.to_csv(path, index=False)
+
+
+def run_trace(
+    prediction_root: Path,
+    next_label_root: Path | None,
+    pool_path: str,
+    *,
+    prediction_next_label_col: str | None = None,
+    **details: object,
+) -> dict[str, object]:
+    trace: dict[str, object] = {
+        "created_at_utc": datetime.now(UTC).isoformat(),
+        "prediction_root": str(prediction_root),
+        "next_label_root": str(next_label_root) if next_label_root is not None else None,
+    }
+    if prediction_next_label_col is not None:
+        trace["prediction_next_label_col"] = prediction_next_label_col or None
+    trace.update(pool_path=pool_path, **details)
+    return trace
 
 
 def run_multiscale_bucket_diagnostics(config: MultiscaleBucketDiagConfig) -> None:
@@ -372,43 +431,40 @@ def run_multiscale_bucket_diagnostics(config: MultiscaleBucketDiagConfig) -> Non
     all_topk_ic_rows: list[tuple] = []
     all_bucket_ic_rows: list[tuple] = []
     all_window_ic_rows: list[tuple] = []
-    label_cache: dict[str, pd.DataFrame] = {}
-    trace: dict[str, object] = {
-        "created_at_utc": datetime.now(UTC).isoformat(),
-        "prediction_root": str(config.prediction_root),
-        "next_label_root": str(config.next_label_root),
-        "pool_path": config.pool_path,
-        "canonical_weighting": CANONICAL_WEIGHTING,
-        "variants": {},
-        "months": config.months,
-        "bucket_widths": config.bucket_widths,
-        "top_k": config.top_k,
-        "window_widths": config.window_widths,
-        "window_stride": config.window_stride,
-        "top_n": config.top_n,
-        "rank_ic_method": "spearman_average_rank_ties",
-    }
+    trace = run_trace(
+        config.prediction_root,
+        config.next_label_root,
+        config.pool_path,
+        canonical_weighting=CANONICAL_WEIGHTING,
+        variants={},
+        months=config.months,
+        bucket_widths=config.bucket_widths,
+        top_k=config.top_k,
+        window_widths=config.window_widths,
+        window_stride=config.window_stride,
+        top_n=config.top_n,
+        rank_ic_method="spearman_average_rank_ties",
+    )
 
     for variant, run_id in config.run_ids.items():
         print(f"processing {variant} ({run_id})", flush=True)
         top_parts: list[pd.DataFrame] = []
         variant_trace = {"run_id": run_id, "months": {}}
-        for month in config.months:
-            year = month.split("-", 1)[0]
-            if year not in label_cache:
-                print(f"  loading labels {year}", flush=True)
-                label_cache.clear()
-                label_cache[year] = load_label_for_year(
-                    next_label_path(config.next_label_root, year)
-                )
-            pred_path = prediction_path(config.prediction_root, run_id, month)
-            print(f"  shard {month}: {pred_path}", flush=True)
-            top, shard_trace = process_shard(
-                pred_path=pred_path,
-                labels=label_cache[year],
-                pool=pool,
-                top_n=config.top_n,
-            )
+        for month, frame, shard_trace in ranked_pool_shards(
+            config.prediction_root,
+            config.next_label_root,
+            "",
+            config.pool_path,
+            run_id,
+            config.months,
+            config.top_n,
+            " ",
+            pool=pool,
+            require_complete_groups=False,
+        ):
+            top = frame.loc[frame["score_rank"] <= config.top_n].copy()
+            top["top_n"] = config.top_n
+            shard_trace["top_rows"] = len(top)
             topk_rows, bucket_ic_rows, window_rows = add_ic_rows(
                 top,
                 variant=variant,
@@ -461,37 +517,19 @@ def run_multiscale_bucket_diagnostics(config: MultiscaleBucketDiagConfig) -> Non
         window_ic["start_rank"].astype(str) + "-" + window_ic["end_rank"].astype(str)
     )
 
-    bucket_summary = pd.concat(
-        [bucket_summary, summarize_variant_average(bucket_summary, ["bucket_width", "bucket"])],
-        ignore_index=True,
+    bucket_summary = with_variant_average(
+        bucket_summary,
+        ["bucket_width", "bucket"],
     )
-    shape_summary = pd.concat(
-        [shape_summary, summarize_variant_average(shape_summary, ["top_k"])],
-        ignore_index=True,
+    shape_summary = with_variant_average(shape_summary, ["top_k"])
+    topk_ic = with_variant_average(topk_ic, ["top_k"])
+    bucket_ic = with_variant_average(
+        bucket_ic,
+        ["bucket_width", "bucket", "start_rank", "end_rank"],
     )
-    topk_ic = pd.concat(
-        [topk_ic, summarize_variant_average(topk_ic, ["top_k"])],
-        ignore_index=True,
-    )
-    bucket_ic = pd.concat(
-        [
-            bucket_ic,
-            summarize_variant_average(
-                bucket_ic,
-                ["bucket_width", "bucket", "start_rank", "end_rank"],
-            ),
-        ],
-        ignore_index=True,
-    )
-    window_ic = pd.concat(
-        [
-            window_ic,
-            summarize_variant_average(
-                window_ic,
-                ["window_width", "start_rank", "end_rank"],
-            ),
-        ],
-        ignore_index=True,
+    window_ic = with_variant_average(
+        window_ic,
+        ["window_width", "start_rank", "end_rank"],
     )
 
     write_frame(config.output_dir / "bucket_width_distribution_summary.csv", bucket_summary)

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
+from functools import partial
 from pathlib import Path
 
 import pandas as pd
 
+from opening_strength_fit.io import frame_columns, read_frame
 from opening_strength_fit.pvc_layout import prediction_shard_dirs
 from opening_strength_fit.schema import normalize_decision_keys
 
@@ -46,6 +49,10 @@ def prediction_files(path: Path) -> list[Path]:
     raise SystemExit(f"no prediction parquet files found under: {path}")
 
 
+def prediction_files_many(paths: Iterable[str | Path]) -> list[Path]:
+    return [file for path in paths for file in prediction_files(Path(path))]
+
+
 def next_close_files(path: Path, years: set[str]) -> list[Path]:
     if path.is_file():
         return [path]
@@ -61,8 +68,37 @@ def next_close_files(path: Path, years: set[str]) -> list[Path]:
     raise SystemExit(f"no next-close parquet files found under: {path}")
 
 
-def normalize_keys(frame: pd.DataFrame) -> pd.DataFrame:
-    return normalize_decision_keys(frame, drop_missing=False)
+normalize_keys = partial(normalize_decision_keys, drop_missing=False)
+
+
+def read_clock_predictions(
+    path: Path,
+    *,
+    required_columns: tuple[str, ...],
+    optional_columns: tuple[str, ...] = (),
+    trailing_required_columns: tuple[str, ...] = (),
+    dropna_columns: tuple[str, ...] = (),
+    clocks: list[str],
+    context: str = "",
+) -> pd.DataFrame:
+    available = frame_columns(path)
+    required = (*required_columns, *trailing_required_columns)
+    if context and (missing := [column for column in required if column not in available]):
+        raise SystemExit(f"{context} missing columns: {missing}")
+    columns = [
+        *dict.fromkeys(
+            (
+                *required_columns,
+                *(column for column in optional_columns if column in available),
+                *trailing_required_columns,
+            )
+        )
+    ]
+    frame = normalize_decision_keys(
+        read_frame(path, columns=columns).dropna(subset=list(dropna_columns or required))
+    )
+    frame["clock"] = frame["decision_target_timestamp"].dt.strftime("%H:%M")
+    return frame.loc[frame["clock"].isin(clocks)].copy()
 
 
 def clock_label(values: pd.Series) -> pd.Series:

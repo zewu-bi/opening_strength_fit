@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import gc
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -15,11 +14,11 @@ from opening_strength_fit.alpha_conditioning import (
     predict_model_score,
 )
 from opening_strength_fit.analysis import write_json
+from opening_strength_fit.commands.arguments import command_config
 from opening_strength_fit.config import (
     config_int,
     config_str,
-    load_toml,
-    run_id,
+    prepare_output_dir,
 )
 from opening_strength_fit.io import write_frame
 from opening_strength_fit.next_close_labels import add_next_close_label_arguments
@@ -29,6 +28,8 @@ from opening_strength_fit.risk_labels import (
     next_close_label_request,
 )
 from opening_strength_fit.score_variant_eval import (
+    GAP_P80_VARIANTS,
+    configured_score_variants,
     score_variants,
     summarize_group_metrics,
 )
@@ -45,18 +46,7 @@ from opening_strength_fit.training_windows import date_splits
 
 DEFAULT_VARIANTS = (
     {"variant": "alpha_rank", "risk_model": "", "penalty": 0.0, "candidate_alpha_rank_min": 0.0},
-    {
-        "variant": "gap_penalty_030_p80",
-        "risk_model": "gap",
-        "penalty": 0.30,
-        "candidate_alpha_rank_min": 0.80,
-    },
-    {
-        "variant": "gap_penalty_035_p80",
-        "risk_model": "gap",
-        "penalty": 0.35,
-        "candidate_alpha_rank_min": 0.80,
-    },
+    *GAP_P80_VARIANTS,
     {
         "variant": "gap_penalty_030_p90",
         "risk_model": "gap",
@@ -78,26 +68,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def variant_specs(config: dict) -> list[dict[str, object]]:
-    variants = config.get("score", {}).get("variants", [])
-    if not variants:
-        return [dict(item) for item in DEFAULT_VARIANTS]
-    specs = []
-    for item in variants:
-        specs.append(
-            {
-                "variant": str(item.get("variant", "")).strip(),
-                "risk_model": str(item.get("risk_model", "") or "").strip().lower(),
-                "penalty": float(item.get("penalty", 0.0) or 0.0),
-                "candidate_alpha_rank_min": float(item.get("candidate_alpha_rank_min", 0.0) or 0.0),
-            }
-        )
-    return [spec for spec in specs if spec["variant"]]
-
-
 def main() -> None:
     args = parse_args()
-    config = load_toml(args.config) if args.config else {}
+    config, run_name = command_config(args, "rolling_alpha_conditioned_top100")
     config = apply_stock_pool_cli_overrides(config, args)
     stock_pool_settings = stock_pool_config_from_mapping(config)
     if stock_pool_settings.enabled and stock_pool_settings.filter_train:
@@ -114,12 +87,7 @@ def main() -> None:
     if stock_pool is not None:
         print_mapping("stock_pool", stock_pool_runtime_summary(stock_pool_settings, stock_pool))
 
-    run_name = run_id(config, args.config) if args.config else "rolling_alpha_conditioned_top100"
-    output_dir = Path(
-        args.output_dir
-        or config_str(config, "output", "local_dir", f"output/legacy/analysis/{run_name}")
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = prepare_output_dir(config, args.output_dir, run_name)
 
     labeled = load_labeled_pvc_frame(args, config)
     labels = load_risk_next_close_labels(
@@ -155,7 +123,7 @@ def main() -> None:
         },
     )
     top_n = args.top_n or config_int(config, "score", "top_n", 100)
-    variants = variant_specs(config)
+    variants = configured_score_variants(config, "score", DEFAULT_VARIANTS)
 
     group_metric_frames = []
     prediction_paths = []
@@ -183,31 +151,20 @@ def main() -> None:
         test = add_group_rank(test, "candidate_alpha_score", "candidate_alpha_rank")
 
         risk_train = add_alpha_conditioned_risk_targets(train, config, copy_frame=False)
-        gap_model, gap_stats = fit_lgbm_config_section(
-            risk_train,
-            args=args,
-            config=config,
-            section="gap_model",
-            target_col="target_alpha_conditioned_gap_risk",
-            sample_weight_col="risk_sample_weight",
-            random_state_default=config_int(config, "model", "random_state", 43),
-        )
-        test["gap_risk_prediction"] = np.clip(predict_model_score(gap_model, test), 0.0, 1.0)
-        del gap_model
-        gc.collect()
-
-        binary_model, binary_stats = fit_lgbm_config_section(
-            risk_train,
-            args=args,
-            config=config,
-            section="binary_model",
-            target_col="target_alpha_conditioned_binary_risk",
-            sample_weight_col="risk_sample_weight",
-            random_state_default=config_int(config, "model", "random_state", 44),
-        )
-        test["binary_risk_prediction"] = np.clip(predict_model_score(binary_model, test), 0.0, 1.0)
-        del binary_model
-        gc.collect()
+        risk_stats = {}
+        for name, default_seed in (("gap", 43), ("binary", 44)):
+            model, risk_stats[name] = fit_lgbm_config_section(
+                risk_train,
+                args=args,
+                config=config,
+                section=f"{name}_model",
+                target_col=f"target_alpha_conditioned_{name}_risk",
+                sample_weight_col="risk_sample_weight",
+                random_state_default=config_int(config, "model", "random_state", default_seed),
+            )
+            test[f"{name}_risk_prediction"] = np.clip(predict_model_score(model, test), 0.0, 1.0)
+            del model
+            gc.collect()
         test = add_group_rank(test, "gap_risk_prediction", "gap_risk_rank")
         test = add_group_rank(test, "binary_risk_prediction", "binary_risk_rank")
         selection_mask_col = ""
@@ -258,8 +215,7 @@ def main() -> None:
             "test_start_date": split.test_start_date,
             "test_end_date": split.test_end_date,
             "alpha": alpha_stats,
-            "gap": gap_stats,
-            "binary": binary_stats,
+            **risk_stats,
         }
         print_mapping(
             f"rolling_window_summary[{month}]",

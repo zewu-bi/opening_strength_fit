@@ -75,22 +75,16 @@ def _torch_loss(
 
 def _normalize_training_tensor_storage(value: str) -> str:
     name = str(value or "auto").strip().lower()
-    aliases = {
-        "auto": "auto",
-        "cuda": "cuda_resident",
-        "cuda_resident": "cuda_resident",
-        "gpu": "cuda_resident",
-        "gpu_resident": "cuda_resident",
-        "host": "host_vectorized",
-        "host_vectorized": "host_vectorized",
-        "cpu": "host_vectorized",
-    }
-    if name not in aliases:
-        raise SystemExit(
-            "model.training_tensor_storage for torch_mlp must be auto, "
-            "cuda_resident, or host_vectorized"
-        )
-    return aliases[name]
+    if name == "auto":
+        return name
+    if name in {"cuda", "cuda_resident", "gpu", "gpu_resident"}:
+        return "cuda_resident"
+    if name in {"host", "host_vectorized", "cpu"}:
+        return "host_vectorized"
+    raise SystemExit(
+        "model.training_tensor_storage for torch_mlp must be auto, "
+        "cuda_resident, or host_vectorized"
+    )
 
 
 def _resolve_training_tensor_storage(
@@ -168,15 +162,9 @@ def _torch_gate_diagnostics(
 ) -> dict[str, object]:
     if not hasattr(module, "gate_values"):
         return {}
-    max_rows = max(0, int(max_rows))
-    if max_rows <= 0 or len(x_values) == 0:
+    values = _gate_diagnostic_sample(x_values, rng=rng, max_rows=max_rows)
+    if len(values) == 0:
         return {}
-    if len(x_values) > max_rows:
-        selected = rng.choice(len(x_values), size=max_rows, replace=False)
-        selected.sort()
-        values = x_values[selected]
-    else:
-        values = x_values
 
     group_names = tuple(str(name) for name in getattr(module, "group_names", ()))
     group_dims = tuple(int(dim) for dim in getattr(module, "group_dims", ()))
@@ -405,11 +393,21 @@ def _fit_torch_epochs(
             values = values.to(resolved_device)
         return values
 
-    def batch_loss_tensors(indices):
+    def batch_loss(indices):
         batch_x = take_batch(x_tensor, indices)
         batch_y = take_batch(y_tensor, indices)
         batch_w = take_batch(weight_tensor, indices) if weight_tensor is not None else None
-        return batch_x, batch_y, batch_w
+        raw_loss = criterion(module(batch_x), batch_y)
+        if batch_w is not None:
+            raw_loss = raw_loss * batch_w
+            denom = torch.clamp(batch_w.sum(), min=1.0)
+        else:
+            denom = raw_loss.new_tensor(float(batch_y.numel()))
+        return raw_loss.sum(), denom
+
+    def mean_loss(total_loss, total_weight) -> float:
+        totals = torch.stack((total_loss, total_weight)).cpu().tolist()
+        return float(totals[0] / totals[1]) if totals[1] else float("nan")
 
     best_state = None
     best_validation = float("inf")
@@ -430,22 +428,12 @@ def _fit_torch_epochs(
             positions = epoch_order[start : start + int(batch_size)]
             indices = train_indices_tensor.index_select(0, positions)
             optimizer.zero_grad(set_to_none=True)
-            batch_x, batch_y, batch_w = batch_loss_tensors(indices)
-            raw_loss = criterion(module(batch_x), batch_y)
-            if batch_w is not None:
-                raw_loss = raw_loss * batch_w
-                denom = torch.clamp(batch_w.sum(), min=1.0)
-            else:
-                denom = raw_loss.new_tensor(float(batch_y.numel()))
-            raw_loss_sum = raw_loss.sum()
+            raw_loss_sum, denom = batch_loss(indices)
             (raw_loss_sum / denom).backward()
             optimizer.step()
             total_loss_tensor += raw_loss_sum.detach().to(dtype=torch.float64)
             total_weight_tensor += denom.detach().to(dtype=torch.float64)
-        train_totals = torch.stack((total_loss_tensor, total_weight_tensor)).cpu().tolist()
-        final_train_loss = (
-            float(train_totals[0] / train_totals[1]) if train_totals[1] else float("nan")
-        )
+        final_train_loss = mean_loss(total_loss_tensor, total_weight_tensor)
 
         final_validation_loss = final_train_loss
         if validation_rows > 0:
@@ -456,21 +444,10 @@ def _fit_torch_epochs(
             with torch.no_grad():
                 for start in range(0, validation_rows, int(batch_size)):
                     indices = validation_indices_tensor[start : start + int(batch_size)]
-                    batch_x, batch_y, batch_w = batch_loss_tensors(indices)
-                    raw_loss = criterion(module(batch_x), batch_y)
-                    if batch_w is not None:
-                        raw_loss = raw_loss * batch_w
-                        denom = torch.clamp(batch_w.sum(), min=1.0)
-                    else:
-                        denom = raw_loss.new_tensor(float(batch_y.numel()))
-                    total_loss_tensor += raw_loss.sum().to(dtype=torch.float64)
+                    raw_loss_sum, denom = batch_loss(indices)
+                    total_loss_tensor += raw_loss_sum.to(dtype=torch.float64)
                     total_weight_tensor += denom.to(dtype=torch.float64)
-            validation_totals = torch.stack((total_loss_tensor, total_weight_tensor)).cpu().tolist()
-            final_validation_loss = (
-                float(validation_totals[0] / validation_totals[1])
-                if validation_totals[1]
-                else float("nan")
-            )
+            final_validation_loss = mean_loss(total_loss_tensor, total_weight_tensor)
 
         epochs_trained = epoch
         if final_validation_loss < best_validation:
@@ -548,7 +525,7 @@ def fit_torch_mlp_frame(
     feature_value_transform_tick_size: float = 0.01,
 ) -> tuple[TorchMLPPredictionModel, dict[str, object]]:
     fit_started = time.monotonic()
-    torch, _nn, _DataLoader, _TensorDataset = _import_torch()
+    torch, _nn = _import_torch()
     prepared = _prepare_torch_training_data(
         train,
         feature_limit=feature_limit,
@@ -567,17 +544,6 @@ def fit_torch_mlp_frame(
     y_values = prepared.y_values
     sample_weight = prepared.sample_weight
     selected_rows = prepared.selected_rows
-    feature_mean = prepared.feature_mean
-    feature_scale = prepared.feature_scale
-    standardization_mode = prepared.standardization_mode
-    standardization_group_col = prepared.standardization_group_col
-    standardization_group_keys = prepared.standardization_group_keys
-    standardization_group_mean = prepared.standardization_group_mean
-    standardization_group_scale = prepared.standardization_group_scale
-    value_transform_mode = prepared.value_transform_mode
-    value_transform_group_cols = prepared.value_transform_group_cols
-    value_transform_rank_method = prepared.value_transform_rank_method
-    value_transform_tick_size = prepared.value_transform_tick_size
 
     if len(x_values) < 2:
         raise SystemExit("torch_mlp needs at least two valid training rows")
@@ -694,9 +660,7 @@ def fit_torch_mlp_frame(
             weight_tensor = weight_tensor.to(resolved_device)
         train_indices_tensor = train_indices_tensor.to(resolved_device)
         validation_indices_tensor = validation_indices_tensor.to(resolved_device)
-        del x_values, y_values, train_indices, validation_indices
-        if sample_weight is not None:
-            del sample_weight
+        del x_values, y_values, sample_weight, train_indices, validation_indices
     storage_seconds = time.monotonic() - storage_started
     print(f"  storage_transfer_seconds: {storage_seconds:.1f}")
 
@@ -718,19 +682,16 @@ def fit_torch_mlp_frame(
         max_epochs=int(max_epochs),
         early_stopping_patience=int(early_stopping_patience),
     )
-    best_state = epoch_result.best_state
-    best_validation = epoch_result.best_validation
-    best_epoch = epoch_result.best_epoch
-    epochs_trained = epoch_result.epochs_trained
-    final_train_loss = epoch_result.final_train_loss
-    epoch_seconds = epoch_result.epoch_seconds
-    if best_state is not None:
-        module.load_state_dict(best_state)
+    if epoch_result.best_state is not None:
+        module.load_state_dict(epoch_result.best_state)
     module.eval()
 
     device_name = ""
     if str(resolved_device).startswith("cuda") and torch.cuda.is_available():
         device_name = torch.cuda.get_device_name(torch.device(resolved_device))
+    symbol_standardized = prepared.standardization_mode == "symbol_train_zscore"
+    transformed = prepared.value_transform_mode != "none"
+    mechanismized = prepared.value_transform_mode.startswith("mechanismized_")
     stats: dict[str, object] = {
         "rows": n_rows,
         "dates": date_count,
@@ -739,10 +700,10 @@ def fit_torch_mlp_frame(
         "device": resolved_device,
         "torch_cuda_available": bool(torch.cuda.is_available()),
         "torch_device_name": device_name,
-        "epochs_trained": int(epochs_trained),
-        "best_epoch": int(best_epoch),
-        "train_loss": float(final_train_loss),
-        "validation_loss": float(best_validation),
+        "epochs_trained": int(epoch_result.epochs_trained),
+        "best_epoch": int(epoch_result.best_epoch),
+        "train_loss": float(epoch_result.final_train_loss),
+        "validation_loss": float(epoch_result.best_validation),
         "loss": str(loss),
         "huber_beta": float(huber_beta),
         "mse_blend_weight": float(mse_blend_weight),
@@ -756,23 +717,23 @@ def fit_torch_mlp_frame(
         "num_workers_ignored": int(num_workers),
         "training_preparation_seconds": float(training_started - fit_started),
         "training_storage_transfer_seconds": float(storage_seconds),
-        "training_epoch_seconds": epoch_seconds,
-        "feature_standardization": standardization_mode,
-        "standardization_group_col": standardization_group_col
-        if standardization_mode == "symbol_train_zscore"
+        "training_epoch_seconds": epoch_result.epoch_seconds,
+        "feature_standardization": prepared.standardization_mode,
+        "standardization_group_col": prepared.standardization_group_col
+        if symbol_standardized
         else "",
-        "standardization_groups": int(len(standardization_group_keys))
-        if standardization_group_keys is not None
+        "standardization_groups": int(len(prepared.standardization_group_keys))
+        if prepared.standardization_group_keys is not None
         else 0,
-        "feature_value_transform": value_transform_mode,
-        "feature_value_transform_group_cols": list(value_transform_group_cols)
-        if value_transform_mode != "none"
+        "feature_value_transform": prepared.value_transform_mode,
+        "feature_value_transform_group_cols": list(prepared.value_transform_group_cols)
+        if transformed
         else [],
-        "feature_value_transform_rank_method": value_transform_rank_method
-        if value_transform_mode != "none"
+        "feature_value_transform_rank_method": prepared.value_transform_rank_method
+        if transformed
         else "",
-        "feature_value_transform_tick_size": value_transform_tick_size
-        if value_transform_mode.startswith("mechanismized_")
+        "feature_value_transform_tick_size": prepared.value_transform_tick_size
+        if mechanismized
         else "",
     }
     if sample_weight_mean is not None:
@@ -787,9 +748,7 @@ def fit_torch_mlp_frame(
         max_rows=len(diagnostic_values),
         batch_size=min(int(predict_batch_size or batch_size), 32768),
     )
-    del x_tensor, y_tensor, train_indices_tensor, validation_indices_tensor
-    if weight_tensor is not None:
-        del weight_tensor
+    del x_tensor, y_tensor, weight_tensor, train_indices_tensor, validation_indices_tensor
     if str(resolved_device).startswith("cuda"):
         torch.cuda.empty_cache()
     stats.update(diagnostics)
@@ -797,17 +756,17 @@ def fit_torch_mlp_frame(
         TorchMLPPredictionModel(
             features=features,
             module=module,
-            feature_mean=feature_mean,
-            feature_scale=feature_scale,
-            feature_standardization=standardization_mode,
-            standardization_group_col=standardization_group_col,
-            standardization_group_keys=standardization_group_keys,
-            standardization_group_mean=standardization_group_mean,
-            standardization_group_scale=standardization_group_scale,
-            feature_value_transform=value_transform_mode,
-            feature_value_transform_group_cols=value_transform_group_cols,
-            feature_value_transform_rank_method=value_transform_rank_method,
-            feature_value_transform_tick_size=value_transform_tick_size,
+            feature_mean=prepared.feature_mean,
+            feature_scale=prepared.feature_scale,
+            feature_standardization=prepared.standardization_mode,
+            standardization_group_col=prepared.standardization_group_col,
+            standardization_group_keys=prepared.standardization_group_keys,
+            standardization_group_mean=prepared.standardization_group_mean,
+            standardization_group_scale=prepared.standardization_group_scale,
+            feature_value_transform=prepared.value_transform_mode,
+            feature_value_transform_group_cols=prepared.value_transform_group_cols,
+            feature_value_transform_rank_method=prepared.value_transform_rank_method,
+            feature_value_transform_tick_size=prepared.value_transform_tick_size,
             device=resolved_device,
             batch_size=int(predict_batch_size or batch_size),
             diagnostics=diagnostics or None,

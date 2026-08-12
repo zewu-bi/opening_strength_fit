@@ -123,8 +123,7 @@ def _reuse_next_close(base: pd.DataFrame, source_path: Path) -> pd.DataFrame:
     source = normalize_dataset_keys(
         read_frame(source_path, columns=[*KEY_COLUMNS, "label_next_close"])
     )
-    duplicate = source.duplicated(list(KEY_COLUMNS), keep=False)
-    if duplicate.any():
+    if (duplicate := source.duplicated(list(KEY_COLUMNS), keep=False)).any():
         raise SystemExit(
             f"next-close source has {int(duplicate.sum())} duplicate keys: {source_path}"
         )
@@ -135,8 +134,7 @@ def _reuse_next_close(base: pd.DataFrame, source_path: Path) -> pd.DataFrame:
         validate="one_to_one",
         indicator=True,
     )
-    missing_keys = merged["_merge"].ne("both")
-    if missing_keys.any():
+    if (missing_keys := merged["_merge"].ne("both")).any():
         raise SystemExit(
             f"next-close source misses {int(missing_keys.sum())} base keys: {source_path}"
         )
@@ -145,36 +143,13 @@ def _reuse_next_close(base: pd.DataFrame, source_path: Path) -> pd.DataFrame:
     return merged
 
 
-def _initialize_long_label_worker(
-    base_year_root: Path,
-    state_year_roots: list[Path],
-    clocks: tuple[str, ...],
-    horizons: tuple[int, ...],
-    feature_tick_start_offset_us: int,
-    entry_delay_seconds: int,
-    sell_window_seconds: int,
-    volume_unit_multiplier: float,
-    fee_bps: float,
-    tradable: tuple[str, ...],
-) -> None:
+def _initialize_long_label_worker(state: dict[str, object]) -> None:
     global _LONG_LABEL_WORKER_STATE
     close_reference = read_frame(
-        base_year_root / "close_reference.parquet",
+        state["base_year_root"] / "close_reference.parquet",
         columns=["TradingDay", "Symbol", "ClosePrice"],
     )
-    _LONG_LABEL_WORKER_STATE = {
-        "base_year_root": base_year_root,
-        "state_year_roots": state_year_roots,
-        "clocks": clocks,
-        "horizons": horizons,
-        "feature_tick_start_offset_us": feature_tick_start_offset_us,
-        "entry_delay_seconds": entry_delay_seconds,
-        "sell_window_seconds": sell_window_seconds,
-        "volume_unit_multiplier": volume_unit_multiplier,
-        "fee_bps": fee_bps,
-        "tradable": tradable,
-        "close_reference": close_reference,
-    }
+    _LONG_LABEL_WORKER_STATE = {**state, "close_reference": close_reference}
 
 
 def _build_long_label_worker(trading_day: str) -> pd.DataFrame:
@@ -257,27 +232,29 @@ def build_label_year(
         raise SystemExit(f"no raw tick days in {start_date}..{end_date}")
     if workers < 1:
         raise SystemExit("long-label workers must be >= 1")
-    worker_args = (
-        base_year_root,
-        state_year_roots,
-        clocks,
-        horizons,
-        config_int(config, "dataset", "feature_tick_start_offset_us", 0),
-        config_int(config, "dataset", "entry_delay_seconds", 6),
-        config_int(config, "dataset", "sell_window_seconds", 60),
-        config_float(config, "dataset", "volume_unit_multiplier", 1.0),
-        fee_bps,
-        tradable,
-    )
+    worker_state = {
+        "base_year_root": base_year_root,
+        "state_year_roots": state_year_roots,
+        "clocks": clocks,
+        "horizons": horizons,
+        "feature_tick_start_offset_us": config_int(
+            config, "dataset", "feature_tick_start_offset_us", 0
+        ),
+        "entry_delay_seconds": config_int(config, "dataset", "entry_delay_seconds", 6),
+        "sell_window_seconds": config_int(config, "dataset", "sell_window_seconds", 60),
+        "volume_unit_multiplier": config_float(config, "dataset", "volume_unit_multiplier", 1.0),
+        "fee_bps": fee_bps,
+        "tradable": tradable,
+    }
     parts = []
     if workers == 1:
-        _initialize_long_label_worker(*worker_args)
+        _initialize_long_label_worker(worker_state)
         built_parts = (_build_long_label_worker(day) for day in days)
     else:
         executor = ProcessPoolExecutor(
             max_workers=workers,
             initializer=_initialize_long_label_worker,
-            initargs=worker_args,
+            initargs=(worker_state,),
         )
         built_parts = executor.map(_build_long_label_worker, days, chunksize=1)
     try:

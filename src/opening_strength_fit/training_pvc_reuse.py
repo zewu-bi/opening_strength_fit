@@ -17,8 +17,6 @@ def _normalized_reuse_keys(frame: pd.DataFrame, key_columns: list[str]) -> pd.Da
         out = out.copy()
         out["date"] = parsed.dt.strftime("%Y-%m-%d")
     if "symbol" in key_columns:
-        if out is frame:
-            out = out.copy()
         out["symbol"] = out["symbol"].astype("string")
     return out
 
@@ -32,25 +30,10 @@ def attach_reused_labeled_features(labeled: pd.DataFrame, config: dict) -> pd.Da
     if not source_path.exists():
         raise SystemExit(f"reused labeled feature source does not exist: {source_path}")
 
-    key_columns = config_list(
-        config,
-        "features",
-        "reuse_key_columns",
-        ["date", "symbol"],
-    )
-    explicit_columns = config_list(
-        config,
-        "features",
-        "reuse_feature_columns",
-        [],
-    )
+    key_columns = config_list(config, "features", "reuse_key_columns", ["date", "symbol"])
+    explicit_columns = config_list(config, "features", "reuse_feature_columns", [])
     prefixes = tuple(
-        config_list(
-            config,
-            "features",
-            "reuse_feature_prefixes",
-            ["preopen_", "auction_"],
-        )
+        config_list(config, "features", "reuse_feature_prefixes", ["preopen_", "auction_"])
     )
     available = frame_columns(source_path)
     missing_keys = [column for column in key_columns if column not in available]
@@ -121,12 +104,7 @@ def attach_reused_labeled_features(labeled: pd.DataFrame, config: dict) -> pd.Da
         validate="many_to_one",
     )
     matched_rows = int(merged["_reused_labeled_feature_match"].fillna(False).sum())
-    if join_mode == "left" and config_bool(
-        config,
-        "features",
-        "reuse_require_full_match",
-        True,
-    ):
+    if join_mode == "left" and config_bool(config, "features", "reuse_require_full_match", True):
         unmatched_rows = len(merged) - matched_rows
         if unmatched_rows:
             raise SystemExit(

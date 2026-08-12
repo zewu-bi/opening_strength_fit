@@ -12,6 +12,7 @@ from opening_strength_fit.config import (
     config_bool,
     config_float,
     config_str,
+    prepare_output_dir,
     run_id,
 )
 from opening_strength_fit.evaluation import score_bucket_returns
@@ -89,11 +90,7 @@ def train_from_args(args: argparse.Namespace) -> None:
     run_name = getattr(args, "run_id", None) or (
         run_id(config, args.config) if args.config else "local_ridge_opening"
     )
-    output_dir = Path(
-        args.output_dir
-        or config_str(config, "output", "local_dir", f"output/legacy/analysis/{run_name}")
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = prepare_output_dir(config, args.output_dir, run_name)
 
     if data_source == "clickhouse":
         labeled = load_clickhouse_labeled_frame(args, config)

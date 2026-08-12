@@ -9,8 +9,8 @@ from opening_strength_fit.config import (
     config_int,
     config_optional_int,
     config_str,
-    config_value,
 )
+from opening_strength_fit.config import config_value as get
 from opening_strength_fit.evaluation import format_group_cols, group_cols_for_mode
 from opening_strength_fit.rolling import (
     annual_rolling_date_splits,
@@ -31,27 +31,23 @@ def _arg_value(args: argparse.Namespace, name: str, default=None):
     return getattr(args, name, default)
 
 
+def _window_arg(args: argparse.Namespace, config: dict, name: str, default=None):
+    value = _arg_value(args, name)
+    return value if value is not None else get(config, "window", name, default)
+
+
+def _optional_int_window_arg(args: argparse.Namespace, config: dict, name: str) -> int | None:
+    value = _arg_value(args, name)
+    return value if value is not None else config_optional_int(config, "window", name)
+
+
 def rolling_monthly_date_bounds(
     args: argparse.Namespace,
     config: dict,
 ) -> tuple[str, str] | None:
-    train_months = (
-        _arg_value(args, "train_months")
-        if _arg_value(args, "train_months") is not None
-        else config_int(config, "window", "train_months", 12)
-    )
-    first_test_month = _arg_value(args, "test_start_month") or config_value(
-        config,
-        "window",
-        "test_start_month",
-        None,
-    )
-    last_test_month = _arg_value(args, "test_end_month") or config_value(
-        config,
-        "window",
-        "test_end_month",
-        None,
-    )
+    train_months = _window_arg(args, config, "train_months", 12)
+    first_test_month = _window_arg(args, config, "test_start_month")
+    last_test_month = _window_arg(args, config, "test_end_month")
     if not first_test_month or not last_test_month:
         return None
     first_period = pd.Period(first_test_month, freq="M")
@@ -61,16 +57,12 @@ def rolling_monthly_date_bounds(
 
 
 def test_year_from_args(args: argparse.Namespace, config: dict, key: str) -> int | None:
-    if key == "start":
-        if args.test_start_year is not None:
-            return args.test_start_year
-        test_date = args.test_start_date or config_value(config, "window", "test_start_date", None)
-        explicit = config_optional_int(config, "window", "test_start_year", None)
-    else:
-        if args.test_end_year is not None:
-            return args.test_end_year
-        test_date = args.test_end_date or config_value(config, "window", "test_end_date", None)
-        explicit = config_optional_int(config, "window", "test_end_year", None)
+    year_name = f"test_{key}_year"
+    if (year := _arg_value(args, year_name)) is not None:
+        return year
+    date_name = f"test_{key}_date"
+    test_date = _arg_value(args, date_name) or get(config, "window", date_name, None)
+    explicit = config_optional_int(config, "window", year_name, None)
     if explicit is not None:
         return explicit
     return int(pd.Timestamp(test_date).year) if test_date else None
@@ -81,34 +73,16 @@ def date_splits(labeled: pd.DataFrame, args: argparse.Namespace, config: dict):
     if window_mode == "rolling_monthly":
         return monthly_rolling_date_splits(
             labeled,
-            train_months=(
-                args.train_months
-                if args.train_months is not None
-                else config_int(config, "window", "train_months", 12)
-            ),
-            test_months=(
-                _arg_value(args, "test_months")
-                if _arg_value(args, "test_months") is not None
-                else config_int(config, "window", "test_months", 1)
-            ),
-            test_stride_months=(
-                _arg_value(args, "test_stride_months")
-                if _arg_value(args, "test_stride_months") is not None
-                else config_value(config, "window", "test_stride_months", None)
-            ),
-            first_test_month=args.test_start_month
-            or config_value(config, "window", "test_start_month", None),
-            last_test_month=args.test_end_month
-            or config_value(config, "window", "test_end_month", None),
+            train_months=int(_window_arg(args, config, "train_months", 12)),
+            test_months=int(_window_arg(args, config, "test_months", 1)),
+            test_stride_months=_window_arg(args, config, "test_stride_months"),
+            first_test_month=_window_arg(args, config, "test_start_month"),
+            last_test_month=_window_arg(args, config, "test_end_month"),
         )
     if window_mode == "rolling_annual":
         return annual_rolling_date_splits(
             labeled,
-            train_start_year=(
-                args.train_start_year
-                if args.train_start_year is not None
-                else config_optional_int(config, "window", "train_start_year", None)
-            ),
+            train_start_year=_optional_int_window_arg(args, config, "train_start_year"),
             first_test_year=test_year_from_args(args, config, "start"),
             last_test_year=test_year_from_args(args, config, "end"),
             min_train_years=config_int(config, "window", "min_train_years", 1),
@@ -116,10 +90,8 @@ def date_splits(labeled: pd.DataFrame, args: argparse.Namespace, config: dict):
     return [
         chronological_date_split(
             labeled,
-            test_start_date=args.test_start_date
-            or config_value(config, "window", "test_start_date", None),
-            test_end_date=args.test_end_date
-            or config_value(config, "window", "test_end_date", None),
+            test_start_date=_window_arg(args, config, "test_start_date"),
+            test_end_date=_window_arg(args, config, "test_end_date"),
             train_fraction=config_float(config, "window", "train_fraction", 0.8),
         )
     ]
@@ -127,10 +99,7 @@ def date_splits(labeled: pd.DataFrame, args: argparse.Namespace, config: dict):
 
 def resolve_window_mode(args: argparse.Namespace, config: dict) -> str:
     window_mode = _arg_value(args, "split_mode") or config_str(
-        config,
-        "window",
-        "mode",
-        "chronological",
+        config, "window", "mode", "chronological"
     )
     if _arg_value(args, "rolling_monthly", False):
         return "rolling_monthly"

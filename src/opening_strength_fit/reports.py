@@ -3,6 +3,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from opening_strength_fit.model_metrics import PREDICTION_METRIC_COLUMNS
+
 BASE_YEARLY_COLUMNS = (
     "year",
     "train_window",
@@ -127,22 +129,7 @@ def metrics_by_year_from_windows(metrics: pd.DataFrame) -> pd.DataFrame:
     rows = []
     weighted_mean_cols = {
         "model_test_r2",
-        "overall_ic",
-        "overall_rank_ic",
-        "group_ic_mean",
-        "group_ic_std",
-        "group_ic_ir",
-        "group_rank_ic_mean",
-        "group_rank_ic_std",
-        "group_rank_ic_ir",
-        "daily_ic_mean",
-        "daily_ic_std",
-        "daily_ic_ir",
-        "daily_rank_ic_mean",
-        "daily_rank_ic_std",
-        "daily_rank_ic_ir",
-        "mean_label",
-        "win_rate",
+        *PREDICTION_METRIC_COLUMNS,
         "top_score_mean_return",
         "top_score_median_return",
         "top_score_win_rate",

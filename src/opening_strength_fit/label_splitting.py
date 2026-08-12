@@ -6,34 +6,11 @@ import pandas as pd
 
 from opening_strength_fit.config import config_float, config_int, config_str, run_id
 from opening_strength_fit.io import read_frame, write_frame_atomic, write_json
+from opening_strength_fit.labels import cross_sectional_mixed_target as mixed_target
 from opening_strength_fit.schema import DECISION_KEY_COLUMNS
 
 KEY_COLUMNS = DECISION_KEY_COLUMNS
 OUTPUT_COLUMNS = (*KEY_COLUMNS, "label_short", "label_next_close", "target_label")
-
-
-def mixed_target(
-    frame: pd.DataFrame,
-    *,
-    short_column: str,
-    weight: float,
-    min_group_size: int,
-) -> pd.Series:
-    short = pd.to_numeric(frame[short_column], errors="coerce")
-    long = pd.to_numeric(frame["label_next_close"], errors="coerce")
-    usable = short.notna() & long.notna()
-    keys = [frame["date"], frame["decision_target_timestamp"]]
-    short_valid = short.where(usable)
-    long_valid = long.where(usable)
-    short_group = short_valid.groupby(keys, sort=False)
-    long_group = long_valid.groupby(keys, sort=False)
-    count = short_group.transform("count")
-    short_std = short_group.transform(lambda values: values.std(ddof=0))
-    long_std = long_group.transform(lambda values: values.std(ddof=0))
-    usable &= count.ge(int(min_group_size)) & short_std.gt(1e-12) & long_std.gt(1e-12)
-    short_z = (short - short_group.transform("mean")) / short_std
-    long_z = (long - long_group.transform("mean")) / long_std
-    return (short_z + float(weight) * long_z).where(usable)
 
 
 def split_mixed_label_year(

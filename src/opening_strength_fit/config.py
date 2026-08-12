@@ -68,11 +68,29 @@ def config_str(config: dict, section: str, key: str, default: str) -> str:
     return str(config_value(config, section, key, default))
 
 
-def config_bool(config: dict, section: str, key: str, default: bool) -> bool:
-    value = config_value(config, section, key, default)
+def prepare_output_dir(config: dict, override: str | None, run_name: str) -> Path:
+    path = Path(
+        override or config_str(config, "output", "local_dir", f"output/legacy/analysis/{run_name}")
+    )
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def coerce_bool(value: object) -> bool:
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "yes", "y", "on"}
     return bool(value)
+
+
+def config_bool(config: dict, section: str, key: str, default: bool) -> bool:
+    return coerce_bool(config_value(config, section, key, default))
+
+
+def coerce_str_list(value: object) -> list[str]:
+    if value is None:
+        return []
+    parts = value.replace(",", " ").split() if isinstance(value, str) else map(str, value)
+    return [part.strip() for part in parts if part and part.strip()]
 
 
 def config_list(
@@ -81,14 +99,7 @@ def config_list(
     key: str,
     default: list[str] | tuple[str, ...],
 ) -> list[str]:
-    value = config_value(config, section, key, default)
-    if value is None:
-        return []
-    if isinstance(value, str):
-        parts = value.replace(",", " ").split()
-    else:
-        parts = [str(item) for item in value]
-    return [part.strip() for part in parts if part and part.strip()]
+    return coerce_str_list(config_value(config, section, key, default))
 
 
 def config_clock_list(
@@ -113,12 +124,8 @@ def config_float_mapping(config: dict, section: str, key: str) -> dict[str, floa
     }
 
 
-def _config_tuple(
-    config: dict,
-    section: str,
-    key: str,
-    default: tuple,
-    convert: type,
+def config_tuple(
+    config: dict, section: str, key: str, default: tuple, convert: type = str
 ) -> tuple:
     value = config_value(config, section, key, default)
     if value is None:
@@ -137,7 +144,7 @@ def config_int_tuple(
     key: str,
     default: tuple[int, ...],
 ) -> tuple[int, ...]:
-    return _config_tuple(config, section, key, default, int)
+    return config_tuple(config, section, key, default, int)
 
 
 def config_float_tuple(
@@ -146,7 +153,7 @@ def config_float_tuple(
     key: str,
     default: tuple[float, ...],
 ) -> tuple[float, ...]:
-    return _config_tuple(config, section, key, default, float)
+    return config_tuple(config, section, key, default, float)
 
 
 def run_id(config: dict, config_path: str | Path) -> str:

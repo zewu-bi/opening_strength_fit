@@ -17,6 +17,117 @@ FONT_FAMILY = (
     "Inter, 'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', "
     "'Hiragino Sans GB', Arial, sans-serif"
 )
+SVG_WIDTH, SVG_HEIGHT = 1600, 900
+PLOT_LEFT, PLOT_RIGHT = 86.0, 1562.0
+
+
+def _y_mapper(bottom: float, ymin: float, ymax: float, height: float):
+    def scale(value: float) -> float:
+        return bottom - (value - ymin) / (ymax - ymin) * height
+
+    return scale
+
+
+def _svg_header(title: str) -> list[str]:
+    return [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{SVG_WIDTH}" height="{SVG_HEIGHT}" viewBox="0 0 {SVG_WIDTH} {SVG_HEIGHT}">',
+        f'<rect width="{SVG_WIDTH}" height="{SVG_HEIGHT}" fill="#fbfaf7"/>',
+        _svg_text(SVG_WIDTH / 2, 42, title, size=34, weight=800, anchor="middle"),
+    ]
+
+
+def _append_legend(
+    lines: list[str],
+    plot_data: pd.DataFrame,
+    pools: tuple[str, ...],
+    marker: str,
+    line_width: float = 3.0,
+) -> None:
+    labels = _legend_labels(plot_data, pools)
+    for pool, x, y in _legend_layout(labels, pools):
+        if marker == "bar":
+            lines.append(
+                f'<rect x="{x:.1f}" y="{y - 12:.1f}" width="34" height="18" '
+                f'fill="{PLOT_COLORS[pool]}"/>'
+            )
+        else:
+            lines.extend(
+                (
+                    f'<line x1="{x:.1f}" y1="{y - 3:.1f}" x2="{x + 34.0:.1f}" '
+                    f'y2="{y - 3:.1f}" stroke="{PLOT_COLORS[pool]}" '
+                    f'stroke-width="{max(line_width + 2.0, 3.0):.1f}"/>',
+                    f'<circle cx="{x + 17.0:.1f}" cy="{y - 3:.1f}" r="4.5" '
+                    f'fill="{PLOT_COLORS[pool]}"/>',
+                )
+            )
+        lines.append(_svg_text(x + 46.0, y + 3.0, labels[pool], size=19, fill="#262626"))
+
+
+def _append_y_grid(
+    lines: list[str],
+    values: pd.Series,
+    panel: dict[str, object],
+    top: float,
+    bottom: float,
+) -> tuple[str, float, float, object]:
+    column = str(panel["column"])
+    ymin, ymax, tick_step = _panel_axis(values, panel=panel)
+    ymap = _y_mapper(bottom, ymin, ymax, bottom - top)
+    panel_title = str(panel.get("title", ""))
+    if panel_title:
+        lines.append(
+            _svg_text(
+                PLOT_LEFT,
+                top - 22.0,
+                panel_title,
+                size=int(panel.get("title_size", 28)),
+                weight=800,
+            )
+        )
+    for tick in _ticks(ymin, ymax, tick_step):
+        y = ymap(tick)
+        is_zero = abs(tick) < 1e-12
+        lines.extend(
+            (
+                f'<line x1="{PLOT_LEFT:.1f}" y1="{y:.1f}" x2="{PLOT_RIGHT:.1f}" y2="{y:.1f}" '
+                f'stroke="{"#b8b2a8" if is_zero else "#dedbd4"}" '
+                f'stroke-width="{1.3 if is_zero else 1.0}"/>',
+                _svg_text(
+                    PLOT_LEFT - 14.0,
+                    y + 5.0,
+                    _format_tick(tick, panel["tick_decimals"]),
+                    size=16,
+                    fill="#3a3a3a",
+                    anchor="end",
+                ),
+            )
+        )
+    return column, ymin, ymax, ymap
+
+
+def _append_panel_border(
+    lines: list[str],
+    panel: dict[str, object],
+    top: float,
+    bottom: float,
+) -> None:
+    lines.extend(
+        (
+            f'<line x1="{PLOT_LEFT:.1f}" y1="{top:.1f}" x2="{PLOT_LEFT:.1f}" y2="{bottom:.1f}" '
+            'stroke="#928d84" stroke-width="1"/>',
+            f'<line x1="{PLOT_LEFT:.1f}" y1="{bottom:.1f}" x2="{PLOT_RIGHT:.1f}" y2="{bottom:.1f}" '
+            'stroke="#928d84" stroke-width="1"/>',
+        )
+    )
+    ylabel = str(panel.get("ylabel", ""))
+    if ylabel:
+        lines.append(_svg_text(24.0, (top + bottom) / 2 + 6.0, ylabel, size=18))
+
+
+def _write_svg(path: Path, lines: list[str]) -> None:
+    lines.append("</svg>")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def write_two_panel_bar_svg(
@@ -33,12 +144,7 @@ def write_two_panel_bar_svg(
     pool_count = len(pools)
     if pool_count <= 0:
         raise ValueError("at least one pool is required for plotting")
-    legend_labels = _legend_labels(plot_data, pools)
-
-    width = 1600
-    height = 900
-    left = 86.0
-    right = 1562.0
+    left, right = PLOT_LEFT, PLOT_RIGHT
     panel_tops = (145.0, 550.0)
     panel_height = 310.0
     chart_width = right - left
@@ -56,80 +162,18 @@ def write_two_panel_bar_svg(
     )
     data_index = plot_data.set_index(["test_month", "pool"])
 
-    lines = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
-        f'<rect width="{width}" height="{height}" fill="#fbfaf7"/>',
-        _svg_text(width / 2, 42, title, size=34, weight=800, anchor="middle"),
-    ]
-    for pool, x, legend_y in _legend_layout(
-        legend_labels,
-        pools,
-        width=width,
-        left=left,
-        right=right,
-        y=80.0,
-    ):
-        lines.append(
-            f'<rect x="{x:.1f}" y="{legend_y - 12:.1f}" width="34" height="18" '
-            f'fill="{PLOT_COLORS[pool]}"/>'
-        )
-        lines.append(
-            _svg_text(x + 46.0, legend_y + 3.0, legend_labels[pool], size=19, fill="#262626")
-        )
+    lines = _svg_header(title)
+    _append_legend(lines, plot_data, pools, "bar")
 
     for panel_index, panel in enumerate(panels):
         top = panel_tops[panel_index]
         bottom = top + panel_height
-        column = str(panel["column"])
-        ymin, ymax, tick_step = _panel_axis(
-            plot_data[column],
-            panel=panel,
+        column, ymin, ymax, ymap = _append_y_grid(
+            lines, plot_data[str(panel["column"])], panel, top, bottom
         )
-        tick_values = _ticks(ymin, ymax, tick_step)
-        tick_decimals = panel["tick_decimals"]
         label_decimals = int(panel["label_decimals"])
         value_labels = str(panel.get("value_labels", "all"))
-
-        def ymap(
-            value: float,
-            *,
-            bottom: float = bottom,
-            ymin: float = ymin,
-            ymax: float = ymax,
-        ) -> float:
-            return bottom - (value - ymin) / (ymax - ymin) * panel_height
-
-        panel_title = str(panel.get("title", ""))
-        if panel_title:
-            title_size = int(panel.get("title_size", 28))
-            lines.append(_svg_text(left, top - 22.0, panel_title, size=title_size, weight=800))
-        for tick in tick_values:
-            y = ymap(tick)
-            is_zero = abs(tick) < 1e-12
-            lines.append(
-                f'<line x1="{left:.1f}" y1="{y:.1f}" x2="{right:.1f}" y2="{y:.1f}" '
-                f'stroke="{"#b8b2a8" if is_zero else "#dedbd4"}" '
-                f'stroke-width="{1.3 if is_zero else 1.0}"/>'
-            )
-            lines.append(
-                _svg_text(
-                    left - 14.0,
-                    y + 5.0,
-                    _format_tick(tick, tick_decimals),
-                    size=16,
-                    fill="#3a3a3a",
-                    anchor="end",
-                )
-            )
-        lines.append(
-            f'<line x1="{left:.1f}" y1="{top:.1f}" x2="{left:.1f}" y2="{bottom:.1f}" '
-            'stroke="#928d84" stroke-width="1"/>'
-        )
-        lines.append(
-            f'<line x1="{left:.1f}" y1="{bottom:.1f}" x2="{right:.1f}" y2="{bottom:.1f}" '
-            'stroke="#928d84" stroke-width="1"/>'
-        )
-        lines.append(_svg_text(24.0, top + panel_height / 2 + 6.0, str(panel["ylabel"]), size=18))
+        _append_panel_border(lines, panel, top, bottom)
         mean_separator_x = (centers[-2] + centers[-1]) / 2
         lines.append(
             f'<line x1="{mean_separator_x:.1f}" y1="{top:.1f}" x2="{mean_separator_x:.1f}" '
@@ -184,9 +228,7 @@ def write_two_panel_bar_svg(
                     )
                 )
 
-    lines.append("</svg>")
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _write_svg(output_path, lines)
 
 
 def write_two_panel_line_svg(
@@ -208,12 +250,7 @@ def write_two_panel_line_svg(
     data = data.dropna(subset=["week_start"]).sort_values(["pool", "week_start"])
     if data.empty:
         raise ValueError("weekly plot data is empty")
-    legend_labels = _legend_labels(data, pools)
-
-    width = 1600
-    height = 900
-    left = 86.0
-    right = 1562.0
+    left, right = PLOT_LEFT, PLOT_RIGHT
     panel_count = len(panels)
     if panel_count == 1:
         panel_tops = (112.0,)
@@ -239,73 +276,13 @@ def write_two_panel_line_svg(
 
     year_ticks = _line_x_ticks(min_date, max_date, mode=x_label_mode)
 
-    lines = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
-        f'<rect width="{width}" height="{height}" fill="#fbfaf7"/>',
-        _svg_text(width / 2, 42, title, size=34, weight=800, anchor="middle"),
-    ]
-    for pool, x, legend_y in _legend_layout(
-        legend_labels,
-        pools,
-        width=width,
-        left=left,
-        right=right,
-        y=80.0,
-    ):
-        lines.append(
-            f'<line x1="{x:.1f}" y1="{legend_y - 3:.1f}" x2="{x + 34.0:.1f}" '
-            f'y2="{legend_y - 3:.1f}" stroke="{PLOT_COLORS[pool]}" '
-            f'stroke-width="{max(line_width + 2.0, 3.0):.1f}"/>'
-        )
-        lines.append(
-            f'<circle cx="{x + 17.0:.1f}" cy="{legend_y - 3:.1f}" r="4.5" '
-            f'fill="{PLOT_COLORS[pool]}"/>'
-        )
-        lines.append(
-            _svg_text(x + 46.0, legend_y + 3.0, legend_labels[pool], size=19, fill="#262626")
-        )
+    lines = _svg_header(title)
+    _append_legend(lines, data, pools, "line", line_width)
 
     for panel_index, panel in enumerate(panels):
         top = panel_tops[panel_index]
         bottom = top + panel_height
-        column = str(panel["column"])
-        ymin, ymax, tick_step = _panel_axis(
-            data[column],
-            panel=panel,
-        )
-        tick_values = _ticks(ymin, ymax, tick_step)
-        tick_decimals = panel["tick_decimals"]
-
-        def ymap(
-            value: float,
-            *,
-            bottom: float = bottom,
-            ymin: float = ymin,
-            ymax: float = ymax,
-        ) -> float:
-            return bottom - (value - ymin) / (ymax - ymin) * panel_height
-
-        panel_title = str(panel.get("title", ""))
-        if panel_title:
-            lines.append(_svg_text(left, top - 22.0, panel_title, size=28, weight=800))
-        for tick in tick_values:
-            y = ymap(tick)
-            is_zero = abs(tick) < 1e-12
-            lines.append(
-                f'<line x1="{left:.1f}" y1="{y:.1f}" x2="{right:.1f}" y2="{y:.1f}" '
-                f'stroke="{"#b8b2a8" if is_zero else "#dedbd4"}" '
-                f'stroke-width="{1.3 if is_zero else 1.0}"/>'
-            )
-            lines.append(
-                _svg_text(
-                    left - 14.0,
-                    y + 5.0,
-                    _format_tick(tick, tick_decimals),
-                    size=16,
-                    fill="#3a3a3a",
-                    anchor="end",
-                )
-            )
+        column, _, _, ymap = _append_y_grid(lines, data[str(panel["column"])], panel, top, bottom)
         for tick in year_ticks:
             x = xmap(tick)
             lines.append(
@@ -329,17 +306,7 @@ def write_two_panel_line_svg(
                         anchor="middle",
                     )
                 )
-        lines.append(
-            f'<line x1="{left:.1f}" y1="{top:.1f}" x2="{left:.1f}" y2="{bottom:.1f}" '
-            'stroke="#928d84" stroke-width="1"/>'
-        )
-        lines.append(
-            f'<line x1="{left:.1f}" y1="{bottom:.1f}" x2="{right:.1f}" y2="{bottom:.1f}" '
-            'stroke="#928d84" stroke-width="1"/>'
-        )
-        ylabel = str(panel.get("ylabel", ""))
-        if ylabel:
-            lines.append(_svg_text(24.0, top + panel_height / 2 + 6.0, ylabel, size=18))
+        _append_panel_border(lines, panel, top, bottom)
 
         for pool in pools:
             item = data.loc[data["pool"].eq(pool)].dropna(subset=[column])
@@ -364,9 +331,7 @@ def write_two_panel_line_svg(
                         f'fill="{PLOT_COLORS[pool]}"/>'
                     )
 
-    lines.append("</svg>")
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _write_svg(output_path, lines)
 
 
 def nice_line_axis(
@@ -397,18 +362,13 @@ def _legend_labels(plot_data: pd.DataFrame, pools: tuple[str, ...]) -> dict[str,
 def _legend_layout(
     legend_labels: dict[str, str],
     pools: tuple[str, ...],
-    *,
-    width: float,
-    left: float,
-    right: float,
-    y: float,
 ) -> list[tuple[str, float, float]]:
     marker_and_gap = 46.0
     trailing_gap = 34.0
     font_size = 19.0
     min_item_width = 110.0
     row_gap = 28.0
-    available_width = max(right - left, width * 0.6)
+    available_width = max(PLOT_RIGHT - PLOT_LEFT, SVG_WIDTH * 0.6)
     item_widths = {
         pool: max(
             min_item_width,
@@ -430,10 +390,10 @@ def _legend_layout(
     if current:
         rows.append((current, current_width))
 
-    start_y = y - (len(rows) - 1) * row_gap / 2.0
+    start_y = 80.0 - (len(rows) - 1) * row_gap / 2.0
     positions: list[tuple[str, float, float]] = []
     for row_index, (row, row_width) in enumerate(rows):
-        x = max(left, width / 2.0 - row_width / 2.0)
+        x = max(PLOT_LEFT, SVG_WIDTH / 2.0 - row_width / 2.0)
         row_y = start_y + row_gap * row_index
         for pool in row:
             positions.append((pool, x, row_y))
@@ -500,9 +460,7 @@ def _line_x_tick_label(
 ) -> str:
     if mode == "years_only":
         return tick.strftime("%Y")
-    if tick == min_date or tick == max_date:
-        return tick.strftime("%Y-%m-%d")
-    return tick.strftime("%Y")
+    return tick.strftime("%Y-%m-%d" if tick in (min_date, max_date) else "%Y")
 
 
 def _nice_ylim(

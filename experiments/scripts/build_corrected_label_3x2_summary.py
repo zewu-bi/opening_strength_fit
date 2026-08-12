@@ -103,38 +103,7 @@ def build_summary(backtests_root: Path, output_dir: Path) -> None:
     effects_path = output_dir / "corrected_label_3x2_effects.csv"
     effects_frame.to_csv(effects_path, index=False, lineterminator="\n")
 
-    markdown = summary[
-        [
-            "window",
-            "holding_horizon",
-            "universe_short_rank_ic",
-            "pool_L_top100_short_excess_bps",
-            "pool_L_top100_overnight_excess_bps",
-            "pool_L_overnight_rank_ic",
-        ]
-    ].copy()
-    markdown.columns = [
-        "时间窗口",
-        "持有期",
-        "短期 IC",
-        "短期超额(bps)",
-        "隔夜超额(bps)",
-        "隔夜 IC",
-    ]
-    markdown_path = output_dir / "corrected_label_3x2_summary.md"
-    header = "| " + " | ".join(markdown.columns) + " |"
-    separator = "| " + " | ".join(["---", "---", "---:", "---:", "---:", "---:"]) + " |"
-    body = [
-        "| "
-        + " | ".join(
-            [str(row.iloc[0]), str(row.iloc[1])] + [f"{float(value):.6f}" for value in row.iloc[2:]]
-        )
-        + " |"
-        for _, row in markdown.iterrows()
-    ]
-    markdown_path.write_text("\n".join([header, separator, *body]) + "\n", encoding="utf-8")
-
-    outputs = (summary_path, effects_path, markdown_path)
+    outputs = (summary_path, effects_path)
     optional_outputs = tuple(
         path
         for path in (

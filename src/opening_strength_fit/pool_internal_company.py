@@ -206,14 +206,9 @@ def create_company_backtest_payload(
         pack_company_score_frame(score) if daily else {api_time: pack_company_score_frame(score)}
     )
     payload: dict[str, Any] = {"score": packed_score, "tar": tar}
-    if cap is not None:
-        payload["cap"] = cap
-    if trgain is not None:
-        payload["trgain"] = trgain
-    if fee is not None:
-        payload["fee"] = fee
-    if vol_limit is not None:
-        payload["vol_limit"] = vol_limit
+    for key, value in {"cap": cap, "trgain": trgain, "fee": fee, "vol_limit": vol_limit}.items():
+        if value is not None:
+            payload[key] = value
     if return_eod:
         payload["return_eod"] = True
     return pickle.dumps(payload)
@@ -382,33 +377,20 @@ def company_backtest_neutral_comparison_plot_data(
     delta_key: str,
     delta_label: str,
 ) -> pd.DataFrame:
-    model_item = model.copy()
-    model_item["pool"] = model_key
-    model_item["pool_label"] = model_label
-    model_item["incremental_cumulative_bps"] = pd.NA
-    model_item = model_item[
-        [
-            "pool",
-            "pool_label",
-            "week_start",
-            "profit_cumulative_bps",
-            "incremental_cumulative_bps",
-        ]
+    columns = [
+        "pool",
+        "pool_label",
+        "week_start",
+        "profit_cumulative_bps",
+        "incremental_cumulative_bps",
     ]
-
-    neutral_item = neutral.copy()
-    neutral_item["pool"] = neutral_key
-    neutral_item["pool_label"] = neutral_label
-    neutral_item["incremental_cumulative_bps"] = pd.NA
-    neutral_item = neutral_item[
-        [
-            "pool",
-            "pool_label",
-            "week_start",
-            "profit_cumulative_bps",
-            "incremental_cumulative_bps",
-        ]
-    ]
+    comparison = []
+    for frame, key, label in (
+        (model, model_key, model_label),
+        (neutral, neutral_key, neutral_label),
+    ):
+        item = frame.assign(pool=key, pool_label=label, incremental_cumulative_bps=pd.NA)
+        comparison.append(item[columns])
 
     delta = company_backtest_relative_plot_data(
         model,
@@ -418,16 +400,8 @@ def company_backtest_neutral_comparison_plot_data(
     )
     delta["profit_cumulative_bps"] = pd.NA
     delta = delta.rename(columns={"alpha_cumulative_bps": "incremental_cumulative_bps"})
-    delta = delta[
-        [
-            "pool",
-            "pool_label",
-            "week_start",
-            "profit_cumulative_bps",
-            "incremental_cumulative_bps",
-        ]
-    ]
-    return pd.concat([model_item, neutral_item, delta], ignore_index=True)
+    comparison.append(delta[columns])
+    return pd.concat(comparison, ignore_index=True)
 
 
 def run_company_score_backtest(

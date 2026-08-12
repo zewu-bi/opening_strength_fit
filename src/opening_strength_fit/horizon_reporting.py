@@ -138,6 +138,7 @@ def summarize_horizon(
     )
     top_mean = float(top[label_col].mean()) if not top.empty else float("nan")
     bottom_mean = float(bottom[label_col].mean()) if not bottom.empty else float("nan")
+    top_sem = group_return_sem(top, label_col=label_col, group_cols=group_cols)
     return {
         "branch": branch,
         "horizon": horizon.name,
@@ -156,17 +157,8 @@ def summarize_horizon(
         else (1 if not top.empty else 0),
         "mean_alpha_return": top_mean,
         "mean_alpha_return_bps": top_mean * 10_000.0,
-        "mean_alpha_return_sem": group_return_sem(
-            top,
-            label_col=label_col,
-            group_cols=group_cols,
-        ),
-        "mean_alpha_return_bps_sem": group_return_sem(
-            top,
-            label_col=label_col,
-            group_cols=group_cols,
-        )
-        * 10_000.0,
+        "mean_alpha_return_sem": top_sem,
+        "mean_alpha_return_bps_sem": top_sem * 10_000.0,
         "median_alpha_return": float(top[label_col].median()) if not top.empty else float("nan"),
         "top_win_rate": float((top[label_col] > 0).mean()) if not top.empty else float("nan"),
         "all_mean_return": float(valid[label_col].mean()),
@@ -197,11 +189,10 @@ def build_summary_tables(
     for branch, branch_frame in predictions.groupby("branch", sort=False):
         for spec in horizons:
             label_col = label_column_name(spec.name)
-            if label_col not in branch_frame.columns:
-                missing.append(f"{branch}:{spec.name}")
-                continue
-            non_null = pd.to_numeric(branch_frame[label_col], errors="coerce").notna()
-            if not non_null.any():
+            if (
+                label_col not in branch_frame.columns
+                or not pd.to_numeric(branch_frame.get(label_col), errors="coerce").notna().any()
+            ):
                 missing.append(f"{branch}:{spec.name}")
                 continue
             summary_rows.append(
@@ -270,11 +261,17 @@ def add_decay_retention(summary: pd.DataFrame, horizons: list[HorizonLike]) -> p
     return out
 
 
-def plot_mean_alpha_return(
+def _plot_metric(
     summary: pd.DataFrame,
     output_path: Path,
     *,
     title: str,
+    value_column: str,
+    error_column: str = "",
+    value_format: str,
+    label_offset: float,
+    ylabel: str,
+    figsize: tuple[float, float],
 ) -> None:
     if summary.empty:
         return
@@ -287,40 +284,46 @@ def plot_mean_alpha_return(
     horizons = list(table["horizon"].drop_duplicates())
     branch_sort_cols = ["branch_order"] if "branch_order" in table else ["branch"]
     branches = list(table.sort_values(branch_sort_cols)["branch"].drop_duplicates())
-    x = np.arange(len(horizons))
+    x = np.arange(len(horizons), dtype="float64" if not error_column else None)
     width = 0.78 / max(1, len(branches))
 
-    fig, ax = plt.subplots(figsize=(9.2, 5.2))
+    fig, ax = plt.subplots(figsize=figsize)
     for idx, branch in enumerate(branches):
         branch_table = table.loc[table["branch"] == branch].set_index("horizon")
         values = [
-            branch_table.loc[h, "mean_alpha_return_bps"] if h in branch_table.index else np.nan
-            for h in horizons
-        ]
-        errors = [
-            branch_table.loc[h, "mean_alpha_return_bps_sem"] if h in branch_table.index else np.nan
+            branch_table.loc[h, value_column] if h in branch_table.index else np.nan
             for h in horizons
         ]
         offset = (idx - (len(branches) - 1) / 2.0) * width
+        error_options = (
+            {
+                "yerr": [
+                    branch_table.loc[h, error_column] if h in branch_table.index else np.nan
+                    for h in horizons
+                ],
+                "capsize": 3,
+            }
+            if error_column
+            else {}
+        )
         bars = ax.bar(
             x + offset,
             values,
             width,
-            yerr=errors,
-            capsize=3,
             label=branch,
             color=RUN_COLORS.get(branch, None),
             alpha=0.9,
+            **error_options,
         )
         for bar, value in zip(bars, values, strict=True):
-            if pd.isna(value):
+            if pd.isna(value) if error_column else not np.isfinite(value):
                 continue
             va = "bottom" if value >= 0 else "top"
-            y = value + (1.2 if value >= 0 else -1.2)
+            y = value + (label_offset if value >= 0 else -label_offset)
             ax.text(
                 bar.get_x() + bar.get_width() / 2,
                 y,
-                f"{value:.1f}",
+                format(value, value_format),
                 ha="center",
                 va=va,
                 fontsize=8,
@@ -328,7 +331,7 @@ def plot_mean_alpha_return(
     ax.axhline(0.0, color="#666666", linewidth=0.9)
     ax.set_xticks(x)
     ax.set_xticklabels([h.replace("_", "\n") for h in horizons])
-    ax.set_ylabel("Mean alpha return (bps)")
+    ax.set_ylabel(ylabel)
     ax.set_title(title)
     ax.grid(axis="y", alpha=0.25)
     ax.legend(frameon=False)
@@ -336,60 +339,36 @@ def plot_mean_alpha_return(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=180)
     plt.close(fig)
+
+
+def plot_mean_alpha_return(
+    summary: pd.DataFrame,
+    output_path: Path,
+    *,
+    title: str,
+) -> None:
+    _plot_metric(
+        summary,
+        output_path,
+        title=title,
+        value_column="mean_alpha_return_bps",
+        error_column="mean_alpha_return_bps_sem",
+        value_format=".1f",
+        label_offset=1.2,
+        ylabel="Mean alpha return (bps)",
+        figsize=(9.2, 5.2),
+    )
 
 
 def plot_rank_ic(summary: pd.DataFrame, output_path: Path, *, title: str) -> None:
-    if summary.empty or "group_rank_ic_mean" not in summary:
-        return
-    sort_cols = (
-        ["horizon_order", "branch_order"]
-        if "branch_order" in summary
-        else ["horizon_order", "branch"]
-    )
-    table = summary.sort_values(sort_cols)
-    horizons = list(table["horizon"].drop_duplicates())
-    branch_sort_cols = ["branch_order"] if "branch_order" in table else ["branch"]
-    branches = list(table.sort_values(branch_sort_cols)["branch"].drop_duplicates())
-    x = np.arange(len(horizons), dtype="float64")
-    width = 0.78 / max(1, len(branches))
-
-    fig, ax = plt.subplots(figsize=(11.0, 5.4))
-    for idx, branch in enumerate(branches):
-        branch_table = table.loc[table["branch"] == branch].set_index("horizon")
-        values = [
-            float(branch_table.loc[horizon, "group_rank_ic_mean"])
-            if horizon in branch_table.index
-            else np.nan
-            for horizon in horizons
-        ]
-        offset = (idx - (len(branches) - 1) / 2.0) * width
-        bars = ax.bar(
-            x + offset,
-            values,
-            width=width,
-            label=branch,
-            color=RUN_COLORS.get(branch, None),
-            alpha=0.9,
+    if "group_rank_ic_mean" in summary:
+        _plot_metric(
+            summary,
+            output_path,
+            title=title,
+            value_column="group_rank_ic_mean",
+            value_format=".3f",
+            label_offset=0.004,
+            ylabel="Group rank IC mean",
+            figsize=(11.0, 5.4),
         )
-        for bar, value in zip(bars, values, strict=True):
-            if not np.isfinite(value):
-                continue
-            ax.text(
-                bar.get_x() + bar.get_width() / 2,
-                value + (0.004 if value >= 0 else -0.004),
-                f"{value:.3f}",
-                ha="center",
-                va="bottom" if value >= 0 else "top",
-                fontsize=8,
-            )
-    ax.axhline(0.0, color="#666666", linewidth=0.9)
-    ax.set_xticks(x)
-    ax.set_xticklabels([horizon.replace("_", "\n") for horizon in horizons])
-    ax.set_ylabel("Group rank IC mean")
-    ax.set_title(title)
-    ax.grid(axis="y", alpha=0.25)
-    ax.legend(frameon=False)
-    fig.tight_layout()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=180)
-    plt.close(fig)

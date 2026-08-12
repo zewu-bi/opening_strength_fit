@@ -3,58 +3,19 @@ import os
 import textwrap
 from pathlib import Path
 
+from opening_strength_fit import k8s_rendering_support as _render_support
 from opening_strength_fit.commands.k8s_analysis_rendering import render_pool_internal_analysis_job
 from opening_strength_fit.config import config_value as get
 from opening_strength_fit.config import load_toml, run_id, slug
-from opening_strength_fit.k8s import KUBERNETES_NAME_LIMIT
-from opening_strength_fit.k8s_rendering_support import k8s_job_name as _k8s_job_name
-from opening_strength_fit.k8s_rendering_support import (
-    training_config_map_mount_yaml as _training_config_map_mount_yaml,
+from opening_strength_fit.k8s import (
+    KUBERNETES_NAME_LIMIT,
+    render_config_for_mode,
+    rendered_job_image,
 )
-from opening_strength_fit.k8s_rendering_support import (
-    training_config_map_volume_yaml as _training_config_map_volume_yaml,
-)
-from opening_strength_fit.k8s_training_support import (
-    gpu_opencl_bootstrap_yaml as _gpu_opencl_bootstrap_yaml,
-)
-from opening_strength_fit.k8s_training_support import (
-    gpu_resource_line as _gpu_resource_line,
-)
-from opening_strength_fit.k8s_training_support import (
-    k8s_env_from as _k8s_env_from,
-)
-from opening_strength_fit.k8s_training_support import (
-    month_windows_from_config as _month_windows_from_config,
-)
-from opening_strength_fit.k8s_training_support import (
-    rolling_completion_files as _rolling_completion_files,
-)
-from opening_strength_fit.k8s_training_support import (
-    scheduler_yaml as _scheduler_yaml,
-)
-from opening_strength_fit.k8s_training_support import (
-    shard_job_mode as _shard_job_mode,
-)
-from opening_strength_fit.k8s_training_support import (
-    shard_parallelism as _shard_parallelism,
-)
-from opening_strength_fit.k8s_training_support import (
-    shell_file_check as _shell_file_check,
-)
-from opening_strength_fit.k8s_training_support import (
-    training_command_yaml as _training_command_yaml,
-)
-from opening_strength_fit.k8s_training_support import (
-    wait_for_paths_script as _wait_for_paths_script,
-)
-from opening_strength_fit.k8s_training_support import (
-    wait_for_paths_yaml as _wait_for_paths_yaml,
-)
-from opening_strength_fit.k8s_training_support import (
-    window_mode as _window_mode,
-)
-from opening_strength_fit.k8s_training_support import (
-    year_from_config as _year_from_config,
+from opening_strength_fit.k8s_builder_rendering import (
+    render_indexed_builder_job,
+    render_matrix_training_jobs,
+    render_top1000_job,
 )
 from opening_strength_fit.pvc_layout import (
     output_layout,
@@ -62,6 +23,9 @@ from opening_strength_fit.pvc_layout import (
     run_output_dir,
     yearly_shard_dir_name,
 )
+
+_k8s_job_name = _render_support.k8s_job_name
+_training_support = _render_support
 
 DEFAULT_IMAGE_ENV = "OPENING_STRENGTH_IMAGE"
 _RUN_KIND_COMMANDS = {
@@ -87,12 +51,13 @@ _RUN_KIND_COMMANDS = {
 }
 
 
-def load_config(path: Path) -> dict:
-    return load_toml(path)
-
-
-def resolve_render_image(image: str, *, allow_mutable: bool = False) -> str:
-    resolved = (image or os.environ.get(DEFAULT_IMAGE_ENV, "")).strip()
+def resolve_render_image(
+    image: str,
+    *,
+    fallback: object = "",
+    allow_mutable: bool = False,
+) -> str:
+    resolved = (image or os.environ.get(DEFAULT_IMAGE_ENV, "") or str(fallback or "")).strip()
     if not resolved:
         raise SystemExit(
             f"missing container image: pass --image or set {DEFAULT_IMAGE_ENV} "
@@ -112,122 +77,77 @@ def training_command(config: dict) -> str:
     if run_kind not in {"experiment", "exploration"}:
         raise SystemExit(f"Unsupported run.kind for k8s rendering: {run_kind}")
     model_name = str(get(config, "model", "name", "ridge")).strip().lower()
-    if model_name in {
-        "ridge",
-        "gbm",
-        "hist_gbm",
-        "hist_gradient_boosting",
-        "lightgbm",
-        "lgbm",
-        "torch_mlp",
-        "mlp",
-        "nn",
-        "ensemble",
-        "clock_segment_lightgbm",
-        "clock_segment_lgbm",
-        "segmented_lightgbm",
-    }:
+    if model_name in set(
+        "ridge gbm hist_gbm hist_gradient_boosting lightgbm lgbm torch_mlp mlp nn ensemble "
+        "clock_segment_lightgbm clock_segment_lgbm segmented_lightgbm".split()
+    ):
         return "osf-train"
     raise SystemExit(f"Unsupported model.name for k8s rendering: {model_name}")
+
+
+def _command_config_path(config_path: Path, config: dict) -> Path:
+    return Path(str(get(config, "k8s", "command_config_path", config_path.as_posix())))
+
+
+def _shell_script(*parts: str, indent: int) -> str:
+    return textwrap.indent("\n".join(part.rstrip() for part in parts), " " * indent)
 
 
 def render_training_job(config_path: Path, config: dict, image: str) -> str:
     run_id_value = run_id(config, config_path)
     job_name = get(config, "k8s", "job_name", f"opening-strength-{slug(run_id_value)}")
-    namespace = get(config, "k8s", "namespace", "bizewu")
-    pull_secret = get(config, "k8s", "image_pull_secret", "highfort")
-    pvc = get(config, "k8s", "pvc", "bizewu-private-data")
     mount_path = get(config, "k8s", "mount_path", "/mnt/output")
     output_dir = run_output_dir(config, run_id_value, mount_path=str(mount_path))
     resources = config.get("k8s", {}).get("resources", {})
-    cpu_request = resources.get("cpu_request", "4")
-    cpu_limit = resources.get("cpu_limit", "8")
-    memory_request = resources.get("memory_request", "16Gi")
-    memory_limit = resources.get("memory_limit", "32Gi")
-    gpu_resource_line = _gpu_resource_line(resources, indent=22)
-    scheduler_yaml = _scheduler_yaml(config, resources, indent=14)
+    scheduler_yaml = _training_support.scheduler_yaml(config, resources, indent=6)
     command = training_command(config)
-    env_from = _k8s_env_from(config, indent=18)
-    command_yaml = _training_command_yaml(
+    env_from = _training_support.k8s_env_from(config, indent=10)
+    command_yaml = _training_support.training_command_yaml(
         command=command,
-        config_path=config_path,
+        config_path=_command_config_path(config_path, config),
         output_dir=output_dir,
         resources=resources,
-        wait_for_paths=_wait_for_paths_script(config),
-        indent=18,
+        wait_for_paths=_training_support.wait_for_paths_yaml(config, indent=0),
+        indent=10,
     )
-
-    return textwrap.dedent(
-        f"""\
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          name: {job_name}
-          namespace: {namespace}
-        spec:
-          backoffLimit: 0
-          ttlSecondsAfterFinished: 86400
-          template:
-            spec:
-              restartPolicy: Never
-              imagePullSecrets:
-                - name: {pull_secret}
-              volumes:
-                - name: opening-strength-output
-                  persistentVolumeClaim:
-                    claimName: {pvc}
-{scheduler_yaml.rstrip()}
-              containers:
-                - name: opening-strength-fit
-                  image: {image}
-                  imagePullPolicy: Always
-{env_from}                  workingDir: /app/opening_strength_fit
-{command_yaml.rstrip()}
-                  volumeMounts:
-                    - name: opening-strength-output
-                      mountPath: {mount_path}
-                  resources:
-                    requests:
-                      cpu: "{cpu_request}"
-                      memory: {memory_request}
-{gpu_resource_line.rstrip()}
-                    limits:
-                      cpu: "{cpu_limit}"
-                      memory: {memory_limit}
-{gpu_resource_line.rstrip()}
-        """
+    return _render_support.job_manifest_yaml(
+        _render_support.configured_job_pod_header_yaml(config, job_name),
+        scheduler_yaml or "\n",
+        image,
+        "",
+        mount_path,
+        _training_support.training_resources_yaml(resources, indent=10),
+        env_from=env_from,
+        env_before_workdir=True,
+        config_volume=_render_support.training_config_map_volume_yaml(config, indent=8),
+        extra_mounts=_render_support.training_config_map_mount_yaml(config, indent=12),
+        command_yaml=command_yaml,
     )
 
 
 def render_sharded_training_job(config_path: Path, config: dict, image: str) -> str:
     run_id_value = run_id(config, config_path)
+    command_config_path = _command_config_path(config_path, config)
     explicit_job_name = str(get(config, "k8s", "job_name", "") or "").strip()
     job_name = explicit_job_name or _k8s_job_name("opening-strength", run_id_value, "sharded")
-    namespace = get(config, "k8s", "namespace", "bizewu")
-    pull_secret = get(config, "k8s", "image_pull_secret", "highfort")
-    pvc = get(config, "k8s", "pvc", "bizewu-private-data")
     mount_path = get(config, "k8s", "mount_path", "/mnt/output")
     layout = output_layout(config)
     output_dir = run_output_dir(config, run_id_value, mount_path=str(mount_path))
     resources = config.get("k8s", {}).get("resources", {})
-    cpu_request = resources.get("cpu_request", "4")
-    cpu_limit = resources.get("cpu_limit", "8")
-    memory_request = resources.get("memory_request", "16Gi")
-    memory_limit = resources.get("memory_limit", "32Gi")
-    gpu_resource_line = _gpu_resource_line(resources, indent=26)
-    scheduler_yaml = _scheduler_yaml(config, resources, indent=18)
     command = training_command(config)
-    env_from = _k8s_env_from(config, indent=18)
-    opencl_bootstrap = _gpu_opencl_bootstrap_yaml(resources, indent=26)
-    wait_for_paths = _wait_for_paths_yaml(config, indent=26)
-    config_map_volume = _training_config_map_volume_yaml(config, indent=20)
-    config_map_mount = _training_config_map_mount_yaml(config, indent=24)
-    if _window_mode(config) == "rolling_monthly":
-        env_from = _k8s_env_from(config, indent=22)
-        month_windows = _month_windows_from_config(config)
+    env_from = _training_support.k8s_env_from(config, indent=18)
+    if _training_support.window_mode(config) == "rolling_monthly":
+        scheduler_yaml = _training_support.scheduler_yaml(config, resources, indent=6)
+        env_from = _training_support.k8s_env_from(config, indent=10)
+        opencl_bootstrap = _training_support.gpu_opencl_bootstrap_yaml(resources, indent=0)
+        wait_for_paths = _training_support.wait_for_paths_yaml(config, indent=0)
+        config_map_volume = _render_support.training_config_map_volume_yaml(config, indent=8)
+        config_map_mount = _render_support.training_config_map_mount_yaml(config, indent=12)
+        resources_yaml = _training_support.training_resources_yaml(resources, indent=10)
+        month_windows = _training_support.month_windows_from_config(config)
         test_starts = " ".join(start for start, _ in month_windows)
         test_ends = " ".join(end for _, end in month_windows)
-        shard_job_mode = _shard_job_mode(config)
+        shard_job_mode = _training_support.shard_job_mode(config)
         index_suffix_chars = (2 if shard_job_mode == "separate" else 1) + len(
             str(len(month_windows) - 1)
         )
@@ -238,27 +158,38 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
                 "sharded",
                 max_length=KUBERNETES_NAME_LIMIT - index_suffix_chars,
             )
-        shard_parallelism = _shard_parallelism(config, resources)
+        shard_parallelism = _training_support.shard_parallelism(config, resources)
         train_months = int(get(config, "window", "train_months", 12))
         test_months = int(get(config, "window", "test_months", 1) or 1)
         test_stride_months = int(
             get(config, "window", "test_stride_months", test_months) or test_months
         )
-        completion_files = _rolling_completion_files(config, command)
-        completion_check = _shell_file_check(completion_files)
+        completion_files = _training_support.rolling_completion_files(config, command)
+        completion_check = _training_support.shell_file_check(completion_files)
         completion_label = ", ".join(completion_files)
         rolling_dir_expression = rolling_shard_dir_name("${TEST_START}", "${TEST_END}", layout)
+        if bool(get(config, "k8s", "replace_existing_shard_output", False)):
+            existing_output_action = textwrap.dedent(
+                """\
+                if [ -d "${OUT}" ]; then
+                  echo "removing stale shard output ${OUT}"
+                  rm -rf "${OUT}"
+                fi
+                """
+            )
+        else:
+            existing_output_action = textwrap.dedent(
+                f"""\
+                if {completion_check}; then
+                  echo "test window ${{TEST_START}}..${{TEST_END}}: required outputs already exist ({completion_label}), skipping ${{OUT}}"
+                  exit 0
+                fi
+                """
+            )
         per_index_backoff = get(config, "k8s", "backoff_limit_per_index", None)
         backoff_field = "backoffLimitPerIndex" if per_index_backoff is not None else "backoffLimit"
         backoff_value = int(per_index_backoff) if per_index_backoff is not None else 0
         if shard_job_mode == "separate":
-            config_map_volume = _training_config_map_volume_yaml(config, indent=32)
-            scheduler_yaml = _scheduler_yaml(config, resources, indent=30)
-            env_from = _k8s_env_from(config, indent=34)
-            opencl_bootstrap = _gpu_opencl_bootstrap_yaml(resources, indent=38)
-            wait_for_paths = _wait_for_paths_yaml(config, indent=38)
-            config_map_mount = _training_config_map_mount_yaml(config, indent=36)
-            gpu_resource_line = _gpu_resource_line(resources, indent=38)
             manifests: list[str] = []
             for index, (test_start, test_end) in enumerate(month_windows):
                 suffix = f"-s{index}"
@@ -269,102 +200,74 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
                     )
                 shard_job_name = f"{job_name}{suffix}"
                 rolling_dir = rolling_shard_dir_name(test_start, test_end, layout)
-                manifests.append(
+                script = _shell_script(
+                    "set -euo pipefail",
+                    opencl_bootstrap,
+                    wait_for_paths,
                     textwrap.dedent(
                         f"""\
-                        apiVersion: batch/v1
-                        kind: Job
-                        metadata:
-                          name: {shard_job_name}
-                          namespace: {namespace}
-                        spec:
-                          backoffLimit: 0
-                          ttlSecondsAfterFinished: 86400
-                          template:
-                            spec:
-                              restartPolicy: Never
-                              imagePullSecrets:
-                                - name: {pull_secret}
-                              volumes:
-                                - name: opening-strength-output
-                                  persistentVolumeClaim:
-                                    claimName: {pvc}
-{config_map_volume.rstrip()}
-{scheduler_yaml.rstrip()}
-                              containers:
-                                - name: opening-strength-fit
-                                  image: {image}
-                                  imagePullPolicy: Always
-{env_from}                                  workingDir: /app/opening_strength_fit
-                                  command:
-                                    - /bin/bash
-                                    - -lc
-                                    - |
-                                      set -euo pipefail
-{opencl_bootstrap.rstrip()}
-{wait_for_paths.rstrip()}
-                                      ROOT={output_dir}
-                                      mkdir -p "${{ROOT}}"
-                                      TEST_START={test_start}
-                                      TEST_END={test_end}
-                                      OUT="${{ROOT}}/{rolling_dir}"
-                                      if {completion_check}; then
-                                        echo "test window ${{TEST_START}}..${{TEST_END}}: required outputs already exist ({completion_label}), skipping ${{OUT}}"
-                                        exit 0
-                                      fi
+                        ROOT={output_dir}
+                        mkdir -p "${{ROOT}}"
+                        TEST_START={test_start}
+                        TEST_END={test_end}
+                        OUT="${{ROOT}}/{rolling_dir}"
+                        if {completion_check}; then
+                          echo "test window ${{TEST_START}}..${{TEST_END}}: required outputs already exist ({completion_label}), skipping ${{OUT}}"
+                          exit 0
+                        fi
 
-                                      echo
-                                      echo "running {run_id_value} shard test=${{TEST_START}}..${{TEST_END}} index={index}"
-                                      echo "output_dir=${{OUT}}"
+                        echo
+                        echo "running {run_id_value} shard test=${{TEST_START}}..${{TEST_END}} index={index}"
+                        echo "output_dir=${{OUT}}"
 
-                                      {command} \\
-                                        --config {config_path.as_posix()} \\
-                                        --rolling-monthly \\
-                                        --train-months {train_months} \\
-                                        --test-months {test_months} \\
-                                        --test-stride-months {test_stride_months} \\
-                                        --test-start-month "${{TEST_START}}" \\
-                                        --test-end-month "${{TEST_END}}" \\
-                                        --output-dir "${{OUT}}"
-                                  volumeMounts:
-                                    - name: opening-strength-output
-                                      mountPath: {mount_path}
-{config_map_mount.rstrip()}
-                                  resources:
-                                    requests:
-                                      cpu: "{cpu_request}"
-                                      memory: {memory_request}
-{gpu_resource_line.rstrip()}
-                                    limits:
-                                      cpu: "{cpu_limit}"
-                                      memory: {memory_limit}
-{gpu_resource_line.rstrip()}
+                        {command} \\
+                          --config {command_config_path.as_posix()} \\
+                          --rolling-monthly \\
+                          --train-months {train_months} \\
+                          --test-months {test_months} \\
+                          --test-stride-months {test_stride_months} \\
+                          --test-start-month "${{TEST_START}}" \\
+                          --test-end-month "${{TEST_END}}" \\
+                        --output-dir "${{OUT}}"
                         """
+                    ),
+                    indent=14,
+                )
+                manifests.append(
+                    _render_support.job_manifest_yaml(
+                        _render_support.configured_job_pod_header_yaml(config, shard_job_name),
+                        scheduler_yaml,
+                        image,
+                        script,
+                        mount_path,
+                        resources_yaml,
+                        env_from=env_from,
+                        config_volume=config_map_volume,
+                        extra_mounts=config_map_mount,
                     ).rstrip()
                 )
             return "\n---\n".join(manifests) + "\n"
+        scheduler_yaml = _training_support.scheduler_yaml(config, resources, indent=18)
+        env_from = _training_support.k8s_env_from(config, indent=22)
+        opencl_bootstrap = _training_support.gpu_opencl_bootstrap_yaml(resources, indent=26)
+        wait_for_paths = _training_support.wait_for_paths_yaml(config, indent=26)
+        config_map_volume = _render_support.training_config_map_volume_yaml(config, indent=20)
+        config_map_mount = _render_support.training_config_map_mount_yaml(config, indent=24)
+        resources_yaml = _training_support.training_resources_yaml(resources, indent=22)
+        job_header = _render_support.configured_job_pod_header_yaml(
+            config,
+            job_name,
+            spec_lines=(
+                f"{backoff_field}: {backoff_value}",
+                "completionMode: Indexed",
+                f"completions: {len(month_windows)}",
+                f"parallelism: {shard_parallelism}",
+            ),
+            indent=12,
+        )
         return textwrap.dedent(
             f"""\
-            apiVersion: batch/v1
-            kind: Job
-            metadata:
-              name: {job_name}
-              namespace: {namespace}
-            spec:
-              {backoff_field}: {backoff_value}
-              completionMode: Indexed
-              completions: {len(month_windows)}
-              parallelism: {shard_parallelism}
-              ttlSecondsAfterFinished: 86400
-              template:
-                spec:
-                  restartPolicy: Never
-                  imagePullSecrets:
-                    - name: {pull_secret}
-                  volumes:
-                    - name: opening-strength-output
-                      persistentVolumeClaim:
-                        claimName: {pvc}
+{job_header.rstrip()}
 {config_map_volume.rstrip()}
 {scheduler_yaml.rstrip()}
                   containers:
@@ -401,17 +304,14 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
                           TEST_START="${{TEST_STARTS[${{INDEX}}]}}"
                           TEST_END="${{TEST_ENDS[${{INDEX}}]}}"
                           OUT="${{ROOT}}/{rolling_dir_expression}"
-                          if {completion_check}; then
-                            echo "test window ${{TEST_START}}..${{TEST_END}}: required outputs already exist ({completion_label}), skipping ${{OUT}}"
-                            exit 0
-                          fi
+{textwrap.indent(existing_output_action, " " * 26).rstrip()}
 
                           echo
                           echo "running {run_id_value} shard test=${{TEST_START}}..${{TEST_END}} index=${{INDEX}}"
                           echo "output_dir=${{OUT}}"
 
                           {command} \\
-                            --config {config_path.as_posix()} \\
+                            --config {command_config_path.as_posix()} \\
                             --rolling-monthly \\
                             --train-months {train_months} \\
                             --test-months {test_months} \\
@@ -420,45 +320,22 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
                             --test-end-month "${{TEST_END}}" \\
                             --output-dir "${{OUT}}"
                       volumeMounts:
-                        - name: opening-strength-output
-                          mountPath: {mount_path}
+{_render_support.output_volume_mount_yaml(mount_path, 24).rstrip()}
 {config_map_mount.rstrip()}
-                      resources:
-                        requests:
-                          cpu: "{cpu_request}"
-                          memory: {memory_request}
-{gpu_resource_line.rstrip()}
-                        limits:
-                          cpu: "{cpu_limit}"
-                          memory: {memory_limit}
-{gpu_resource_line.rstrip()}
+{resources_yaml.rstrip()}
             """
         )
-    test_start_year = _year_from_config(config, "test_start_date")
-    test_end_year = _year_from_config(config, "test_end_date")
+    test_start_year = _training_support.year_from_config(config, "test_start_date")
+    test_end_year = _training_support.year_from_config(config, "test_end_date")
     years = " ".join(str(year) for year in range(test_start_year, test_end_year + 1))
     yearly_dir_expression = yearly_shard_dir_name("${YEAR}", layout)
+    job_header = _render_support.configured_job_pod_header_yaml(config, job_name, indent=8)
+    resources_yaml = _training_support.training_resources_yaml(resources, indent=18)
 
     return textwrap.dedent(
         f"""\
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          name: {job_name}
-          namespace: {namespace}
-        spec:
-          backoffLimit: 0
-          ttlSecondsAfterFinished: 86400
-          template:
-            spec:
-              restartPolicy: Never
-              imagePullSecrets:
-                - name: {pull_secret}
-              volumes:
-                - name: opening-strength-output
-                  persistentVolumeClaim:
-                    claimName: {pvc}
-{_scheduler_yaml(config, resources, indent=14).rstrip()}
+{job_header.rstrip()}
+{_training_support.scheduler_yaml(config, resources, indent=14).rstrip()}
               containers:
                 - name: opening-strength-fit
                   image: {image}
@@ -469,7 +346,7 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
                     - -lc
                     - |
                       set -euo pipefail
-{_gpu_opencl_bootstrap_yaml(resources, indent=22).rstrip()}
+{_training_support.gpu_opencl_bootstrap_yaml(resources, indent=22).rstrip()}
                       ROOT={output_dir}
                       mkdir -p "${{ROOT}}"
 
@@ -485,25 +362,26 @@ def render_sharded_training_job(config_path: Path, config: dict, image: str) -> 
                         echo "output_dir=${{OUT}}"
 
                         {command} \\
-                          --config {config_path.as_posix()} \\
+                          --config {command_config_path.as_posix()} \\
                           --test-start-date "${{YEAR}}-01-01" \\
                           --test-end-date "${{YEAR}}-12-31" \\
                           --output-dir "${{OUT}}"
                       done
                   volumeMounts:
-                    - name: opening-strength-output
-                      mountPath: {mount_path}
-                  resources:
-                    requests:
-                      cpu: "{cpu_request}"
-                      memory: {memory_request}
-{_gpu_resource_line(resources, indent=22).rstrip()}
-                    limits:
-                      cpu: "{cpu_limit}"
-                      memory: {memory_limit}
-{_gpu_resource_line(resources, indent=22).rstrip()}
+{_render_support.output_volume_mount_yaml(mount_path, 20).rstrip()}
+{resources_yaml.rstrip()}
         """
     )
+
+
+JOB_RENDERERS = {
+    "analysis": render_pool_internal_analysis_job,
+    "indexed": render_indexed_builder_job,
+    "matrix": render_matrix_training_jobs,
+    "sharded": render_sharded_training_job,
+    "top1000": render_top1000_job,
+    "training": render_training_job,
+}
 
 
 def main() -> None:
@@ -524,50 +402,45 @@ def main() -> None:
         default="experiments/jobs",
         help="Directory for rendered Job manifests.",
     )
-    parser.add_argument(
-        "--sharded",
-        action="store_true",
-        help="Render a sequential per-year or per-month training job.",
-    )
-    parser.add_argument(
-        "--analysis",
-        action="store_true",
-        help="Render a cluster-side pool-internal analysis job for the configured run.",
-    )
+    mode = parser.add_mutually_exclusive_group()
+    mode_help = {
+        "sharded": "Render a sequential per-year or per-month training job.",
+        "indexed": "Render an Indexed annual data-builder job.",
+        "matrix": "Render one Indexed training Job per configured matrix case.",
+        "top1000": "Render a legacy Top1000 diagnostic job.",
+        "analysis": "Render a cluster-side pool-internal analysis job for the configured run.",
+    }
+    for name, help_text in mode_help.items():
+        mode.add_argument(f"--{name}", action="store_true", help=help_text)
     args = parser.parse_args()
 
     config_path = Path(args.config)
-    config = load_config(config_path)
-    image = resolve_render_image(args.image, allow_mutable=args.allow_mutable_image)
+    config = load_toml(config_path)
+    render_mode = next(
+        (name for name in mode_help if getattr(args, name)),
+        "training",
+    )
+    image = resolve_render_image(
+        args.image,
+        fallback=rendered_job_image(config, render_mode),
+        allow_mutable=args.allow_mutable_image,
+    )
+    config = render_config_for_mode(config, render_mode)
     run_id_value = run_id(config, config_path)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    if args.analysis:
-        analysis_path = output_dir / f"{run_id_value}_pool_internal_analysis_job.yaml"
-        analysis_path.write_text(
-            render_pool_internal_analysis_job(config_path, config, image).rstrip() + "\n",
-            encoding="utf-8",
-        )
-        print("rendered_k8s_jobs:")
-        print(f"  analysis: {analysis_path}")
-        return
-
-    suffix = "_sharded" if args.sharded else ""
-    training_path = output_dir / f"{run_id_value}{suffix}_job.yaml"
-    if args.sharded:
-        training_path.write_text(
-            render_sharded_training_job(config_path, config, image).rstrip() + "\n",
-            encoding="utf-8",
-        )
-    else:
-        training_path.write_text(
-            render_training_job(config_path, config, image).rstrip() + "\n",
-            encoding="utf-8",
-        )
-
+    suffix = {
+        "analysis": "_pool_internal_analysis",
+        "matrix": "_matrix",
+        "sharded": "_sharded",
+    }.get(render_mode, "")
+    output_path = output_dir / f"{run_id_value}{suffix}_job.yaml"
+    output_path.write_text(
+        JOB_RENDERERS[render_mode](config_path, config, image).rstrip() + "\n",
+        encoding="utf-8",
+    )
     print("rendered_k8s_jobs:")
-    print(f"  training: {training_path}")
+    print(f"  {'analysis' if args.analysis else 'training'}: {output_path}")
 
 
 if __name__ == "__main__":

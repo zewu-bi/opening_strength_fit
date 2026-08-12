@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from opening_strength_fit.clickhouse_ticks import TICK_FIELD_DESC, normalize_clickhouse_ticks
+from opening_strength_fit.clickhouse_ticks import TICK_SOURCE_COLUMNS, normalize_clickhouse_ticks
 from opening_strength_fit.config import (
     config_bool,
     config_float,
@@ -20,7 +20,7 @@ from opening_strength_fit.sampling import sample_labeled_frame
 from opening_strength_fit.schema import normalize_date_series
 from opening_strength_fit.training_labeled import _apply_feature_transforms_from_config
 
-RAW_FEATURE_TICK_COLUMNS = tuple(column for column in TICK_FIELD_DESC if column != "LocalTimeStamp")
+RAW_FEATURE_TICK_COLUMNS = TICK_SOURCE_COLUMNS
 
 
 def decode_clickhouse_text(values: pd.Series) -> pd.Series:

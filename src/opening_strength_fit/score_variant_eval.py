@@ -4,10 +4,43 @@ import numpy as np
 import pandas as pd
 
 from opening_strength_fit.analysis import (
+    mean_aggregations,
     positive_count,
     positive_rate,
-    selection_return_stats,
+    selection_group_metrics,
 )
+
+GAP_P80_VARIANTS = tuple(
+    {
+        "variant": f"gap_penalty_{int(penalty * 100):03d}_p80",
+        "risk_model": "gap",
+        "penalty": penalty,
+        "candidate_alpha_rank_min": 0.80,
+    }
+    for penalty in (0.30, 0.35)
+)
+
+
+def configured_score_variants(
+    config: dict,
+    section: str,
+    defaults: tuple[dict[str, object], ...],
+    *,
+    default_risk_model: str = "",
+) -> list[dict[str, object]]:
+    configured = config.get(section, {}).get("variants", [])
+    if not configured:
+        return [dict(item) for item in defaults]
+    return [
+        {
+            "variant": str(item.get("variant", "")).strip(),
+            "risk_model": str(item.get("risk_model", default_risk_model) or "").strip().lower(),
+            "penalty": float(item.get("penalty", 0.0) or 0.0),
+            "candidate_alpha_rank_min": float(item.get("candidate_alpha_rank_min", 0.0) or 0.0),
+        }
+        for item in configured
+        if str(item.get("variant", "")).strip()
+    ]
 
 
 def score_variants(
@@ -51,18 +84,6 @@ def score_variants(
                 selected = group.sort_values("final_score", ascending=False).head(top_n)
             else:
                 selected = group
-            short_stats = selection_return_stats(
-                full_group,
-                selected,
-                label_col="label",
-                prefix="short",
-            )
-            next_stats = selection_return_stats(
-                full_group,
-                selected,
-                label_col="alpha_return_next_close",
-                prefix="next",
-            )
             rows.append(
                 {
                     "test_month": month,
@@ -70,23 +91,26 @@ def score_variants(
                     "risk_model": risk_model,
                     "penalty": penalty,
                     "candidate_alpha_rank_min": candidate_min,
-                    "date": str(date),
-                    "decision_target_timestamp": pd.Timestamp(timestamp),
-                    "clock": pd.Timestamp(timestamp).strftime("%H:%M"),
-                    "rows": int(len(full_group)),
-                    "alpha_candidate_rows": int(len(alpha_candidates)),
-                    "stock_pool_candidate_rows": stock_pool_candidate_rows,
-                    "candidate_rows": int(len(group)),
-                    "selected_rows": int(len(selected)),
-                    "selected_stock_pool_rows": (
-                        int(selected[selection_mask_col].astype(bool).sum())
-                        if selection_mask_col and len(selected)
-                        else float("nan")
+                    **selection_group_metrics(
+                        full_group,
+                        selected,
+                        date=date,
+                        timestamp=timestamp,
+                        candidate_counts={
+                            "alpha_candidate_rows": int(len(alpha_candidates)),
+                            "stock_pool_candidate_rows": stock_pool_candidate_rows,
+                            "candidate_rows": int(len(group)),
+                        },
+                        selection_counts={
+                            "selected_stock_pool_rows": (
+                                int(selected[selection_mask_col].astype(bool).sum())
+                                if selection_mask_col and len(selected)
+                                else float("nan")
+                            )
+                        },
+                        include_all_mean=False,
+                        include_win_rate=False,
                     ),
-                    "short_top_mean_bps": short_stats["short_top_mean_bps"],
-                    "short_top_excess_bps": short_stats["short_top_excess_bps"],
-                    "next_top_mean_bps": next_stats["next_top_mean_bps"],
-                    "next_top_excess_bps": next_stats["next_top_excess_bps"],
                     "selected_gap_risk_rank": (
                         float(selected["gap_risk_rank"].mean())
                         if len(selected) and "gap_risk_rank" in selected
@@ -118,18 +142,13 @@ def summarize_group_metrics(group_metrics: pd.DataFrame) -> tuple[pd.DataFrame, 
         group_metrics.groupby(["test_month", *keys], as_index=False)
         .agg(
             groups=("date", "size"),
-            alpha_candidate_rows=("alpha_candidate_rows", "mean"),
-            stock_pool_candidate_rows=("stock_pool_candidate_rows", "mean"),
-            candidate_rows=("candidate_rows", "mean"),
-            selected_rows=("selected_rows", "mean"),
-            selected_stock_pool_rows=("selected_stock_pool_rows", "mean"),
-            short_top_mean_bps=("short_top_mean_bps", "mean"),
-            short_top_excess_bps=("short_top_excess_bps", "mean"),
-            next_top_mean_bps=("next_top_mean_bps", "mean"),
-            next_top_excess_bps=("next_top_excess_bps", "mean"),
+            **mean_aggregations(
+                *"alpha_candidate_rows stock_pool_candidate_rows candidate_rows selected_rows "
+                "selected_stock_pool_rows short_top_mean_bps short_top_excess_bps "
+                "next_top_mean_bps next_top_excess_bps".split()
+            ),
             next_excess_positive_rate=("next_top_excess_bps", positive_rate),
-            selected_gap_risk_rank=("selected_gap_risk_rank", "mean"),
-            selected_binary_risk_rank=("selected_binary_risk_rank", "mean"),
+            **mean_aggregations("selected_gap_risk_rank", "selected_binary_risk_rank"),
         )
         .sort_values(["test_month", "next_top_excess_bps"], ascending=[True, False])
     )
@@ -151,18 +170,13 @@ def summarize_group_metrics(group_metrics: pd.DataFrame) -> tuple[pd.DataFrame, 
         .agg(
             groups=("date", "size"),
             months=("test_month", "nunique"),
-            alpha_candidate_rows=("alpha_candidate_rows", "mean"),
-            stock_pool_candidate_rows=("stock_pool_candidate_rows", "mean"),
-            candidate_rows=("candidate_rows", "mean"),
-            selected_rows=("selected_rows", "mean"),
-            selected_stock_pool_rows=("selected_stock_pool_rows", "mean"),
-            short_top_mean_bps=("short_top_mean_bps", "mean"),
-            short_top_excess_bps=("short_top_excess_bps", "mean"),
-            next_top_mean_bps=("next_top_mean_bps", "mean"),
-            next_top_excess_bps=("next_top_excess_bps", "mean"),
+            **mean_aggregations(
+                *"alpha_candidate_rows stock_pool_candidate_rows candidate_rows selected_rows "
+                "selected_stock_pool_rows short_top_mean_bps short_top_excess_bps "
+                "next_top_mean_bps next_top_excess_bps".split()
+            ),
             next_excess_positive_rate=("next_top_excess_bps", positive_rate),
-            selected_gap_risk_rank=("selected_gap_risk_rank", "mean"),
-            selected_binary_risk_rank=("selected_binary_risk_rank", "mean"),
+            **mean_aggregations("selected_gap_risk_rank", "selected_binary_risk_rank"),
         )
         .merge(minute_positive, on=keys, how="left")
         .merge(monthly_positive, on=keys, how="left")

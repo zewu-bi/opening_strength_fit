@@ -9,21 +9,18 @@ from pathlib import Path
 import pandas as pd
 
 from opening_strength_fit.analysis import KEY_COLUMNS, write_json
+from opening_strength_fit.artifact_catalog import STRATEGY_ACCEPTANCE_ARTIFACTS
 from opening_strength_fit.capacity_acceptance import load_label_frame
 from opening_strength_fit.capacity_audit import (
     CapacityConstraints,
     build_capacity_portfolios,
     summarize_capacity_groups,
 )
+from opening_strength_fit.commands.arguments import CommandArguments, command_context
 from opening_strength_fit.config import (
-    config_bool,
-    config_float,
     config_float_tuple,
     config_int,
-    config_list,
     config_str,
-    load_toml,
-    run_id,
 )
 from opening_strength_fit.io import frame_columns, read_frame, write_frame_atomic
 from opening_strength_fit.prediction_frames import prediction_files
@@ -52,95 +49,46 @@ from opening_strength_fit.strategy_acceptance import (
     summarize_tail_robustness,
 )
 
-COMPACT_ARTIFACTS = (
-    "strategy_acceptance_summary.csv",
-    "strategy_acceptance_daily.csv",
-    "strategy_acceptance_group_metrics.csv",
-    "strategy_acceptance_capacity_summary.csv",
-    "strategy_acceptance_overlap_summary.csv",
-    "strategy_acceptance_overlap_daily.csv",
-    "strategy_acceptance_overlap_adjacent.csv",
-    "strategy_acceptance_tail_summary.csv",
-    "strategy_acceptance_tail_monthly.csv",
-    "strategy_acceptance_tail_concentration.csv",
-    "strategy_acceptance_bootstrap.csv",
-    "strategy_acceptance_leave_one_out.csv",
-    "strategy_acceptance_trace.json",
-    "_SUCCESS",
-)
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=(
-            "Run capacity, realistic no-refill, visible pre-trade refill, overlap, "
-            "and tail-robustness acceptance from one prediction lineage."
-        )
+        description="Run capacity, realistic no-refill, visible pre-trade refill, overlap, "
+        "and tail-robustness acceptance from one prediction lineage."
     )
     parser.add_argument("--config", required=True)
     parser.add_argument("--output-dir", default="")
     return parser.parse_args()
 
 
+def _configured_constraints[T](config: dict, section: str, defaults: T) -> T:
+    return CommandArguments(argparse.Namespace(), config, section).resolve_dataclass(defaults)
+
+
 def capacity_constraints_from_config(config: dict) -> CapacityConstraints:
-    section = "capacity"
-    return CapacityConstraints(
-        target_notional=config_float(config, section, "target_notional", 50_000_000.0),
-        score_col=config_str(config, section, "score_col", "prediction"),
-        capacity_notional_col=config_str(
-            config, section, "capacity_notional_col", "turnover_diff_10t"
+    return _configured_constraints(
+        config,
+        "capacity",
+        CapacityConstraints(
+            target_notional=50_000_000.0,
+            capacity_notional_col="turnover_diff_10t",
+            max_participation_rate=0.20,
         ),
-        capacity_volume_col=config_str(config, section, "capacity_volume_col", ""),
-        capacity_price_col=config_str(config, section, "capacity_price_col", "ask_price_1"),
-        max_participation_rate=config_float(config, section, "max_participation_rate", 0.20),
-        max_symbol_weight=config_float(config, section, "max_symbol_weight", 0.01),
-        min_trade_notional=config_float(config, section, "min_trade_notional", 0.0),
-        max_names=config_int(config, section, "max_names", 0),
-        ask_depth_levels=config_int(config, section, "ask_depth_levels", 0),
-        ask_depth_participation_rate=config_float(
-            config, section, "ask_depth_participation_rate", 0.25
-        ),
-        allow_decision_depth_fallback=config_bool(
-            config, section, "allow_decision_depth_fallback", False
-        ),
-        industry_col=config_str(config, section, "industry_col", ""),
-        max_industry_weight=config_float(config, section, "max_industry_weight", 0.0),
     )
 
 
 def execution_constraints_from_config(config: dict) -> RealisticExecutionConstraints:
-    section = "execution"
-    return RealisticExecutionConstraints(
-        capacity_total_notional=config_float(
-            config, section, "capacity_total_notional", 1_000_000_000.0
+    return _configured_constraints(
+        config,
+        "execution",
+        RealisticExecutionConstraints(
+            min_child_notional=10_000.0,
+            round_lot_shares=100,
+            price_col="capacity_price",
+            status_col="status",
+            tradable_statuses=("T0", "TRADE"),
+            max_spread_bps=50.0,
+            max_ask_depth_participation_rate=0.25,
         ),
-        fee_bps=config_float(config, section, "fee_bps", 8.0),
-        max_daily_symbol_weight=config_float(config, section, "max_daily_symbol_weight", 0.005),
-        max_daily_symbol_participation_rate=config_float(
-            config, section, "max_daily_symbol_participation_rate", 0.10
-        ),
-        daily_capacity_method=config_str(config, section, "daily_capacity_method", "max"),
-        execution_fill_rate=config_float(config, section, "execution_fill_rate", 1.0),
-        min_child_notional=config_float(config, section, "min_child_notional", 10_000.0),
-        max_symbol_decision_count=config_int(config, section, "max_symbol_decision_count", 0),
-        round_lot_shares=config_int(config, section, "round_lot_shares", 100),
-        price_col=config_str(config, section, "price_col", "capacity_price"),
-        status_col=config_str(config, section, "status_col", "status"),
-        tradable_statuses=tuple(config_list(config, section, "tradable_statuses", ["T0", "TRADE"])),
-        spread_bps_col=config_str(config, section, "spread_bps_col", "spread_bps"),
-        max_spread_bps=config_float(config, section, "max_spread_bps", 50.0),
-        limit_up_room_bps_col=config_str(
-            config, section, "limit_up_room_bps_col", "ask1_to_limit_up_bps"
-        ),
-        min_limit_up_room_bps=config_float(config, section, "min_limit_up_room_bps", 0.0),
-        ask_depth_notional_col=config_str(
-            config, section, "ask_depth_notional_col", "ask_depth_notional"
-        ),
-        max_ask_depth_participation_rate=config_float(
-            config, section, "max_ask_depth_participation_rate", 0.25
-        ),
-        industry_col=config_str(config, section, "industry_col", "industry"),
-        max_daily_industry_weight=config_float(config, section, "max_daily_industry_weight", 0.0),
     )
 
 
@@ -161,40 +109,30 @@ def _required_prediction_columns(
     if missing:
         raise SystemExit(f"prediction input missing required columns: {missing}")
 
-    desired = set(required)
-    desired |= {
-        "status",
-        "ask_price_1",
-        "bid_price_1",
-        "mid_price",
-        "spread_bps",
-        "ask1_to_limit_up_bps",
-        "ask_depth_notional",
-        "ask_depth_10",
-        "industry",
-    }
-    if execution.price_col:
-        desired.add(execution.price_col)
-    if execution.status_col:
-        desired.add(execution.status_col)
-    if execution.spread_bps_col:
-        desired.add(execution.spread_bps_col)
-    if execution.limit_up_room_bps_col:
-        desired.add(execution.limit_up_room_bps_col)
-    if execution.ask_depth_notional_col:
-        desired.add(execution.ask_depth_notional_col)
-    if execution.industry_col:
-        desired.add(execution.industry_col)
-    if capacity.industry_col:
-        desired.add(capacity.industry_col)
+    desired = set(required) | set(
+        "status ask_price_1 bid_price_1 mid_price spread_bps ask1_to_limit_up_bps "
+        "ask_depth_notional ask_depth_10 industry".split()
+    )
+    desired.update(
+        filter(
+            None,
+            (
+                execution.price_col,
+                execution.status_col,
+                execution.spread_bps_col,
+                execution.limit_up_room_bps_col,
+                execution.ask_depth_notional_col,
+                execution.industry_col,
+                capacity.industry_col,
+            ),
+        )
+    )
     if capacity.ask_depth_levels > 0:
-        for level in range(1, capacity.ask_depth_levels + 1):
-            desired |= {
-                f"entry_ask_price_{level}",
-                f"entry_ask_volume_{level}",
-                f"ask_price_{level}",
-                f"ask_volume_{level}",
-            }
+        desired.update(
+            f"{prefix}_{level}"
+            for level in range(1, capacity.ask_depth_levels + 1)
+            for prefix in ("entry_ask_price", "entry_ask_volume", "ask_price", "ask_volume")
+        )
     return sorted(column for column in desired if column in available)
 
 
@@ -202,25 +140,23 @@ def _validate_execution_context(
     frame: pd.DataFrame,
     constraints: RealisticExecutionConstraints,
 ) -> None:
-    if constraints.status_col and constraints.tradable_statuses:
-        if constraints.status_col not in frame.columns:
-            raise SystemExit(f"execution status column is missing: {constraints.status_col}")
-    if constraints.max_spread_bps > 0 and constraints.spread_bps_col not in frame.columns:
-        raise SystemExit(f"execution spread column is missing: {constraints.spread_bps_col}")
-    if (
-        constraints.min_limit_up_room_bps > 0
-        and constraints.limit_up_room_bps_col not in frame.columns
-    ):
-        raise SystemExit(
-            f"execution limit-up room column is missing: {constraints.limit_up_room_bps_col}"
-        )
-    if (
-        constraints.max_ask_depth_participation_rate > 0
-        and constraints.ask_depth_notional_col not in frame.columns
-    ):
-        raise SystemExit(
-            f"execution ask-depth column is missing: {constraints.ask_depth_notional_col}"
-        )
+    requirements = (
+        (
+            constraints.status_col and constraints.tradable_statuses,
+            constraints.status_col,
+            "status",
+        ),
+        (constraints.max_spread_bps > 0, constraints.spread_bps_col, "spread"),
+        (constraints.min_limit_up_room_bps > 0, constraints.limit_up_room_bps_col, "limit-up room"),
+        (
+            constraints.max_ask_depth_participation_rate > 0,
+            constraints.ask_depth_notional_col,
+            "ask-depth",
+        ),
+    )
+    for required, column, label in requirements:
+        if required and column not in frame.columns:
+            raise SystemExit(f"execution {label} column is missing: {column}")
 
 
 def _context_frame(frame: pd.DataFrame, execution: RealisticExecutionConstraints) -> pd.DataFrame:
@@ -263,12 +199,7 @@ def _policy_daily_and_summary(
 
 
 def _tail_summary_wide(tail: pd.DataFrame) -> pd.DataFrame:
-    value_columns = [
-        "raw_net_bps_vs_target",
-        "winsor_net_bps_vs_target",
-        "trim_net_bps_vs_target",
-        "tail_notional_share",
-    ]
+    value_columns = "raw_net_bps_vs_target winsor_net_bps_vs_target trim_net_bps_vs_target tail_notional_share".split()
     parts = []
     for threshold, item in tail.groupby("threshold", observed=True):
         renamed = item[["policy", "pool", *value_columns]].rename(
@@ -286,19 +217,15 @@ def _tail_summary_wide(tail: pd.DataFrame) -> pd.DataFrame:
 def main() -> None:
     args = parse_args()
     config_path = Path(args.config)
-    config = load_toml(config_path)
-    run_name = run_id(config, config_path)
-    section = "strategy_acceptance"
-    variant = config_str(config, section, "variant", run_name)
-    prediction_roots = config_list(config, section, "predictions", [])
-    label_inputs = config_list(config, section, "label_input", [])
-    label_col = config_str(config, section, "label_col", "alpha_return_next_close")
-    pool_code = config_str(config, section, "pool", "L").upper()
-    pool_path = config_str(
-        config, section, "pool_path", f"lml.bzw@ssd/data/pool_{pool_code}.parquet"
-    )
-    pool_lag = config_int(config, section, "pool_date_lag_sessions", 0)
-    policies = tuple(config_list(config, section, "policies", list(POLICIES)))
+    config, arguments, run_name = command_context(args, "strategy_acceptance")
+    variant = arguments.string("variant", run_name)
+    prediction_roots = arguments.list("predictions")
+    label_inputs = arguments.list("label_input")
+    label_col = arguments.string("label_col", "alpha_return_next_close")
+    pool_code = arguments.string("pool", "L").upper()
+    pool_path = arguments.string("pool_path", f"lml.bzw@ssd/data/pool_{pool_code}.parquet")
+    pool_lag = arguments.integer("pool_date_lag_sessions", 0)
+    policies = arguments.tuple("policies", POLICIES)
     unknown_policies = sorted(set(policies) - set(POLICIES))
     if unknown_policies:
         raise SystemExit(f"unsupported strategy policies: {unknown_policies}")
@@ -324,8 +251,8 @@ def main() -> None:
     files = [file for root in prediction_roots for file in prediction_files(Path(root))]
     stock_pool = None if pool_code == "UNIVERSE" else load_stock_pool(pool_path)
     pool_name = "universe" if pool_code == "UNIVERSE" else f"pool_{pool_code}"
-    selected_parts: dict[str, list[pd.DataFrame]] = {policy: [] for policy in policies}
-    target_parts: dict[str, list[pd.DataFrame]] = {policy: [] for policy in policies}
+    selected_parts: list[pd.DataFrame] = []
+    target_parts: list[pd.DataFrame] = []
     capacity_metric_parts: list[pd.DataFrame] = []
     refill_metric_parts: list[pd.DataFrame] = []
     seen_dates: set[str] = set()
@@ -370,16 +297,16 @@ def main() -> None:
         if CAPACITY_ONLY in policies:
             part = capacity_selected.copy()
             part.insert(0, "policy", CAPACITY_ONLY)
-            selected_parts[CAPACITY_ONLY].append(part)
-            target_parts[CAPACITY_ONLY].append(capacity_targets)
+            selected_parts.append(part)
+            target_parts.append(capacity_targets)
 
         if REALISTIC_NO_REFILL in policies:
             no_refill, _ = apply_realistic_execution_constraints(capacity_selected, execution)
             no_refill.insert(0, "policy", REALISTIC_NO_REFILL)
-            selected_parts[REALISTIC_NO_REFILL].append(no_refill)
+            selected_parts.append(no_refill)
             no_refill_targets = capacity_targets.copy()
             no_refill_targets["policy"] = REALISTIC_NO_REFILL
-            target_parts[REALISTIC_NO_REFILL].append(no_refill_targets)
+            target_parts.append(no_refill_targets)
 
         if VISIBLE_PRETRADE_REFILL in policies:
             refill, refill_metrics = build_visible_pretrade_refill(
@@ -389,8 +316,8 @@ def main() -> None:
                 execution_constraints=execution,
             )
             refill.insert(0, "policy", VISIBLE_PRETRADE_REFILL)
-            selected_parts[VISIBLE_PRETRADE_REFILL].append(refill)
-            target_parts[VISIBLE_PRETRADE_REFILL].append(
+            selected_parts.append(refill)
+            target_parts.append(
                 group_targets_from_metrics(
                     refill_metrics,
                     policy=VISIBLE_PRETRADE_REFILL,
@@ -408,14 +335,8 @@ def main() -> None:
             }
         )
 
-    selected = pd.concat(
-        [pd.concat(selected_parts[policy], ignore_index=True) for policy in policies],
-        ignore_index=True,
-    )
-    targets = pd.concat(
-        [pd.concat(target_parts[policy], ignore_index=True) for policy in policies],
-        ignore_index=True,
-    )
+    selected = pd.concat(selected_parts, ignore_index=True)
+    targets = pd.concat(target_parts, ignore_index=True)
     capacity_metrics = pd.concat(capacity_metric_parts, ignore_index=True)
     refill_metrics = (
         pd.concat(refill_metric_parts, ignore_index=True) if refill_metric_parts else pd.DataFrame()
@@ -470,38 +391,35 @@ def main() -> None:
     summary = summary.merge(bootstrap, on=["policy", "pool"], how="left")
     capacity_summary = summarize_capacity_groups(capacity_metrics)
 
-    write_frame_atomic(summary, output_dir / "strategy_acceptance_summary.csv")
-    write_frame_atomic(daily, output_dir / "strategy_acceptance_daily.csv")
-    write_frame_atomic(group_metrics, output_dir / "strategy_acceptance_group_metrics.csv")
-    write_frame_atomic(
+    artifacts = (
+        summary,
+        daily,
+        group_metrics,
         capacity_summary,
-        output_dir / "strategy_acceptance_capacity_summary.csv",
-    )
-    write_frame_atomic(positions, output_dir / "strategy_acceptance_daily_positions.parquet")
-    write_frame_atomic(
+        positions,
         overlap_summary,
-        output_dir / "strategy_acceptance_overlap_summary.csv",
-    )
-    write_frame_atomic(
         overlap_daily,
-        output_dir / "strategy_acceptance_overlap_daily.csv",
-    )
-    write_frame_atomic(adjacent, output_dir / "strategy_acceptance_overlap_adjacent.csv")
-    write_frame_atomic(tail, output_dir / "strategy_acceptance_tail_summary.csv")
-    write_frame_atomic(
+        adjacent,
+        tail,
         tail_monthly,
-        output_dir / "strategy_acceptance_tail_monthly.csv",
-    )
-    write_frame_atomic(
         tail_concentration,
-        output_dir / "strategy_acceptance_tail_concentration.csv",
+        bootstrap,
+        leave_one_out,
     )
-    write_frame_atomic(bootstrap, output_dir / "strategy_acceptance_bootstrap.csv")
-    write_frame_atomic(leave_one_out, output_dir / "strategy_acceptance_leave_one_out.csv")
+    artifact_names = (
+        "strategy_acceptance_summary.csv strategy_acceptance_daily.csv "
+        "strategy_acceptance_group_metrics.csv strategy_acceptance_capacity_summary.csv "
+        "strategy_acceptance_daily_positions.parquet strategy_acceptance_overlap_summary.csv "
+        "strategy_acceptance_overlap_daily.csv strategy_acceptance_overlap_adjacent.csv "
+        "strategy_acceptance_tail_summary.csv strategy_acceptance_tail_monthly.csv "
+        "strategy_acceptance_tail_concentration.csv strategy_acceptance_bootstrap.csv "
+        "strategy_acceptance_leave_one_out.csv"
+    ).split()
+    for artifact, name in zip(artifacts, artifact_names, strict=True):
+        write_frame_atomic(artifact, output_dir / name)
     if not refill_metrics.empty:
         write_frame_atomic(
-            refill_metrics,
-            output_dir / "strategy_acceptance_refill_group_metrics.csv",
+            refill_metrics, output_dir / "strategy_acceptance_refill_group_metrics.csv"
         )
 
     trace = {
@@ -543,7 +461,7 @@ def main() -> None:
                 "this is an aggregate audit, not a general intraday entry/exit ledger."
             ),
         },
-        "compact_artifacts": list(COMPACT_ARTIFACTS),
+        "compact_artifacts": list(STRATEGY_ACCEPTANCE_ARTIFACTS),
     }
     write_json(output_dir / "strategy_acceptance_trace.json", trace, ensure_ascii=True)
     write_json(

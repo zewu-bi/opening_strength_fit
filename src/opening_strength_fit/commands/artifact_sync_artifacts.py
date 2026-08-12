@@ -4,12 +4,12 @@ import json
 import shutil
 from collections.abc import Callable
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 import pandas as pd
 
 from opening_strength_fit.analysis import (
-    month_window_periods,
     write_artifact_fetch_trace,
     write_json,
 )
@@ -27,28 +27,46 @@ from opening_strength_fit.artifact_catalog import (
     ROLLING_VALIDATION_SHARD_ARTIFACTS,
     SCORE_RISK_ARTIFACTS,
     STRATEGY_ACCEPTANCE_ARTIFACTS,
-    is_capacity_acceptance,
-    is_capacity_audit,
-    is_exposure_audit,
-    is_feature_audit,
-    is_feature_hygiene,
-    is_gap_attribution,
-    is_pool_internal_analysis,
-    is_rolling_validation,
-    is_score_risk_sweep,
+    record_named_artifacts,
 )
+from opening_strength_fit.commands.artifact_sync_metrics import run_shards
 from opening_strength_fit.commands.artifact_sync_remote import (
     fetch_remote_directory_if_exists,
     fetch_remote_file_if_exists,
 )
 from opening_strength_fit.k8s import RunSpec
 from opening_strength_fit.pool_internal_artifacts import record_pool_internal_outputs
-from opening_strength_fit.pvc_layout import rolling_shard_dir_candidates
 from opening_strength_fit.score_variant_eval import (
     summarize_group_metrics as summarize_rolling_group_metrics,
 )
 
 DEFAULT_ARTIFACTS_ROOT = Path("output/artifacts")
+ARCHIVE_ARTIFACTS_BY_KIND = {
+    "capacity_acceptance": CAPACITY_ACCEPTANCE_ARTIFACTS,
+    "capacity_audit": CAPACITY_AUDIT_ARTIFACTS,
+    "exposure_audit": EXPOSURE_AUDIT_ARTIFACTS,
+    "feature_audit": FEATURE_AUDIT_ARTIFACTS,
+    "feature_hygiene": FEATURE_HYGIENE_ARTIFACTS,
+    "strategy_acceptance": tuple(
+        STRATEGY_ACCEPTANCE_ARTIFACTS[index] for index in (0, 3, 4, 7, 10, 11, 12, 13)
+    ),
+}
+ARCHIVE_RENAMES_BY_KIND = {
+    "score_risk_sweep": (("score_risk_summary.csv", "{run_id}_summary.csv"),),
+    "alpha_conditioned_rolling_validation": (
+        ("rolling_summary.csv", "summary.csv"),
+        ("rolling_month_summary.csv", "month_summary.csv"),
+        ("rolling_trace.json", "trace.json"),
+    ),
+    "gap_risk_attribution": (
+        ("gap_attribution_outcomes_by_month.csv", "outcomes_by_month.csv"),
+        ("gap_attribution_outcomes_overall.csv", "outcomes_overall.csv"),
+        ("gap_attribution_feature_exposure_overall.csv", "feature_exposure_overall.csv"),
+        ("gap_attribution_penalized_feature_delta.csv", "penalized_feature_delta.csv"),
+        ("gap_attribution_residual_penalized_vs_kept.csv", "residual_penalized_vs_kept.csv"),
+        ("gap_attribution_trace.json", "trace.json"),
+    ),
+}
 
 
 def local_artifact_dir(spec: RunSpec, output_root: Path | None) -> Path:
@@ -113,135 +131,55 @@ def pull_required_artifact_set(
     return pulled
 
 
-def pull_score_risk_artifacts(
+def artifact_puller(
+    artifact_names: tuple[str, ...], artifact_label: str
+) -> Callable[..., list[Path]]:
+    return partial(
+        pull_required_artifact_set,
+        artifact_names=artifact_names,
+        artifact_label=artifact_label,
+    )
+
+
+pull_score_risk_artifacts = artifact_puller(SCORE_RISK_ARTIFACTS, "score-risk")
+pull_gap_attribution_artifacts = artifact_puller(GAP_ATTRIBUTION_ARTIFACTS, "gap-attribution")
+pull_capacity_audit_artifacts = artifact_puller(CAPACITY_AUDIT_ARTIFACTS, "capacity-audit")
+pull_capacity_acceptance_artifacts = artifact_puller(
+    CAPACITY_ACCEPTANCE_ARTIFACTS, "capacity-acceptance"
+)
+pull_exposure_audit_artifacts = artifact_puller(EXPOSURE_AUDIT_ARTIFACTS, "exposure-audit")
+pull_feature_hygiene_artifacts = artifact_puller(FEATURE_HYGIENE_ARTIFACTS, "feature-hygiene")
+pull_strategy_acceptance_artifacts = artifact_puller(
+    STRATEGY_ACCEPTANCE_ARTIFACTS, "strategy-acceptance"
+)
+
+
+def _pull_shardable_artifacts(
     hfcli: str,
     spec: RunSpec,
     pod_name: str,
     output_root: Path | None,
-) -> list[Path]:
-    return pull_required_artifact_set(
-        hfcli, spec, pod_name, output_root, SCORE_RISK_ARTIFACTS, "score-risk"
-    )
-
-
-def pull_rolling_validation_artifacts(
-    hfcli: str,
-    spec: RunSpec,
-    pod_name: str,
-    output_root: Path | None,
-) -> list[Path]:
-    output_dir, pulled, missing = pull_artifact_set(
-        hfcli,
-        spec,
-        pod_name,
-        output_root,
-        ROLLING_VALIDATION_ARTIFACTS,
-    )
-
-    if (output_dir / "rolling_summary.csv").exists():
-        record_artifact_fetch(spec, output_dir, pulled, missing)
-        return pulled
-
-    shard_paths = pull_rolling_validation_shards(
-        hfcli,
-        spec,
-        pod_name,
-        output_dir,
-    )
-    if shard_paths:
-        pulled.extend(shard_paths)
-    if not pulled:
-        raise SystemExit(
-            f"{spec.run_id}: no rolling-validation artifacts found under {spec.pvc_dir}"
-        )
-    record_artifact_fetch(spec, output_dir, pulled, missing)
-    return pulled
-
-
-def pull_gap_attribution_artifacts(
-    hfcli: str,
-    spec: RunSpec,
-    pod_name: str,
-    output_root: Path | None,
-) -> list[Path]:
-    return pull_required_artifact_set(
-        hfcli, spec, pod_name, output_root, GAP_ATTRIBUTION_ARTIFACTS, "gap-attribution"
-    )
-
-
-def pull_capacity_audit_artifacts(
-    hfcli: str,
-    spec: RunSpec,
-    pod_name: str,
-    output_root: Path | None,
-) -> list[Path]:
-    return pull_required_artifact_set(
-        hfcli, spec, pod_name, output_root, CAPACITY_AUDIT_ARTIFACTS, "capacity-audit"
-    )
-
-
-def pull_capacity_acceptance_artifacts(
-    hfcli: str,
-    spec: RunSpec,
-    pod_name: str,
-    output_root: Path | None,
-) -> list[Path]:
-    return pull_required_artifact_set(
-        hfcli,
-        spec,
-        pod_name,
-        output_root,
-        CAPACITY_ACCEPTANCE_ARTIFACTS,
-        "capacity-acceptance",
-    )
-
-
-def pull_exposure_audit_artifacts(
-    hfcli: str,
-    spec: RunSpec,
-    pod_name: str,
-    output_root: Path | None,
-) -> list[Path]:
-    return pull_required_artifact_set(
-        hfcli, spec, pod_name, output_root, EXPOSURE_AUDIT_ARTIFACTS, "exposure-audit"
-    )
-
-
-def pull_feature_audit_artifacts(
-    hfcli: str,
-    spec: RunSpec,
-    pod_name: str,
-    output_root: Path | None,
+    *,
+    artifact_names: tuple[str, ...],
+    combined_name: str,
+    pull_shards: Callable[..., list[Path]],
+    artifact_label: str,
 ) -> list[Path]:
     output_dir, pulled, missing = pull_artifact_set(
         hfcli,
         spec,
         pod_name,
         output_root,
-        FEATURE_AUDIT_ARTIFACTS,
+        artifact_names,
     )
-    if (output_dir / "feature_audit_metrics.csv").exists():
+    if (output_dir / combined_name).exists():
         record_artifact_fetch(spec, output_dir, pulled, missing)
         return pulled
-
-    shard_paths = pull_feature_audit_shards(hfcli, spec, pod_name, output_dir)
-    if shard_paths:
-        pulled.extend(shard_paths)
+    pulled.extend(pull_shards(hfcli, spec, pod_name, output_dir))
     if not pulled:
-        raise SystemExit(f"{spec.run_id}: no feature-audit artifacts found under {spec.pvc_dir}")
+        raise SystemExit(f"{spec.run_id}: no {artifact_label} artifacts found under {spec.pvc_dir}")
     record_artifact_fetch(spec, output_dir, pulled, missing)
     return pulled
-
-
-def pull_feature_hygiene_artifacts(
-    hfcli: str,
-    spec: RunSpec,
-    pod_name: str,
-    output_root: Path | None,
-) -> list[Path]:
-    return pull_required_artifact_set(
-        hfcli, spec, pod_name, output_root, FEATURE_HYGIENE_ARTIFACTS, "feature-hygiene"
-    )
 
 
 def pull_pool_internal_analysis_artifacts(
@@ -286,13 +224,12 @@ def _prune_pool_internal_artifacts_for_archive_profile(
     payload["report_plots"] = {
         key: value for key, value in report_plots.items() if key in PRESENTATION_CORE_REPORT_KEYS
     }
-    keep_dirs = set()
-    for value in payload["report_plots"].values():
-        parts = Path(str(value)).parts
-        if "reports" in parts:
-            index = parts.index("reports")
-            if index + 1 < len(parts):
-                keep_dirs.add(parts[index + 1])
+    keep_dirs = {
+        parts[index + 1]
+        for value in payload["report_plots"].values()
+        if "reports" in (parts := Path(str(value)).parts)
+        if (index := parts.index("reports")) + 1 < len(parts)
+    }
     reports_dir = output_dir / "reports"
     if reports_dir.exists():
         for path in reports_dir.iterdir():
@@ -359,14 +296,11 @@ def _pull_month_shards(
 
     pulled: list[Path] = []
     missing_months: list[str] = []
-    windows = month_window_periods(
-        spec.test_start_month,
-        spec.test_end_month,
-        test_months=spec.test_months,
-        stride_months=spec.test_stride_months,
-    )
-    labels = [start if start == end else f"{start}_{end}" for start, end in windows]
-    for (start_month, end_month), label in zip(windows, labels, strict=True):
+    shard_kind, _, shards = run_shards(spec)
+    if shard_kind != "monthly":
+        return []
+    for _, label, shard_dirs in shards:
+        start_month = label.split("_", 1)[0]
         shard_dir = output_dir / f"month_{start_month}"
         shard_dir.mkdir(parents=True, exist_ok=True)
         found = False
@@ -380,11 +314,7 @@ def _pull_month_shards(
                     f"{spec.pvc_dir}/{remote_dir}/{name}",
                     local_path,
                 )
-                for remote_dir in rolling_shard_dir_candidates(
-                    start_month,
-                    end_month,
-                    preferred_layout=spec.output_layout,
-                )
+                for remote_dir in shard_dirs
             )
             if fetched:
                 pulled.append(local_path)
@@ -394,26 +324,17 @@ def _pull_month_shards(
 
     combined = combine_shards(
         output_dir,
-        months=[start for start, _ in windows],
+        months=[label.split("_", 1)[0] for _, label, _ in shards],
         missing_months=missing_months,
     )
     return [*pulled, *combined]
 
 
-def pull_rolling_validation_shards(
-    hfcli: str,
-    spec: RunSpec,
-    pod_name: str,
-    output_dir: Path,
-) -> list[Path]:
-    return _pull_month_shards(
-        hfcli,
-        spec,
-        pod_name,
-        output_dir,
-        artifact_names=ROLLING_VALIDATION_SHARD_ARTIFACTS,
-        combine_shards=combine_rolling_validation_shards,
-    )
+pull_rolling_validation_shards = partial(
+    _pull_month_shards,
+    artifact_names=ROLLING_VALIDATION_SHARD_ARTIFACTS,
+    combine_shards=combine_rolling_validation_shards,
+)
 
 
 def combine_feature_audit_shards(
@@ -456,28 +377,38 @@ def combine_feature_audit_shards(
     return combined_paths
 
 
-def pull_feature_audit_shards(
-    hfcli: str,
-    spec: RunSpec,
-    pod_name: str,
-    output_dir: Path,
-) -> list[Path]:
-    return _pull_month_shards(
-        hfcli,
-        spec,
-        pod_name,
-        output_dir,
-        artifact_names=FEATURE_AUDIT_ARTIFACTS,
-        combine_shards=combine_feature_audit_shards,
-    )
+pull_feature_audit_shards = partial(
+    _pull_month_shards,
+    artifact_names=FEATURE_AUDIT_ARTIFACTS,
+    combine_shards=combine_feature_audit_shards,
+)
 
 
-def record_artifact_file(source: Path, destination: Path) -> Path | None:
-    if not source.exists():
-        return None
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, destination)
-    return destination
+pull_rolling_validation_artifacts = partial(
+    _pull_shardable_artifacts,
+    artifact_names=ROLLING_VALIDATION_ARTIFACTS,
+    combined_name="rolling_summary.csv",
+    pull_shards=pull_rolling_validation_shards,
+    artifact_label="rolling-validation",
+)
+pull_feature_audit_artifacts = partial(
+    _pull_shardable_artifacts,
+    artifact_names=FEATURE_AUDIT_ARTIFACTS,
+    combined_name="feature_audit_metrics.csv",
+    pull_shards=pull_feature_audit_shards,
+    artifact_label="feature-audit",
+)
+ARTIFACT_PULLERS = {
+    "alpha_conditioned_rolling_validation": pull_rolling_validation_artifacts,
+    "capacity_acceptance": pull_capacity_acceptance_artifacts,
+    "capacity_audit": pull_capacity_audit_artifacts,
+    "exposure_audit": pull_exposure_audit_artifacts,
+    "feature_audit": pull_feature_audit_artifacts,
+    "feature_hygiene": pull_feature_hygiene_artifacts,
+    "gap_risk_attribution": pull_gap_attribution_artifacts,
+    "score_risk_sweep": pull_score_risk_artifacts,
+    "strategy_acceptance": pull_strategy_acceptance_artifacts,
+}
 
 
 def record_lightweight_artifacts(
@@ -486,121 +417,30 @@ def record_lightweight_artifacts(
     records_dir: Path,
 ) -> list[Path]:
     output_dir = local_artifact_dir(spec, artifacts_root)
-    backtests_dir = records_dir / "backtests"
-    if is_pool_internal_analysis(spec):
-        report_plots = _local_pool_internal_report_plots(
-            spec,
-            output_dir,
-        )
+    if spec.pool_internal_analysis_enabled:
         record_prefix = spec.pool_internal_record_prefix or spec.run_id
         return record_pool_internal_outputs(
             output_dir=output_dir,
             records_dir=records_dir,
             record_prefix=record_prefix,
-            report_plots=report_plots,
+            report_plots=_local_pool_internal_report_plots(spec, output_dir),
             record_subdir=record_prefix,
         )
-    if is_score_risk_sweep(spec):
-        records = [
-            (
-                output_dir / "score_risk_summary.csv",
-                backtests_dir / f"{spec.run_id}_summary.csv",
-            ),
-        ]
-    elif is_rolling_validation(spec):
-        archive_dir = backtests_dir / spec.run_id
-        records = [
-            (
-                output_dir / "rolling_summary.csv",
-                archive_dir / "summary.csv",
-            ),
-            (
-                output_dir / "rolling_month_summary.csv",
-                archive_dir / "month_summary.csv",
-            ),
-            (
-                output_dir / "rolling_trace.json",
-                archive_dir / "trace.json",
-            ),
-        ]
-    elif is_gap_attribution(spec):
-        archive_dir = backtests_dir / spec.run_id
-        records = [
-            (
-                output_dir / "gap_attribution_outcomes_by_month.csv",
-                archive_dir / "outcomes_by_month.csv",
-            ),
-            (
-                output_dir / "gap_attribution_outcomes_overall.csv",
-                archive_dir / "outcomes_overall.csv",
-            ),
-            (
-                output_dir / "gap_attribution_feature_exposure_overall.csv",
-                archive_dir / "feature_exposure_overall.csv",
-            ),
-            (
-                output_dir / "gap_attribution_penalized_feature_delta.csv",
-                archive_dir / "penalized_feature_delta.csv",
-            ),
-            (
-                output_dir / "gap_attribution_residual_penalized_vs_kept.csv",
-                archive_dir / "residual_penalized_vs_kept.csv",
-            ),
-            (
-                output_dir / "gap_attribution_trace.json",
-                archive_dir / "trace.json",
-            ),
-        ]
-    elif is_exposure_audit(spec):
-        archive_dir = backtests_dir / spec.run_id
-        records = [(output_dir / name, archive_dir / name) for name in EXPOSURE_AUDIT_ARTIFACTS]
-    elif is_capacity_audit(spec):
-        archive_dir = backtests_dir / spec.run_id
-        records = [(output_dir / name, archive_dir / name) for name in CAPACITY_AUDIT_ARTIFACTS]
-    elif is_capacity_acceptance(spec):
-        archive_dir = backtests_dir / spec.run_id
-        records = [
-            (output_dir / name, archive_dir / name) for name in CAPACITY_ACCEPTANCE_ARTIFACTS
-        ]
-    elif spec.kind == "strategy_acceptance":
-        archive_dir = backtests_dir / spec.run_id
-        names = (STRATEGY_ACCEPTANCE_ARTIFACTS[i] for i in (0, 3, 4, 7, 10, 11, 12, 13))
-        records = [(output_dir / name, archive_dir / name) for name in names]
-    elif is_feature_audit(spec):
-        archive_dir = backtests_dir / spec.run_id
-        records = [
-            (
-                output_dir / "feature_audit_metrics.csv",
-                archive_dir / "feature_audit_metrics.csv",
-            ),
-            (
-                output_dir / "feature_audit_permutation.csv",
-                archive_dir / "feature_audit_permutation.csv",
-            ),
-            (
-                output_dir / "feature_importance.csv",
-                archive_dir / "feature_importance.csv",
-            ),
-            (
-                output_dir / "feature_group_importance.csv",
-                archive_dir / "feature_group_importance.csv",
-            ),
-            (
-                output_dir / "feature_audit_trace.json",
-                archive_dir / "feature_audit_trace.json",
-            ),
-        ]
-    elif is_feature_hygiene(spec):
-        archive_dir = backtests_dir / spec.run_id
-        records = [(output_dir / name, archive_dir / name) for name in FEATURE_HYGIENE_ARTIFACTS]
-    else:
+    names = ARCHIVE_ARTIFACTS_BY_KIND.get(spec.kind, ())
+    renames = ARCHIVE_RENAMES_BY_KIND.get(spec.kind)
+    if not names and not renames:
         return []
-
-    return [
-        path
-        for source, destination in records
-        if (path := record_artifact_file(source, destination)) is not None
-    ]
+    return record_named_artifacts(
+        output_dir=output_dir,
+        records_dir=records_dir,
+        record_prefix="" if spec.kind == "score_risk_sweep" else spec.run_id,
+        names=names,
+        renames=tuple(
+            (name, destination.format(run_id=spec.run_id)) for name, destination in renames
+        )
+        if renames
+        else (),
+    )
 
 
 def _local_pool_internal_report_plots(spec: RunSpec, output_dir: Path) -> dict[str, str]:

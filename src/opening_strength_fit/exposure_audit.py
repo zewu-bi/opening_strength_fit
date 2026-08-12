@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from functools import partial
 
 import numpy as np
 import pandas as pd
@@ -74,8 +75,11 @@ _DEFAULT_CATEGORY_BY_COLUMN = {spec.column: spec.category for spec in DEFAULT_EX
 _DERIVED_EXPOSURE_BY_COLUMN = {spec.column: spec for spec in DERIVED_EXPOSURES}
 
 
-def normalize_audit_frame(frame: pd.DataFrame) -> pd.DataFrame:
-    return normalize_decision_keys(frame, key_columns=KEY_COLUMNS, drop_missing=True)
+normalize_audit_frame = partial(
+    normalize_decision_keys,
+    key_columns=KEY_COLUMNS,
+    drop_missing=True,
+)
 
 
 def category_for_exposure(column: str) -> str:

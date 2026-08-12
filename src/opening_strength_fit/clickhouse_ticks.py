@@ -9,6 +9,7 @@ from contextlib import contextmanager
 import numpy as np
 import pandas as pd
 
+from opening_strength_fit.config import config_str
 from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns
 from opening_strength_fit.universe import DEFAULT_A_SHARE_SYMBOL_REGEX
 
@@ -59,35 +60,29 @@ for _level in range(1, 11):
     )
 del _level
 
-STATUS_DESC = {
-    # ========= SZ =========
-    "T0": "连续竞价交易",
-    "C0": "收盘集合竞价",
-    "S0": "停牌",
-    "O0": "开盘集合竞价",
-    "B0": "午间休市",
-    "E0": "闭市结束",
-    "A0": "盘后交易或特殊交易阶段",
-    "H0": "临时停牌",
-    "V0": "波动性中断/异常波动状态",
-    "10": "开盘集合竞价阶段",
-    "20": "连续竞价阶段",
-    # ========= SH =========
-    "START": "开市准备阶段",
-    "OCALL": "开盘集合竞价",
-    "TRADE": "连续竞价交易",
-    "CLOSE": "收盘阶段",
-    "ENDTR": "交易结束",
-    "CCALL": "收盘集合竞价",
-    "SUSP": "停牌(Suspend)",
-    "FIXOC": "固定价格开盘集合竞价",
-    "FIXTR": "固定价格交易",
-    "FIXCL": "固定价格收盘",
-    "DERSP": "衍生品特殊阶段",
-}
+TICK_INDEX_COLUMNS = tuple(TICK_FIELD_DESC)[:3]
+TICK_CORE_COLUMNS = tuple(TICK_FIELD_DESC)[3:18]
+TICK_SOURCE_COLUMNS = tuple(column for column in TICK_FIELD_DESC if column != "LocalTimeStamp")
 
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 TICK_TIMESTAMP_DEDUPLICATION_MODES = {"latest_local_timestamp"}
+
+
+def clickhouse_connection(config: Mapping) -> dict[str, object]:
+    return {
+        "host": config_str(config, "clickhouse", "host", "")
+        or os.environ.get("CLICKHOUSE_HOST", "")
+        or DEFAULT_CLICKHOUSE_TICK_HOST,
+        "port": int(
+            config_str(config, "clickhouse", "port", "")
+            or os.environ.get("CLICKHOUSE_PORT", DEFAULT_CLICKHOUSE_TICK_PORT)
+        ),
+        "username": os.environ.get("CLICKHOUSE_USER", ""),
+        "password": os.environ.get("CLICKHOUSE_PASSWORD", ""),
+        "table": config_str(config, "clickhouse", "table", "")
+        or os.environ.get("CLICKHOUSE_TICK_TABLE", "")
+        or DEFAULT_CLICKHOUSE_TICK_TABLE,
+    }
 
 
 def _validate_table_name(table: str) -> str:

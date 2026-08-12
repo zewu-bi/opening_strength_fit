@@ -48,7 +48,6 @@ cluster = [
 ]
 
 [project.scripts]
-osf = "opening_strength_fit.cli:main"
 osf-analyze-capacity-acceptance = "opening_strength_fit.commands.capacity_acceptance_analysis:main"
 osf-analyze-pool-internal-top100 = "opening_strength_fit.commands.pool_internal_analysis:main"
 osf-analyze-realistic-acceptance = "opening_strength_fit.commands.realistic_acceptance_analysis:main"
@@ -59,7 +58,6 @@ osf-audit-exposure = "opening_strength_fit.commands.exposure_audit:main"
 osf-audit-feature-dependence = "opening_strength_fit.commands.feature_dependence_audit:main"
 osf-audit-feature-hygiene = "opening_strength_fit.commands.feature_hygiene_audit:main"
 osf-audit-strategy-acceptance = "opening_strength_fit.commands.strategy_acceptance:main"
-osf-audit-storage = "opening_strength_fit.commands.storage_audit:main"
 osf-build-labeled-cache = "opening_strength_fit.commands.labeled_cache_build:main"
 osf-build-long-horizon-labels = "opening_strength_fit.commands.long_horizon_labels:main"
 osf-build-long-label-raw-source = "opening_strength_fit.commands.long_label_raw_source:main"

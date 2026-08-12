@@ -73,6 +73,128 @@ def _model_group_embedding_dims(config: dict) -> dict[str, int]:
     return {str(group): int(dim) for group, dim in value.items() if dim not in (None, "")}
 
 
+def _gbm_model_options(config: dict) -> dict[str, object]:
+    return {
+        "max_iter": config_int(config, "model", "max_iter", 100),
+        "learning_rate": config_float(config, "model", "learning_rate", 0.05),
+        "max_leaf_nodes": config_int(config, "model", "max_leaf_nodes", 31),
+        "l2_regularization": config_float(config, "model", "l2_regularization", 0.0),
+        "random_state": config_int(config, "model", "random_state", 7),
+    }
+
+
+def _feature_transform_runtime_options(
+    config: dict,
+    *,
+    group_cols_as_tuple: bool = True,
+) -> dict[str, object]:
+    group_cols = config_list(
+        config,
+        "features",
+        "feature_value_transform_group_cols",
+        ["date", "decision_target_timestamp"],
+    )
+    return {
+        "feature_value_transform_group_cols": tuple(group_cols)
+        if group_cols_as_tuple
+        else group_cols,
+        "feature_value_transform_rank_method": config_str(
+            config, "features", "feature_value_transform_rank_method", "average"
+        ),
+        "feature_value_transform_tick_size": config_float(
+            config, "features", "feature_value_transform_tick_size", 0.01
+        ),
+    }
+
+
+def _lightgbm_model_options(config: dict) -> dict[str, object]:
+    return {
+        "sample_weight_col": config_str(config, "model", "sample_weight_col", ""),
+        "n_estimators": config_int(config, "model", "n_estimators", 300),
+        "learning_rate": config_float(config, "model", "learning_rate", 0.03),
+        "num_leaves": config_int(config, "model", "num_leaves", 63),
+        "max_depth": config_int(config, "model", "max_depth", -1),
+        "min_child_samples": config_int(config, "model", "min_child_samples", 200),
+        "subsample": config_float(config, "model", "subsample", 1.0),
+        "subsample_freq": config_int(config, "model", "subsample_freq", 0),
+        "colsample_bytree": config_float(config, "model", "colsample_bytree", 1.0),
+        "reg_alpha": config_float(config, "model", "reg_alpha", 0.0),
+        "reg_lambda": config_float(config, "model", "reg_lambda", 0.0),
+        "random_state": config_int(config, "model", "random_state", 7),
+        "n_jobs": config_int(config, "model", "n_jobs", -1),
+        "device_type": config_str(config, "model", "device_type", "cpu"),
+        "max_bin": config_optional_int(config, "model", "max_bin", None),
+        "gpu_use_dp": config_bool(config, "model", "gpu_use_dp", False),
+        "feature_value_transform": config_str(
+            config, "features", "feature_value_transform", "none"
+        ),
+        "feature_value_transform_output": config_str(
+            config, "features", "feature_value_transform_output", "replace"
+        ),
+        "feature_value_transform_prefix": config_str(
+            config, "features", "feature_value_transform_prefix", "mech_v3_"
+        ),
+    }
+
+
+def _torch_model_options(config: dict, *, for_manifest: bool) -> dict[str, object]:
+    hidden_layers = config_list(
+        config,
+        "model",
+        "hidden_layers",
+        ["512", "256", "128"],
+    )
+    return {
+        "hidden_layers": hidden_layers
+        if for_manifest
+        else tuple(int(value) for value in hidden_layers),
+        "architecture": config_str(config, "model", "architecture", "mlp"),
+        "group_embedding_dim": config_int(config, "model", "group_embedding_dim", 48),
+        "group_embedding_dims": _model_group_embedding_dims(config),
+        "fusion_dim": config_int(config, "model", "fusion_dim", 256),
+        "block_hidden_dim": config_int(config, "model", "block_hidden_dim", 512),
+        "num_blocks": config_int(config, "model", "num_blocks", 2),
+        "transformer_heads": config_int(config, "model", "transformer_heads", 4),
+        "dropout": config_float(config, "model", "dropout", 0.1),
+        "activation": config_str(config, "model", "activation", "relu"),
+        "batch_size": config_int(config, "model", "batch_size", 32768),
+        "predict_batch_size": config_int(config, "model", "predict_batch_size", 65536),
+        "learning_rate": config_float(config, "model", "learning_rate", 3e-4),
+        "weight_decay": config_float(config, "model", "weight_decay", 1e-4),
+        "max_epochs": config_int(config, "model", "max_epochs", 8),
+        "validation_fraction": config_float(config, "model", "validation_fraction", 0.02),
+        "validation_max_rows": config_int(config, "model", "validation_max_rows", 250_000),
+        "early_stopping_patience": config_int(config, "model", "early_stopping_patience", 2),
+        "loss": config_str(config, "model", "loss", "mse"),
+        "huber_beta": config_float(config, "model", "huber_beta", 1.0),
+        "mse_blend_weight": config_float(config, "model", "mse_blend_weight", 0.2),
+        "device": config_str(config, "model", "device", "auto"),
+        "random_state": config_int(config, "model", "random_state", 7),
+        "num_workers": config_int(config, "model", "num_workers", 0),
+        "training_tensor_storage": config_str(config, "model", "training_tensor_storage", "auto"),
+        "cuda_resident_reserve_gib": config_float(
+            config, "model", "cuda_resident_reserve_gib", 8.0
+        ),
+        "sample_weight_col": config_str(config, "model", "sample_weight_col", ""),
+        "feature_standardization": config_str(
+            config, "model", "feature_standardization", "global_zscore"
+        ),
+        "feature_standardization_group_col": config_str(
+            config, "model", "feature_standardization_group_col", "symbol"
+        ),
+        "feature_value_transform": config_str(
+            config, "features", "feature_value_transform", "none"
+        ),
+        **_feature_transform_runtime_options(
+            config,
+            group_cols_as_tuple=not for_manifest,
+        ),
+        "gate_diagnostics_max_rows": config_int(
+            config, "model", "gate_diagnostics_max_rows", 200_000
+        ),
+    }
+
+
 def metrics_row(
     *,
     run_name: str,
@@ -165,195 +287,36 @@ def fit_single_prediction_model(
     alpha: float,
 ):
     model_name = config_str(config, "model", "name", "ridge").strip().lower()
-    configured_feature_limit = feature_limit(args, config)
-    target_col = config_str(config, "model", "target_col", "label")
-    configured_feature_filters = feature_filters_from_config(config)
+    fit_options = {
+        "feature_limit": feature_limit(args, config),
+        "target_col": config_str(config, "model", "target_col", "label"),
+        "feature_filters": feature_filters_from_config(config),
+    }
     if model_name == "ridge":
-        return fit_ridge_frame(
-            train,
-            alpha=alpha,
-            feature_limit=configured_feature_limit,
-            target_col=target_col,
-            feature_filters=configured_feature_filters,
-        )
+        return fit_ridge_frame(train, alpha=alpha, **fit_options)
     if model_name in {"gbm", "hist_gbm", "hist_gradient_boosting"}:
         return fit_gbm_frame(
             train,
-            feature_limit=configured_feature_limit,
-            target_col=target_col,
-            feature_filters=configured_feature_filters,
-            max_iter=config_int(config, "model", "max_iter", 100),
-            learning_rate=config_float(config, "model", "learning_rate", 0.05),
-            max_leaf_nodes=config_int(config, "model", "max_leaf_nodes", 31),
-            l2_regularization=config_float(
-                config,
-                "model",
-                "l2_regularization",
-                0.0,
-            ),
-            random_state=config_int(config, "model", "random_state", 7),
+            **fit_options,
+            **_gbm_model_options(config),
         )
     if model_name in {"lightgbm", "lgbm"}:
         return fit_lightgbm_frame(
             train,
-            feature_limit=configured_feature_limit,
-            target_col=target_col,
-            sample_weight_col=config_str(config, "model", "sample_weight_col", ""),
-            feature_filters=configured_feature_filters,
-            n_estimators=config_int(config, "model", "n_estimators", 300),
-            learning_rate=config_float(config, "model", "learning_rate", 0.03),
-            num_leaves=config_int(config, "model", "num_leaves", 63),
-            max_depth=config_int(config, "model", "max_depth", -1),
-            min_child_samples=config_int(config, "model", "min_child_samples", 200),
-            subsample=config_float(config, "model", "subsample", 1.0),
-            subsample_freq=config_int(config, "model", "subsample_freq", 0),
-            colsample_bytree=config_float(config, "model", "colsample_bytree", 1.0),
-            reg_alpha=config_float(config, "model", "reg_alpha", 0.0),
-            reg_lambda=config_float(config, "model", "reg_lambda", 0.0),
-            random_state=config_int(config, "model", "random_state", 7),
-            n_jobs=config_int(config, "model", "n_jobs", -1),
-            device_type=config_str(config, "model", "device_type", "cpu"),
-            max_bin=config_optional_int(config, "model", "max_bin", None),
-            gpu_use_dp=config_bool(config, "model", "gpu_use_dp", False),
-            feature_value_transform=config_str(
-                config,
-                "features",
-                "feature_value_transform",
-                "none",
-            ),
-            feature_value_transform_output=config_str(
-                config,
-                "features",
-                "feature_value_transform_output",
-                "replace",
-            ),
-            feature_value_transform_prefix=config_str(
-                config,
-                "features",
-                "feature_value_transform_prefix",
-                "mech_v3_",
-            ),
-            feature_value_transform_group_cols=tuple(
-                config_list(
-                    config,
-                    "features",
-                    "feature_value_transform_group_cols",
-                    ["date", "decision_target_timestamp"],
-                )
-            ),
-            feature_value_transform_rank_method=config_str(
-                config,
-                "features",
-                "feature_value_transform_rank_method",
-                "average",
-            ),
-            feature_value_transform_tick_size=config_float(
-                config,
-                "features",
-                "feature_value_transform_tick_size",
-                0.01,
-            ),
+            **fit_options,
+            **_lightgbm_model_options(config),
+            **_feature_transform_runtime_options(config),
         )
     if model_name in {"torch_mlp", "mlp", "nn"}:
-        hidden_layers = tuple(
-            int(value)
-            for value in config_list(config, "model", "hidden_layers", ["512", "256", "128"])
-        )
         return fit_torch_mlp_frame(
             train,
-            feature_limit=configured_feature_limit,
-            target_col=target_col,
-            sample_weight_col=config_str(config, "model", "sample_weight_col", ""),
-            feature_filters=configured_feature_filters,
-            hidden_layers=hidden_layers,
-            architecture=config_str(config, "model", "architecture", "mlp"),
-            group_embedding_dim=config_int(config, "model", "group_embedding_dim", 48),
-            group_embedding_dims=_model_group_embedding_dims(config),
-            fusion_dim=config_int(config, "model", "fusion_dim", 256),
-            block_hidden_dim=config_int(config, "model", "block_hidden_dim", 512),
-            num_blocks=config_int(config, "model", "num_blocks", 2),
-            transformer_heads=config_int(config, "model", "transformer_heads", 4),
-            dropout=config_float(config, "model", "dropout", 0.1),
-            activation=config_str(config, "model", "activation", "relu"),
-            batch_size=config_int(config, "model", "batch_size", 32768),
-            predict_batch_size=config_int(config, "model", "predict_batch_size", 65536),
-            learning_rate=config_float(config, "model", "learning_rate", 3e-4),
-            weight_decay=config_float(config, "model", "weight_decay", 1e-4),
-            max_epochs=config_int(config, "model", "max_epochs", 8),
-            validation_fraction=config_float(config, "model", "validation_fraction", 0.02),
-            validation_max_rows=config_int(config, "model", "validation_max_rows", 250_000),
-            early_stopping_patience=config_int(config, "model", "early_stopping_patience", 2),
-            loss=config_str(config, "model", "loss", "mse"),
-            huber_beta=config_float(config, "model", "huber_beta", 1.0),
-            mse_blend_weight=config_float(config, "model", "mse_blend_weight", 0.2),
-            device=config_str(config, "model", "device", "auto"),
-            random_state=config_int(config, "model", "random_state", 7),
-            num_workers=config_int(config, "model", "num_workers", 0),
-            training_tensor_storage=config_str(
-                config,
-                "model",
-                "training_tensor_storage",
-                "auto",
-            ),
-            cuda_resident_reserve_gib=config_float(
-                config,
-                "model",
-                "cuda_resident_reserve_gib",
-                8.0,
-            ),
-            gate_diagnostics_max_rows=config_int(
-                config,
-                "model",
-                "gate_diagnostics_max_rows",
-                200_000,
-            ),
-            feature_standardization=config_str(
-                config,
-                "model",
-                "feature_standardization",
-                "global_zscore",
-            ),
-            feature_standardization_group_col=config_str(
-                config,
-                "model",
-                "feature_standardization_group_col",
-                "symbol",
-            ),
-            feature_value_transform=config_str(
-                config,
-                "features",
-                "feature_value_transform",
-                "none",
-            ),
-            feature_value_transform_group_cols=tuple(
-                config_list(
-                    config,
-                    "features",
-                    "feature_value_transform_group_cols",
-                    ["date", "decision_target_timestamp"],
-                )
-            ),
-            feature_value_transform_rank_method=config_str(
-                config,
-                "features",
-                "feature_value_transform_rank_method",
-                "average",
-            ),
-            feature_value_transform_tick_size=config_float(
-                config,
-                "features",
-                "feature_value_transform_tick_size",
-                0.01,
-            ),
+            **fit_options,
+            **_torch_model_options(config, for_manifest=False),
         )
     raise SystemExit(
         f"unsupported model.name={model_name!r}; "
         "expected ridge, gbm, lightgbm, torch_mlp, ensemble, or clock_segment_lightgbm"
     )
-
-
-def _clock_series(frame: pd.DataFrame) -> pd.Series:
-    return frame_clock_series(frame)
 
 
 def _segment_model_config(config: dict, segment: dict, base_model_name: str) -> dict:
@@ -394,7 +357,7 @@ def fit_clock_segment_prediction_model(
         )
 
     base_model_name = config_str(config, "model", "base_model_name", "lightgbm")
-    clock = _clock_series(train)
+    clock = frame_clock_series(train)
     fitted_segments = []
     segment_stats = []
     for index, segment in enumerate(segments):
@@ -552,150 +515,20 @@ def model_config_payload(config: dict, alpha: float) -> dict[str, object]:
         return {
             "name": "gbm",
             "target_col": target_col,
-            "max_iter": config_int(config, "model", "max_iter", 100),
-            "learning_rate": config_float(config, "model", "learning_rate", 0.05),
-            "max_leaf_nodes": config_int(config, "model", "max_leaf_nodes", 31),
-            "l2_regularization": config_float(
-                config,
-                "model",
-                "l2_regularization",
-                0.0,
-            ),
-            "random_state": config_int(config, "model", "random_state", 7),
+            **_gbm_model_options(config),
         }
     if model_name in {"lightgbm", "lgbm"}:
         return {
             "name": "lightgbm",
             "target_col": target_col,
-            "device_type": config_str(config, "model", "device_type", "cpu"),
-            "n_estimators": config_int(config, "model", "n_estimators", 300),
-            "learning_rate": config_float(config, "model", "learning_rate", 0.03),
-            "num_leaves": config_int(config, "model", "num_leaves", 63),
-            "max_depth": config_int(config, "model", "max_depth", -1),
-            "min_child_samples": config_int(config, "model", "min_child_samples", 200),
-            "subsample": config_float(config, "model", "subsample", 1.0),
-            "subsample_freq": config_int(config, "model", "subsample_freq", 0),
-            "colsample_bytree": config_float(config, "model", "colsample_bytree", 1.0),
-            "reg_alpha": config_float(config, "model", "reg_alpha", 0.0),
-            "reg_lambda": config_float(config, "model", "reg_lambda", 0.0),
-            "random_state": config_int(config, "model", "random_state", 7),
-            "n_jobs": config_int(config, "model", "n_jobs", -1),
-            "max_bin": config_optional_int(config, "model", "max_bin", None),
-            "gpu_use_dp": config_bool(config, "model", "gpu_use_dp", False),
-            "sample_weight_col": config_str(config, "model", "sample_weight_col", ""),
+            **_lightgbm_model_options(config),
             "missing_value_policy": "lightgbm_native",
-            "feature_value_transform": config_str(
-                config,
-                "features",
-                "feature_value_transform",
-                "none",
-            ),
-            "feature_value_transform_output": config_str(
-                config,
-                "features",
-                "feature_value_transform_output",
-                "replace",
-            ),
-            "feature_value_transform_prefix": config_str(
-                config,
-                "features",
-                "feature_value_transform_prefix",
-                "mech_v3_",
-            ),
         }
     if model_name in {"torch_mlp", "mlp", "nn"}:
         return {
             "name": "torch_mlp",
             "target_col": target_col,
-            "hidden_layers": config_list(
-                config,
-                "model",
-                "hidden_layers",
-                ["512", "256", "128"],
-            ),
-            "architecture": config_str(config, "model", "architecture", "mlp"),
-            "group_embedding_dim": config_int(config, "model", "group_embedding_dim", 48),
-            "group_embedding_dims": _model_group_embedding_dims(config),
-            "fusion_dim": config_int(config, "model", "fusion_dim", 256),
-            "block_hidden_dim": config_int(config, "model", "block_hidden_dim", 512),
-            "num_blocks": config_int(config, "model", "num_blocks", 2),
-            "transformer_heads": config_int(config, "model", "transformer_heads", 4),
-            "dropout": config_float(config, "model", "dropout", 0.1),
-            "activation": config_str(config, "model", "activation", "relu"),
-            "batch_size": config_int(config, "model", "batch_size", 32768),
-            "predict_batch_size": config_int(config, "model", "predict_batch_size", 65536),
-            "learning_rate": config_float(config, "model", "learning_rate", 3e-4),
-            "weight_decay": config_float(config, "model", "weight_decay", 1e-4),
-            "max_epochs": config_int(config, "model", "max_epochs", 8),
-            "validation_fraction": config_float(config, "model", "validation_fraction", 0.02),
-            "validation_max_rows": config_int(config, "model", "validation_max_rows", 250_000),
-            "early_stopping_patience": config_int(
-                config,
-                "model",
-                "early_stopping_patience",
-                2,
-            ),
-            "loss": config_str(config, "model", "loss", "mse"),
-            "huber_beta": config_float(config, "model", "huber_beta", 1.0),
-            "mse_blend_weight": config_float(config, "model", "mse_blend_weight", 0.2),
-            "device": config_str(config, "model", "device", "auto"),
-            "random_state": config_int(config, "model", "random_state", 7),
-            "num_workers": config_int(config, "model", "num_workers", 0),
-            "training_tensor_storage": config_str(
-                config,
-                "model",
-                "training_tensor_storage",
-                "auto",
-            ),
-            "cuda_resident_reserve_gib": config_float(
-                config,
-                "model",
-                "cuda_resident_reserve_gib",
-                8.0,
-            ),
-            "sample_weight_col": config_str(config, "model", "sample_weight_col", ""),
-            "feature_standardization": config_str(
-                config,
-                "model",
-                "feature_standardization",
-                "global_zscore",
-            ),
-            "feature_standardization_group_col": config_str(
-                config,
-                "model",
-                "feature_standardization_group_col",
-                "symbol",
-            ),
-            "feature_value_transform": config_str(
-                config,
-                "features",
-                "feature_value_transform",
-                "none",
-            ),
-            "feature_value_transform_group_cols": config_list(
-                config,
-                "features",
-                "feature_value_transform_group_cols",
-                ["date", "decision_target_timestamp"],
-            ),
-            "feature_value_transform_rank_method": config_str(
-                config,
-                "features",
-                "feature_value_transform_rank_method",
-                "average",
-            ),
-            "feature_value_transform_tick_size": config_float(
-                config,
-                "features",
-                "feature_value_transform_tick_size",
-                0.01,
-            ),
-            "gate_diagnostics_max_rows": config_int(
-                config,
-                "model",
-                "gate_diagnostics_max_rows",
-                200_000,
-            ),
+            **_torch_model_options(config, for_manifest=True),
         }
     if model_name == "ensemble":
         model_section = config.get("model", {})

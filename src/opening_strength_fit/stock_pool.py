@@ -318,6 +318,29 @@ def filter_stock_pool_members(
     return frame.loc[mask].copy()
 
 
+def filter_named_stock_pool(
+    frame: pd.DataFrame,
+    pool: str,
+    *,
+    date_lag_sessions: int = 0,
+    cache: dict[str, pd.DataFrame] | None = None,
+) -> tuple[str, pd.DataFrame]:
+    if pool == "universe":
+        return "universe", frame
+    pool_path = DEFAULT_STOCK_POOL_PATHS[pool]
+    print(f"loading_stock_pool: pool={pool} path={pool_path}")
+    stock_pool = cache.get(pool) if cache is not None else None
+    if stock_pool is None:
+        stock_pool = load_stock_pool(pool_path)
+        if cache is not None:
+            cache[pool] = stock_pool
+    return f"pool_{pool}", filter_stock_pool_members(
+        frame,
+        stock_pool,
+        date_lag_sessions=date_lag_sessions,
+    )
+
+
 def filter_configured_stock_pool_train(
     train: pd.DataFrame,
     settings: StockPoolConfig,

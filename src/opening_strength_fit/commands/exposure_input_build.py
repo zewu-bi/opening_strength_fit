@@ -16,15 +16,14 @@ from opening_strength_fit.clickhouse_ticks import (
     managed_tick_client,
     validate_table_name,
 )
-from opening_strength_fit.commands.arguments import CommandArguments
-from opening_strength_fit.config import config_str, load_env_file, load_toml, run_id
+from opening_strength_fit.commands.arguments import command_context
+from opening_strength_fit.config import config_str, load_env_file
 from opening_strength_fit.exposure_audit import normalize_audit_frame
+from opening_strength_fit.feature_utils import finite_numeric as _finite_float
 from opening_strength_fit.io import read_frame, write_frame
-from opening_strength_fit.prediction_frames import prediction_files
+from opening_strength_fit.prediction_frames import prediction_files_many as _prediction_files
 from opening_strength_fit.stock_pool import (
-    DEFAULT_STOCK_POOL_PATHS,
-    load_stock_pool,
-    stock_pool_membership_mask,
+    filter_named_stock_pool,
 )
 
 DEFAULT_DAILY_BAR_TABLE = "stock.daily_bar_jy"
@@ -61,10 +60,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _prediction_files(paths: Iterable[str]) -> list[Path]:
-    return [file for raw in paths for file in prediction_files(Path(raw))]
-
-
 def _read_prediction_keys(files: list[Path]) -> pd.DataFrame:
     frames = []
     for file in files:
@@ -76,33 +71,10 @@ def _read_prediction_keys(files: list[Path]) -> pd.DataFrame:
     return normalize_audit_frame(pd.concat(frames, ignore_index=True))
 
 
-def _filter_pool(
-    keys: pd.DataFrame,
-    *,
-    pool: str,
-    pool_date_lag_sessions: int,
-) -> pd.DataFrame:
-    if pool == "universe":
-        return keys
-    pool_path = DEFAULT_STOCK_POOL_PATHS[pool]
-    print(f"loading_stock_pool: pool={pool} path={pool_path}")
-    stock_pool = load_stock_pool(pool_path)
-    mask = stock_pool_membership_mask(
-        keys,
-        stock_pool,
-        date_lag_sessions=pool_date_lag_sessions,
-    )
-    return keys.loc[mask].copy()
-
-
 def _chunks(values: list[str], size: int) -> Iterable[list[str]]:
     size = max(int(size), 1)
     for start in range(0, len(values), size):
         yield values[start : start + size]
-
-
-def _finite_float(values: pd.Series) -> pd.Series:
-    return pd.to_numeric(values, errors="coerce").replace([np.inf, -np.inf], np.nan)
 
 
 def _query_daily_bar(
@@ -234,9 +206,7 @@ def _clickhouse_setting(arg_value: object, env_name: str, default: object) -> ob
 
 def main() -> None:
     args = parse_args()
-    config = load_toml(args.config) if args.config else {}
-    arguments = CommandArguments(args, config, "exposure_input")
-    run_name = run_id(config, args.config) if config or args.config else "exposure_input"
+    config, arguments, run_name = command_context(args, "exposure_input")
     if args.env_file:
         load_env_file(args.env_file)
     prediction_paths = arguments.list("predictions")
@@ -277,10 +247,10 @@ def main() -> None:
     prediction_files_list = _prediction_files(prediction_paths)
     print(f"reading_prediction_keys: files={len(prediction_files_list)}")
     keys = _read_prediction_keys(prediction_files_list)
-    keys = _filter_pool(
+    _, keys = filter_named_stock_pool(
         keys,
-        pool=pool,
-        pool_date_lag_sessions=pool_date_lag_sessions,
+        pool,
+        date_lag_sessions=pool_date_lag_sessions,
     )
     full_keys = keys.drop_duplicates(list(KEY_COLUMNS)).copy()
     print(

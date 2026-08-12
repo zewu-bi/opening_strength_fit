@@ -163,9 +163,3 @@ def build_labeled_feature_frame(
     if require_cross_section_ready_entry:
         sampled = require_entry_after_cross_section_ready(sampled)
     return sampled
-
-
-def valid_labeled_rows(frame: pd.DataFrame) -> pd.DataFrame:
-    if "valid_label" in frame.columns:
-        return frame.loc[frame["valid_label"]].copy()
-    return frame.loc[frame["label"].notna()].copy()

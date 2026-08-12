@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import argparse
-import shutil
 from datetime import UTC, datetime
-from pathlib import Path
 
-from opening_strength_fit.analysis import write_json
-from opening_strength_fit.artifact_catalog import record_requested_artifacts
+from opening_strength_fit.artifact_catalog import (
+    CAPACITY_ACCEPTANCE_ARTIFACTS,
+    print_recorded_artifacts,
+    record_requested_artifacts,
+)
 from opening_strength_fit.capacity_acceptance import (
     DEFAULT_CAPACITY_LABEL_COL,
     DEFAULT_CAPACITY_TOTAL_NOTIONAL,
@@ -15,24 +16,17 @@ from opening_strength_fit.capacity_acceptance import (
     summarize_capacity_acceptance,
     summarize_capacity_acceptance_overall,
 )
-from opening_strength_fit.commands.arguments import CommandArguments
-from opening_strength_fit.config import load_toml, run_id
-
-ARTIFACTS = (
-    "capacity_acceptance_daily_summary.csv",
-    "capacity_acceptance_summary.csv",
-    "capacity_acceptance_trace.json",
-)
+from opening_strength_fit.commands import arguments as cmd
+from opening_strength_fit.config import config_str, prepare_output_dir
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
+    parser = cmd.command_parser(
         description=(
             "Compute capacity-weighted next-close acceptance returns from a capacity "
             "audit selected allocation file."
         )
     )
-    parser.add_argument("--config", default="")
     parser.add_argument(
         "--selected-input",
         action="append",
@@ -43,24 +37,16 @@ def parse_args() -> argparse.Namespace:
         action="append",
         help="Next-close label parquet/csv file or directory. May be repeated.",
     )
-    parser.add_argument("--output-dir", default="")
-    parser.add_argument("--run-id", default="")
-    parser.add_argument("--variant", default="")
+    cmd.add_arguments(parser, "output-dir run-id variant", default="")
     parser.add_argument("--label-col", default="")
-    parser.add_argument("--fee-bps", type=float, default=None)
-    parser.add_argument("--capacity-total-notional", type=float, default=None)
-    parser.add_argument("--records-dir", default="")
-    parser.add_argument("--record-prefix", default="")
+    cmd.add_arguments(parser, "fee-bps capacity-total-notional", type=float, default=None)
+    cmd.add_arguments(parser, "records-dir record-prefix", default="")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    config = load_toml(args.config) if args.config else {}
-    arguments = CommandArguments(args, config, "capacity_acceptance")
-    run_name = args.run_id or (
-        run_id(config, args.config) if args.config else "capacity_acceptance"
-    )
+    config, arguments, run_name = cmd.command_context(args, "capacity_acceptance")
     selected_inputs = arguments.tuple("selected_input")
     label_inputs = arguments.tuple("label_input")
     if not selected_inputs:
@@ -68,14 +54,9 @@ def main() -> None:
     if not label_inputs:
         raise SystemExit("pass --label-input or set [capacity_acceptance].label_input")
 
-    output_dir_value = CommandArguments(args, config, "output").string(
-        "output_dir",
-        config_name="local_dir",
-    )
-    if not output_dir_value:
+    if not (args.output_dir or config_str(config, "output", "local_dir", "")):
         raise SystemExit("pass --output-dir or set [output].local_dir")
-    output_dir = Path(output_dir_value)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = prepare_output_dir(config, args.output_dir, run_name)
     label_col = arguments.string("label_col", DEFAULT_CAPACITY_LABEL_COL)
     fee_bps = arguments.float("fee_bps", 0.0)
     capacity_total_notional = arguments.float(
@@ -119,29 +100,19 @@ def main() -> None:
         "daily_summary": str(daily_path),
         "record_paths": [],
     }
-    write_json(trace_path, trace, ensure_ascii=True)
-
     records_dir = arguments.string("records_dir")
     record_prefix = arguments.string("record_prefix") or run_name
     record_paths = record_requested_artifacts(
         output_dir=output_dir,
         records_dir=records_dir,
         record_prefix=record_prefix,
-        names=ARTIFACTS,
+        names=CAPACITY_ACCEPTANCE_ARTIFACTS,
+        trace=(trace_path, trace),
     )
-    if records_dir:
-        trace["record_paths"] = [str(path) for path in record_paths]
-        write_json(trace_path, trace, ensure_ascii=True)
-        destination = Path(records_dir) / "backtests" / record_prefix / trace_path.name
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(trace_path, destination)
 
     print("capacity_acceptance_summary:")
     print(summary.to_string(index=False) if not summary.empty else "empty")
-    if record_paths:
-        print("\nrecorded_capacity_acceptance_outputs:")
-        for path in record_paths:
-            print(f"  {path}")
+    print_recorded_artifacts(record_paths, "capacity_acceptance")
     print(f"\nwrote outputs: {output_dir}")
 
 

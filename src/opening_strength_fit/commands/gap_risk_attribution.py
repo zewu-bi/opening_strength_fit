@@ -2,62 +2,39 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Iterable
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pyarrow.parquet as pq
 
-from opening_strength_fit.config import config_int, config_str, config_value, load_toml, run_id
-from opening_strength_fit.io import write_json
-from opening_strength_fit.schema import DECISION_KEY_COLUMNS
+from opening_strength_fit.analysis import finite_mean
+from opening_strength_fit.commands.arguments import add_arguments, command_context
+from opening_strength_fit.config import (
+    coerce_str_list,
+    config_int,
+    config_list,
+    config_value,
+    prepare_output_dir,
+)
+from opening_strength_fit.io import frame_columns, write_json
+from opening_strength_fit.schema import DECISION_KEY_COLUMNS, normalize_decision_keys
+from opening_strength_fit.score_variant_eval import (
+    GAP_P80_VARIANTS,
+    configured_score_variants,
+)
 
 KEY_COLUMNS = DECISION_KEY_COLUMNS
-DEFAULT_FEATURES = (
-    "spread_bps",
-    "turnover_diff_1t",
-    "turnover_diff_3t",
-    "turnover_diff_10t",
-    "turnover_diff_30t",
-    "volume_diff_10t",
-    "volume_diff_30t",
-    "return_10t",
-    "return_30t",
-    "ask_depth_10",
-    "bid_depth_10",
-    "ask_volume_1",
-    "bid_volume_1",
-    "depth_imbalance_1",
-    "depth_imbalance_10",
-    "preopen_turnover",
-    "preopen_volume",
-    "buy_price",
-    "mid_price",
+DEFAULT_FEATURES = tuple(
+    "spread_bps turnover_diff_1t turnover_diff_3t turnover_diff_10t turnover_diff_30t "
+    "volume_diff_10t volume_diff_30t return_10t return_30t ask_depth_10 bid_depth_10 "
+    "ask_volume_1 bid_volume_1 depth_imbalance_1 depth_imbalance_10 preopen_turnover "
+    "preopen_volume buy_price mid_price".split()
 )
-DEFAULT_CONTROLS = (
-    "turnover_diff_10t",
-    "return_10t",
-    "spread_bps",
-    "ask_depth_10",
-    "depth_imbalance_10",
-    "preopen_turnover",
-    "buy_price",
+DEFAULT_CONTROLS = tuple(
+    "turnover_diff_10t return_10t spread_bps ask_depth_10 depth_imbalance_10 "
+    "preopen_turnover buy_price".split()
 )
-DEFAULT_VARIANTS = (
-    {
-        "variant": "gap_penalty_030_p80",
-        "risk_model": "gap",
-        "penalty": 0.30,
-        "candidate_alpha_rank_min": 0.80,
-    },
-    {
-        "variant": "gap_penalty_035_p80",
-        "risk_model": "gap",
-        "penalty": 0.35,
-        "candidate_alpha_rank_min": 0.80,
-    },
-)
+DEFAULT_VARIANTS = GAP_P80_VARIANTS
 RISK_RANK_BY_MODEL = {
     "gap": "gap_risk_rank",
     "binary": "binary_risk_rank",
@@ -71,10 +48,7 @@ def parse_args() -> argparse.Namespace:
             "penalized-out names, replacements, and retained names."
         )
     )
-    parser.add_argument("--config", default="")
-    parser.add_argument("--prediction-dir", default="")
-    parser.add_argument("--labeled-path", default="")
-    parser.add_argument("--output-dir", default="")
+    add_arguments(parser, "config prediction-dir labeled-path output-dir", default="")
     parser.add_argument(
         "--months",
         default="",
@@ -84,21 +58,11 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def string_sequence(value, default: Iterable[str] = ()) -> list[str]:
-    if value in (None, ""):
-        return list(default)
-    if isinstance(value, str):
-        raw = value.replace(",", " ").split()
-    else:
-        raw = list(value)
-    return [str(item).strip() for item in raw if str(item).strip()]
-
-
 def month_sequence(config: dict, override: str = "") -> list[str]:
-    explicit = string_sequence(override)
+    explicit = coerce_str_list(override)
     if explicit:
         return explicit
-    explicit = string_sequence(config_value(config, "attribution", "months", []))
+    explicit = config_list(config, "attribution", "months", [])
     if explicit:
         return explicit
     start = config_value(config, "window", "test_start_month", "")
@@ -106,29 +70,6 @@ def month_sequence(config: dict, override: str = "") -> list[str]:
     if start and end:
         return [str(month) for month in pd.period_range(str(start), str(end), freq="M")]
     raise SystemExit("gap attribution requires --months or [attribution].months")
-
-
-def variant_specs(config: dict) -> list[dict[str, object]]:
-    configured = config.get("attribution", {}).get("variants", [])
-    if not configured:
-        return [dict(item) for item in DEFAULT_VARIANTS]
-    specs = []
-    for item in configured:
-        specs.append(
-            {
-                "variant": str(item.get("variant", "")).strip(),
-                "risk_model": str(item.get("risk_model", "gap")).strip().lower(),
-                "penalty": float(item.get("penalty", 0.0) or 0.0),
-                "candidate_alpha_rank_min": float(item.get("candidate_alpha_rank_min", 0.0) or 0.0),
-            }
-        )
-    return [spec for spec in specs if spec["variant"]]
-
-
-def existing_columns(path: Path) -> set[str]:
-    if path.suffix.lower() == ".csv":
-        return set(pd.read_csv(path, nrows=0).columns)
-    return set(pq.ParquetFile(path).schema.names)
 
 
 def prediction_path(prediction_dir: Path, month: str) -> Path:
@@ -160,7 +101,7 @@ def read_predictions(path: Path) -> pd.DataFrame:
         "candidate_alpha_rank",
         "gap_risk_rank",
     ]
-    available = existing_columns(path)
+    available = frame_columns(path)
     missing = [column for column in required if column not in available]
     if missing:
         raise SystemExit(f"{path}: prediction shard missing columns: {missing}")
@@ -171,16 +112,10 @@ def read_predictions(path: Path) -> pd.DataFrame:
 
 
 def normalize_frame(frame: pd.DataFrame) -> pd.DataFrame:
-    out = frame.copy()
-    out["date"] = out["date"].astype(str)
-    out["symbol"] = out["symbol"].astype(str)
-    out["decision_target_timestamp"] = pd.to_datetime(
-        out["decision_target_timestamp"],
-        errors="coerce",
-    )
+    out = normalize_decision_keys(frame)
     for column in set(out.columns) - set(KEY_COLUMNS):
         out[column] = pd.to_numeric(out[column], errors="coerce")
-    return out.dropna(subset=list(KEY_COLUMNS)).copy()
+    return out
 
 
 def read_feature_month(
@@ -189,7 +124,7 @@ def read_feature_month(
     month: str,
     feature_columns: list[str],
 ) -> pd.DataFrame:
-    available = existing_columns(labeled_path)
+    available = frame_columns(labeled_path)
     features = [column for column in feature_columns if column in available]
     if not features:
         raise SystemExit(f"{labeled_path}: none of requested feature columns exist")
@@ -208,13 +143,6 @@ def read_feature_month(
         frame["date"] = frame["date"].astype(str)
         frame = frame.loc[frame["date"].between(start, end)].copy()
     return normalize_frame(frame)
-
-
-def finite_mean(values: pd.Series) -> float:
-    numeric = pd.to_numeric(values, errors="coerce").replace([np.inf, -np.inf], np.nan)
-    if numeric.notna().sum() == 0:
-        return float("nan")
-    return float(numeric.mean())
 
 
 def add_group_feature_scales(frame: pd.DataFrame, features: list[str]) -> pd.DataFrame:
@@ -251,24 +179,14 @@ def selected_ids(group: pd.DataFrame, variant: dict[str, object], top_n: int) ->
     risk_model = str(variant.get("risk_model", "") or "").lower()
     penalty = float(variant.get("penalty", 0.0) or 0.0)
     candidate_min = float(variant.get("candidate_alpha_rank_min", 0.0) or 0.0)
-    candidates = group.loc[
-        pd.to_numeric(group["candidate_alpha_rank"], errors="coerce").ge(candidate_min)
-    ].copy()
+    candidates = group.loc[group["candidate_alpha_rank"].ge(candidate_min)].copy()
     if candidates.empty:
         return set()
     risk_col = RISK_RANK_BY_MODEL.get(risk_model, "")
-    risk_values = (
-        pd.to_numeric(candidates[risk_col], errors="coerce").fillna(0.0) if risk_col else 0.0
-    )
-    candidates["final_score"] = (
-        pd.to_numeric(candidates["candidate_alpha_rank"], errors="coerce") - penalty * risk_values
-    )
-    return set(
-        candidates.sort_values("final_score", ascending=False)
-        .head(top_n)["row_id"]
-        .astype(int)
-        .tolist()
-    )
+    risk_values = candidates[risk_col].fillna(0.0) if risk_col else 0.0
+    candidates["final_score"] = candidates["candidate_alpha_rank"] - penalty * risk_values
+    selected = candidates.sort_values("final_score", ascending=False).head(top_n)
+    return set(selected["row_id"].astype(int))
 
 
 def build_membership_and_group_metrics(
@@ -341,34 +259,25 @@ def build_membership_and_group_metrics(
 
 
 def summarize_group_metrics(group_metrics: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    keys = ["test_month", "variant", "cohort"]
-    month = (
-        group_metrics.groupby(keys, dropna=False)
-        .agg(
-            groups=("rows", "size"),
-            mean_rows=("rows", "mean"),
-            short_mean_bps=("short_mean_bps", "mean"),
-            short_excess_bps=("short_excess_bps", "mean"),
-            next_mean_bps=("next_mean_bps", "mean"),
-            next_excess_bps=("next_excess_bps", "mean"),
-            next_positive_rate=("next_excess_bps", lambda s: float((s > 0).mean())),
+    def aggregate(keys: list[str]) -> pd.DataFrame:
+        return (
+            group_metrics.groupby(keys, dropna=False)
+            .agg(
+                groups=("rows", "size"),
+                mean_rows=("rows", "mean"),
+                short_mean_bps=("short_mean_bps", "mean"),
+                short_excess_bps=("short_excess_bps", "mean"),
+                next_mean_bps=("next_mean_bps", "mean"),
+                next_excess_bps=("next_excess_bps", "mean"),
+                next_positive_rate=("next_excess_bps", lambda values: float((values > 0).mean())),
+            )
+            .reset_index()
         )
-        .reset_index()
+
+    return (
+        aggregate(["test_month", "variant", "cohort"]),
+        aggregate(["variant", "cohort"]),
     )
-    overall = (
-        group_metrics.groupby(["variant", "cohort"], dropna=False)
-        .agg(
-            groups=("rows", "size"),
-            mean_rows=("rows", "mean"),
-            short_mean_bps=("short_mean_bps", "mean"),
-            short_excess_bps=("short_excess_bps", "mean"),
-            next_mean_bps=("next_mean_bps", "mean"),
-            next_excess_bps=("next_excess_bps", "mean"),
-            next_positive_rate=("next_excess_bps", lambda s: float((s > 0).mean())),
-        )
-        .reset_index()
-    )
-    return month, overall
 
 
 def summarize_feature_exposure(
@@ -389,24 +298,19 @@ def summarize_feature_exposure(
         on="row_id",
         how="left",
     )
-    rows = []
+    summaries = []
+    keys = ["test_month", "variant", "cohort"]
     for feature in features:
-        for keys, part in selected.groupby(["test_month", "variant", "cohort"]):
-            month, variant, cohort = keys
-            rows.append(
-                {
-                    "test_month": month,
-                    "variant": variant,
-                    "cohort": cohort,
-                    "feature": feature,
-                    "rows": int(len(part)),
-                    "mean_raw": finite_mean(part[feature]),
-                    "median_raw": float(pd.to_numeric(part[feature], errors="coerce").median()),
-                    "mean_rank": finite_mean(part[f"{feature}__rank"]),
-                    "mean_z": finite_mean(part[f"{feature}__z"]),
-                }
-            )
-    month_summary = pd.DataFrame(rows)
+        summary = selected.groupby(keys, as_index=False).agg(
+            rows=(feature, "size"),
+            mean_raw=(feature, finite_mean),
+            median_raw=(feature, "median"),
+            mean_rank=(f"{feature}__rank", finite_mean),
+            mean_z=(f"{feature}__z", finite_mean),
+        )
+        summary.insert(len(keys), "feature", feature)
+        summaries.append(summary)
+    month_summary = pd.concat(summaries, ignore_index=True)
     overall = (
         month_summary.groupby(["variant", "cohort", "feature"], dropna=False)
         .agg(
@@ -419,37 +323,26 @@ def summarize_feature_exposure(
         )
         .reset_index()
     )
-    delta_rows = []
-    for (variant, feature), part in overall.groupby(["variant", "feature"]):
-        by_cohort = part.set_index("cohort")
-        if {"penalized_out", "baseline_kept"} <= set(by_cohort.index):
-            delta_rows.append(
-                {
-                    "variant": variant,
-                    "feature": feature,
-                    "penalized_minus_kept_rank": float(
-                        by_cohort.loc["penalized_out", "mean_rank"]
-                        - by_cohort.loc["baseline_kept", "mean_rank"]
-                    ),
-                    "penalized_minus_kept_z": float(
-                        by_cohort.loc["penalized_out", "mean_z"]
-                        - by_cohort.loc["baseline_kept", "mean_z"]
-                    ),
-                }
+    columns = ["variant", "feature", "mean_rank", "mean_z"]
+    kept = overall.loc[overall["cohort"].eq("baseline_kept"), columns]
+    penalized = overall.loc[overall["cohort"].eq("penalized_out"), columns]
+    delta = penalized.merge(kept, on=["variant", "feature"], suffixes=("", "_kept"))
+    if delta.empty:
+        delta = pd.DataFrame()
+    else:
+        for metric in ("rank", "z"):
+            delta[f"penalized_minus_kept_{metric}"] = (
+                delta[f"mean_{metric}"] - delta[f"mean_{metric}_kept"]
             )
-    return month_summary, overall, pd.DataFrame(delta_rows)
+        delta = delta[["variant", "feature", "penalized_minus_kept_rank", "penalized_minus_kept_z"]]
+    return month_summary, overall, delta
 
 
 def fit_residual(values: pd.DataFrame, control_columns: list[str]) -> pd.Series:
     y = pd.to_numeric(values["next_excess_bps"], errors="coerce").to_numpy(dtype=float)
-    controls = []
-    for column in control_columns:
-        x = pd.to_numeric(values[f"{column}__z"], errors="coerce").fillna(0.0)
-        controls.append(x.to_numpy(dtype=float))
-    if controls:
-        xmat = np.column_stack([np.ones(len(values)), *controls])
-    else:
-        xmat = np.ones((len(values), 1))
+    controls = values[[f"{column}__z" for column in control_columns]]
+    controls = controls.apply(pd.to_numeric, errors="coerce").fillna(0.0).to_numpy(dtype=float)
+    xmat = np.column_stack([np.ones(len(values)), controls])
     mask = np.isfinite(y) & np.isfinite(xmat).all(axis=1)
     residual = np.full(len(values), np.nan, dtype=float)
     if mask.sum() <= xmat.shape[1] + 5:
@@ -488,96 +381,62 @@ def residual_penalized_vs_kept(
             .set_index("cohort")
         )
         if {"baseline_kept", "penalized_out"} <= set(by_cohort.index):
-            rows.append(
-                {
-                    "test_month": month,
-                    "variant": variant,
-                    "controls": " ".join(controls),
-                    "kept_rows": int(by_cohort.loc["baseline_kept", "rows"]),
-                    "penalized_rows": int(by_cohort.loc["penalized_out", "rows"]),
-                    "kept_next_excess_bps": float(
-                        by_cohort.loc["baseline_kept", "next_excess_bps"]
-                    ),
-                    "penalized_next_excess_bps": float(
-                        by_cohort.loc["penalized_out", "next_excess_bps"]
-                    ),
-                    "penalized_minus_kept_next_excess_bps": float(
-                        by_cohort.loc["penalized_out", "next_excess_bps"]
-                        - by_cohort.loc["baseline_kept", "next_excess_bps"]
-                    ),
-                    "kept_next_residual_bps": float(
-                        by_cohort.loc["baseline_kept", "next_residual_bps"]
-                    ),
-                    "penalized_next_residual_bps": float(
-                        by_cohort.loc["penalized_out", "next_residual_bps"]
-                    ),
-                    "penalized_minus_kept_next_residual_bps": float(
-                        by_cohort.loc["penalized_out", "next_residual_bps"]
-                        - by_cohort.loc["baseline_kept", "next_residual_bps"]
-                    ),
-                }
-            )
+            kept = by_cohort.loc["baseline_kept"]
+            penalized = by_cohort.loc["penalized_out"]
+            row = {
+                "test_month": month,
+                "variant": variant,
+                "controls": " ".join(controls),
+                "kept_rows": int(kept["rows"]),
+                "penalized_rows": int(penalized["rows"]),
+            }
+            for metric in ("next_excess_bps", "next_residual_bps"):
+                row[f"kept_{metric}"] = float(kept[metric])
+                row[f"penalized_{metric}"] = float(penalized[metric])
+                row[f"penalized_minus_kept_{metric}"] = float(penalized[metric] - kept[metric])
+            rows.append(row)
     month_summary = pd.DataFrame(rows)
     if month_summary.empty:
         return month_summary
-    overall = (
-        month_summary.groupby("variant", dropna=False)
-        .agg(
-            test_month=("test_month", lambda _: "OVERALL"),
-            controls=("controls", "first"),
-            kept_rows=("kept_rows", "sum"),
-            penalized_rows=("penalized_rows", "sum"),
-            kept_next_excess_bps=("kept_next_excess_bps", "mean"),
-            penalized_next_excess_bps=("penalized_next_excess_bps", "mean"),
-            penalized_minus_kept_next_excess_bps=(
-                "penalized_minus_kept_next_excess_bps",
-                "mean",
-            ),
-            kept_next_residual_bps=("kept_next_residual_bps", "mean"),
-            penalized_next_residual_bps=("penalized_next_residual_bps", "mean"),
-            penalized_minus_kept_next_residual_bps=(
-                "penalized_minus_kept_next_residual_bps",
-                "mean",
-            ),
+    aggregations = {"test_month": ("test_month", lambda _: "OVERALL")}
+    for column in month_summary.columns:
+        if column in {"test_month", "variant"}:
+            continue
+        operation = (
+            "first" if column == "controls" else "sum" if column.endswith("_rows") else "mean"
         )
-        .reset_index()
-    )
+        aggregations[column] = (column, operation)
+    overall = month_summary.groupby("variant", dropna=False).agg(**aggregations).reset_index()
     return pd.concat([month_summary, overall], ignore_index=True)
 
 
 def main() -> None:
     args = parse_args()
-    config = load_toml(args.config) if args.config else {}
-    run_name = run_id(config, args.config) if args.config else "gap_risk_attribution"
-    prediction_dir = Path(
-        args.prediction_dir or config_str(config, "attribution", "prediction_dir", "")
+    config, settings, run_name = command_context(
+        args, "attribution", default_run_name="gap_risk_attribution"
     )
-    labeled_path = Path(args.labeled_path or config_str(config, "attribution", "labeled_path", ""))
+    prediction_dir = Path(settings.string("prediction_dir"))
+    labeled_path = Path(settings.string("labeled_path"))
     if not prediction_dir:
         raise SystemExit(
             "gap attribution requires --prediction-dir or [attribution].prediction_dir"
         )
     if not labeled_path:
         raise SystemExit("gap attribution requires --labeled-path or [attribution].labeled_path")
-    output_dir = Path(
-        args.output_dir
-        or config_str(config, "output", "local_dir", f"output/legacy/analysis/{run_name}")
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = prepare_output_dir(config, args.output_dir, run_name)
 
     months = month_sequence(config, args.months)
     top_n = args.top_n or config_int(config, "attribution", "top_n", 100)
-    variants = variant_specs(config)
-    features = string_sequence(
-        config_value(config, "attribution", "feature_columns", list(DEFAULT_FEATURES)),
-        DEFAULT_FEATURES,
+    variants = configured_score_variants(
+        config,
+        "attribution",
+        DEFAULT_VARIANTS,
+        default_risk_model="gap",
     )
-    controls = string_sequence(
-        config_value(config, "attribution", "control_columns", list(DEFAULT_CONTROLS)),
-        DEFAULT_CONTROLS,
-    )
+    features = config_list(config, "attribution", "feature_columns", DEFAULT_FEATURES)
+    controls = config_list(config, "attribution", "control_columns", DEFAULT_CONTROLS)
     requested_features = sorted(set(features) | set(controls))
-    available = existing_columns(labeled_path)
+    available = frame_columns(labeled_path)
     active_features = [column for column in requested_features if column in available]
     active_controls = [column for column in controls if column in active_features]
     if not active_features:
@@ -623,16 +482,7 @@ def main() -> None:
         all_membership.append(membership)
         all_group_metrics.append(group_metrics)
         keep_columns = [
-            "row_id",
-            "date",
-            "symbol",
-            "decision_target_timestamp",
-            "label",
-            "alpha_return_next_close",
-            "candidate_alpha_rank",
-            "gap_risk_rank",
-            "short_excess_bps",
-            "next_excess_bps",
+            *"row_id date symbol decision_target_timestamp label alpha_return_next_close candidate_alpha_rank gap_risk_rank short_excess_bps next_excess_bps".split(),
             *active_for_month,
             *(f"{feature}__rank" for feature in active_for_month),
             *(f"{feature}__z" for feature in active_for_month),

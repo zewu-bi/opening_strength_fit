@@ -24,38 +24,18 @@ def record_pool_internal_outputs(
     def record_name(suffix: str) -> str:
         return suffix if record_subdir else f"{record_prefix}_{suffix}"
 
-    records = [
-        (output_dir / "pool_internal_summary.csv", record_name("pool_internal_summary.csv")),
-        (
-            output_dir / "pool_internal_quarter_summary.csv",
-            record_name("pool_internal_quarter_summary.csv"),
-        ),
-        (
-            output_dir / "daily_pool_internal_summary.csv",
-            record_name("daily_pool_internal_summary.csv"),
-        ),
-        (
-            output_dir / "pool_internal_month_summary.csv",
-            record_name("pool_internal_month_summary.csv"),
-        ),
-        (
-            output_dir / "pool_internal_clock_summary.csv",
-            record_name("pool_internal_clock_summary.csv"),
-        ),
-        (
-            output_dir / "pool_internal_group_metrics.csv",
-            record_name("pool_internal_group_metrics.csv"),
-        ),
-        (
-            output_dir / "pool_internal_halfyear_summary.csv",
-            record_name("pool_internal_halfyear_summary.csv"),
-        ),
-        (
-            output_dir / "pool_internal_year_summary.csv",
-            record_name("pool_internal_year_summary.csv"),
-        ),
-        (output_dir / "pool_internal_trace.json", record_name("pool_internal_trace.json")),
-    ]
+    summary_names = (
+        "pool_internal_summary.csv",
+        "pool_internal_quarter_summary.csv",
+        "daily_pool_internal_summary.csv",
+        "pool_internal_month_summary.csv",
+        "pool_internal_clock_summary.csv",
+        "pool_internal_group_metrics.csv",
+        "pool_internal_halfyear_summary.csv",
+        "pool_internal_year_summary.csv",
+        "pool_internal_trace.json",
+    )
+    records = [(output_dir / name, record_name(name)) for name in summary_names]
     plot_records = {
         "pool_internal_plot_data": record_name("pool_internal_plot_data.csv"),
         "pool_internal_figure": record_name("pool_internal_with_mean.svg"),
@@ -79,9 +59,7 @@ def record_pool_internal_outputs(
         trace_path = _plot_trace_path(Path(report_plots[key]))
         if trace_path.exists():
             trace_name = name.replace("_plot_data.csv", "_trace.json")
-            if trace_name == "pool_internal_trace.json" or trace_name.endswith(
-                "_pool_internal_trace.json"
-            ):
+            if trace_name.endswith("pool_internal_trace.json"):
                 trace_name = record_name("pool_internal_with_mean_trace.json")
             records.append((trace_path, trace_name))
 

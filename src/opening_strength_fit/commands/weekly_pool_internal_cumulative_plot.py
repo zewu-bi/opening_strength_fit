@@ -5,10 +5,9 @@ from pathlib import Path
 
 import pandas as pd
 
+from opening_strength_fit.commands.weekly_pool_internal_plots import add_weekly_plot_arguments
 from opening_strength_fit.pool_internal_plots import write_weekly_pool_internal_cumulative_plot
 from opening_strength_fit.pool_internal_weekly import normalize_pools
-
-POOL_CHOICES = ("universe", "S", "M", "L", "pool_S", "pool_M", "pool_L")
 
 
 def parse_args() -> argparse.Namespace:
@@ -19,24 +18,7 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument("--weekly-summary", required=True)
-    parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--output-prefix", default="baseline")
-    parser.add_argument(
-        "--output-name",
-        default="",
-        help="Optional exact file stem for flat outputs under --output-dir.",
-    )
-    parser.add_argument(
-        "--plot-variant-label",
-        default="",
-        help="Display label used in the generated SVG title. Defaults to --output-prefix.",
-    )
-    parser.add_argument(
-        "--pool",
-        action="append",
-        choices=POOL_CHOICES,
-        help="Pools to include. Defaults to universe, S, M, and L.",
-    )
+    add_weekly_plot_arguments(parser, output_name=True)
     return parser.parse_args()
 
 

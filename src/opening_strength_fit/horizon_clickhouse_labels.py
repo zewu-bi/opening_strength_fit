@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from opening_strength_fit.clickhouse_ticks import get_tick_client, validate_table_name
+from opening_strength_fit.horizon_local_labels import _attach_intraday_labels, _intraday_targets
 from opening_strength_fit.horizons import HorizonLike, key_columns_for_merge, label_column_name
 from opening_strength_fit.labels import safe_price_return
 
@@ -16,10 +17,7 @@ DEFAULT_CLOSE_LOOKBACK_SECONDS = 1_800
 def clickhouse_setting(value, env_name: str, default):
     if value not in (None, ""):
         return value
-    env_value = os.environ.get(env_name)
-    if env_value not in (None, ""):
-        return env_value
-    return default
+    return os.environ.get(env_name) or default
 
 
 def query_trading_dates(
@@ -148,39 +146,10 @@ def compute_clickhouse_intraday_labels(
     if "buy_price" not in predictions.columns:
         raise SystemExit("ClickHouse intraday labels require prediction column: buy_price")
 
-    sample = predictions[[*key_cols, "buy_price"]].copy()
-    sample["date"] = sample["date"].astype(str)
-    sample["symbol"] = sample["symbol"].astype(str)
-    sample["decision_target_timestamp"] = pd.to_datetime(
-        sample["decision_target_timestamp"],
-        errors="coerce",
+    timed_horizons, _, output, target_frame = _intraday_targets(
+        predictions, timed_horizons, target_end_seconds
     )
-    sample["buy_price"] = pd.to_numeric(sample["buy_price"], errors="coerce")
-    sample["_row"] = np.arange(len(sample), dtype="int64")
-    sample = sample.dropna(subset=["decision_target_timestamp", "buy_price"])
-    if sample.empty:
-        return output.drop_duplicates(key_cols)
-
-    target_frames = []
-    for spec in timed_horizons:
-        targets = sample[
-            ["_row", "date", "symbol", "decision_target_timestamp", "buy_price"]
-        ].copy()
-        targets["horizon"] = spec.name
-        targets["target_timestamp"] = targets["decision_target_timestamp"] + pd.to_timedelta(
-            int(spec.seconds),
-            unit="s",
-        )
-        if target_end_seconds is not None:
-            target_seconds = (
-                targets["target_timestamp"].dt.hour.astype("int64") * 3_600
-                + targets["target_timestamp"].dt.minute.astype("int64") * 60
-                + targets["target_timestamp"].dt.second.astype("int64")
-            )
-            targets = targets.loc[target_seconds <= int(target_end_seconds)].copy()
-        targets["target_offset_us"] = target_offset_us(targets["target_timestamp"])
-        target_frames.append(targets)
-    target_frame = pd.concat(target_frames, ignore_index=True)
+    target_frame["target_offset_us"] = target_offset_us(target_frame["target_timestamp"])
     target_frame = target_frame.dropna(subset=["target_offset_us"])
     if target_frame.empty:
         return output.drop_duplicates(key_cols)
@@ -210,22 +179,9 @@ def compute_clickhouse_intraday_labels(
         on=["date", "symbol", "target_offset_us"],
         how="left",
     )
-    merged["label"] = safe_price_return(
-        merged["exit_mid_price"],
-        merged["buy_price"],
-        fee_bps=fee_bps,
+    return _attach_intraday_labels(
+        output, merged, timed_horizons, exit_price_col="exit_mid_price", fee_bps=fee_bps
     )
-    labels_wide = merged.pivot_table(
-        index="_row",
-        columns="horizon",
-        values="label",
-        aggfunc="first",
-    )
-    output["_row"] = np.arange(len(output), dtype="int64")
-    for spec in timed_horizons:
-        if spec.name in labels_wide.columns:
-            output[label_column_name(spec.name)] = output["_row"].map(labels_wide[spec.name])
-    return output.drop(columns=["_row"]).drop_duplicates(key_cols)
 
 
 def query_close_prices(

@@ -5,21 +5,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from opening_strength_fit.artifact_catalog import (
-    STRATEGY_ACCEPTANCE_ARTIFACTS,
-    is_capacity_acceptance,
-    is_capacity_audit,
-    is_exposure_audit,
-    is_feature_hygiene,
-    is_gap_attribution,
     is_non_standard_artifact_run,
-    is_pool_internal_analysis,
-    is_rolling_validation,
-    is_score_risk_sweep,
 )
-from opening_strength_fit.commands.artifact_sync_artifacts import (
-    combine_rolling_validation_shards as combine_rolling_validation_shards,
-)
-from opening_strength_fit.commands.artifact_sync_artifacts import (
+from opening_strength_fit.commands.artifact_sync_artifacts import (  # noqa: F401
+    ARTIFACT_PULLERS,
+    combine_rolling_validation_shards,
     local_artifact_dir,
     pull_capacity_acceptance_artifacts,
     pull_capacity_audit_artifacts,
@@ -28,25 +18,21 @@ from opening_strength_fit.commands.artifact_sync_artifacts import (
     pull_feature_hygiene_artifacts,
     pull_gap_attribution_artifacts,
     pull_pool_internal_analysis_artifacts,
-    pull_required_artifact_set,
     pull_rolling_validation_artifacts,
+    pull_rolling_validation_shards,
     pull_score_risk_artifacts,
+    pull_strategy_acceptance_artifacts,
     record_lightweight_artifacts,
 )
-from opening_strength_fit.commands.artifact_sync_artifacts import (
-    pull_rolling_validation_shards as pull_rolling_validation_shards,
-)
-from opening_strength_fit.commands.artifact_sync_metrics import (
+from opening_strength_fit.commands.artifact_sync_metrics import (  # noqa: F401
     DEFAULT_NEXT_CLOSE_LABEL_PVC_DIR,
     METRICS_SUFFIX,
     collect_run_statuses,
+    combine_metric_frames,
     fetch_predictions,
     pull_metrics,
     pull_next_close_labels,
     record_metrics,
-)
-from opening_strength_fit.commands.artifact_sync_metrics import (
-    combine_metric_frames as combine_metric_frames,
 )
 from opening_strength_fit.k8s import (
     DEFAULT_IMAGE,
@@ -60,22 +46,6 @@ DEFAULT_METRICS_DIR = "experiments/results/metrics"
 DEFAULT_RECORDS_DIR = "experiments/evidence"
 DEFAULT_PARTIAL_METRICS_DIR = "output/artifacts/_partial_metrics"
 DEFAULT_METRIC_SHARDS_ROOT = "output/artifacts"
-
-
-def pull_strategy_acceptance_artifacts(
-    hfcli: str,
-    spec: RunSpec,
-    pod_name: str,
-    output_root: Path | None,
-) -> list[Path]:
-    return pull_required_artifact_set(
-        hfcli,
-        spec,
-        pod_name,
-        output_root,
-        STRATEGY_ACCEPTANCE_ARTIFACTS,
-        "strategy-acceptance",
-    )
 
 
 def parse_run(value: str) -> tuple[str, str]:
@@ -107,19 +77,15 @@ def ad_hoc_run_spec(label: str, pvc_dir: str, namespace: str) -> RunSpec:
 def validate_specs(specs: list[RunSpec]) -> None:
     if not specs:
         return
-    first = specs[0]
-    for spec in specs[1:]:
-        if (
-            spec.namespace != first.namespace
-            or spec.pvc != first.pvc
-            or spec.mount_path != first.mount_path
-            or spec.pull_secret != first.pull_secret
-            or spec.image != first.image
-        ):
-            raise SystemExit(
-                "All synced runs must share namespace, pvc, mount_path, "
-                "image_pull_secret, and helper image."
-            )
+    connection_fields = "namespace pvc mount_path pull_secret image".split()
+    expected = tuple(getattr(specs[0], field) for field in connection_fields)
+    if any(
+        tuple(getattr(spec, field) for field in connection_fields) != expected for spec in specs[1:]
+    ):
+        raise SystemExit(
+            "All synced runs must share namespace, pvc, mount_path, "
+            "image_pull_secret, and helper image."
+        )
 
 
 @dataclass(frozen=True)
@@ -140,12 +106,8 @@ class SyncPlan:
     @property
     def needs_pod(self) -> bool:
         return any(
-            (
-                self.fetch_metrics,
-                self.fetch_predictions,
-                self.fetch_artifacts,
-                self.fetch_next_close_labels,
-            )
+            getattr(self, field)
+            for field in "fetch_metrics fetch_predictions fetch_artifacts fetch_next_close_labels".split()
         )
 
 
@@ -191,47 +153,39 @@ def build_parser() -> argparse.ArgumentParser:
         help="Tracked destination for compact evidence selected by --record.",
     )
     parser.add_argument("--runs-dir", default="experiments/runs")
-    parser.add_argument("--metrics", action="store_true", help="Fetch metrics CSVs.")
-    parser.add_argument(
-        "--predictions",
-        action="store_true",
-        help="Fetch prediction parquet explicitly. Cluster-side analysis artifacts do not need this.",
-    )
-    parser.add_argument(
-        "--artifacts",
-        action="store_true",
-        help=(
+    actions = (
+        ("--metrics", "Fetch metrics CSVs."),
+        (
+            "--predictions",
+            "Fetch prediction parquet explicitly. Cluster-side analysis artifacts do not need this.",
+        ),
+        (
+            "--artifacts",
             "Fetch lightweight artifact files, including cluster-side pool-internal "
-            "analysis outputs and non-standard sweep outputs."
+            "analysis outputs and non-standard sweep outputs.",
         ),
-    )
-    parser.add_argument(
-        "--analysis-artifacts",
-        action="store_true",
-        help="Alias for --artifacts when the config declares cluster-side analysis.",
-    )
-    parser.add_argument(
-        "--next-close-labels",
-        action="store_true",
-        help="Fetch yearly next-close label shards needed by pool-internal analysis.",
-    )
-    parser.add_argument("--record", action="store_true", help="Archive fetched metrics.")
-    parser.add_argument(
-        "--all",
-        action="store_true",
-        help=(
+        (
+            "--analysis-artifacts",
+            "Alias for --artifacts when the config declares cluster-side analysis.",
+        ),
+        (
+            "--next-close-labels",
+            "Fetch yearly next-close label shards needed by pool-internal analysis.",
+        ),
+        ("--record", "Archive fetched metrics."),
+        (
+            "--all",
             "Fetch metrics and lightweight cluster-side artifacts, then archive them. "
-            "Prediction parquet is only fetched with --predictions."
+            "Prediction parquet is only fetched with --predictions.",
         ),
-    )
-    parser.add_argument(
-        "--allow-partial",
-        action="store_true",
-        help=(
+        (
+            "--allow-partial",
             "For sharded runs, sync completed shards without failing on missing "
-            "future months/years. Recording to experiments/results is disabled."
+            "future months/years. Recording to experiments/results is disabled.",
         ),
     )
+    for option, help_text in actions:
+        parser.add_argument(option, action="store_true", help=help_text)
     parser.add_argument("--dry-run", action="store_true")
     return parser
 
@@ -313,21 +267,6 @@ def pull_metrics_for_specs(args: argparse.Namespace, plan: SyncPlan, pod_name: s
         print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
 
 
-def pull_predictions_for_specs(args: argparse.Namespace, plan: SyncPlan, pod_name: str) -> None:
-    if not plan.fetch_predictions:
-        return
-    print("pulled_predictions:")
-    for spec in plan.specs:
-        path = fetch_predictions(
-            args.hfcli,
-            spec,
-            pod_name,
-            plan.predictions_root,
-            allow_partial=args.allow_partial,
-        )
-        print(f"  {spec.run_id}: {path}")
-
-
 def pull_artifacts_for_spec(
     args: argparse.Namespace,
     plan: SyncPlan,
@@ -335,59 +274,11 @@ def pull_artifacts_for_spec(
     pod_name: str,
 ) -> list[Path] | None:
     common = (args.hfcli, spec, pod_name, plan.artifacts_root)
-    if is_pool_internal_analysis(spec):
+    if spec.pool_internal_analysis_enabled:
         return pull_pool_internal_analysis_artifacts(*common)
     if not is_non_standard_artifact_run(spec):
         return None
-    if is_score_risk_sweep(spec):
-        return pull_score_risk_artifacts(*common)
-    if is_rolling_validation(spec):
-        return pull_rolling_validation_artifacts(*common)
-    if is_gap_attribution(spec):
-        return pull_gap_attribution_artifacts(*common)
-    if is_capacity_acceptance(spec):
-        return pull_capacity_acceptance_artifacts(*common)
-    if is_capacity_audit(spec):
-        return pull_capacity_audit_artifacts(*common)
-    if spec.kind == "strategy_acceptance":
-        return pull_strategy_acceptance_artifacts(*common)
-    if is_exposure_audit(spec):
-        return pull_exposure_audit_artifacts(*common)
-    if is_feature_hygiene(spec):
-        return pull_feature_hygiene_artifacts(*common)
-    return pull_feature_audit_artifacts(*common)
-
-
-def pull_artifacts_for_specs(args: argparse.Namespace, plan: SyncPlan, pod_name: str) -> None:
-    if not plan.fetch_artifacts:
-        return
-    print("pulled_artifacts:")
-    for spec in plan.specs:
-        paths = pull_artifacts_for_spec(args, plan, spec, pod_name)
-        if paths is None:
-            if args.artifacts:
-                print(f"  {spec.run_id}: no artifact sync configured")
-            continue
-        print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
-
-
-def pull_next_close_labels_for_specs(
-    args: argparse.Namespace,
-    plan: SyncPlan,
-    pod_name: str,
-) -> None:
-    if not plan.fetch_next_close_labels:
-        return
-    print("pulled_next_close_labels:")
-    for spec in plan.specs:
-        paths = pull_next_close_labels(
-            args.hfcli,
-            spec,
-            pod_name,
-            plan.next_close_labels_root,
-            label_pvc_dir=args.next_close_label_pvc_dir,
-        )
-        print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
+    return ARTIFACT_PULLERS.get(spec.kind, pull_feature_audit_artifacts)(*common)
 
 
 def record_synced_results(args: argparse.Namespace, plan: SyncPlan) -> None:
@@ -414,7 +305,7 @@ def record_synced_results(args: argparse.Namespace, plan: SyncPlan) -> None:
         paths = record_lightweight_artifacts(spec, plan.artifacts_root, plan.records_dir)
         if paths:
             print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
-        elif is_pool_internal_analysis(spec):
+        elif spec.pool_internal_analysis_enabled:
             print(f"  {spec.run_id}: no pool-internal analysis artifacts to record")
         elif is_non_standard_artifact_run(spec):
             print(f"  {spec.run_id}: no lightweight artifacts to record")
@@ -441,9 +332,37 @@ def main() -> None:
 
     try:
         pull_metrics_for_specs(args, plan, pod_name)
-        pull_predictions_for_specs(args, plan, pod_name)
-        pull_artifacts_for_specs(args, plan, pod_name)
-        pull_next_close_labels_for_specs(args, plan, pod_name)
+        if plan.fetch_predictions:
+            print("pulled_predictions:")
+            for spec in plan.specs:
+                path = fetch_predictions(
+                    args.hfcli,
+                    spec,
+                    pod_name,
+                    plan.predictions_root,
+                    allow_partial=args.allow_partial,
+                )
+                print(f"  {spec.run_id}: {path}")
+        if plan.fetch_artifacts:
+            print("pulled_artifacts:")
+            for spec in plan.specs:
+                paths = pull_artifacts_for_spec(args, plan, spec, pod_name)
+                if paths is None:
+                    if args.artifacts:
+                        print(f"  {spec.run_id}: no artifact sync configured")
+                    continue
+                print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
+        if plan.fetch_next_close_labels:
+            print("pulled_next_close_labels:")
+            for spec in plan.specs:
+                paths = pull_next_close_labels(
+                    args.hfcli,
+                    spec,
+                    pod_name,
+                    plan.next_close_labels_root,
+                    label_pvc_dir=args.next_close_label_pvc_dir,
+                )
+                print(f"  {spec.run_id}: {', '.join(str(path) for path in paths)}")
     finally:
         if created_temp_pod:
             delete_temp_pod(args.hfcli, plan.specs[0].namespace, pod_name)

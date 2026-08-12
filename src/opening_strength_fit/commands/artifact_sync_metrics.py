@@ -22,9 +22,53 @@ from opening_strength_fit.reports import metrics_by_year_from_windows
 
 METRICS_SUFFIX = "_metrics_by_year.csv"
 MONTHLY_METRICS_SUFFIX = "_metrics_by_month.csv"
+METRIC_FILES = (
+    ("metrics_by_year.csv", METRICS_SUFFIX),
+    ("metrics_by_month.csv", MONTHLY_METRICS_SUFFIX),
+)
 DEFAULT_NEXT_CLOSE_LABEL_PVC_DIR = (
     "/mnt/output/opening_strength_fit/cache/opening_13y_201301_202512_delay2_next_close_labels_v1"
 )
+
+
+def run_shards(
+    spec: RunSpec,
+) -> tuple[str, str, list[tuple[object, str, tuple[str, ...]]]]:
+    if spec.test_start_month and spec.test_end_month:
+        shards = []
+        for start_month, end_month in month_window_periods(
+            spec.test_start_month,
+            spec.test_end_month,
+            test_months=spec.test_months,
+            stride_months=spec.test_stride_months,
+        ):
+            label = start_month if start_month == end_month else f"{start_month}_{end_month}"
+            shards.append(
+                (
+                    label,
+                    label,
+                    rolling_shard_dir_candidates(
+                        start_month,
+                        end_month,
+                        preferred_layout=spec.output_layout,
+                    ),
+                )
+            )
+        return "monthly", "month", shards
+    if spec.test_start_year > 0 and spec.test_end_year > 0:
+        return (
+            "yearly",
+            "year",
+            [
+                (
+                    year,
+                    str(year),
+                    yearly_shard_dir_candidates(year, preferred_layout=spec.output_layout),
+                )
+                for year in range(spec.test_start_year, spec.test_end_year + 1)
+            ],
+        )
+    return "", "", []
 
 
 def pull_root_metrics(
@@ -34,25 +78,14 @@ def pull_root_metrics(
     output_dir: Path,
 ) -> list[Path]:
     pulled: list[Path] = []
-    year_path = output_dir / f"{spec.run_id}_metrics_by_year.csv"
-    if not fetch_remote_file_if_exists(
-        hfcli,
-        spec,
-        pod_name,
-        f"{spec.pvc_dir}/metrics_by_year.csv",
-        year_path,
-    ):
-        return pulled
-    pulled.append(year_path)
-    month_path = output_dir / f"{spec.run_id}_metrics_by_month.csv"
-    if fetch_remote_file_if_exists(
-        hfcli,
-        spec,
-        pod_name,
-        f"{spec.pvc_dir}/metrics_by_month.csv",
-        month_path,
-    ):
-        pulled.append(month_path)
+    for remote_name, suffix in METRIC_FILES:
+        local_path = output_dir / f"{spec.run_id}{suffix}"
+        if fetch_remote_file_if_exists(
+            hfcli, spec, pod_name, f"{spec.pvc_dir}/{remote_name}", local_path
+        ):
+            pulled.append(local_path)
+        elif not pulled:
+            return []
     return pulled
 
 
@@ -97,86 +130,36 @@ def pull_shard_metrics(
     raw_dir.mkdir(parents=True, exist_ok=True)
     frames: list[pd.DataFrame] = []
     missing: list[str] = []
-    if spec.test_start_month and spec.test_end_month:
-        for start_month, end_month in month_window_periods(
-            spec.test_start_month,
-            spec.test_end_month,
-            test_months=spec.test_months,
-            stride_months=spec.test_stride_months,
-        ):
-            label = start_month if start_month == end_month else f"{start_month}_{end_month}"
-            local_path = raw_dir / f"metrics_by_year_{label}.csv"
-            fetched = any(
-                fetch_remote_file_if_exists(
-                    hfcli,
-                    spec,
-                    pod_name,
-                    f"{spec.pvc_dir}/{shard_dir}/metrics_by_year.csv",
-                    local_path,
-                )
-                for shard_dir in rolling_shard_dir_candidates(
-                    start_month,
-                    end_month,
-                    preferred_layout=spec.output_layout,
-                )
+    shard_kind, period_name, shards = run_shards(spec)
+    if not shards:
+        raise SystemExit(f"{spec.run_id}: no root metrics found and config has no shard date range")
+    for _, label, shard_dirs in shards:
+        local_path = raw_dir / f"metrics_by_year_{label}.csv"
+        fetched = any(
+            fetch_remote_file_if_exists(
+                hfcli,
+                spec,
+                pod_name,
+                f"{spec.pvc_dir}/{shard_dir}/metrics_by_year.csv",
+                local_path,
             )
-            if fetched:
-                frames.append(pd.read_csv(local_path))
-            else:
-                missing.append(label)
-        if missing:
-            if allow_partial and frames:
-                print(f"  {spec.run_id}: partial metrics; missing months {missing}")
-                return combine_metric_frames(
-                    frames,
-                    monthly=True,
-                    run_id=spec.run_id,
-                    output_dir=output_dir,
-                )
-            raise SystemExit(f"{spec.run_id}: missing shard metrics for months {missing}")
-        return combine_metric_frames(
-            frames,
-            monthly=True,
-            run_id=spec.run_id,
-            output_dir=output_dir,
+            for shard_dir in shard_dirs
         )
-    if spec.test_start_year > 0 and spec.test_end_year > 0:
-        for year in range(spec.test_start_year, spec.test_end_year + 1):
-            local_path = raw_dir / f"metrics_by_year_{year}.csv"
-            fetched = any(
-                fetch_remote_file_if_exists(
-                    hfcli,
-                    spec,
-                    pod_name,
-                    f"{spec.pvc_dir}/{shard_dir}/metrics_by_year.csv",
-                    local_path,
-                )
-                for shard_dir in yearly_shard_dir_candidates(
-                    year,
-                    preferred_layout=spec.output_layout,
-                )
-            )
-            if fetched:
-                frames.append(pd.read_csv(local_path))
-            else:
-                missing.append(str(year))
-        if missing:
-            if allow_partial and frames:
-                print(f"  {spec.run_id}: partial metrics; missing years {missing}")
-                return combine_metric_frames(
-                    frames,
-                    monthly=False,
-                    run_id=spec.run_id,
-                    output_dir=output_dir,
-                )
-            raise SystemExit(f"{spec.run_id}: missing shard metrics for years {missing}")
-        return combine_metric_frames(
-            frames,
-            monthly=False,
-            run_id=spec.run_id,
-            output_dir=output_dir,
-        )
-    raise SystemExit(f"{spec.run_id}: no root metrics found and config has no shard date range")
+        if fetched:
+            frames.append(pd.read_csv(local_path))
+        else:
+            missing.append(label)
+    if missing:
+        if allow_partial and frames:
+            print(f"  {spec.run_id}: partial metrics; missing {period_name}s {missing}")
+        else:
+            raise SystemExit(f"{spec.run_id}: missing shard metrics for {period_name}s {missing}")
+    return combine_metric_frames(
+        frames,
+        monthly=shard_kind == "monthly",
+        run_id=spec.run_id,
+        output_dir=output_dir,
+    )
 
 
 def pull_metrics(
@@ -255,40 +238,30 @@ def fetch_predictions(
     combined_stats: dict[str, object]
     combined_remote_path = f"{spec.pvc_dir}/predictions_all.parquet"
     single_remote_path = f"{spec.pvc_dir}/predictions.parquet"
-    if remote_file_exists(hfcli, spec.namespace, pod_name, combined_remote_path):
-        print(f"fetching {combined_remote_path} -> {combined_path}")
-        fetch_binary_file(hfcli, spec.namespace, pod_name, combined_remote_path, combined_path)
+    for kind, remote_path in (
+        ("combined", combined_remote_path),
+        ("single", single_remote_path),
+    ):
+        if not remote_file_exists(hfcli, spec.namespace, pod_name, remote_path):
+            continue
+        print(f"fetching {remote_path} -> {combined_path}")
+        fetch_binary_file(hfcli, spec.namespace, pod_name, remote_path, combined_path)
         fetched_files.append(
-            {
-                "kind": "combined",
-                "remote_path": combined_remote_path,
-                "local_path": str(combined_path),
-            }
+            {"kind": kind, "remote_path": remote_path, "local_path": str(combined_path)}
         )
         combined_stats = summarize_predictions(combined_path)
-    elif remote_file_exists(hfcli, spec.namespace, pod_name, single_remote_path):
-        print(f"fetching {single_remote_path} -> {combined_path}")
-        fetch_binary_file(hfcli, spec.namespace, pod_name, single_remote_path, combined_path)
-        fetched_files.append(
-            {"kind": "single", "remote_path": single_remote_path, "local_path": str(combined_path)}
-        )
-        combined_stats = summarize_predictions(combined_path)
-    elif spec.test_start_month and spec.test_end_month:
-        missing_months: list[str] = []
-        for start_month, end_month in month_window_periods(
-            spec.test_start_month,
-            spec.test_end_month,
-            test_months=spec.test_months,
-            stride_months=spec.test_stride_months,
-        ):
-            label = start_month if start_month == end_month else f"{start_month}_{end_month}"
+        break
+    else:
+        shard_kind, period_name, shards = run_shards(spec)
+        if not shards:
+            raise SystemExit(
+                f"{spec.run_id}: no combined/single predictions found and config has no test date range"
+            )
+        missing: list[str] = []
+        for period, label, shard_dirs in shards:
             remote_candidates = [
                 f"{spec.pvc_dir}/{shard_dir}/{name}"
-                for shard_dir in rolling_shard_dir_candidates(
-                    start_month,
-                    end_month,
-                    preferred_layout=spec.output_layout,
-                )
+                for shard_dir in shard_dirs
                 for name in ("predictions.parquet", f"predictions_{label}.parquet")
             ]
             remote_path = next(
@@ -301,69 +274,25 @@ def fetch_predictions(
             )
             if not remote_path:
                 if allow_partial:
-                    missing_months.append(label)
+                    missing.append(label)
                     continue
-                raise SystemExit(f"no prediction parquet found for monthly shard {label}")
+                raise SystemExit(f"no prediction parquet found for {shard_kind} shard {label}")
             local_path = raw_dir / f"predictions_{label}.parquet"
             print(f"fetching {remote_path} -> {local_path}")
             fetch_binary_file(hfcli, spec.namespace, pod_name, remote_path, local_path)
             fetched_files.append(
                 {
-                    "kind": "monthly",
-                    "month": label,
+                    "kind": shard_kind,
+                    period_name: period,
                     "remote_path": remote_path,
                     "local_path": str(local_path),
                 }
             )
-        if missing_months:
-            print(f"  {spec.run_id}: partial predictions; missing months {missing_months}")
+        if missing:
+            print(f"  {spec.run_id}: partial predictions; missing {period_name}s {missing}")
         if allow_partial and not fetched_files:
-            raise SystemExit(f"{spec.run_id}: no completed monthly prediction shards found")
+            raise SystemExit(f"{spec.run_id}: no completed {shard_kind} prediction shards found")
         combined_stats = combine_prediction_files(raw_dir, combined_path)
-    elif spec.test_start_year > 0 and spec.test_end_year > 0:
-        missing_years: list[str] = []
-        for year in range(spec.test_start_year, spec.test_end_year + 1):
-            remote_candidates = [
-                f"{spec.pvc_dir}/{shard_dir}/{name}"
-                for shard_dir in yearly_shard_dir_candidates(
-                    year,
-                    preferred_layout=spec.output_layout,
-                )
-                for name in ("predictions.parquet", f"predictions_{year}.parquet")
-            ]
-            remote_path = next(
-                (
-                    candidate
-                    for candidate in remote_candidates
-                    if remote_file_exists(hfcli, spec.namespace, pod_name, candidate)
-                ),
-                "",
-            )
-            if not remote_path:
-                if allow_partial:
-                    missing_years.append(str(year))
-                    continue
-                raise SystemExit(f"no prediction parquet found for yearly shard {year}")
-            local_path = raw_dir / f"predictions_{year}.parquet"
-            print(f"fetching {remote_path} -> {local_path}")
-            fetch_binary_file(hfcli, spec.namespace, pod_name, remote_path, local_path)
-            fetched_files.append(
-                {
-                    "kind": "yearly",
-                    "year": year,
-                    "remote_path": remote_path,
-                    "local_path": str(local_path),
-                }
-            )
-        if missing_years:
-            print(f"  {spec.run_id}: partial predictions; missing years {missing_years}")
-        if allow_partial and not fetched_files:
-            raise SystemExit(f"{spec.run_id}: no completed yearly prediction shards found")
-        combined_stats = combine_prediction_files(raw_dir, combined_path)
-    else:
-        raise SystemExit(
-            f"{spec.run_id}: no combined/single predictions found and config has no test date range"
-        )
 
     trace = {
         "fetched_at_utc": datetime.now(UTC).isoformat(),
@@ -434,15 +363,14 @@ def pull_next_close_labels(
 def collect_run_statuses(runs_dir: Path) -> dict[str, str]:
     statuses = {}
     for path in sorted(runs_dir.glob("*.toml")):
-        config = load_toml(path)
-        run_id = str(config.get("run", {}).get("id", path.stem))
-        statuses[run_id] = str(config.get("run", {}).get("status", "completed"))
+        run = load_toml(path).get("run", {})
+        statuses[str(run.get("id", path.stem))] = str(run.get("status", "completed"))
     return statuses
 
 
 def record_metrics(run_id: str, metrics_dir: Path, records_dir: Path) -> list[Path]:
     records: list[Path] = []
-    for suffix in (METRICS_SUFFIX, MONTHLY_METRICS_SUFFIX):
+    for _, suffix in METRIC_FILES:
         source = metrics_dir / f"{run_id}{suffix}"
         if not source.exists():
             continue

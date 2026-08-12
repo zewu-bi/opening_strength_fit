@@ -13,6 +13,15 @@ from opening_strength_fit.model_preprocessing import lightgbm_feature_value_fram
 from opening_strength_fit.model_types import RidgePredictionModel
 
 
+def _fit_stats(train: pd.DataFrame, index: pd.Index, feature_count: int) -> dict[str, int]:
+    return {
+        "rows": len(index),
+        "dates": int(train.loc[index, "date"].nunique()),
+        "symbols": int(train.loc[index, "symbol"].nunique()),
+        "features": feature_count,
+    }
+
+
 def fit_ridge_frame(
     train: pd.DataFrame,
     *,
@@ -34,12 +43,7 @@ def fit_ridge_frame(
         ]
     )
     pipeline.fit(x, y)
-    stats = {
-        "rows": len(x),
-        "dates": int(train.loc[x.index, "date"].nunique()),
-        "symbols": int(train.loc[x.index, "symbol"].nunique()),
-        "features": len(features),
-    }
+    stats = _fit_stats(train, x.index, len(features))
     return (
         RidgePredictionModel(
             features=features,
@@ -88,12 +92,7 @@ def fit_gbm_frame(
         ]
     )
     pipeline.fit(x, y)
-    stats = {
-        "rows": len(x),
-        "dates": int(train.loc[x.index, "date"].nunique()),
-        "symbols": int(train.loc[x.index, "symbol"].nunique()),
-        "features": len(features),
-    }
+    stats = _fit_stats(train, x.index, len(features))
     return (
         RidgePredictionModel(
             features=features,
@@ -210,12 +209,7 @@ def fit_lightgbm_frame(
         else {}
     )
     pipeline.fit(x, y, **fit_params)
-    stats = {
-        "rows": len(x),
-        "dates": int(train.loc[x.index, "date"].nunique()),
-        "symbols": int(train.loc[x.index, "symbol"].nunique()),
-        "features": len(features),
-    }
+    stats = _fit_stats(train, x.index, len(features))
     if sample_weight is not None:
         stats["sample_weight_mean"] = float(sample_weight.mean())
         stats["sample_weight_zero_rate"] = float((sample_weight <= 0.0).mean())

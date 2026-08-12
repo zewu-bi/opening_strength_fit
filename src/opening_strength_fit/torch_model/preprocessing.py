@@ -44,74 +44,61 @@ def _normalize_feature_standardization(value: str) -> str:
 
 
 _NO_FEATURE_VALUE_TRANSFORMS = {"", "none", "identity", "raw", "off", "false"}
-_CROSS_SECTIONAL_FEATURE_VALUE_TRANSFORMS = {
-    "cross_sectional_demean": "demean",
-    "xs_demean": "demean",
-    "cross_sectional_zscore": "zscore",
-    "xs_zscore": "zscore",
-    "cross_sectional_robust_zscore": "robust_zscore",
-    "xs_robust_zscore": "robust_zscore",
-    "cross_sectional_rank_pct": "rank_pct",
-    "xs_rank_pct": "rank_pct",
-    "cross_sectional_rank": "rank",
-    "xs_rank": "rank",
-    "cross_sectional_rank_centered": "rank_centered",
-    "cross_sectional_rank_centered_inplace": "rank_centered",
-    "xs_rank_centered": "rank_centered",
-    "rank_centered": "rank_centered",
-}
-_MECHANISMIZED_FEATURE_VALUE_TRANSFORMS = {
-    "mechanismized_cross_sectional_rank_centered": "rank_centered",
-    "mechanismized_xs_rank_centered": "rank_centered",
-    "mechanismized_rank_centered": "rank_centered",
-    "mechanismized_dimensionless": "rank_centered",
-    "mechanismized_dimensionless_328": "rank_centered",
-    "mechanism_aware_cross_sectional_rank_centered": "rank_centered",
-    "mechanism_aware_xs_rank_centered": "rank_centered",
-    "mechanism_aware_rank_centered": "rank_centered",
-    "mechanismized_cross_sectional_zscore": "zscore",
-    "mechanismized_xs_zscore": "zscore",
-    "mechanismized_zscore": "zscore",
-    "mechanismized_none": "none",
-    "mechanismized_only": "none",
-    "mechanism_aware_only": "none",
-}
-_MECHANISMIZED_V2_FEATURE_VALUE_TRANSFORMS = {
-    "mechanismized_v2_cross_sectional_robust_zscore": "robust_zscore",
-    "mechanismized_v2_xs_robust_zscore": "robust_zscore",
-    "mechanismized_v2_robust_zscore": "robust_zscore",
-    "mechanismized_v2_dimensionless": "robust_zscore",
-    "mechanismized_v2_dimensionless_328": "robust_zscore",
-    "mechanismized_v2_cross_sectional_zscore": "zscore",
-    "mechanismized_v2_xs_zscore": "zscore",
-    "mechanismized_v2_zscore": "zscore",
-    "mechanismized_v2_cross_sectional_rank_centered": "rank_centered",
-    "mechanismized_v2_xs_rank_centered": "rank_centered",
-    "mechanismized_v2_rank_centered": "rank_centered",
-    "mechanismized_v2_none": "none",
-    "mechanismized_v2_only": "none",
-    "mechanism_aware_v2_cross_sectional_robust_zscore": "robust_zscore",
-    "mechanism_aware_v2_dimensionless": "robust_zscore",
-    "mechanism_aware_v2_only": "none",
-}
-_MECHANISMIZED_V3_FEATURE_VALUE_TRANSFORMS = {
-    "mechanismized_v3_cross_sectional_robust_zscore": "robust_zscore",
-    "mechanismized_v3_xs_robust_zscore": "robust_zscore",
-    "mechanismized_v3_robust_zscore": "robust_zscore",
-    "mechanismized_v3_dimensionless": "none",
-    "mechanismized_v3_dimensionless_328": "none",
-    "mechanismized_v3_cross_sectional_zscore": "zscore",
-    "mechanismized_v3_xs_zscore": "zscore",
-    "mechanismized_v3_zscore": "zscore",
-    "mechanismized_v3_cross_sectional_rank_centered": "rank_centered",
-    "mechanismized_v3_xs_rank_centered": "rank_centered",
-    "mechanismized_v3_rank_centered": "rank_centered",
-    "mechanismized_v3_none": "none",
-    "mechanismized_v3_only": "none",
-    "mechanism_aware_v3_cross_sectional_robust_zscore": "robust_zscore",
-    "mechanism_aware_v3_dimensionless": "none",
-    "mechanism_aware_v3_only": "none",
-}
+
+
+def _aliases(prefix: str, groups: dict[str, tuple[str, ...]]) -> dict[str, str]:
+    return {f"{prefix}{alias}": mode for mode, aliases in groups.items() for alias in aliases}
+
+
+_RANK_ALIASES = ("cross_sectional_rank_centered", "xs_rank_centered", "rank_centered")
+_ZSCORE_ALIASES = ("cross_sectional_zscore", "xs_zscore", "zscore")
+_ROBUST_ALIASES = ("cross_sectional_robust_zscore", "xs_robust_zscore", "robust_zscore")
+_CROSS_SECTIONAL_FEATURE_VALUE_TRANSFORMS = _aliases(
+    "",
+    {
+        "demean": ("cross_sectional_demean", "xs_demean"),
+        "zscore": ("cross_sectional_zscore", "xs_zscore"),
+        "robust_zscore": ("cross_sectional_robust_zscore", "xs_robust_zscore"),
+        "rank_pct": ("cross_sectional_rank_pct", "xs_rank_pct"),
+        "rank": ("cross_sectional_rank", "xs_rank"),
+        "rank_centered": (*_RANK_ALIASES, "cross_sectional_rank_centered_inplace"),
+    },
+)
+_MECHANISMIZED_FEATURE_VALUE_TRANSFORMS = _aliases(
+    "mechanismized_",
+    {
+        "rank_centered": (*_RANK_ALIASES, "dimensionless", "dimensionless_328"),
+        "zscore": _ZSCORE_ALIASES,
+        "none": ("none", "only"),
+    },
+) | _aliases(
+    "mechanism_aware_",
+    {"rank_centered": _RANK_ALIASES, "none": ("only",)},
+)
+_MECHANISMIZED_V2_FEATURE_VALUE_TRANSFORMS = _aliases(
+    "mechanismized_v2_",
+    {
+        "robust_zscore": (*_ROBUST_ALIASES, "dimensionless", "dimensionless_328"),
+        "zscore": _ZSCORE_ALIASES,
+        "rank_centered": _RANK_ALIASES,
+        "none": ("none", "only"),
+    },
+) | _aliases(
+    "mechanism_aware_v2_",
+    {"robust_zscore": ("cross_sectional_robust_zscore", "dimensionless"), "none": ("only",)},
+)
+_MECHANISMIZED_V3_FEATURE_VALUE_TRANSFORMS = _aliases(
+    "mechanismized_v3_",
+    {
+        "robust_zscore": _ROBUST_ALIASES,
+        "zscore": _ZSCORE_ALIASES,
+        "rank_centered": _RANK_ALIASES,
+        "none": ("dimensionless", "dimensionless_328", "none", "only"),
+    },
+) | _aliases(
+    "mechanism_aware_v3_",
+    {"robust_zscore": ("cross_sectional_robust_zscore",), "none": ("dimensionless", "only")},
+)
 
 
 def _normalize_feature_value_transform(value: str) -> str:

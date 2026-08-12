@@ -8,48 +8,14 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from opening_strength_fit.model_metrics import PREDICTION_METRIC_COLUMNS
 from opening_strength_fit.reports import build_yearly_table, preferred_metric_column
 
-RESULT_COLUMNS = {
-    "run",
-    "run_id",
-    "test_year",
-    "train_start_date",
-    "train_end_date",
-    "test_start_date",
-    "test_end_date",
-    "train_rows",
-    "train_dates",
-    "train_symbols",
-    "test_rows",
-    "test_dates",
-    "test_symbols",
-    "features",
-    "model_test_r2",
-    "rows",
-    "dates",
-    "symbols",
-    "sample_grain",
-    "ic_grouping",
-    "overall_ic",
-    "overall_rank_ic",
-    "group_ic_mean",
-    "group_ic_std",
-    "group_ic_ir",
-    "group_rank_ic_mean",
-    "group_rank_ic_std",
-    "group_rank_ic_ir",
-    "daily_ic_mean",
-    "daily_ic_std",
-    "daily_ic_ir",
-    "daily_rank_ic_mean",
-    "daily_rank_ic_std",
-    "daily_rank_ic_ir",
-    "mean_label",
-    "win_rate",
-    "selection_mode",
-    "top_n",
-}
+RESULT_COLUMNS = set(
+    "run run_id test_year train_start_date train_end_date test_start_date test_end_date train_rows "
+    "train_dates train_symbols test_rows test_dates test_symbols features model_test_r2 rows dates "
+    "symbols sample_grain ic_grouping selection_mode top_n".split()
+) | set(PREDICTION_METRIC_COLUMNS)
 
 DEFAULT_RUNS = (
     ("gbm", "experiments/results/metrics/gbm_opening_1y_next_month_metrics_by_year.csv"),
@@ -78,9 +44,7 @@ def first_value(df: pd.DataFrame, column: str, default: object = "") -> object:
     if column not in df.columns:
         return default
     value = df[column].dropna()
-    if value.empty:
-        return default
-    return value.iloc[0]
+    return default if value.empty else value.iloc[0]
 
 
 def display_value(value: object) -> str:
@@ -103,34 +67,29 @@ def _metric_series(df: pd.DataFrame, preferred: str, fallback: str) -> tuple[str
     return column, df[column]
 
 
+def _rank_metrics(df: pd.DataFrame) -> tuple[str, pd.Series, str, pd.Series]:
+    rank_col, rank = _metric_series(df, "group_rank_ic_mean", "daily_rank_ic_mean")
+    rank_ir_col, rank_ir = _metric_series(df, "group_rank_ic_ir", "daily_rank_ic_ir")
+    return rank_col, rank, rank_ir_col, rank_ir
+
+
 def _extreme_year(df: pd.DataFrame, series: pd.Series, method: str) -> object:
     valid = series.dropna()
     if valid.empty:
         return pd.NA
-    index = valid.idxmax() if method == "max" else valid.idxmin()
+    index = getattr(valid, f"idx{method}")()
     return int(df.loc[index, "test_year"])
 
 
 def _extreme_value(series: pd.Series, method: str) -> float:
     valid = series.dropna()
-    if valid.empty:
-        return float("nan")
-    return float(valid.max() if method == "max" else valid.min())
+    return float("nan") if valid.empty else float(getattr(valid, method)())
 
 
 def build_summary(runs: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for label, df in runs.groupby("run", sort=False):
-        rank_col, rank = _metric_series(
-            df,
-            "group_rank_ic_mean",
-            "daily_rank_ic_mean",
-        )
-        rank_ir_col, rank_ir = _metric_series(
-            df,
-            "group_rank_ic_ir",
-            "daily_rank_ic_ir",
-        )
+        rank_col, rank, rank_ir_col, rank_ir = _rank_metrics(df)
         ic_col, ic = _metric_series(df, "group_ic_mean", "daily_ic_mean")
         r2 = df["model_test_r2"]
         rows.append(
@@ -172,16 +131,7 @@ def build_diagnostics(runs: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for label, df in runs.groupby("run", sort=False):
         df = df.sort_values("test_year")
-        rank_col, rank = _metric_series(
-            df,
-            "group_rank_ic_mean",
-            "daily_rank_ic_mean",
-        )
-        rank_ir_col, rank_ir = _metric_series(
-            df,
-            "group_rank_ic_ir",
-            "daily_rank_ic_ir",
-        )
+        rank_col, rank, rank_ir_col, rank_ir = _rank_metrics(df)
         r2 = df["model_test_r2"]
         valid_rank = rank.dropna()
         rank_first = float(valid_rank.iloc[0]) if not valid_rank.empty else float("nan")
@@ -216,19 +166,17 @@ def build_yearly(runs: pd.DataFrame) -> pd.DataFrame:
 
 def write_plot(summary: pd.DataFrame, yearly: pd.DataFrame, output: Path) -> None:
     fig, axes = plt.subplots(2, 2, figsize=(13, 9), constrained_layout=True)
-
+    panels = (
+        (axes[0, 0], "rank_ic_mean", "Rank IC Mean"),
+        (axes[0, 1], "ic_mean", "IC Mean"),
+        (axes[1, 0], "rank_ic_ir", "Rank IC IR"),
+        (axes[1, 1], "model_r2", "Model R2"),
+    )
     for label, df in yearly.groupby("run", sort=False):
-        axes[0, 0].plot(df["year"], df["rank_ic_mean"], marker="o", label=label)
-        axes[0, 1].plot(df["year"], df["ic_mean"], marker="o", label=label)
-        axes[1, 0].plot(df["year"], df["rank_ic_ir"], marker="o", label=label)
-        axes[1, 1].plot(df["year"], df["model_r2"], marker="o", label=label)
-
-    axes[0, 0].set_title("Rank IC Mean")
-    axes[0, 1].set_title("IC Mean")
-    axes[1, 0].set_title("Rank IC IR")
-    axes[1, 1].set_title("Model R2")
-
-    for ax in axes.ravel():
+        for ax, column, _ in panels:
+            ax.plot(df["year"], df[column], marker="o", label=label)
+    for ax, _, title in panels:
+        ax.set_title(title)
         ax.axhline(0, color="#777777", linewidth=0.8)
         ax.grid(True, alpha=0.25)
         ax.set_xlabel("Test year")
@@ -242,12 +190,10 @@ def write_plot(summary: pd.DataFrame, yearly: pd.DataFrame, output: Path) -> Non
 
 
 def markdown_table(df: pd.DataFrame, floatfmt: str = ".6f") -> str:
-    def cell(value: object) -> str:
-        if isinstance(value, float):
-            return format(value, floatfmt)
-        return str(value)
-
-    rows = [[cell(value) for value in row] for row in df.to_numpy()]
+    rows = [
+        [format(value, floatfmt) if isinstance(value, float) else str(value) for value in row]
+        for row in df.to_numpy()
+    ]
     headers = [str(column) for column in df.columns]
     widths = [
         max(len(header), *(len(row[index]) for row in rows)) if rows else len(header)
@@ -261,10 +207,8 @@ def markdown_table(df: pd.DataFrame, floatfmt: str = ".6f") -> str:
             + " |"
         )
 
-    out = [fmt_row(headers)]
-    out.append("| " + " | ".join("-" * width for width in widths) + " |")
-    out.extend(fmt_row(row) for row in rows)
-    return "\n".join(out)
+    separator = "| " + " | ".join("-" * width for width in widths) + " |"
+    return "\n".join([fmt_row(headers), separator, *(fmt_row(row) for row in rows)])
 
 
 def main() -> None:
@@ -292,61 +236,39 @@ def main() -> None:
     diagnostics = build_diagnostics(runs)
     yearly = build_yearly(runs)
 
-    summary_path = output_dir / "opening_model_comparison_summary.csv"
-    parameters_path = output_dir / "opening_model_comparison_parameters.csv"
-    diagnostics_path = output_dir / "opening_model_comparison_diagnostics.csv"
-    yearly_path = output_dir / "opening_model_comparison_yearly.csv"
+    tables = {
+        "summary": summary,
+        "parameters": parameters,
+        "diagnostics": diagnostics,
+        "yearly": yearly,
+    }
+    paths = {name: output_dir / f"opening_model_comparison_{name}.csv" for name in tables}
     report_path = output_dir / "opening_model_comparison.md"
     plot_path = output_dir / "opening_model_comparison.png"
-
-    summary.to_csv(summary_path, index=False)
-    parameters.to_csv(parameters_path, index=False)
-    diagnostics.to_csv(diagnostics_path, index=False)
-    yearly.to_csv(yearly_path, index=False)
+    for name, table in tables.items():
+        table.to_csv(paths[name], index=False)
     write_plot(summary, yearly, plot_path)
 
-    report = [
-        "# Opening-Strength Model Comparison",
-        "",
-        "## Summary",
-        "",
-        markdown_table(summary),
-        "",
-        "## Diagnostics",
-        "",
-        markdown_table(diagnostics),
-        "",
-        "## Model Parameters",
-        "",
-        markdown_table(parameters),
-        "",
-        "## Yearly Metrics",
-        "",
-        markdown_table(
+    report_tables = (
+        ("Summary", summary),
+        ("Diagnostics", diagnostics),
+        ("Model Parameters", parameters),
+        (
+            "Yearly Metrics",
             yearly[
-                [
-                    "run",
-                    "year",
-                    "rank_ic_mean",
-                    "rank_ic_ir",
-                    "ic_mean",
-                    "ic_ir",
-                    "model_r2",
-                    "pooled_rank_ic",
-                ]
-            ]
+                "run year rank_ic_mean rank_ic_ir ic_mean ic_ir model_r2 pooled_rank_ic".split()
+            ],
         ),
-        "",
-        f"![Opening model comparison]({plot_path.name})",
-        "",
-    ]
+    )
+    report = ["# Opening-Strength Model Comparison", ""]
+    for title, table in report_tables:
+        report.extend((f"## {title}", "", markdown_table(table), ""))
+    report.extend((f"![Opening model comparison]({plot_path.name})", ""))
     report_path.write_text("\n".join(report), encoding="utf-8")
 
     print("comparison_outputs:")
-    print(f"  summary: {summary_path}")
-    print(f"  parameters: {parameters_path}")
-    print(f"  diagnostics: {diagnostics_path}")
-    print(f"  yearly: {yearly_path}")
+    for name in tables:
+        print(f"  {name}: {paths[name]}")
     print(f"  report: {report_path}")
     print(f"  plot: {plot_path}")
     print()

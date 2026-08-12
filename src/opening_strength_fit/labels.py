@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import pyarrow.parquet as pq
 
 from opening_strength_fit.schema import (
     OPEN_SAMPLE_END,
@@ -16,46 +14,6 @@ from opening_strength_fit.schema import (
     ensure_timestamp_columns,
     filter_time_range,
 )
-
-
-def read_clock_return_labels(
-    label_root: str | Path,
-    year: int,
-    *,
-    clock: str,
-    label_column: str,
-    valid_column: str,
-    output_column: str,
-    multiplier: float = 1.0,
-    batch_size: int = 500_000,
-) -> pd.DataFrame:
-    hour, minute = (int(value) for value in clock.split(":", 1))
-    parquet = pq.ParquetFile(Path(label_root) / f"year={year}" / "labels.parquet")
-    columns = [
-        "date",
-        "symbol",
-        "decision_target_timestamp",
-        label_column,
-        valid_column,
-    ]
-    parts = []
-    for batch in parquet.iter_batches(columns=columns, batch_size=batch_size):
-        frame = batch.to_pandas()
-        timestamp = pd.to_datetime(frame["decision_target_timestamp"], errors="coerce")
-        keep = timestamp.dt.hour.eq(hour) & timestamp.dt.minute.eq(minute)
-        if not keep.any():
-            continue
-        frame = frame.loc[keep].copy()
-        frame["date"] = frame["date"].astype(str)
-        frame["symbol"] = frame["symbol"].astype(str)
-        valid = frame[valid_column].fillna(False).astype(bool)
-        frame[output_column] = (
-            finite_numeric_series(frame[label_column]).where(valid).mul(multiplier)
-        )
-        parts.append(frame[["date", "symbol", output_column]])
-    if not parts:
-        return pd.DataFrame(columns=["date", "symbol", output_column])
-    return pd.concat(parts, ignore_index=True).drop_duplicates(["date", "symbol"], keep="last")
 
 
 def finite_numeric_series(
@@ -114,6 +72,30 @@ def normalize_return_label_frame(
     if "decision_target_timestamp" in out.columns:
         drop_subset.append("decision_target_timestamp")
     return out.dropna(subset=drop_subset).drop_duplicates(list(key_columns))
+
+
+def cross_sectional_mixed_target(
+    frame: pd.DataFrame,
+    *,
+    short_column: str,
+    weight: float,
+    min_group_size: int,
+    usable: pd.Series | None = None,
+) -> pd.Series:
+    """Combine short and next-close returns after causal cross-sectional scaling."""
+    short = pd.to_numeric(frame[short_column], errors="coerce")
+    long = pd.to_numeric(frame["label_next_close"], errors="coerce")
+    usable = short.notna() & long.notna() if usable is None else usable.astype(bool)
+    keys = [frame["date"], frame["decision_target_timestamp"]]
+    short_group = short.where(usable).groupby(keys, sort=False)
+    long_group = long.where(usable).groupby(keys, sort=False)
+    count = short_group.transform("count")
+    short_std = short_group.transform(lambda values: values.std(ddof=0))
+    long_std = long_group.transform(lambda values: values.std(ddof=0))
+    usable &= count.ge(int(min_group_size)) & short_std.gt(1e-12) & long_std.gt(1e-12)
+    short_z = (short - short_group.transform("mean")) / short_std
+    long_z = (long - long_group.transform("mean")) / long_std
+    return (short_z + float(weight) * long_z).where(usable)
 
 
 def _future_values(

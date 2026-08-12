@@ -10,6 +10,7 @@ from opening_strength_fit.capacity_acceptance import RETURN_BPS_DENOMINATOR
 from opening_strength_fit.capacity_audit import (
     CapacityConstraints,
     add_capacity_limits,
+    capacity_selection_record,
     finite_numeric,
     normalize_capacity_frame,
 )
@@ -76,38 +77,20 @@ def _selected_refill_record(
     constraints: CapacityConstraints,
     allocated: float,
 ) -> dict[str, object]:
-    target = float(constraints.target_notional)
-    record: dict[str, object] = {
-        "pool": pool,
-        "test_month": pd.Timestamp(row["date"]).to_period("M").strftime("%Y-%m"),
-        "date": row["date"],
-        "decision_target_timestamp": row["decision_target_timestamp"],
-        "clock": pd.Timestamp(row["decision_target_timestamp"]).strftime("%H:%M"),
-        "rank": int(row["candidate_rank"]),
-        "symbol": str(row["symbol"]),
-        "score": float(row[constraints.score_col]),
-        "capacity_price": float(row["_capacity_price"])
-        if pd.notna(row["_capacity_price"])
-        else float("nan"),
-        "target_notional": target,
-        "allocated_notional": allocated,
-        "original_allocated_notional": allocated,
-        "target_weight": allocated / target,
-        "row_limit_notional": float(row["_row_limit_notional"]),
-        "capacity_notional": float(row["_capacity_notional"])
-        if pd.notna(row["_capacity_notional"])
-        else float("nan"),
-        "capacity_limit_notional": float(row["_capacity_limit_notional"])
-        if pd.notna(row["_capacity_limit_notional"])
-        else float("nan"),
-        "capacity_participation_rate": (
-            allocated / float(row["_capacity_notional"])
-            if pd.notna(row["_capacity_notional"]) and float(row["_capacity_notional"]) > 0
-            else float("nan")
-        ),
-        "ask_depth_notional": float(row.get("ask_depth_notional", np.nan)),
-        "execution_fill_rate": 1.0,
-    }
+    record = capacity_selection_record(
+        row,
+        pool=pool,
+        constraints=constraints,
+        rank=int(row["candidate_rank"]),
+        symbol=str(row["symbol"]),
+        allocated=allocated,
+        extra_allocations={"original_allocated_notional": allocated},
+        audit_depth=False,
+    )
+    record.update(
+        ask_depth_notional=float(row.get("ask_depth_notional", np.nan)),
+        execution_fill_rate=1.0,
+    )
     for column in (
         "status",
         "spread_bps",

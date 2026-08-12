@@ -17,17 +17,12 @@ DEFAULT_INPUT = (
     "experiments/results/backtests/rolling_alpha_conditioned_top100_validation_v1/month_summary.csv"
 )
 DEFAULT_OUTPUT_DIR = "output/legacy/reports/rolling_alpha_conditioned_top100_validation_v1"
-DEFAULT_VARIANTS = (
-    "alpha_rank=Baseline",
-    "gap_penalty_030_p80=Gap 0.30 p80",
-    "gap_penalty_035_p80=Gap 0.35 p80",
+DEFAULT_VARIANTS = tuple(
+    "alpha_rank=Baseline|gap_penalty_030_p80=Gap 0.30 p80|gap_penalty_035_p80=Gap 0.35 p80".split(
+        "|"
+    )
 )
-REQUIRED_COLUMNS = (
-    "test_month",
-    "variant",
-    "short_top_excess_bps",
-    "next_top_excess_bps",
-)
+REQUIRED_COLUMNS = tuple("test_month variant short_top_excess_bps next_top_excess_bps".split())
 COLORS = ("#35699a", "#df8f16", "#9b3f4e", "#607a52", "#6c5aa7")
 
 

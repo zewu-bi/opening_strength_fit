@@ -33,27 +33,16 @@ def main() -> None:
     output_dir = args.output_dir or args.histogram_csv.parent
     output_dir.mkdir(parents=True, exist_ok=True)
     histogram = pd.read_csv(args.histogram_csv)
-    plot_score_bucket_histograms(
-        histogram,
-        bin_width_bps=TOP1000_RETURN_HISTOGRAM_BIN_WIDTH_BPS,
-        output_dir=output_dir,
-        variant=args.variant,
-    )
-    plot_score_bucket_histograms_full_scale(
-        histogram,
-        bin_width_bps=TOP1000_RETURN_HISTOGRAM_BIN_WIDTH_BPS,
-        output_dir=output_dir,
-        variant=args.variant,
-    )
-    for suffix in ("", "_full_scale"):
-        print(
-            output_dir
-            / (
-                "top1000_score_bucket_return_"
-                f"{TOP1000_RETURN_HISTOGRAM_BIN_WIDTH_BPS}bps_counts{suffix}.svg"
-            ),
-            flush=True,
+    for plotter in (plot_score_bucket_histograms, plot_score_bucket_histograms_full_scale):
+        plotter(
+            histogram,
+            bin_width_bps=TOP1000_RETURN_HISTOGRAM_BIN_WIDTH_BPS,
+            output_dir=output_dir,
+            variant=args.variant,
         )
+    stem = f"top1000_score_bucket_return_{TOP1000_RETURN_HISTOGRAM_BIN_WIDTH_BPS}bps_counts"
+    for suffix in ("", "_full_scale"):
+        print(output_dir / f"{stem}{suffix}.svg", flush=True)
 
 
 if __name__ == "__main__":

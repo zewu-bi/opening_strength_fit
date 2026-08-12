@@ -64,8 +64,10 @@ def fetch_next_close_labels(
     close_lookback_seconds: int = DEFAULT_CLOSE_LOOKBACK_SECONDS,
     calendar_days_after: int = 14,
     fee_bps: float = 0.0,
+    compute_labels=None,
 ) -> pd.DataFrame:
-    labels = compute_clickhouse_close_labels(
+    label_builder = compute_labels or compute_clickhouse_close_labels
+    labels = label_builder(
         base[[*DECISION_KEY_COLUMNS, "buy_price"]].copy(),
         [HorizonSpec(name="next_close", label="next close", seconds=None)],
         host=host or DEFAULT_CLICKHOUSE_TICK_HOST,

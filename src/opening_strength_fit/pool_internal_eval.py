@@ -1,11 +1,40 @@
 from __future__ import annotations
 
+from functools import partial
+
 import pandas as pd
 
 from opening_strength_fit.model_metrics import corr
 from opening_strength_fit.prediction_frames import clock_label
 
 GROUP_COLS = ("date", "decision_target_timestamp")
+POOL_INTERNAL_ROLLING_COLUMNS = (
+    "pool_short_mean_bps",
+    "selected_short_mean_bps",
+    "short_internal_excess_bps",
+    "pool_next_mean_bps",
+    "selected_next_mean_bps",
+    "next_internal_excess_bps",
+    "short_rank_ic",
+    "next_rank_ic",
+)
+POOL_INTERNAL_MEAN_AGGREGATIONS = {
+    column: (column, "mean")
+    for column in ("candidate_rows", "selected_rows", *POOL_INTERNAL_ROLLING_COLUMNS)
+}
+
+
+def _positive_period_aggregations(period: str) -> dict[str, tuple[str, object]]:
+    return {
+        f"{horizon}_positive_{period}": (
+            f"{horizon}_internal_excess_bps",
+            lambda value: int((value > 0).sum()),
+        )
+        for horizon in ("short", "next")
+    }
+
+
+POSITIVE_MONTH_AGGREGATIONS = _positive_period_aggregations("months")
 
 
 def evaluate_pool(
@@ -73,16 +102,7 @@ def evaluate_pool(
             "date",
             "decision_target_timestamp",
             "clock",
-            "candidate_rows",
-            "selected_rows",
-            "pool_short_mean_bps",
-            "selected_short_mean_bps",
-            "short_internal_excess_bps",
-            "pool_next_mean_bps",
-            "selected_next_mean_bps",
-            "next_internal_excess_bps",
-            "short_rank_ic",
-            "next_rank_ic",
+            *POOL_INTERNAL_MEAN_AGGREGATIONS,
         ]
     ]
 
@@ -100,16 +120,7 @@ def summarize_groups(
         .agg(
             groups=("short_internal_excess_bps", "size"),
             months=(month_col, "nunique"),
-            candidate_rows=("candidate_rows", "mean"),
-            selected_rows=("selected_rows", "mean"),
-            pool_short_mean_bps=("pool_short_mean_bps", "mean"),
-            selected_short_mean_bps=("selected_short_mean_bps", "mean"),
-            short_internal_excess_bps=("short_internal_excess_bps", "mean"),
-            pool_next_mean_bps=("pool_next_mean_bps", "mean"),
-            selected_next_mean_bps=("selected_next_mean_bps", "mean"),
-            next_internal_excess_bps=("next_internal_excess_bps", "mean"),
-            short_rank_ic=("short_rank_ic", "mean"),
-            next_rank_ic=("next_rank_ic", "mean"),
+            **POOL_INTERNAL_MEAN_AGGREGATIONS,
         )
         .reset_index()
     )
@@ -121,28 +132,13 @@ def _positive_period_summary(summary: pd.DataFrame, period: str) -> pd.DataFrame
         return pd.DataFrame()
     return (
         summary.groupby("pool", sort=False)
-        .agg(
-            **{
-                f"short_positive_{period}": (
-                    "short_internal_excess_bps",
-                    lambda value: int((value > 0).sum()),
-                ),
-                f"next_positive_{period}": (
-                    "next_internal_excess_bps",
-                    lambda value: int((value > 0).sum()),
-                ),
-            }
-        )
+        .agg(**_positive_period_aggregations(period))
         .reset_index()
     )
 
 
-def positive_month_summary(month_summary: pd.DataFrame) -> pd.DataFrame:
-    return _positive_period_summary(month_summary, "months")
-
-
-def positive_clock_summary(clock_summary: pd.DataFrame) -> pd.DataFrame:
-    return _positive_period_summary(clock_summary, "clocks")
+positive_month_summary = partial(_positive_period_summary, period="months")
+positive_clock_summary = partial(_positive_period_summary, period="clocks")
 
 
 def halfyear_summary(month_summary: pd.DataFrame) -> pd.DataFrame:
@@ -160,11 +156,7 @@ def halfyear_summary(month_summary: pd.DataFrame) -> pd.DataFrame:
             next_internal_excess_bps=("next_internal_excess_bps", "mean"),
             short_rank_ic=("short_rank_ic", "mean"),
             next_rank_ic=("next_rank_ic", "mean"),
-            short_positive_months=(
-                "short_internal_excess_bps",
-                lambda value: int((value > 0).sum()),
-            ),
-            next_positive_months=("next_internal_excess_bps", lambda value: int((value > 0).sum())),
+            **POSITIVE_MONTH_AGGREGATIONS,
         )
         .reset_index()
     )
@@ -179,21 +171,8 @@ def year_summary(month_summary: pd.DataFrame) -> pd.DataFrame:
         frame.groupby(["pool", "year"], sort=False)
         .agg(
             months=("test_month", "nunique"),
-            candidate_rows=("candidate_rows", "mean"),
-            selected_rows=("selected_rows", "mean"),
-            pool_short_mean_bps=("pool_short_mean_bps", "mean"),
-            selected_short_mean_bps=("selected_short_mean_bps", "mean"),
-            short_internal_excess_bps=("short_internal_excess_bps", "mean"),
-            pool_next_mean_bps=("pool_next_mean_bps", "mean"),
-            selected_next_mean_bps=("selected_next_mean_bps", "mean"),
-            next_internal_excess_bps=("next_internal_excess_bps", "mean"),
-            short_rank_ic=("short_rank_ic", "mean"),
-            next_rank_ic=("next_rank_ic", "mean"),
-            short_positive_months=(
-                "short_internal_excess_bps",
-                lambda value: int((value > 0).sum()),
-            ),
-            next_positive_months=("next_internal_excess_bps", lambda value: int((value > 0).sum())),
+            **POOL_INTERNAL_MEAN_AGGREGATIONS,
+            **POSITIVE_MONTH_AGGREGATIONS,
         )
         .reset_index()
     )

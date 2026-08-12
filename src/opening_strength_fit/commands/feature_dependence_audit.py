@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from opening_strength_fit.commands.arguments import add_arguments
 from opening_strength_fit.config import (
     config_bool,
     config_float,
     config_int,
     config_str,
+    prepare_output_dir,
     run_id,
 )
 from opening_strength_fit.evaluation import (
@@ -238,18 +239,12 @@ def main() -> None:
         "Audit opening-strength feature dependence with grouped importance, "
         "permutation, and drop-retrain ablations."
     )
-    parser.add_argument("--skip-permutation", action="store_true")
-    parser.add_argument("--skip-ablation", action="store_true")
-    parser.add_argument("--write-predictions", action="store_true")
+    add_arguments(parser, "skip-permutation skip-ablation write-predictions", action="store_true")
     args = parser.parse_args()
 
     config = load_run_config(args.config)
     run_name = run_id(config, args.config) if args.config else "local_feature_audit"
-    output_dir = Path(
-        args.output_dir
-        or config_str(config, "output", "local_dir", f"output/legacy/analysis/{run_name}")
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = prepare_output_dir(config, args.output_dir, run_name)
 
     labeled = _load_labeled(args, config)
     print_mapping("dataset", dataset_summary(labeled))
@@ -262,26 +257,23 @@ def main() -> None:
     evaluation_settings = build_evaluation_settings(config, args)
     splits = date_splits(labeled, args, config)
     groups = _feature_groups(config)
+    permutation_repeats = config_int(config, "feature_audit", "permutation_repeats", 1)
+    permutation_mode = config_str(config, "feature_audit", "permutation_mode", "cross_section")
+    run_ablation = not args.skip_ablation and config_bool(
+        config, "feature_audit", "run_ablation", True
+    )
+    run_permutation = not args.skip_permutation and config_bool(
+        config, "feature_audit", "run_permutation", True
+    )
+    random_state = config_int(config, "feature_audit", "random_state", 7)
     print_mapping(
         "feature_audit_settings",
         {
             "groups": [group.name for group in groups],
-            "permutation_repeats": config_int(
-                config,
-                "feature_audit",
-                "permutation_repeats",
-                1,
-            ),
-            "permutation_mode": config_str(
-                config,
-                "feature_audit",
-                "permutation_mode",
-                "cross_section",
-            ),
-            "ablation": not args.skip_ablation
-            and config_bool(config, "feature_audit", "run_ablation", True),
-            "permutation": not args.skip_permutation
-            and config_bool(config, "feature_audit", "run_permutation", True),
+            "permutation_repeats": permutation_repeats,
+            "permutation_mode": permutation_mode,
+            "ablation": run_ablation,
+            "permutation": run_permutation,
             "write_predictions": args.write_predictions,
             "window_mode": resolve_window_mode(args, config),
         },
@@ -334,28 +326,10 @@ def main() -> None:
 
         group_columns = {group.name: _matching_features(model.features, group) for group in groups}
 
-        if not args.skip_permutation and config_bool(
-            config,
-            "feature_audit",
-            "run_permutation",
-            True,
-        ):
-            repeat_count = config_int(
-                config,
-                "feature_audit",
-                "permutation_repeats",
-                1,
-            )
-            mode = config_str(
-                config,
-                "feature_audit",
-                "permutation_mode",
-                "cross_section",
-            )
-            permutation_group_cols = group_cols_for_mode(mode)
-            seed = config_int(config, "feature_audit", "random_state", 7)
-            for repeat in range(repeat_count):
-                rng = np.random.default_rng(seed + repeat)
+        if run_permutation:
+            permutation_group_cols = group_cols_for_mode(permutation_mode)
+            for repeat in range(permutation_repeats):
+                rng = np.random.default_rng(random_state + repeat)
                 for group_name, columns in group_columns.items():
                     if not columns:
                         continue
@@ -384,12 +358,7 @@ def main() -> None:
                     row["permuted_features"] = len(columns)
                     permutation_rows.append(row)
 
-        if not args.skip_ablation and config_bool(
-            config,
-            "feature_audit",
-            "run_ablation",
-            True,
-        ):
+        if run_ablation:
             for group_name, columns in group_columns.items():
                 if not columns:
                     continue

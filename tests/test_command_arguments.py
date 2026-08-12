@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
@@ -15,6 +16,15 @@ from opening_strength_fit.commands.capacity_acceptance_analysis import (
 from opening_strength_fit.commands.realistic_acceptance_analysis import (
     main as realistic_acceptance_main,
 )
+
+
+@dataclass(frozen=True)
+class _Settings:
+    enabled: bool = False
+    count: int = 1
+    ratio: float = 0.5
+    label: str = "default"
+    statuses: tuple[str, ...] = ()
 
 
 def test_cli_values_take_precedence_over_config() -> None:
@@ -108,6 +118,34 @@ def test_flag_preserves_store_true_semantics(
     )
 
     assert arguments.flag("include_decision_timestamp") is expected
+
+
+def test_resolve_dataclass_preserves_types_and_cli_precedence() -> None:
+    arguments = CommandArguments(
+        argparse.Namespace(
+            enabled=False,
+            count=None,
+            ratio=1.5,
+            label="",
+            tradable_status=None,
+        ),
+        {
+            "analysis": {
+                "enabled": "yes",
+                "count": "2",
+                "ratio": "0.7",
+                "label": "configured",
+                "statuses": ["TRADE", "AUCTION"],
+            }
+        },
+        "analysis",
+    )
+
+    resolved = arguments.resolve_dataclass(
+        _Settings(), tuple_aliases={"statuses": "tradable_status"}
+    )
+
+    assert resolved == _Settings(True, 2, 1.5, "configured", ("TRADE", "AUCTION"))
 
 
 def _write_acceptance_inputs(tmp_path: Path) -> tuple[Path, Path]:

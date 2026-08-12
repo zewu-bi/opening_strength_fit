@@ -7,11 +7,10 @@ from pathlib import Path
 import pandas as pd
 
 from opening_strength_fit.config import (
-    config_int,
     config_optional_int,
     config_str,
-    config_value,
 )
+from opening_strength_fit.config import config_value as get
 from opening_strength_fit.dataset import load_ticks
 from opening_strength_fit.training_labeled import (
     build_labeled_frame_from_config,
@@ -19,8 +18,8 @@ from opening_strength_fit.training_labeled import (
     looks_labeled,
 )
 from opening_strength_fit.training_windows import (
-    period_end_date,
     resolve_window_mode,
+    rolling_monthly_date_bounds,
     test_year_from_args,
 )
 
@@ -53,11 +52,11 @@ def resolve_data_source(args: argparse.Namespace, config: dict, tick_path: str) 
     source = args.data_source or config_str(config, "data", "source", "auto")
     source = source.strip().lower()
     if source == "auto":
-        labeled_path = os.environ.get("OPENING_STRENGTH_LABELED_PATH", "") or config_value(
+        labeled_path = os.environ.get("OPENING_STRENGTH_LABELED_PATH", "") or get(
             config, "data", "labeled_path", ""
         )
-        feature_path = config_value(config, "data", "feature_path", "")
-        label_path = config_value(config, "data", "label_path", "")
+        feature_path = get(config, "data", "feature_path", "")
+        label_path = get(config, "data", "label_path", "")
         if labeled_path or (feature_path and label_path):
             return "labeled_pvc"
         return "path" if tick_path else "clickhouse"
@@ -69,43 +68,22 @@ def resolve_data_source(args: argparse.Namespace, config: dict, tick_path: str) 
 
 
 def clickhouse_date_bounds(args: argparse.Namespace, config: dict) -> tuple[str, str]:
-    explicit_start = config_value(
-        config,
-        "data",
-        "start_date",
-        config_value(config, "clickhouse", "start_date", None),
+    explicit_start = get(
+        config, "data", "start_date", get(config, "clickhouse", "start_date", None)
     )
-    explicit_end = config_value(
-        config,
-        "data",
-        "end_date",
-        config_value(config, "clickhouse", "end_date", None),
-    )
+    explicit_end = get(config, "data", "end_date", get(config, "clickhouse", "end_date", None))
     if explicit_start and explicit_end:
         return str(pd.Timestamp(explicit_start).date()), str(pd.Timestamp(explicit_end).date())
 
     window_mode = resolve_window_mode(args, config)
     if window_mode == "rolling_monthly":
-        train_months = (
-            args.train_months
-            if args.train_months is not None
-            else config_int(config, "window", "train_months", 12)
-        )
-        first_test_month = args.test_start_month or config_value(
-            config, "window", "test_start_month", None
-        )
-        last_test_month = args.test_end_month or config_value(
-            config, "window", "test_end_month", None
-        )
-        if not first_test_month or not last_test_month:
+        bounds = rolling_monthly_date_bounds(args, config)
+        if bounds is None:
             raise SystemExit(
                 "ClickHouse rolling_monthly source needs [window].test_start_month "
                 "and [window].test_end_month, or CLI overrides."
             )
-        first_period = pd.Period(first_test_month, freq="M")
-        last_period = pd.Period(last_test_month, freq="M")
-        start_period = first_period - int(train_months)
-        return str(start_period.to_timestamp().date()), period_end_date(last_period)
+        return bounds
 
     if window_mode == "rolling_annual":
         train_start_year = (
@@ -121,24 +99,11 @@ def clickhouse_date_bounds(args: argparse.Namespace, config: dict) -> tuple[str,
             )
         return f"{int(train_start_year):04d}-01-01", f"{int(last_test_year):04d}-12-31"
 
-    train_start_date = config_value(
-        config,
-        "window",
-        "train_start_date",
-        config_value(config, "data", "train_start_date", None),
+    train_start_date = get(
+        config, "window", "train_start_date", get(config, "data", "train_start_date", None)
     )
-    test_start_date = args.test_start_date or config_value(
-        config,
-        "window",
-        "test_start_date",
-        None,
-    )
-    test_end_date = args.test_end_date or config_value(
-        config,
-        "window",
-        "test_end_date",
-        None,
-    )
+    test_start_date = args.test_start_date or get(config, "window", "test_start_date", None)
+    test_end_date = args.test_end_date or get(config, "window", "test_end_date", None)
     start_date = explicit_start or train_start_date
     end_date = explicit_end or test_end_date
     if not start_date or not end_date:
@@ -161,22 +126,12 @@ def clickhouse_setting(
     env_name: str,
     default,
 ):
-    arg_value = getattr(args, arg_name)
-    if arg_value not in (None, ""):
-        return arg_value
-    env_value = os.getenv(env_name)
-    if env_value not in (None, ""):
-        return env_value
-    return config_value(config, "clickhouse", config_key, default)
+    for value in (getattr(args, arg_name), os.getenv(env_name)):
+        if value not in (None, ""):
+            return value
+    return get(config, "clickhouse", config_key, default)
 
 
 def resolve_cache_path(config: dict) -> Path | None:
-    raw = config_value(
-        config,
-        "cache",
-        "labeled_path",
-        config_value(config, "cache", "path", ""),
-    )
-    if raw in (None, ""):
-        return None
-    return Path(str(raw))
+    raw = get(config, "cache", "labeled_path", get(config, "cache", "path", ""))
+    return None if raw in (None, "") else Path(str(raw))

@@ -7,7 +7,6 @@ import pandas as pd
 import pytest
 
 from opening_strength_fit.commands.feature_hygiene_audit import (
-    _context_dates_for_targets,
     _file_overlaps_date_range,
     _sample_labeled_pvc_frame,
     build_prune_report,
@@ -122,25 +121,6 @@ def test_explicit_missing_importance_path_is_required(tmp_path) -> None:
 
     with pytest.raises(SystemExit, match="feature importance file not found"):
         load_feature_importance(missing_path, required=True)
-
-
-def test_historical_context_dates_include_prior_trading_days() -> None:
-    all_dates = [f"2022-01-{day:02d}" for day in range(3, 11)]
-
-    context = _context_dates_for_targets(
-        ["2022-01-06", "2022-01-10"],
-        all_dates,
-        lookback_days=2,
-    )
-
-    assert context == [
-        "2022-01-04",
-        "2022-01-05",
-        "2022-01-06",
-        "2022-01-08",
-        "2022-01-09",
-        "2022-01-10",
-    ]
 
 
 def test_labeled_cache_file_overlap_uses_year_from_name() -> None:

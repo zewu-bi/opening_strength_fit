@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import runpy
 from pathlib import Path
 
 import numpy as np
@@ -10,6 +11,16 @@ from opening_strength_fit.legacy.multiscale_bucket_diag import (
     add_ic_rows,
     load_ranked_pool_shard,
     spearman_rank_ic,
+)
+
+ROOT = Path(__file__).parents[1]
+AUCTION_COMPAT = runpy.run_path(
+    ROOT / "experiments/scripts/run_auction_fresh_rank_bucket_diagnostics.py",
+    run_name="auction_fresh_rank_bucket_compat",
+)
+MECH_COMPAT = runpy.run_path(
+    ROOT / "experiments/scripts/run_mech328_v2_multiscale_bucket_diagnostics.py",
+    run_name="mech328_v2_multiscale_compat",
 )
 
 
@@ -88,3 +99,27 @@ def test_load_ranked_pool_shard_is_shared_join_and_sort_boundary(
         "duplicate_keys": 0,
         "missing_labels": 0,
     }
+
+
+def test_historical_diagnostic_presets_delegate_to_shared_runners(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = []
+    auction_globals = AUCTION_COMPAT["main"].__globals__
+    monkeypatch.setitem(auction_globals, "run_rank_bucket_reaudit", calls.append)
+    monkeypatch.setitem(auction_globals, "run_multiscale_bucket_diagnostics", calls.append)
+    AUCTION_COMPAT["main"]()
+    assert len(calls) == 2
+    assert (
+        calls[0].run_ids == calls[1].run_ids == {"auction_fresh_pruned": AUCTION_COMPAT["RUN_ID"]}
+    )
+    assert calls[0].months == calls[1].months == list(AUCTION_COMPAT["DEFAULT_DIAGNOSTIC_MONTHS"])
+
+    calls.clear()
+    monkeypatch.setitem(
+        MECH_COMPAT["main"].__globals__, "run_multiscale_bucket_diagnostics", calls.append
+    )
+    MECH_COMPAT["main"]()
+    assert len(calls) == 1
+    assert calls[0].run_ids == {"mech328_v2": MECH_COMPAT["RUN_ID"]}
+    assert calls[0].months == list(MECH_COMPAT["DEFAULT_DIAGNOSTIC_MONTHS"])

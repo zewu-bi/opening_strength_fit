@@ -9,32 +9,6 @@ from opening_strength_fit.candidates import opening_candidate_mask
 from opening_strength_fit.evaluation import resolve_group_cols
 from opening_strength_fit.schema import ensure_timestamp_columns, standardize_columns
 
-TARGET_STAT_COLUMNS = (
-    "label_raw",
-    "label_xs_mean",
-    "label_xs_median",
-    "label_xs_std",
-    "label_xs_count",
-    "label_xs_rank_pct",
-    "label_xs_heat_fitted",
-    "label_xs_heat_residual",
-    "label_xs_heat_exposure_count",
-    "label_xs_guard_pass",
-    "label_xs_guard_dirty",
-    "label_xs_guard_positive_excess",
-    "label_xs_guard_shrink",
-    "label_xs_guard_risk",
-    "label_xs_guard_risk_component_count",
-    "label_xs_short_component",
-    "label_xs_long_raw",
-    "label_xs_long_mean",
-    "label_xs_long_std",
-    "label_xs_long_count",
-    "label_xs_long_rank_pct",
-    "label_xs_long_component",
-    "label_xs_mixed_long_weight",
-)
-
 DEFAULT_HEAT_NEUTRALIZE_COLUMNS = (
     "ask_price_1",
     "bid_price_1",
@@ -121,7 +95,7 @@ def _cross_sectional_transformed_label(
     transform: str,
     min_group_size: int,
     std_epsilon: float,
-) -> tuple[pd.Series, pd.Series, pd.Series, pd.Series, pd.Series]:
+) -> tuple[pd.Series, pd.Series, pd.Series, pd.Series, pd.Series, pd.Series]:
     values = (
         pd.to_numeric(values, errors="coerce")
         .astype("float64")
@@ -135,17 +109,19 @@ def _cross_sectional_transformed_label(
 
     component = pd.Series(np.nan, index=out.index, dtype="float64")
     mean = pd.Series(np.nan, index=out.index, dtype="float64")
+    median = pd.Series(np.nan, index=out.index, dtype="float64")
     std = pd.Series(np.nan, index=out.index, dtype="float64")
     count = pd.Series(np.nan, index=out.index, dtype="float64")
     rank_pct = pd.Series(np.nan, index=out.index, dtype="float64")
     if not valid.any():
-        return component, mean, std, count, rank_pct
+        return component, mean, median, std, count, rank_pct
 
     valid_frame = out.loc[valid, [*group_cols]].copy()
     valid_frame["_value"] = values.loc[valid].to_numpy()
     grouped = valid_frame.groupby(list(group_cols), sort=False)["_value"]
 
     mean.loc[valid] = grouped.transform("mean").to_numpy()
+    median.loc[valid] = grouped.transform("median").to_numpy()
     std.loc[valid] = grouped.transform(lambda group: group.std(ddof=0)).to_numpy()
     count.loc[valid] = grouped.transform("count").to_numpy()
     rank_pct.loc[valid] = grouped.rank(method="average", pct=True).to_numpy()
@@ -170,7 +146,7 @@ def _cross_sectional_transformed_label(
             "mixed label transform must be raw, demean, zscore, rank_pct, "
             f"or rank_centered; got {transform!r}"
         )
-    return component, mean, std, count, rank_pct
+    return component, mean, median, std, count, rank_pct
 
 
 def _transformed_exposure(
@@ -477,39 +453,26 @@ def add_cross_sectional_target_label(
         out[raw_label_col] = raw_label
 
     valid = _valid_mask(out, label_col=label_col, valid_col=valid_col)
-    target = pd.Series(np.nan, index=out.index, dtype="float64")
-    group_mean = pd.Series(np.nan, index=out.index, dtype="float64")
-    group_median = pd.Series(np.nan, index=out.index, dtype="float64")
-    group_std = pd.Series(np.nan, index=out.index, dtype="float64")
-    group_count = pd.Series(np.nan, index=out.index, dtype="float64")
-    rank_pct = pd.Series(np.nan, index=out.index, dtype="float64")
-
-    valid_frame = out.loc[valid, [*resolved_group_cols]].copy()
-    valid_frame["_label"] = raw_label.loc[valid].to_numpy()
-    grouped = valid_frame.groupby(list(resolved_group_cols), sort=False)["_label"]
-
-    group_mean.loc[valid] = grouped.transform("mean").to_numpy()
-    group_median.loc[valid] = grouped.transform("median").to_numpy()
-    group_std.loc[valid] = grouped.transform(lambda values: values.std(ddof=0)).to_numpy()
-    group_count.loc[valid] = grouped.transform("count").to_numpy()
-    rank_pct.loc[valid] = grouped.rank(method="average", pct=True).to_numpy()
-
+    (
+        target,
+        group_mean,
+        group_median,
+        group_std,
+        group_count,
+        rank_pct,
+    ) = _cross_sectional_transformed_label(
+        out,
+        values=raw_label,
+        valid=valid,
+        group_cols=resolved_group_cols,
+        transform=(
+            mode if mode in {"raw", "demean", "zscore", "rank_pct", "rank_centered"} else "raw"
+        ),
+        min_group_size=min_group_size,
+        std_epsilon=std_epsilon,
+    )
     usable = valid & group_count.ge(int(min_group_size))
-    if mode == "raw":
-        target.loc[usable] = raw_label.loc[usable]
-    elif mode == "demean":
-        target.loc[usable] = raw_label.loc[usable] - group_mean.loc[usable]
-    elif mode == "zscore":
-        usable &= group_std.gt(float(std_epsilon))
-        target.loc[usable] = (raw_label.loc[usable] - group_mean.loc[usable]) / group_std.loc[
-            usable
-        ]
-    elif mode == "rank_pct":
-        target.loc[usable] = rank_pct.loc[usable]
-    elif mode == "rank_centered":
-        rank_mean = (group_count.loc[usable] + 1.0) / (2.0 * group_count.loc[usable])
-        target.loc[usable] = rank_pct.loc[usable] - rank_mean
-    elif mode == "heat_neutral":
+    if mode == "heat_neutral":
         (
             target,
             heat_fitted,
@@ -532,50 +495,45 @@ def add_cross_sectional_target_label(
         out["label_xs_heat_fitted"] = heat_fitted
         out["label_xs_heat_residual"] = heat_residual
         out["label_xs_heat_exposure_count"] = heat_exposure_count
-    elif mode == "guard_shrunk":
-        guard_pass = _guard_pass_mask(
-            out,
-            guard_pass_col=guard_pass_col,
-            min_values=guard_min_values,
-            max_values=guard_max_values,
-            rank_min_values=guard_rank_min_values,
-            rank_max_values=guard_rank_max_values,
-            rank_group_cols=tuple(guard_rank_group_cols or resolved_group_cols),
-            rank_method=guard_rank_method,
-        )
-        dirty = ~guard_pass.astype(bool)
+    elif mode in {"guard_shrunk", "guard_risk_shrunk"}:
+        rank_group_cols = tuple(guard_rank_group_cols or resolved_group_cols)
+        if mode == "guard_shrunk":
+            guard_pass = _guard_pass_mask(
+                out,
+                guard_pass_col=guard_pass_col,
+                min_values=guard_min_values,
+                max_values=guard_max_values,
+                rank_min_values=guard_rank_min_values,
+                rank_max_values=guard_rank_max_values,
+                rank_group_cols=rank_group_cols,
+                rank_method=guard_rank_method,
+            )
+            dirty = ~guard_pass.astype(bool)
+            shrink_rate = float(guard_shrink_penalty) * dirty.astype("float64")
+            out["label_xs_guard_pass"] = guard_pass.astype("int8")
+            out["label_xs_guard_dirty"] = dirty.astype("int8")
+        else:
+            risk, risk_component_count = _guard_risk_score(
+                out,
+                rank_min_values=guard_risk_rank_min_values,
+                rank_max_values=guard_risk_rank_max_values,
+                rank_group_cols=rank_group_cols,
+                rank_method=guard_rank_method,
+                normalization=guard_risk_normalization,
+            )
+            shrink_rate = float(guard_risk_lambda) * risk
+            out["label_xs_guard_risk"] = risk.where(usable)
+            out["label_xs_guard_risk_component_count"] = risk_component_count.where(usable)
         positive_excess = (raw_label - group_median).clip(lower=0.0)
-        shrink = float(guard_shrink_penalty) * positive_excess
-
-        target.loc[usable] = raw_label.loc[usable]
-        shrink_mask = usable & dirty & positive_excess.gt(0.0)
+        shrink = shrink_rate * positive_excess
+        shrink_mask = usable & positive_excess.gt(0.0) & shrink_rate.gt(0.0)
         target.loc[shrink_mask] = raw_label.loc[shrink_mask] - shrink.loc[shrink_mask]
-        out["label_xs_guard_pass"] = guard_pass.astype("int8")
-        out["label_xs_guard_dirty"] = dirty.astype("int8")
-        out["label_xs_guard_positive_excess"] = positive_excess.where(usable)
-        out["label_xs_guard_shrink"] = shrink.where(shrink_mask, 0.0).where(usable)
-    elif mode == "guard_risk_shrunk":
-        risk, risk_component_count = _guard_risk_score(
-            out,
-            rank_min_values=guard_risk_rank_min_values,
-            rank_max_values=guard_risk_rank_max_values,
-            rank_group_cols=tuple(guard_rank_group_cols or resolved_group_cols),
-            rank_method=guard_rank_method,
-            normalization=guard_risk_normalization,
-        )
-        positive_excess = (raw_label - group_median).clip(lower=0.0)
-        shrink = float(guard_risk_lambda) * risk * positive_excess
-
-        target.loc[usable] = raw_label.loc[usable]
-        shrink_mask = usable & positive_excess.gt(0.0) & risk.gt(0.0)
-        target.loc[shrink_mask] = raw_label.loc[shrink_mask] - shrink.loc[shrink_mask]
-        out["label_xs_guard_risk"] = risk.where(usable)
-        out["label_xs_guard_risk_component_count"] = risk_component_count.where(usable)
         out["label_xs_guard_positive_excess"] = positive_excess.where(usable)
         out["label_xs_guard_shrink"] = shrink.where(shrink_mask, 0.0).where(usable)
     elif mode == "mixed":
         if long_label_col not in out.columns:
             raise SystemExit(f"mixed target missing long label column: {long_label_col}")
+        target[:] = np.nan
         long_label = (
             pd.to_numeric(out[long_label_col], errors="coerce")
             .astype("float64")
@@ -585,6 +543,7 @@ def add_cross_sectional_target_label(
         (
             short_component,
             _short_mean,
+            _short_median,
             _short_std,
             _short_count,
             _short_rank_pct,
@@ -600,6 +559,7 @@ def add_cross_sectional_target_label(
         (
             long_component,
             long_mean,
+            _long_median,
             long_std,
             long_count,
             long_rank_pct,

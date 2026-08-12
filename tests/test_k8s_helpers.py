@@ -12,9 +12,119 @@ from opening_strength_fit.commands.k8s_rendering import (
     training_command,  # noqa: E402
 )
 from opening_strength_fit.k8s import KUBERNETES_NAME_LIMIT, temporary_pod_name
+from opening_strength_fit.k8s_builder_rendering import (
+    render_indexed_builder_job,
+    render_top1000_job,
+)
 
 
 class K8sHelperTest(unittest.TestCase):
+    def test_top1000_job_can_adapt_noncanonical_label_filenames(self) -> None:
+        config = {
+            "run": {"id": "top1000_hist", "kind": "pool_internal_analysis"},
+            "output": {"k8s_dir": "/mnt/output/top1000_hist"},
+            "analysis": {
+                "top1000": {
+                    "next_close_label_input": "/mnt/output/labels",
+                    "next_close_label_filename_template": "labels_{year}.parquet",
+                    "years": [2023, 2024],
+                    "pool_path": "pool.parquet",
+                    "variant": "window",
+                    "source_run_id": "model_run",
+                    "histogram_bin_width_bps": 100,
+                }
+            },
+            "k8s": {"analysis_config_map": "analysis-script"},
+        }
+
+        manifest = render_top1000_job(
+            Path("experiments/runs/top1000_hist.toml"), config, "image:tag"
+        )
+
+        self.assertIn("name: analysis-script", manifest)
+        self.assertIn("for YEAR in 2023 2024", manifest)
+        self.assertIn("/mnt/output/labels/labels_${YEAR}.parquet", manifest)
+        self.assertIn("--top1000-bucket-return-histogram-only", manifest)
+        self.assertIn('--next-label-root "${COMPAT_LABEL_ROOT}"', manifest)
+
+    def test_indexed_builder_job_uses_declared_years_and_builder_kind(self) -> None:
+        config = {
+            "run": {"id": "opening_features", "kind": "training_feature_dataset"},
+            "dataset": {"years": [2023, 2024]},
+            "k8s": {
+                "job_name": "opening-features",
+                "shard_parallelism": 2,
+                "active_deadline_seconds": 3600,
+                "avoid_nodes": ["node7"],
+                "resources": {"memory_limit": "64Gi"},
+            },
+        }
+
+        manifest = render_indexed_builder_job(
+            Path("experiments/runs/opening_features.toml"), config, "image:tag"
+        )
+
+        self.assertIn("activeDeadlineSeconds: 3600", manifest)
+        self.assertIn("completionMode: Indexed", manifest)
+        self.assertIn("completions: 2", manifest)
+        self.assertIn("YEARS=(2023 2024)", manifest)
+        self.assertIn("osf-build-training-datasets", manifest)
+        self.assertIn("--kind features", manifest)
+        self.assertIn("values:\n                    - node7", manifest)
+
+        config["run"]["kind"] = "long_label_raw_source"
+        config["raw_source"] = config.pop("dataset")
+        manifest = render_indexed_builder_job(
+            Path("experiments/runs/opening_long_raw.toml"), config, "image:tag"
+        )
+        self.assertIn("osf-build-long-label-raw-source", manifest)
+
+    def test_indexed_builder_job_can_select_existing_yearly_configs(self) -> None:
+        config = {
+            "run": {"id": "annual_targets", "kind": "cache_transform"},
+            "k8s": {
+                "job_name": "annual-targets",
+                "years": [2023, 2024],
+                "indexed_run_id_template": "target_{year}_v1",
+                "indexed_wait_for_paths": ["/mnt/output/base_{year}.parquet"],
+                "wait_for_path_timeout_seconds": 7200,
+                "wait_for_path_interval_seconds": 30,
+            },
+        }
+
+        manifest = render_indexed_builder_job(
+            Path("experiments/runs/annual_targets.toml"), config, "image:tag"
+        )
+
+        self.assertIn('opening-strength-fit/run-ids: "target_2023_v1,target_2024_v1"', manifest)
+        self.assertIn('RUN_ID="target_${YEAR}_v1"', manifest)
+        self.assertIn('CONFIG="experiments/runs/${RUN_ID}.toml"', manifest)
+        self.assertIn('WAIT_PATHS=("/mnt/output/base_${YEAR}.parquet")', manifest)
+        self.assertIn("WAIT_PATH_TIMEOUT_SECONDS=7200", manifest)
+        self.assertIn('exec osf-build-target-label-cache --config "${CONFIG}"', manifest)
+
+    def test_indexed_builder_job_renders_short_label_shards(self) -> None:
+        config = {
+            "run": {"id": "short_labels", "kind": "short_label_cache"},
+            "short_label_shards": {
+                "years": [2024],
+                "input_path_template": "/mnt/output/base_{year}.parquet",
+                "output_path_template": "/mnt/output/short_{year}.parquet",
+            },
+            "output": {"k8s_dir": "/mnt/output/traces/short_labels"},
+            "k8s": {"wait_for_path_timeout_seconds": 3600},
+        }
+
+        manifest = render_indexed_builder_job(
+            Path("experiments/runs/short_labels.toml"), config, "image:tag"
+        )
+
+        self.assertIn('WAIT_PATHS=("/mnt/output/base_${YEAR}.parquet"', manifest)
+        self.assertIn("/mnt/output/base_${YEAR}.parquet.manifest.json", manifest)
+        self.assertIn('OUTPUT="/mnt/output/short_${YEAR}.parquet"', manifest)
+        self.assertIn('[ -f "${TRACE_DIR}/_SUCCESS" ]', manifest)
+        self.assertIn("exec osf-build-short-labels", manifest)
+
     def test_temporary_pod_name_stays_within_kubernetes_limit(self) -> None:
         name = temporary_pod_name(
             "opening-strength-sync-artifacts",
@@ -44,6 +154,10 @@ class K8sHelperTest(unittest.TestCase):
         self.assertEqual(
             resolve_render_image("registry/opening-strength-fit:20260715-maintenance-v1"),
             "registry/opening-strength-fit:20260715-maintenance-v1",
+        )
+        self.assertEqual(
+            resolve_render_image("", fallback="registry/opening-strength-fit:historical-v1"),
+            "registry/opening-strength-fit:historical-v1",
         )
 
     def test_rendered_job_name_keeps_mixed_weight_token(self) -> None:
@@ -169,6 +283,33 @@ class K8sHelperTest(unittest.TestCase):
         self.assertEqual(manifest.count("name: os-nn-independent-config"), 2)
         self.assertEqual(manifest.count("subPath: run.toml"), 2)
 
+    def test_sharded_job_can_mount_config_map_directory(self) -> None:
+        config = {
+            "run": {"id": "config_map_directory", "kind": "experiment"},
+            "model": {"name": "lightgbm"},
+            "window": {
+                "mode": "rolling_monthly",
+                "train_months": 12,
+                "test_start_month": "2022-01",
+                "test_end_month": "2022-01",
+            },
+            "k8s": {
+                "config_map_name": "run-config",
+                "config_map_volume_name": "window-config",
+                "config_map_mount_path": "/mnt/window-config",
+                "command_config_path": "/mnt/window-config/run.toml",
+            },
+        }
+
+        manifest = render_sharded_training_job(
+            Path("experiments/runs/run.toml"), config, "image:tag"
+        )
+
+        self.assertIn("name: run-config", manifest)
+        self.assertIn("mountPath: /mnt/window-config", manifest)
+        self.assertNotIn("subPath:", manifest)
+        self.assertIn("--config /mnt/window-config/run.toml", manifest)
+
     def test_v2_sharded_job_uses_run_and_fold_directories(self) -> None:
         config = {
             "run": {"id": "new_halfyear_run", "kind": "exploration"},
@@ -227,6 +368,13 @@ class K8sHelperTest(unittest.TestCase):
         self.assertIn('[ -f "${OUT}/metrics_by_year.csv" ]', manifest)
         self.assertIn('[ -f "${OUT}/predictions.parquet" ]', manifest)
         self.assertIn("required outputs already exist", manifest)
+
+        config["k8s"]["completion_files"] = ["metrics_by_year.csv"]
+        custom_manifest = render_sharded_training_job(
+            Path("experiments/runs/rolling.toml"), config, "image:tag"
+        )
+        self.assertNotIn('[ -f "${OUT}/_SUCCESS" ]', custom_manifest)
+        self.assertNotIn('[ -f "${OUT}/predictions.parquet" ]', custom_manifest)
 
     def test_sharded_job_respects_explicit_short_job_name(self) -> None:
         config = {

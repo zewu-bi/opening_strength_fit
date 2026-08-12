@@ -11,16 +11,9 @@ from opening_strength_fit.config import (
 )
 from opening_strength_fit.feature_config import feature_filters_from_config
 from opening_strength_fit.features import mechanismized_feature_value_reference_columns
+from opening_strength_fit.features_postopen import POSTOPEN_DYNAMIC_COLUMNS
 from opening_strength_fit.io import frame_columns
 from opening_strength_fit.model import PREDICTION_CONTEXT_COLUMNS
-
-
-def _mapping_keys(mapping: dict[str, object]) -> tuple[str, ...]:
-    return tuple(str(key) for key in mapping)
-
-
-def _existing_columns(available: set[str], columns: list[str] | tuple[str, ...]) -> list[str]:
-    return [column for column in columns if column in available]
 
 
 def _matching_existing_columns(
@@ -30,32 +23,19 @@ def _matching_existing_columns(
     patterns: tuple[str, ...] = (),
 ) -> list[str]:
     compiled = [re.compile(pattern) for pattern in patterns]
-    out = []
-    for column in sorted(available):
-        if prefixes and column.startswith(prefixes):
-            out.append(column)
-            continue
-        if compiled and any(pattern.search(column) for pattern in compiled):
-            out.append(column)
-    return out
+    return [
+        column
+        for column in sorted(available)
+        if (prefixes and column.startswith(prefixes))
+        or (compiled and any(pattern.search(column) for pattern in compiled))
+    ]
 
 
 def _postopen_decision_source_columns(config: dict) -> tuple[str, ...]:
     if not config_bool(config, "features", "include_postopen_decision", False):
         return ()
     return (
-        "ask_volume_1",
-        "bid_volume_1",
-        "ask_depth_10",
-        "bid_depth_10",
-        "depth_imbalance_1",
-        "depth_imbalance_10",
-        "spread_bps",
-        "mid_price",
-        "ask_price_1",
-        "bid_price_1",
-        "volume",
-        "turnover",
+        *POSTOPEN_DYNAMIC_COLUMNS,
         "volume_diff_1t",
         *(f"ask_gap_{level}_bps" for level in range(2, 11)),
         *(f"bid_gap_{level}_bps" for level in range(2, 11)),
@@ -65,7 +45,7 @@ def _postopen_decision_source_columns(config: dict) -> tuple[str, ...]:
 def _postopen_v2_source_columns(config: dict, available: set[str]) -> list[str]:
     if not config_bool(config, "features", "include_postopen_v2", False):
         return []
-    source = [
+    return [
         "ask_price_1",
         "bid_price_1",
         "ask_volume_1",
@@ -74,9 +54,7 @@ def _postopen_v2_source_columns(config: dict, available: set[str]) -> list[str]:
         "spread_bps",
         "volume",
         "turnover",
-    ]
-    source.extend(
-        _matching_existing_columns(
+        *_matching_existing_columns(
             available,
             prefixes=(
                 "ask_price_",
@@ -95,42 +73,27 @@ def _postopen_v2_source_columns(config: dict, available: set[str]) -> list[str]:
                 "trade_vwap_",
                 "return_",
             ),
-        )
-    )
-    return source
+        ),
+    ]
 
 
-def _cross_sectional_relative_source_columns(config: dict, available: set[str]) -> list[str]:
-    if not config_bool(config, "features", "include_cross_sectional_relative", False):
+def _optional_feature_sources(
+    config: dict,
+    available: set[str],
+    enabled_key: str,
+    prefix: str,
+) -> list[str]:
+    if not config_bool(config, "features", enabled_key, False):
         return []
-    source = []
-    source.extend(config_list(config, "features", "cross_sectional_relative_group_cols", []))
-    source.extend(config_list(config, "features", "cross_sectional_relative_columns", []))
-    source.extend(
-        _matching_existing_columns(
+    return [
+        *config_list(config, "features", f"{prefix}_group_cols", []),
+        *config_list(config, "features", f"{prefix}_columns", []),
+        *_matching_existing_columns(
             available,
-            prefixes=tuple(
-                config_list(config, "features", "cross_sectional_relative_prefixes", [])
-            ),
-            patterns=tuple(config_list(config, "features", "cross_sectional_relative_regexes", [])),
-        )
-    )
-    return source
-
-
-def _historical_surprise_source_columns(config: dict, available: set[str]) -> list[str]:
-    if not config_bool(config, "features", "include_historical_same_minute_surprise", False):
-        return []
-    source = []
-    source.extend(config_list(config, "features", "historical_surprise_columns", []))
-    source.extend(
-        _matching_existing_columns(
-            available,
-            prefixes=tuple(config_list(config, "features", "historical_surprise_prefixes", [])),
-            patterns=tuple(config_list(config, "features", "historical_surprise_regexes", [])),
-        )
-    )
-    return source
+            prefixes=tuple(config_list(config, "features", f"{prefix}_prefixes", [])),
+            patterns=tuple(config_list(config, "features", f"{prefix}_regexes", [])),
+        ),
+    ]
 
 
 def _multi_denominator_source_columns(config: dict) -> list[str]:
@@ -163,7 +126,7 @@ def _multi_denominator_source_columns(config: dict) -> list[str]:
 def _price_scale_source_columns(config: dict) -> list[str]:
     if not config_bool(config, "features", "include_price_scale_features", False):
         return []
-    source = [
+    return [
         config_str(config, "features", "price_scale_price_col", "ask_price_1"),
         "ask_price_1",
         "bid_price_1",
@@ -180,11 +143,10 @@ def _price_scale_source_columns(config: dict) -> list[str]:
         "postopen_v2_bid_depth_10",
         "volume_diff_1t",
         "volume_diff_3t",
+        *(f"ask_price_{level}" for level in range(2, 11)),
+        *(f"bid_price_{level}" for level in range(2, 11)),
+        *config_list(config, "features", "price_scale_interaction_columns", []),
     ]
-    source.extend(f"ask_price_{level}" for level in range(2, 11))
-    source.extend(f"bid_price_{level}" for level in range(2, 11))
-    source.extend(config_list(config, "features", "price_scale_interaction_columns", []))
-    return source
 
 
 def _target_transform_source_columns(config: dict) -> list[str]:
@@ -203,12 +165,12 @@ def _target_transform_source_columns(config: dict) -> list[str]:
 
 def _guard_condition_columns(config: dict, section: str) -> tuple[str, ...]:
     return (
-        *_mapping_keys(config_float_mapping(config, section, "min")),
-        *_mapping_keys(config_float_mapping(config, section, "max")),
-        *_mapping_keys(config_float_mapping(config, section, "rank_min")),
-        *_mapping_keys(config_float_mapping(config, section, "rank_max")),
-        *tuple(config_list(config, section, "rank_columns", [])),
-        *tuple(config_list(config, section, "rank_group_cols", [])),
+        *map(str, config_float_mapping(config, section, "min")),
+        *map(str, config_float_mapping(config, section, "max")),
+        *map(str, config_float_mapping(config, section, "rank_min")),
+        *map(str, config_float_mapping(config, section, "rank_max")),
+        *config_list(config, section, "rank_columns", []),
+        *config_list(config, section, "rank_group_cols", []),
     )
 
 
@@ -260,8 +222,11 @@ def labeled_pvc_read_columns(path: Path, config: dict) -> list[str] | None:
     selected.extend(_postopen_decision_source_columns(config))
     selected.extend(_postopen_v2_source_columns(config, available))
     selected.extend(_price_scale_source_columns(config))
-    selected.extend(_cross_sectional_relative_source_columns(config, available))
-    selected.extend(_historical_surprise_source_columns(config, available))
+    for enabled_key, prefix in (
+        ("include_cross_sectional_relative", "cross_sectional_relative"),
+        ("include_historical_same_minute_surprise", "historical_surprise"),
+    ):
+        selected.extend(_optional_feature_sources(config, available, enabled_key, prefix))
     selected.extend(_multi_denominator_source_columns(config))
     value_transform = config_str(config, "features", "feature_value_transform", "")
     value_transform = value_transform.strip().lower().replace("-", "_")
@@ -291,4 +256,4 @@ def labeled_pvc_read_columns(path: Path, config: dict) -> list[str] | None:
             patterns=feature_filters["include_patterns"],
         )
     )
-    return list(dict.fromkeys(_existing_columns(available, selected)))
+    return list(dict.fromkeys(column for column in selected if column in available))

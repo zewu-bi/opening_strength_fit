@@ -42,9 +42,8 @@ def write_plot_trace(
     plot_data: Path,
     figure: Path,
     variant_label: str,
-    included_months: list[str],
-    metric: str,
     pools: tuple[str, ...] = PLOT_POOLS,
+    **metadata: object,
 ) -> None:
     write_json(
         path,
@@ -54,10 +53,7 @@ def write_plot_trace(
             "figure": str(figure),
             "variant_label": variant_label,
             "series": list(pools),
-            "included_months": included_months,
-            "mean": "simple average across monthly summary rows",
-            "metric": metric,
-            "style": "manual svg two-panel figure for selected pools",
+            **metadata,
         },
         ensure_ascii=True,
     )

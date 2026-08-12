@@ -14,7 +14,7 @@ from opening_strength_fit.torch_model.preprocessing import (
 
 
 def _torch_mlp_score(model: TorchMLPPredictionModel, frame: pd.DataFrame) -> np.ndarray:
-    torch, _nn, _loader, _dataset = _import_torch()
+    torch, _nn = _import_torch()
     module = model.module.to(model.device)
     module.eval()
     scores = np.empty(len(frame), dtype="float64")

@@ -6,7 +6,8 @@ import numpy as np
 import pandas as pd
 
 from opening_strength_fit.io import read_frame
-from opening_strength_fit.schema import DECISION_KEY_COLUMNS
+from opening_strength_fit.labels import cross_sectional_mixed_target
+from opening_strength_fit.schema import DECISION_KEY_COLUMNS, normalize_decision_keys
 from opening_strength_fit.training_dataset_features import (
     decode_clickhouse_text,
     normalize_clickhouse_date,
@@ -29,16 +30,11 @@ RAW_LABEL_TICK_COLUMNS = (
 def normalize_dataset_keys(frame: pd.DataFrame) -> pd.DataFrame:
     """Return a copy with canonical, timezone-naive decision keys."""
 
-    out = frame.copy()
-    out["date"] = pd.to_datetime(out["date"], errors="coerce").dt.strftime("%Y-%m-%d")
-    out["symbol"] = out["symbol"].astype(str)
-    out["decision_target_timestamp"] = pd.to_datetime(
-        out["decision_target_timestamp"], errors="coerce"
-    ).dt.tz_localize(None)
-    missing = out[list(KEY_COLUMNS)].isna().any(axis=1)
-    if missing.any():
-        raise SystemExit(f"dataset has {int(missing.sum())} rows with missing keys")
-    return out
+    return normalize_decision_keys(
+        frame,
+        drop_missing=False,
+        context="dataset",
+    )
 
 
 def filter_decision_clocks(frame: pd.DataFrame, clocks: tuple[str, ...]) -> pd.DataFrame:
@@ -265,25 +261,12 @@ def mixed_target_label(
     min_group_size: int,
 ) -> tuple[pd.Series, pd.Series]:
     """Build the causal cross-sectional short plus next-close training target."""
-
-    short = pd.to_numeric(frame["label_short_1m"], errors="coerce")
-    long = pd.to_numeric(frame["label_next_close"], errors="coerce")
     valid = frame["valid_short_1m"].astype(bool) & frame["valid_next_close"].astype(bool)
-    keys = [frame["date"], frame["decision_target_timestamp"]]
-    short_valid = short.where(valid)
-    long_valid = long.where(valid)
-    short_group = short_valid.groupby(keys, sort=False)
-    long_group = long_valid.groupby(keys, sort=False)
-    count = short_group.transform("count")
-    short_std = short_group.transform(lambda values: values.std(ddof=0))
-    long_std = long_group.transform(lambda values: values.std(ddof=0))
-    usable = valid & count.ge(int(min_group_size)) & short_std.gt(1e-12) & long_std.gt(1e-12)
-    short_z = (short - short_group.transform("mean")) / short_std
-    long_z = (long - long_group.transform("mean")) / long_std
-    mixed = (short_z + float(weight) * long_z).where(usable)
+    mixed = cross_sectional_mixed_target(
+        frame,
+        short_column="label_short_1m",
+        weight=weight,
+        min_group_size=min_group_size,
+        usable=valid,
+    )
     return mixed, mixed.notna()
-
-
-# Compatibility name retained for historical tests and archived callers. The
-# implementation is horizon-agnostic and is owned by this domain module.
-compute_short_label_set = compute_clock_vwap_label_set

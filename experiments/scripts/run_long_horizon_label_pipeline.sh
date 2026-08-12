@@ -2,6 +2,16 @@
 set -euo pipefail
 
 NAMESPACE="bizewu"
+RENDER_DIR="$(mktemp -d)"
+trap 'rm -rf -- "${RENDER_DIR}"' EXIT
+
+render_job() {
+  local run_id="$1"
+  osf-render-k8s-job \
+    --config "experiments/runs/${run_id}.toml" \
+    --indexed \
+    --output-dir "${RENDER_DIR}"
+}
 
 wait_for_job() {
   local job_name="$1"
@@ -27,18 +37,25 @@ wait_for_job() {
   done
 }
 
+render_job "opening_0931_1010_long_label_raw_source_v1"
+hfcli kubectl -n "${NAMESPACE}" apply \
+  -f "${RENDER_DIR}/opening_0931_1010_long_label_raw_source_v1_job.yaml"
 wait_for_job "os-long-label-raw-w0931-1010-v1" 7
 
+render_job "opening_0931_0940_labels_10m_1h_close"
+render_job "opening_1001_1010_labels_10m_1h_close"
 hfcli kubectl -n "${NAMESPACE}" apply \
-  -f experiments/jobs/opening_0931_0940_labels_10m_1h_close_job.yaml \
-  -f experiments/jobs/opening_1001_1010_labels_10m_1h_close_job.yaml
+  -f "${RENDER_DIR}/opening_0931_0940_labels_10m_1h_close_job.yaml" \
+  -f "${RENDER_DIR}/opening_1001_1010_labels_10m_1h_close_job.yaml"
 
 wait_for_job "os-long-labels-w0931-0940" 7
 wait_for_job "os-long-labels-w1001-1010" 7
 
+render_job "opening_0931_0940_labels_10m_1h_close_split"
+render_job "opening_1001_1010_labels_10m_1h_close_split"
 hfcli kubectl -n "${NAMESPACE}" apply \
-  -f experiments/jobs/opening_0931_0940_labels_10m_1h_close_split_job.yaml \
-  -f experiments/jobs/opening_1001_1010_labels_10m_1h_close_split_job.yaml
+  -f "${RENDER_DIR}/opening_0931_0940_labels_10m_1h_close_split_job.yaml" \
+  -f "${RENDER_DIR}/opening_1001_1010_labels_10m_1h_close_split_job.yaml"
 
 wait_for_job "os-long-labelsplit-w0931-0940" 7
 wait_for_job "os-long-labelsplit-w1001-1010" 7

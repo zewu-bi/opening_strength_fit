@@ -16,6 +16,21 @@ from opening_strength_fit.schema import (
     ensure_timestamp_columns,
 )
 
+POSTOPEN_DYNAMIC_COLUMNS = (
+    "ask_volume_1",
+    "bid_volume_1",
+    "ask_depth_10",
+    "bid_depth_10",
+    "depth_imbalance_1",
+    "depth_imbalance_10",
+    "spread_bps",
+    "mid_price",
+    "ask_price_1",
+    "bid_price_1",
+    "volume",
+    "turnover",
+)
+
 
 def _lagged_by_minutes(
     frame: pd.DataFrame,
@@ -54,21 +69,7 @@ def add_postopen_decision_features(
     )
     out["postopen_minutes_since_0930"] = (timestamp - open_timestamp).dt.total_seconds() / 60.0
 
-    dynamic_columns = [
-        "ask_volume_1",
-        "bid_volume_1",
-        "ask_depth_10",
-        "bid_depth_10",
-        "depth_imbalance_1",
-        "depth_imbalance_10",
-        "spread_bps",
-        "mid_price",
-        "ask_price_1",
-        "bid_price_1",
-        "volume",
-        "turnover",
-    ]
-    for column in dynamic_columns:
+    for column in POSTOPEN_DYNAMIC_COLUMNS:
         if column not in out.columns:
             continue
         values = _numeric_series(out[column])
@@ -378,18 +379,7 @@ def _add_trade_impact_features(builder: _PostOpenV2Builder) -> None:
 
 def _trajectory_columns(builder: _PostOpenV2Builder) -> list[str]:
     candidates = (
-        "ask_volume_1",
-        "bid_volume_1",
-        "ask_depth_10",
-        "bid_depth_10",
-        "depth_imbalance_1",
-        "depth_imbalance_10",
-        "spread_bps",
-        "mid_price",
-        "ask_price_1",
-        "bid_price_1",
-        "volume",
-        "turnover",
+        *POSTOPEN_DYNAMIC_COLUMNS,
         "postopen_v2_ask_depth_3",
         "postopen_v2_bid_depth_3",
         "postopen_v2_depth_imbalance_3",

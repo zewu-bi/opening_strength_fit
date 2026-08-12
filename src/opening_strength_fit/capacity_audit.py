@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 
 import numpy as np
 import pandas as pd
@@ -35,8 +36,11 @@ class CapacityConstraints:
     max_industry_weight: float = 0.0
 
 
-def normalize_capacity_frame(frame: pd.DataFrame) -> pd.DataFrame:
-    return normalize_decision_keys(frame, key_columns=KEY_COLUMNS, drop_missing=True)
+normalize_capacity_frame = partial(
+    normalize_decision_keys,
+    key_columns=KEY_COLUMNS,
+    drop_missing=True,
+)
 
 
 def _positive_notional(price: pd.Series, volume: pd.Series) -> pd.Series:
@@ -164,7 +168,12 @@ def _series_max(values: pd.Series) -> float:
     return float(finite.max()) if not finite.empty else float("nan")
 
 
-def _selected_record(
+def _optional_row_float(row: pd.Series, column: str) -> float:
+    value = row[column]
+    return float(value) if pd.notna(value) else float("nan")
+
+
+def capacity_selection_record(
     row: pd.Series,
     *,
     pool: str,
@@ -172,48 +181,43 @@ def _selected_record(
     rank: int,
     allocated: float,
     industry_value: str = "",
+    extra_allocations: dict[str, object] | None = None,
+    symbol: object | None = None,
+    audit_depth: bool = True,
 ) -> dict[str, object]:
     target = float(constraints.target_notional)
-    return {
+    capacity = _optional_row_float(row, "_capacity_notional")
+    record = {
         "pool": pool,
         "test_month": pd.Timestamp(row["date"]).to_period("M").strftime("%Y-%m"),
         "date": row["date"],
         "decision_target_timestamp": row["decision_target_timestamp"],
         "clock": pd.Timestamp(row["decision_target_timestamp"]).strftime("%H:%M"),
         "rank": rank,
-        "symbol": row["symbol"],
+        "symbol": row["symbol"] if symbol is None else symbol,
         "score": float(row[constraints.score_col]),
-        "capacity_price": float(row["_capacity_price"])
-        if pd.notna(row["_capacity_price"])
-        else float("nan"),
+        "capacity_price": _optional_row_float(row, "_capacity_price"),
         "target_notional": target,
         "allocated_notional": allocated,
+        **(extra_allocations or {}),
         "target_weight": allocated / target,
         "row_limit_notional": float(row["_row_limit_notional"]),
-        "capacity_notional": float(row["_capacity_notional"])
-        if pd.notna(row["_capacity_notional"])
-        else float("nan"),
-        "capacity_limit_notional": float(row["_capacity_limit_notional"])
-        if pd.notna(row["_capacity_limit_notional"])
-        else float("nan"),
-        "capacity_participation_rate": (
-            allocated / float(row["_capacity_notional"])
-            if pd.notna(row["_capacity_notional"]) and float(row["_capacity_notional"]) > 0
-            else float("nan")
-        ),
-        "ask_depth_notional": float(row["_ask_depth_notional"])
-        if pd.notna(row["_ask_depth_notional"])
-        else float("nan"),
-        "ask_depth_limit_notional": float(row["_ask_depth_limit_notional"])
-        if pd.notna(row["_ask_depth_limit_notional"])
-        else float("nan"),
-        "ask_depth_participation_rate": (
-            allocated / float(row["_ask_depth_notional"])
-            if pd.notna(row["_ask_depth_notional"]) and float(row["_ask_depth_notional"]) > 0
-            else float("nan")
-        ),
-        "industry": industry_value,
+        "capacity_notional": capacity,
+        "capacity_limit_notional": _optional_row_float(row, "_capacity_limit_notional"),
+        "capacity_participation_rate": allocated / capacity if capacity > 0 else float("nan"),
     }
+    if audit_depth:
+        depth = _optional_row_float(row, "_ask_depth_notional")
+        record.update(
+            ask_depth_notional=depth,
+            ask_depth_limit_notional=_optional_row_float(row, "_ask_depth_limit_notional"),
+            ask_depth_participation_rate=(allocated / depth if depth > 0 else float("nan")),
+            industry=industry_value,
+        )
+    return record
+
+
+_selected_record = capacity_selection_record
 
 
 def _fast_selected_rows(
@@ -480,13 +484,6 @@ def _aggregate_metrics(group: pd.DataFrame, by: list[str]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def summarize_capacity_groups(group_metrics: pd.DataFrame) -> pd.DataFrame:
-    return _aggregate_metrics(group_metrics, ["pool"])
-
-
-def summarize_capacity_months(group_metrics: pd.DataFrame) -> pd.DataFrame:
-    return _aggregate_metrics(group_metrics, ["pool", "test_month"])
-
-
-def summarize_capacity_daily(group_metrics: pd.DataFrame) -> pd.DataFrame:
-    return _aggregate_metrics(group_metrics, ["pool", "date"])
+summarize_capacity_groups = partial(_aggregate_metrics, by=["pool"])
+summarize_capacity_months = partial(_aggregate_metrics, by=["pool", "test_month"])
+summarize_capacity_daily = partial(_aggregate_metrics, by=["pool", "date"])

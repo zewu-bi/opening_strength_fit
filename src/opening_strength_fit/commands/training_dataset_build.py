@@ -9,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 import pyarrow.parquet as pq
 
+from opening_strength_fit.commands.arguments import add_arguments
 from opening_strength_fit.config import (
     config_bool,
     config_float,
@@ -43,32 +44,14 @@ from opening_strength_fit.training_labeled import (
     apply_candidate_filter_from_config,
 )
 
-LABEL_COLUMNS = (
-    "label_short_1m",
-    "label_short_3m",
-    "label_short_5m",
-    "label_next_close",
-    "label_mixed",
+LABEL_COLUMNS = tuple(
+    "label_short_1m label_short_3m label_short_5m label_next_close label_mixed".split()
 )
-VALID_LABEL_COLUMNS = (
-    "valid_short_1m",
-    "valid_short_3m",
-    "valid_short_5m",
-    "valid_next_close",
-    "valid_mixed",
+VALID_LABEL_COLUMNS = tuple(
+    "valid_short_1m valid_short_3m valid_short_5m valid_next_close valid_mixed".split()
 )
 _FEATURE_WORKER_CONFIG: tuple[dict, dict] | None = None
 _FEATURE_WORKER_DAILY_CACHE: dict[Path, pd.DataFrame] = {}
-
-# Compatibility aliases for existing imports. Implementations live in the
-# dataset-label domain module so commands do not own shared business logic.
-_normalize_keys = normalize_dataset_keys
-_filter_decision_clocks = filter_decision_clocks
-_validate_output_keys = validate_dataset_keys
-_build_label_base = build_label_base
-compute_short_label_set = compute_clock_vwap_label_set
-_next_close_label = next_close_label
-_mixed_label = mixed_target_label
 
 
 def _config_fingerprint(path: Path) -> str:
@@ -223,10 +206,10 @@ def build_feature_dataset(
         transformed = _apply_cross_sectional_relative_from_config(transformed, feature_config)
     transformed = _drop_features_from_config(transformed, feature_config)
     transformed = apply_candidate_filter_from_config(transformed, feature_config)
-    transformed = _normalize_keys(transformed)
+    transformed = normalize_dataset_keys(transformed)
     target_dates = transformed["date"].between(start_date, end_date)
     transformed = transformed.loc[target_dates].copy()
-    transformed = _filter_decision_clocks(transformed, clocks)
+    transformed = filter_decision_clocks(transformed, clocks)
     filters = feature_filters_from_config(feature_config)
     selected = feature_columns(transformed, None, **filters)
     if len(selected) != expected_features:
@@ -258,7 +241,7 @@ def build_feature_dataset(
     if output_features != selected:
         raise SystemExit("feature value transform changed the canonical feature names")
     output = output[[*KEY_COLUMNS, *selected]].copy()
-    _validate_output_keys(output, clocks)
+    validate_dataset_keys(output, clocks)
     float_columns = output.select_dtypes(include=["float64"]).columns
     if len(float_columns):
         output[float_columns] = output[float_columns].astype("float32")
@@ -328,7 +311,7 @@ def build_label_dataset(
     parts = []
     for index, (trading_day, tick_path) in enumerate(raw_dates, start=1):
         ticks = read_frame(tick_path, columns=list(RAW_LABEL_TICK_COLUMNS))
-        day_base = _build_label_base(
+        day_base = build_label_base(
             ticks,
             trading_day=trading_day,
             decision_times=clocks,
@@ -337,7 +320,7 @@ def build_label_dataset(
             ),
             entry_delay_seconds=config_int(config, "dataset", "entry_delay_seconds", 6),
         )
-        labels = compute_short_label_set(
+        labels = compute_clock_vwap_label_set(
             day_base,
             ticks,
             horizons=(60, 180, 300),
@@ -367,12 +350,12 @@ def build_label_dataset(
             "entry_after_cross_section_ready",
         ]
     ].copy()
-    _validate_output_keys(base, clocks)
+    validate_dataset_keys(base, clocks)
     output = base_and_short[[*KEY_COLUMNS, *LABEL_COLUMNS[:3], *VALID_LABEL_COLUMNS[:3]]]
-    next_close = _next_close_label(base, raw_year_root)
+    next_close = next_close_label(base, raw_year_root)
     output = output.merge(next_close, on=list(KEY_COLUMNS), how="left", validate="one_to_one")
     output["valid_next_close"] = output["valid_next_close"].fillna(False).astype(bool)
-    mixed, mixed_valid = _mixed_label(
+    mixed, mixed_valid = mixed_target_label(
         output,
         weight=config_float(config, "dataset", "mixed_next_close_weight", 0.30),
         min_group_size=config_int(config, "dataset", "mixed_min_group_size", 50),
@@ -380,7 +363,7 @@ def build_label_dataset(
     output["label_mixed"] = mixed
     output["valid_mixed"] = mixed_valid
     output = output[[*KEY_COLUMNS, *LABEL_COLUMNS, *VALID_LABEL_COLUMNS]]
-    _validate_output_keys(output, clocks)
+    validate_dataset_keys(output, clocks)
     output[list(LABEL_COLUMNS)] = output[list(LABEL_COLUMNS)].astype("float32")
 
     year_root = output_root / f"year={year}"
@@ -439,9 +422,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", required=True)
     parser.add_argument("--kind", choices=("features", "labels"), required=True)
     parser.add_argument("--year", type=int, required=True)
-    parser.add_argument("--output-root", default="")
-    parser.add_argument("--date-start", default="")
-    parser.add_argument("--date-end", default="")
+    add_arguments(parser, "output-root date-start date-end", default="")
     parser.add_argument("--context-days", type=int)
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--overwrite", action="store_true")

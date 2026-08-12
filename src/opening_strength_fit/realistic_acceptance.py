@@ -9,10 +9,12 @@ import pandas as pd
 from opening_strength_fit.analysis import KEY_COLUMNS, NEXT_CLOSE_LABEL_COL
 from opening_strength_fit.capacity_acceptance import (
     DEFAULT_CAPACITY_TOTAL_NOTIONAL,
-    RETURN_BPS_DENOMINATOR,
     SELECTED_REQUIRED_COLUMNS,
     add_daily_return_columns,
+    attach_selected_returns,
     normalize_key_columns,
+    summarize_acceptance_overall,
+    summarize_daily_allocations,
 )
 from opening_strength_fit.feature_utils import finite_numeric
 from opening_strength_fit.io import frame_columns, read_frame
@@ -76,28 +78,23 @@ class RealisticExecutionConstraints:
 def validate_execution_constraints(constraints: RealisticExecutionConstraints) -> None:
     if constraints.capacity_total_notional <= 0:
         raise ValueError("capacity_total_notional must be positive")
-    if constraints.fee_bps < 0:
-        raise ValueError("fee_bps must be >= 0")
-    if constraints.max_daily_symbol_weight < 0:
-        raise ValueError("max_daily_symbol_weight must be >= 0")
-    if constraints.max_daily_symbol_participation_rate < 0:
-        raise ValueError("max_daily_symbol_participation_rate must be >= 0")
+    nonnegative = (
+        "fee_bps",
+        "max_daily_symbol_weight",
+        "max_daily_symbol_participation_rate",
+        "min_child_notional",
+        "max_symbol_decision_count",
+        "round_lot_shares",
+        "max_spread_bps",
+        "min_limit_up_room_bps",
+        "max_ask_depth_participation_rate",
+        "max_daily_industry_weight",
+    )
+    for name in nonnegative:
+        if getattr(constraints, name) < 0:
+            raise ValueError(f"{name} must be >= 0")
     if not 0 <= constraints.execution_fill_rate <= 1:
         raise ValueError("execution_fill_rate must be between 0 and 1")
-    if constraints.min_child_notional < 0:
-        raise ValueError("min_child_notional must be >= 0")
-    if constraints.max_symbol_decision_count < 0:
-        raise ValueError("max_symbol_decision_count must be >= 0")
-    if constraints.round_lot_shares < 0:
-        raise ValueError("round_lot_shares must be >= 0")
-    if constraints.max_spread_bps < 0:
-        raise ValueError("max_spread_bps must be >= 0")
-    if constraints.min_limit_up_room_bps < 0:
-        raise ValueError("min_limit_up_room_bps must be >= 0")
-    if constraints.max_ask_depth_participation_rate < 0:
-        raise ValueError("max_ask_depth_participation_rate must be >= 0")
-    if constraints.max_daily_industry_weight < 0:
-        raise ValueError("max_daily_industry_weight must be >= 0")
 
 
 def load_realistic_selected(
@@ -406,50 +403,16 @@ def summarize_realistic_acceptance(
     label_col: str = DEFAULT_REALISTIC_LABEL_COL,
 ) -> pd.DataFrame:
     validate_execution_constraints(constraints)
-    if adjusted.empty:
-        merged = adjusted.copy()
-        merged["_gross_pnl"] = pd.Series(dtype="float64")
-        merged["_fee_pnl"] = pd.Series(dtype="float64")
-        merged["_net_pnl"] = pd.Series(dtype="float64")
-    else:
-        merged = adjusted.merge(
-            labels[list(KEY_COLUMNS) + [label_col]],
-            on=list(KEY_COLUMNS),
-            how="left",
-            validate="many_to_one",
-        )
-        missing_label_rows = int(merged[label_col].isna().sum())
-        if missing_label_rows:
-            raise ValueError(f"realistic selected rows missing {label_col}: {missing_label_rows}")
-        merged["_gross_pnl"] = merged["allocated_notional"] * merged[label_col]
-        merged["_fee_pnl"] = (
-            merged["allocated_notional"] * float(constraints.fee_bps) / RETURN_BPS_DENOMINATOR
-        )
-        merged["_net_pnl"] = merged["_gross_pnl"] - merged["_fee_pnl"]
+    merged = attach_selected_returns(adjusted, labels, label_col, constraints.fee_bps, "realistic")
 
-    daily_targets = group_targets.groupby(["pool", "date"], sort=False).agg(
-        capacity_decision_groups=("decision_target_timestamp", "size"),
-        target_notional=("group_target_notional", "sum"),
+    daily = summarize_daily_allocations(
+        merged,
+        group_targets,
+        extra_aggregations={
+            "original_selected_allocated_notional": ("original_allocated_notional", "sum")
+        },
+        fill_empty=True,
     )
-    daily = merged.groupby(["pool", "date"], sort=False).agg(
-        gross_pnl=("_gross_pnl", "sum"),
-        fee_pnl=("_fee_pnl", "sum"),
-        net_pnl=("_net_pnl", "sum"),
-        selected_allocated_notional=("allocated_notional", "sum"),
-        original_selected_allocated_notional=("original_allocated_notional", "sum"),
-        selected_rows=("allocated_notional", "size"),
-    )
-    daily = daily_targets.join(daily, how="left").fillna(
-        {
-            "gross_pnl": 0.0,
-            "fee_pnl": 0.0,
-            "net_pnl": 0.0,
-            "selected_allocated_notional": 0.0,
-            "original_selected_allocated_notional": 0.0,
-            "selected_rows": 0,
-        }
-    )
-    daily = daily.reset_index()
     daily["fill_ratio"] = daily["selected_allocated_notional"] / daily["target_notional"]
     daily["cash_notional"] = (daily["target_notional"] - daily["selected_allocated_notional"]).clip(
         lower=0.0
@@ -481,26 +444,12 @@ def summarize_realistic_acceptance(
 
 
 def summarize_realistic_acceptance_overall(daily: pd.DataFrame) -> pd.DataFrame:
-    if daily.empty:
-        return pd.DataFrame()
-    return (
-        daily.groupby("pool", sort=False)
-        .agg(
-            days=("date", "nunique"),
-            capacity_decision_groups=("capacity_decision_groups", "sum"),
-            mean_selected_rows=("selected_rows", "mean"),
-            mean_target_notional=("target_notional", "mean"),
-            mean_selected_allocated_notional=("selected_allocated_notional", "mean"),
-            mean_fill_ratio=("fill_ratio", "mean"),
-            min_fill_ratio=("fill_ratio", "min"),
-            mean_capacity_daily_capital_fraction=("capacity_daily_capital_fraction", "mean"),
-            mean_next_net_return_bps=("next_net_return_bps", "mean"),
-            final_next_cumulative_net_return_bps=("next_capital_net_return_bps", "sum"),
-            total_net_pnl=("next_net_pnl", "sum"),
-        )
-        .reset_index()
+    return summarize_acceptance_overall(
+        daily,
+        mean_selected_allocated_notional=("selected_allocated_notional", "mean"),
+        mean_fill_ratio=("fill_ratio", "mean"),
+        min_fill_ratio=("fill_ratio", "min"),
     )
 
 
-def constraints_trace(constraints: RealisticExecutionConstraints) -> dict[str, object]:
-    return asdict(constraints)
+constraints_trace = asdict

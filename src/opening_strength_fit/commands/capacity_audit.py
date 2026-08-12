@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
 
 from opening_strength_fit.analysis import KEY_COLUMNS, write_json
-from opening_strength_fit.artifact_catalog import record_requested_artifacts
+from opening_strength_fit.artifact_catalog import (
+    CAPACITY_AUDIT_ARTIFACTS,
+    print_recorded_artifacts,
+    record_requested_artifacts,
+)
+from opening_strength_fit.capacity_acceptance import normalize_key_columns
 from opening_strength_fit.capacity_audit import (
     CapacityConstraints,
     ask_depth_pairs,
@@ -16,42 +22,35 @@ from opening_strength_fit.capacity_audit import (
     summarize_capacity_groups,
     summarize_capacity_months,
 )
-from opening_strength_fit.commands.arguments import CommandArguments
-from opening_strength_fit.config import config_str, load_toml, run_id
+from opening_strength_fit.commands import arguments as cmd
+from opening_strength_fit.config import config_str
 from opening_strength_fit.io import (
     available_frame_columns,
     frame_columns,
-    frame_files,
+    merge_frame_support,
     read_frame,
     read_frame_files,
+    select_available_columns,
 )
-from opening_strength_fit.prediction_frames import prediction_files
+from opening_strength_fit.io import (
+    frame_files_many as _generic_files,
+)
+from opening_strength_fit.prediction_frames import prediction_files_many as _prediction_files
 from opening_strength_fit.schema import normalize_decision_keys
 from opening_strength_fit.stock_pool import (
-    DEFAULT_STOCK_POOL_PATHS,
-    load_stock_pool,
-    stock_pool_membership_mask,
+    filter_named_stock_pool,
 )
 
 DEFAULT_POOLS = ("L",)
-OUTPUT_FILES = (
-    "capacity_audit_selected.csv",
-    "capacity_audit_group_metrics.csv",
-    "capacity_audit_daily_summary.csv",
-    "capacity_audit_month_summary.csv",
-    "capacity_audit_summary.csv",
-    "capacity_audit_trace.json",
-)
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
+    parser = cmd.command_parser(
         description=(
             "Build a score-ranked capacity-constrained portfolio per decision group "
             "and audit fill, participation, concentration, and capacity depth."
         )
     )
-    parser.add_argument("--config", default="")
     parser.add_argument("--predictions", action="append")
     parser.add_argument(
         "--label-input",
@@ -63,20 +62,15 @@ def parse_args() -> argparse.Namespace:
         action="append",
         help="Optional keyed parquet/csv file or directory containing capacity columns.",
     )
-    parser.add_argument("--output-dir", default="")
-    parser.add_argument("--run-id", default="")
-    parser.add_argument("--variant", default="")
+    cmd.add_arguments(parser, "output-dir run-id variant", default="")
     parser.add_argument("--score-col", default="")
     parser.add_argument("--label-col", default="", help=argparse.SUPPRESS)
     parser.add_argument("--target-notional", type=float, default=None)
-    parser.add_argument("--capacity-notional-col", default="")
-    parser.add_argument("--capacity-volume-col", default="")
+    cmd.add_arguments(parser, "capacity-notional-col capacity-volume-col", default="")
     parser.add_argument("--capacity-price-col", default="")
-    parser.add_argument("--max-participation-rate", type=float, default=None)
-    parser.add_argument("--max-symbol-weight", type=float, default=None)
+    cmd.add_arguments(parser, "max-participation-rate max-symbol-weight", type=float, default=None)
     parser.add_argument("--min-trade-notional", type=float, default=None)
-    parser.add_argument("--max-names", type=int, default=None)
-    parser.add_argument("--ask-depth-levels", type=int, default=None)
+    cmd.add_arguments(parser, "max-names ask-depth-levels", type=int, default=None)
     parser.add_argument("--ask-depth-participation-rate", type=float, default=None)
     parser.add_argument("--allow-decision-depth-fallback", action="store_true")
     parser.add_argument("--industry-col", default="")
@@ -90,8 +84,7 @@ def parse_args() -> argparse.Namespace:
         help="Pool to audit. Defaults to L.",
     )
     parser.add_argument("--pool-date-lag-sessions", type=int, default=None)
-    parser.add_argument("--records-dir", default="")
-    parser.add_argument("--record-prefix", default="")
+    cmd.add_arguments(parser, "records-dir record-prefix", default="")
     parser.add_argument(
         "--selected-output-limit",
         type=int,
@@ -101,57 +94,27 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _prediction_files(paths: list[str]) -> list[Path]:
-    return [file for raw in paths for file in prediction_files(Path(raw))]
-
-
-def _generic_files(paths: list[str]) -> list[Path]:
-    return [file for raw in paths for file in frame_files(raw)]
-
-
-def _merge_keyed(left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
-    if right.empty:
-        return left
-    keyed = right.drop_duplicates(list(KEY_COLUMNS), keep="last")
-    overlap = [
-        column for column in keyed.columns if column not in KEY_COLUMNS and column in left.columns
-    ]
-    merged = left.merge(
-        keyed,
-        on=list(KEY_COLUMNS),
-        how="left",
-        suffixes=("", "_support"),
-        validate="many_to_one",
-    )
-    for column in overlap:
-        support_col = f"{column}_support"
-        if support_col in merged.columns:
-            merged[column] = merged[column].combine_first(merged[support_col])
-            merged = merged.drop(columns=[support_col])
-    return merged
-
-
 def _capacity_columns(constraints: CapacityConstraints) -> list[str]:
-    columns = []
-    for column in (
-        constraints.capacity_notional_col,
-        constraints.capacity_volume_col,
-        constraints.capacity_price_col,
-        constraints.industry_col,
-    ):
-        if column and column not in columns:
-            columns.append(column)
+    columns = list(
+        dict.fromkeys(
+            filter(
+                None,
+                (
+                    constraints.capacity_notional_col,
+                    constraints.capacity_volume_col,
+                    constraints.capacity_price_col,
+                    constraints.industry_col,
+                ),
+            )
+        )
+    )
     if constraints.ask_depth_levels > 0:
-        for level in range(1, int(constraints.ask_depth_levels) + 1):
-            for column in (
-                f"entry_ask_price_{level}",
-                f"entry_ask_volume_{level}",
-                f"ask_price_{level}",
-                f"ask_volume_{level}",
-            ):
-                if column not in columns:
-                    columns.append(column)
-    return columns
+        columns.extend(
+            f"{prefix}_{level}"
+            for level in range(1, int(constraints.ask_depth_levels) + 1)
+            for prefix in ("entry_ask_price", "entry_ask_volume", "ask_price", "ask_volume")
+        )
+    return list(dict.fromkeys(columns))
 
 
 def _validate_inputs(
@@ -215,10 +178,9 @@ def _load_audit_frame(
     )
 
     support_columns = _capacity_columns(constraints)
-    prediction_columns = [*KEY_COLUMNS, constraints.score_col]
-    for column in support_columns:
-        if column in prediction_available and column not in prediction_columns:
-            prediction_columns.append(column)
+    prediction_columns = select_available_columns(
+        [*KEY_COLUMNS, constraints.score_col], support_columns, prediction_available
+    )
     predictions = read_frame_files(
         prediction_files_list,
         columns=prediction_columns,
@@ -228,57 +190,24 @@ def _load_audit_frame(
 
     if support_files:
         print(f"reading_capacity_support: files={len(support_files)}")
-        support_read_columns = [*KEY_COLUMNS]
-        for column in support_columns:
-            if column in support_available and column not in support_read_columns:
-                support_read_columns.append(column)
+        support_read_columns = select_available_columns(
+            KEY_COLUMNS, support_columns, support_available
+        )
         support = read_frame_files(
             support_files,
             columns=support_read_columns,
             required=KEY_COLUMNS,
         )
         support = normalize_decision_keys(support, key_columns=KEY_COLUMNS)
-        frame = _merge_keyed(frame, support)
+        frame = merge_frame_support(frame, support, keys=KEY_COLUMNS)
 
     trace = {
         "prediction_files": [str(path) for path in prediction_files_list],
-        "capacity_files": [str(path) for path in _generic_files(capacity_paths)]
-        if capacity_paths
-        else [],
+        "capacity_files": [str(path) for path in support_files],
         "prediction_rows": int(len(predictions)),
         "joined_rows": int(len(frame)),
     }
     return frame, trace
-
-
-def _pool_frame(
-    frame: pd.DataFrame,
-    *,
-    pool: str,
-    pool_date_lag_sessions: int,
-    stock_pools: dict[str, pd.DataFrame] | None = None,
-) -> tuple[str, pd.DataFrame]:
-    if pool == "universe":
-        return "universe", frame
-    pool_path = DEFAULT_STOCK_POOL_PATHS[pool]
-    print(f"loading_stock_pool: pool={pool} path={pool_path}")
-    if stock_pools is None:
-        stock_pool = load_stock_pool(pool_path)
-    else:
-        stock_pool = stock_pools.get(pool)
-        if stock_pool is None:
-            stock_pool = load_stock_pool(pool_path)
-            stock_pools[pool] = stock_pool
-    mask = stock_pool_membership_mask(
-        frame,
-        stock_pool,
-        date_lag_sessions=pool_date_lag_sessions,
-    )
-    return f"pool_{pool}", frame.loc[mask].copy()
-
-
-def _normalize_keys(frame: pd.DataFrame) -> pd.DataFrame:
-    return normalize_decision_keys(frame, key_columns=KEY_COLUMNS)
 
 
 def _read_prediction_file(
@@ -288,15 +217,14 @@ def _read_prediction_file(
 ) -> pd.DataFrame:
     available = frame_columns(file)
     support_columns = _capacity_columns(constraints)
-    columns = [*KEY_COLUMNS, constraints.score_col]
-    for column in support_columns:
-        if column in available and column not in columns:
-            columns.append(column)
+    columns = select_available_columns(
+        [*KEY_COLUMNS, constraints.score_col], support_columns, available
+    )
     frame = read_frame(file, columns=columns)
     for column in columns:
         if column not in frame.columns:
             frame[column] = pd.NA
-    return _normalize_keys(frame[columns])
+    return normalize_key_columns(frame[columns])
 
 
 def _run_capacity_audit_streaming(
@@ -328,11 +256,11 @@ def _run_capacity_audit_streaming(
         rows_by_file[str(file)] = int(len(frame))
         print(f"  {file}: rows={len(frame)}")
         for pool in pools:
-            pool_name, pool_data = _pool_frame(
+            pool_name, pool_data = filter_named_stock_pool(
                 frame,
-                pool=pool,
-                pool_date_lag_sessions=pool_date_lag_sessions,
-                stock_pools=stock_pools,
+                pool,
+                date_lag_sessions=pool_date_lag_sessions,
+                cache=stock_pools,
             )
             print(f"auditing_capacity_pool: pool={pool_name} rows={len(pool_data)} file={file}")
             selected, metrics = build_capacity_portfolios(
@@ -365,60 +293,16 @@ def _run_capacity_audit_streaming(
     return selected, group_metrics, trace
 
 
-def _write_outputs(
-    *,
-    output_dir: Path,
-    selected: pd.DataFrame,
-    group_metrics: pd.DataFrame,
-    daily_summary: pd.DataFrame,
-    month_summary: pd.DataFrame,
-    summary: pd.DataFrame,
-    trace: dict[str, object],
-    selected_output_limit: int,
-) -> None:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    group_metrics.to_csv(output_dir / "capacity_audit_group_metrics.csv", index=False)
-    daily_summary.to_csv(output_dir / "capacity_audit_daily_summary.csv", index=False)
-    month_summary.to_csv(output_dir / "capacity_audit_month_summary.csv", index=False)
-    summary.to_csv(output_dir / "capacity_audit_summary.csv", index=False)
-    write_json(output_dir / "capacity_audit_trace.json", trace, ensure_ascii=True)
-    selected_to_write = selected
-    if selected_output_limit > 0 and len(selected) > selected_output_limit:
-        selected_to_write = selected.head(selected_output_limit).copy()
-    selected_to_write.to_csv(output_dir / "capacity_audit_selected.csv", index=False)
-
-
 def main() -> None:
     args = parse_args()
-    config = load_toml(args.config) if args.config else {}
-    arguments = CommandArguments(args, config, "capacity_audit")
-    run_name = args.run_id or (run_id(config, args.config) if args.config else "capacity_audit")
+    config, arguments, run_name = cmd.command_context(args, "capacity_audit")
     prediction_paths = arguments.list("predictions")
     if not prediction_paths:
         raise SystemExit("pass --predictions or set [capacity_audit].predictions")
     pools = tuple(arguments.list("pool", DEFAULT_POOLS) or DEFAULT_POOLS)
-    constraints = CapacityConstraints(
-        target_notional=arguments.float("target_notional", 1_000_000_000.0),
-        score_col=arguments.string("score_col", "prediction") or "prediction",
-        capacity_notional_col=arguments.string(
-            "capacity_notional_col",
-            "turnover_diff_30t",
-        ),
-        capacity_volume_col=arguments.string("capacity_volume_col"),
-        capacity_price_col=arguments.string("capacity_price_col", "ask_price_1"),
-        max_participation_rate=arguments.float("max_participation_rate", 0.10),
-        max_symbol_weight=arguments.float("max_symbol_weight", 0.01),
-        min_trade_notional=arguments.float("min_trade_notional", 0.0),
-        max_names=arguments.integer("max_names", 0),
-        ask_depth_levels=arguments.integer("ask_depth_levels", 0),
-        ask_depth_participation_rate=arguments.float(
-            "ask_depth_participation_rate",
-            0.25,
-        ),
-        allow_decision_depth_fallback=arguments.flag("allow_decision_depth_fallback"),
-        industry_col=arguments.string("industry_col"),
-        max_industry_weight=arguments.float("max_industry_weight", 0.0),
-    )
+    constraints = arguments.resolve_dataclass(CapacityConstraints(target_notional=1_000_000_000.0))
+    if not constraints.score_col:
+        constraints = replace(constraints, score_col="prediction")
     label_paths = arguments.list("label_input")
     capacity_paths = arguments.list("capacity_input")
     output_dir = Path(
@@ -446,10 +330,10 @@ def main() -> None:
         selected_frames = []
         group_frames = []
         for pool in pools:
-            pool_name, pool_data = _pool_frame(
+            pool_name, pool_data = filter_named_stock_pool(
                 frame,
-                pool=pool,
-                pool_date_lag_sessions=pool_date_lag_sessions,
+                pool,
+                date_lag_sessions=pool_date_lag_sessions,
             )
             print(f"auditing_capacity_pool: pool={pool_name} rows={len(pool_data)}")
             selected_part, metrics = build_capacity_portfolios(
@@ -484,44 +368,38 @@ def main() -> None:
         "ignored_label_inputs": label_paths,
         **load_trace,
     }
-    _write_outputs(
-        output_dir=output_dir,
-        selected=selected,
-        group_metrics=group_metrics,
-        daily_summary=daily_summary,
-        month_summary=month_summary,
-        summary=summary,
-        trace=trace,
-        selected_output_limit=selected_output_limit,
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for name, output in (
+        ("group_metrics", group_metrics),
+        ("daily_summary", daily_summary),
+        ("month_summary", month_summary),
+        ("summary", summary),
+    ):
+        output.to_csv(output_dir / f"capacity_audit_{name}.csv", index=False)
+    write_json(output_dir / "capacity_audit_trace.json", trace, ensure_ascii=True)
+    selected_to_write = (
+        selected.head(selected_output_limit).copy()
+        if 0 < selected_output_limit < len(selected)
+        else selected
     )
+    selected_to_write.to_csv(output_dir / "capacity_audit_selected.csv", index=False)
 
     records_dir = arguments.string("records_dir")
     record_paths = record_requested_artifacts(
         output_dir=output_dir,
         records_dir=records_dir,
         record_prefix=arguments.string("record_prefix") or run_name,
-        names=OUTPUT_FILES,
+        names=CAPACITY_AUDIT_ARTIFACTS,
     )
 
     print("\ncapacity_audit_summary:")
-    display_cols = [
-        "pool",
-        "groups",
-        "fill_ratio",
-        "fill_success_rate",
-        "mean_top_depth_to_target",
-        "p95_top_depth_to_target",
-        "max_top_depth_to_target",
-        "selected_rows",
-        "filled_groups",
-        "unfilled_groups",
-        "max_symbol_weight",
-    ]
+    display_cols = (
+        "pool groups fill_ratio fill_success_rate mean_top_depth_to_target "
+        "p95_top_depth_to_target max_top_depth_to_target selected_rows filled_groups "
+        "unfilled_groups max_symbol_weight"
+    ).split()
     print(summary[display_cols].to_string(index=False) if not summary.empty else "empty")
-    if record_paths:
-        print("\nrecorded_capacity_audit_outputs:")
-        for path in record_paths:
-            print(f"  {path}")
+    print_recorded_artifacts(record_paths, "capacity_audit")
     print(f"\nwrote outputs: {output_dir}")
 
 

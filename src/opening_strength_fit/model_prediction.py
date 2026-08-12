@@ -122,13 +122,9 @@ def _ensemble_score(model: EnsemblePredictionModel, frame: pd.DataFrame) -> np.n
     return np.average(stacked, axis=0, weights=weights)
 
 
-def _frame_clock(frame: pd.DataFrame) -> pd.Series:
-    return frame_clock_series(frame)
-
-
 def _clock_segment_score(model: ClockSegmentPredictionModel, frame: pd.DataFrame) -> np.ndarray:
     scores = np.full(len(frame), np.nan, dtype="float64")
-    clock = _frame_clock(frame)
+    clock = frame_clock_series(frame)
     assigned = pd.Series(False, index=frame.index)
     for _name, clocks, segment_model in model.segment_models:
         mask = clock.isin(set(clocks)) & ~assigned

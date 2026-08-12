@@ -15,12 +15,12 @@ from opening_strength_fit.analysis import (
     clock_range,
     write_json,
 )
-from opening_strength_fit.io import read_frame
 from opening_strength_fit.model import corr
 from opening_strength_fit.next_close_labels import (
     add_next_close_label_arguments,
     load_or_fetch_next_close_labels_from_args,
 )
+from opening_strength_fit.prediction_frames import read_clock_predictions
 
 DEFAULT_INPUT = (
     "output/legacy/predictions/lgbm_opening_1y_next_month_delay2/predictions_all.parquet"
@@ -48,28 +48,25 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_predictions(path: Path, clocks: list[str], score_col: str) -> pd.DataFrame:
-    required = [
+    required = (
         "date",
         "symbol",
         "decision_target_timestamp",
         score_col,
         "label",
         "buy_price",
-    ]
-    frame = read_frame(path, columns=required)
-    frame = frame.dropna(
-        subset=["date", "symbol", "decision_target_timestamp", score_col, "label"]
-    ).copy()
+    )
+    frame = read_clock_predictions(
+        path,
+        required_columns=required,
+        dropna_columns=("date", "symbol", "decision_target_timestamp", score_col, "label"),
+        clocks=clocks,
+    )
+    clock = frame.pop("clock")
     if score_col != "prediction":
         frame["prediction"] = pd.to_numeric(frame[score_col], errors="coerce")
-    frame["date"] = frame["date"].astype(str)
-    frame["symbol"] = frame["symbol"].astype(str)
-    frame["decision_target_timestamp"] = pd.to_datetime(
-        frame["decision_target_timestamp"],
-        errors="coerce",
-    )
-    frame["clock"] = frame["decision_target_timestamp"].dt.strftime("%H:%M")
-    return frame.loc[frame["clock"].isin(clocks)].copy()
+    frame["clock"] = clock
+    return frame
 
 
 def summarize_by_minute(
@@ -229,46 +226,30 @@ def main() -> None:
     next_summary.to_csv(output_dir / "next_close_minute_summary.csv", index=False)
 
     fig, axes = plt.subplots(2, 2, figsize=(15, 9), dpi=170, sharex=True)
-    plot_panel(
-        axes[0, 0],
-        short_summary,
-        y_col="rank_ic_mean",
-        sem_col="rank_ic_sem",
-        title="Short-horizon Rank IC",
-        ylabel="Mean Rank IC",
-        color="#2563a7",
-        value_fmt="{:.3f}",
-    )
-    plot_panel(
-        axes[0, 1],
-        short_summary,
-        y_col="top100_excess_bps",
-        sem_col="top100_excess_bps_sem",
-        title="Short-horizon Top100 excess",
-        ylabel="Top100 excess (bps)",
-        color="#c46a1a",
-        value_fmt="{:.1f}",
-    )
-    plot_panel(
-        axes[1, 0],
-        next_summary,
-        y_col="rank_ic_mean",
-        sem_col="rank_ic_sem",
-        title="Next-close Rank IC",
-        ylabel="Mean Rank IC",
-        color="#4d7c0f",
-        value_fmt="{:.3f}",
-    )
-    plot_panel(
-        axes[1, 1],
-        next_summary,
-        y_col="top100_excess_bps",
-        sem_col="top100_excess_bps_sem",
-        title="Next-close Top100 excess",
-        ylabel="Top100 excess (bps)",
-        color="#9333ea",
-        value_fmt="{:.1f}",
-    )
+    for row, summary, horizon, colors in (
+        (0, short_summary, "Short-horizon", ("#2563a7", "#c46a1a")),
+        (1, next_summary, "Next-close", ("#4d7c0f", "#9333ea")),
+    ):
+        plot_panel(
+            axes[row, 0],
+            summary,
+            y_col="rank_ic_mean",
+            sem_col="rank_ic_sem",
+            title=f"{horizon} Rank IC",
+            ylabel="Mean Rank IC",
+            color=colors[0],
+            value_fmt="{:.3f}",
+        )
+        plot_panel(
+            axes[row, 1],
+            summary,
+            y_col="top100_excess_bps",
+            sem_col="top100_excess_bps_sem",
+            title=f"{horizon} Top100 excess",
+            ylabel="Top100 excess (bps)",
+            color=colors[1],
+            value_fmt="{:.1f}",
+        )
     for ax in axes[1, :]:
         ax.set_xlabel("Decision minute")
     fig.suptitle(args.title, fontsize=15)
@@ -303,28 +284,17 @@ def main() -> None:
     }
     write_json(output_dir / "trace.json", trace)
 
-    print("short")
-    print(
-        short_summary[["clock", "rank_ic_mean", "top100_excess_bps", "top100_mean_bps"]].to_string(
-            index=False,
-            formatters={
-                "rank_ic_mean": "{:.6f}".format,
-                "top100_excess_bps": "{:.3f}".format,
-                "top100_mean_bps": "{:.3f}".format,
-            },
-        )
-    )
-    print("\nnext_close")
-    print(
-        next_summary[["clock", "rank_ic_mean", "top100_excess_bps", "top100_mean_bps"]].to_string(
-            index=False,
-            formatters={
-                "rank_ic_mean": "{:.6f}".format,
-                "top100_excess_bps": "{:.3f}".format,
-                "top100_mean_bps": "{:.3f}".format,
-            },
-        )
-    )
+    display_columns = ["clock", "rank_ic_mean", "top100_excess_bps", "top100_mean_bps"]
+    formatters = {
+        "rank_ic_mean": "{:.6f}".format,
+        "top100_excess_bps": "{:.3f}".format,
+        "top100_mean_bps": "{:.3f}".format,
+    }
+    for index, (label, summary) in enumerate(
+        (("short", short_summary), ("next_close", next_summary))
+    ):
+        print(("\n" if index else "") + label)
+        print(summary[display_columns].to_string(index=False, formatters=formatters))
     print(f"\nfour_panel: {panel_path}")
 
 

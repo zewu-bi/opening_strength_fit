@@ -1,21 +1,24 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from pathlib import Path
+
 import pandas as pd
 
-from opening_strength_fit.pool_internal_plots import PLOT_POOLS
+from opening_strength_fit.analysis import write_json
+from opening_strength_fit.io.frames import csv_ready
+from opening_strength_fit.pool_internal_eval import (
+    POOL_INTERNAL_MEAN_AGGREGATIONS,
+    POOL_INTERNAL_ROLLING_COLUMNS,
+)
+from opening_strength_fit.pool_internal_plots import (
+    PLOT_POOLS,
+    write_weekly_pool_internal_rolling_plot,
+)
 
 POOL_CHOICES = ("universe", "S", "M", "L", "pool_S", "pool_M", "pool_L")
 EXCESS_COLUMNS = ("short_internal_excess_bps", "next_internal_excess_bps")
-ROLLING_COLUMNS = (
-    "pool_short_mean_bps",
-    "selected_short_mean_bps",
-    "short_internal_excess_bps",
-    "pool_next_mean_bps",
-    "selected_next_mean_bps",
-    "next_internal_excess_bps",
-    "short_rank_ic",
-    "next_rank_ic",
-)
+ROLLING_COLUMNS = POOL_INTERNAL_ROLLING_COLUMNS
 REQUIRED_GROUP_COLUMNS = {
     "pool",
     "test_month",
@@ -69,6 +72,66 @@ def build_weekly_pool_internal_summaries(
     return daily, weekly, overall, worst
 
 
+def write_weekly_pool_internal_outputs(
+    group_metrics: pd.DataFrame,
+    output_dir: Path,
+    *,
+    output_prefix: str,
+    variant_label: str,
+    pools: tuple[str, ...],
+    rolling_weeks: int,
+    top_worst: int = 5,
+    input_path: Path | None = None,
+) -> tuple[dict[str, str], pd.DataFrame]:
+    daily, weekly, overall, worst = build_weekly_pool_internal_summaries(
+        group_metrics,
+        pools=pools,
+        rolling_weeks=rolling_weeks,
+        top_worst=top_worst,
+    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    paths = {
+        "daily": output_dir / "daily_pool_internal_summary.csv",
+        "weekly": output_dir / "weekly_pool_internal_summary.csv",
+        "overall": output_dir / "weekly_pool_internal_overall_summary.csv",
+        "worst": output_dir / "weekly_worst_windows.csv",
+        "trace": output_dir / "weekly_pool_internal_trace.json",
+    }
+    for label, frame in (("daily", daily), ("weekly", weekly)):
+        csv_ready(frame).to_csv(paths[label], index=False, float_format="%.6f")
+    for label, frame in (("overall", overall), ("worst", worst)):
+        frame.to_csv(paths[label], index=False, float_format="%.6f")
+    plot_paths = write_weekly_pool_internal_rolling_plot(
+        weekly,
+        output_dir,
+        input_path=paths["weekly"],
+        output_prefix=output_prefix,
+        variant_label=variant_label,
+        pools=pools,
+        rolling_weeks=rolling_weeks,
+    )
+    trace: dict[str, object] = {"created_at_utc": datetime.now(UTC).isoformat()}
+    if input_path is not None:
+        trace["input"] = str(input_path)
+    trace.update(
+        {
+            "daily_summary": str(paths["daily"]),
+            "weekly_summary": str(paths["weekly"]),
+            "overall_summary": str(paths["overall"]),
+            "worst_windows": str(paths["worst"]),
+            "plot_paths": plot_paths,
+            "pools": list(pools),
+            "rolling_weeks": rolling_weeks,
+            "weighting": (
+                "date x pool is first averaged across decision clocks; weekly summaries and "
+                "rolling windows are equal weighted by trading day"
+            ),
+        }
+    )
+    write_json(paths["trace"], trace, ensure_ascii=True)
+    return {**{label: str(path) for label, path in paths.items()}, **plot_paths}, overall
+
+
 def build_daily_summary(group_metrics: pd.DataFrame, *, pools: tuple[str, ...]) -> pd.DataFrame:
     missing = sorted(REQUIRED_GROUP_COLUMNS - set(group_metrics.columns))
     if missing:
@@ -90,16 +153,7 @@ def build_daily_summary(group_metrics: pd.DataFrame, *, pools: tuple[str, ...]) 
             test_month=("test_month", "first"),
             decision_groups=("short_internal_excess_bps", "size"),
             clocks=("clock", "nunique"),
-            candidate_rows=("candidate_rows", "mean"),
-            selected_rows=("selected_rows", "mean"),
-            pool_short_mean_bps=("pool_short_mean_bps", "mean"),
-            selected_short_mean_bps=("selected_short_mean_bps", "mean"),
-            short_internal_excess_bps=("short_internal_excess_bps", "mean"),
-            pool_next_mean_bps=("pool_next_mean_bps", "mean"),
-            selected_next_mean_bps=("selected_next_mean_bps", "mean"),
-            next_internal_excess_bps=("next_internal_excess_bps", "mean"),
-            short_rank_ic=("short_rank_ic", "mean"),
-            next_rank_ic=("next_rank_ic", "mean"),
+            **POOL_INTERNAL_MEAN_AGGREGATIONS,
         )
         .reset_index()
     )
@@ -117,16 +171,7 @@ def build_weekly_summary(daily: pd.DataFrame) -> pd.DataFrame:
             trading_days=("date", "nunique"),
             decision_groups=("decision_groups", "sum"),
             mean_daily_clocks=("clocks", "mean"),
-            candidate_rows=("candidate_rows", "mean"),
-            selected_rows=("selected_rows", "mean"),
-            pool_short_mean_bps=("pool_short_mean_bps", "mean"),
-            selected_short_mean_bps=("selected_short_mean_bps", "mean"),
-            short_internal_excess_bps=("short_internal_excess_bps", "mean"),
-            pool_next_mean_bps=("pool_next_mean_bps", "mean"),
-            selected_next_mean_bps=("selected_next_mean_bps", "mean"),
-            next_internal_excess_bps=("next_internal_excess_bps", "mean"),
-            short_rank_ic=("short_rank_ic", "mean"),
-            next_rank_ic=("next_rank_ic", "mean"),
+            **POOL_INTERNAL_MEAN_AGGREGATIONS,
         )
         .reset_index()
     )
@@ -228,56 +273,47 @@ def build_worst_windows(
         item = item.sort_values("week_start").reset_index(drop=True)
         for column in EXCESS_COLUMNS:
             horizon = column.split("_", maxsplit=1)[0]
-            single = item.dropna(subset=[column]).nsmallest(top_worst, column)
-            for rank, row in enumerate(single.itertuples(index=False), start=1):
-                records.append(
-                    {
-                        "pool": pool,
-                        "horizon": horizon,
-                        "window_type": "single_week",
-                        "rank": rank,
-                        "start_week": _date_text(row.week_start),
-                        "end_week": _date_text(row.week_start),
-                        "start_date": _date_text(row.week_start_date),
-                        "end_date": _date_text(row.week_end_date),
-                        "weeks": 1,
-                        "trading_days": int(row.trading_days),
-                        "value_bps": float(getattr(row, column)),
-                        "weekly_values_bps": _window_values_text(item, column, row.week_start),
-                    }
-                )
-
             rolling_col = f"{column}_rolling_{rolling_weeks}w"
             start_col = f"rolling_{rolling_weeks}w_start_week"
             days_col = f"rolling_{rolling_weeks}w_trading_days"
             weeks_col = f"rolling_{rolling_weeks}w_weeks"
-            rolling = item.dropna(subset=[rolling_col]).nsmallest(top_worst, rolling_col)
-            for rank, row in enumerate(rolling.itertuples(index=False), start=1):
-                start_week = getattr(row, start_col)
-                end_week = row.week_start
-                records.append(
-                    {
-                        "pool": pool,
-                        "horizon": horizon,
-                        "window_type": f"{rolling_weeks}w_rolling",
-                        "rank": rank,
-                        "start_week": _date_text(start_week),
-                        "end_week": _date_text(end_week),
-                        "start_date": _date_text(
-                            item.loc[item["week_start"].eq(start_week), "week_start_date"].min()
-                        ),
-                        "end_date": _date_text(row.week_end_date),
-                        "weeks": int(getattr(row, weeks_col)),
-                        "trading_days": int(getattr(row, days_col)),
-                        "value_bps": float(getattr(row, rolling_col)),
-                        "weekly_values_bps": _window_values_text(
-                            item,
-                            column,
-                            start_week,
-                            end_week=end_week,
-                        ),
-                    }
-                )
+            for window_type, value_col, start_attr, weeks_attr, days_attr in (
+                ("single_week", column, "week_start", "", ""),
+                (f"{rolling_weeks}w_rolling", rolling_col, start_col, weeks_col, days_col),
+            ):
+                windows = item.dropna(subset=[value_col]).nsmallest(top_worst, value_col)
+                rolling = bool(weeks_attr)
+                for rank, row in enumerate(windows.itertuples(index=False), start=1):
+                    start_week = getattr(row, start_attr)
+                    end_week = row.week_start
+                    start_date = (
+                        item.loc[item["week_start"].eq(start_week), "week_start_date"].min()
+                        if rolling
+                        else row.week_start_date
+                    )
+                    records.append(
+                        {
+                            "pool": pool,
+                            "horizon": horizon,
+                            "window_type": window_type,
+                            "rank": rank,
+                            "start_week": _date_text(start_week),
+                            "end_week": _date_text(end_week),
+                            "start_date": _date_text(start_date),
+                            "end_date": _date_text(row.week_end_date),
+                            "weeks": int(getattr(row, weeks_attr)) if rolling else 1,
+                            "trading_days": (
+                                int(getattr(row, days_attr)) if rolling else int(row.trading_days)
+                            ),
+                            "value_bps": float(getattr(row, value_col)),
+                            "weekly_values_bps": _window_values_text(
+                                item,
+                                column,
+                                start_week,
+                                end_week=end_week if rolling else None,
+                            ),
+                        }
+                    )
     return pd.DataFrame(records)
 
 

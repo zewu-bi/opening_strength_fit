@@ -5,107 +5,115 @@ import hashlib
 import shutil
 from pathlib import Path
 
+from opening_strength_fit.io import write_json
 from opening_strength_fit.k8s import RunSpec
 
-SCORE_RISK_ARTIFACTS = (
-    "score_risk_summary.csv",
-    "score_risk_minute_summary.csv",
-    "score_risk_group_metrics.csv",
-    "score_risk_trace.json",
+CUMULATIVE_EVIDENCE_COLUMNS = (
+    "pool",
+    "pool_label",
+    "week_start",
+    "variant",
+    "next_cumulative_net_return_bps",
+    "next_cumulative_alpha_bps",
 )
-ROLLING_VALIDATION_ARTIFACTS = (
-    "rolling_summary.csv",
-    "rolling_month_summary.csv",
-    "rolling_group_metrics.csv",
-    "rolling_trace.json",
+
+
+def four_figure_artifact_specs(
+    comparison_dir: Path,
+    bucket_dir: Path,
+    histogram_dir: Path,
+) -> tuple[tuple[Path, str], ...]:
+    return (
+        (
+            comparison_dir / "optimization_directions_overlay_acceptance.svg",
+            "01_signal_acceptance.svg",
+        ),
+        (
+            comparison_dir / "optimization_directions_overlay_acceptance_plot_data.csv",
+            "01_signal_acceptance.csv",
+        ),
+        (
+            comparison_dir / "optimization_directions_net_alpha_cumulative.svg",
+            "02_top100_cumulative.svg",
+        ),
+        (bucket_dir / "top1000_bucket_returns.svg", "03_top1000_bucket_curve.svg"),
+        (bucket_dir / "bucket_curve_plot_data.csv", "03_top1000_bucket_curve.csv"),
+        (
+            histogram_dir / "top1000_score_bucket_return_100bps_counts.svg",
+            "04_top1000_return_distribution.svg",
+        ),
+        (
+            histogram_dir / "top1000_score_bucket_return_100bps_counts.csv",
+            "04_top1000_return_distribution.csv",
+        ),
+    )
+
+
+def _names(value: str) -> tuple[str, ...]:
+    return tuple(value.split())
+
+
+SCORE_RISK_ARTIFACTS = _names(
+    "score_risk_summary.csv score_risk_minute_summary.csv "
+    "score_risk_group_metrics.csv score_risk_trace.json"
 )
-ROLLING_VALIDATION_SHARD_ARTIFACTS = (
-    "rolling_group_metrics.csv",
-    "rolling_month_summary.csv",
-    "rolling_summary.csv",
-    "rolling_trace.json",
+ROLLING_VALIDATION_ARTIFACTS = _names(
+    "rolling_summary.csv rolling_month_summary.csv rolling_group_metrics.csv rolling_trace.json"
 )
-FEATURE_AUDIT_ARTIFACTS = (
-    "feature_audit_metrics.csv",
-    "feature_audit_permutation.csv",
-    "feature_importance.csv",
-    "feature_group_importance.csv",
-    "feature_audit_trace.json",
+ROLLING_VALIDATION_SHARD_ARTIFACTS = _names(
+    "rolling_group_metrics.csv rolling_month_summary.csv rolling_summary.csv rolling_trace.json"
 )
-FEATURE_AUDIT_COMBINED_CSVS = (
-    "feature_audit_metrics.csv",
-    "feature_audit_permutation.csv",
-    "feature_importance.csv",
-    "feature_group_importance.csv",
+FEATURE_AUDIT_ARTIFACTS = _names(
+    "feature_audit_metrics.csv feature_audit_permutation.csv feature_importance.csv "
+    "feature_group_importance.csv feature_audit_trace.json"
 )
-FEATURE_HYGIENE_ARTIFACTS = (
-    "feature_hygiene.csv",
-    "feature_correlation_pairs.csv",
-    "feature_correlation_clusters.csv",
-    "feature_prune_candidates.csv",
-    "feature_keep_list.txt",
-    "feature_drop_list.txt",
-    "feature_hygiene_trace.json",
+FEATURE_AUDIT_COMBINED_CSVS = _names(
+    "feature_audit_metrics.csv feature_audit_permutation.csv feature_importance.csv "
+    "feature_group_importance.csv"
 )
-CAPACITY_AUDIT_ARTIFACTS = (
-    "capacity_audit_selected.csv",
-    "capacity_audit_group_metrics.csv",
-    "capacity_audit_daily_summary.csv",
-    "capacity_audit_month_summary.csv",
-    "capacity_audit_summary.csv",
-    "capacity_audit_trace.json",
+FEATURE_HYGIENE_ARTIFACTS = _names(
+    "feature_hygiene.csv feature_correlation_pairs.csv feature_correlation_clusters.csv "
+    "feature_prune_candidates.csv feature_keep_list.txt feature_drop_list.txt "
+    "feature_hygiene_trace.json"
 )
-CAPACITY_ACCEPTANCE_ARTIFACTS = (
-    "capacity_acceptance_daily_summary.csv",
-    "capacity_acceptance_summary.csv",
-    "capacity_acceptance_trace.json",
+CAPACITY_AUDIT_ARTIFACTS = _names(
+    "capacity_audit_selected.csv capacity_audit_group_metrics.csv "
+    "capacity_audit_daily_summary.csv capacity_audit_month_summary.csv "
+    "capacity_audit_summary.csv capacity_audit_trace.json"
 )
-STRATEGY_ACCEPTANCE_ARTIFACTS = (
-    "strategy_acceptance_summary.csv",
-    "strategy_acceptance_daily.csv",
-    "strategy_acceptance_group_metrics.csv",
-    "strategy_acceptance_capacity_summary.csv",
-    "strategy_acceptance_overlap_summary.csv",
-    "strategy_acceptance_overlap_daily.csv",
-    "strategy_acceptance_overlap_adjacent.csv",
-    "strategy_acceptance_tail_summary.csv",
-    "strategy_acceptance_tail_monthly.csv",
-    "strategy_acceptance_tail_concentration.csv",
-    "strategy_acceptance_bootstrap.csv",
-    "strategy_acceptance_leave_one_out.csv",
-    "strategy_acceptance_trace.json",
-    "_SUCCESS",
+CAPACITY_ACCEPTANCE_ARTIFACTS = _names(
+    "capacity_acceptance_daily_summary.csv capacity_acceptance_summary.csv "
+    "capacity_acceptance_trace.json"
 )
-EXPOSURE_AUDIT_ARTIFACTS = (
-    "exposure_audit_group_metrics.csv",
-    "exposure_audit_month_summary.csv",
-    "exposure_audit_summary.csv",
-    "exposure_audit_category_summary.csv",
-    "exposure_audit_industry_group_metrics.csv",
-    "exposure_audit_industry_month_summary.csv",
-    "exposure_audit_industry_summary.csv",
-    "exposure_audit_daily_concentration.csv",
-    "exposure_audit_concentration_summary.csv",
-    "exposure_audit_trace.json",
+STRATEGY_ACCEPTANCE_ARTIFACTS = _names(
+    "strategy_acceptance_summary.csv strategy_acceptance_daily.csv "
+    "strategy_acceptance_group_metrics.csv strategy_acceptance_capacity_summary.csv "
+    "strategy_acceptance_overlap_summary.csv strategy_acceptance_overlap_daily.csv "
+    "strategy_acceptance_overlap_adjacent.csv strategy_acceptance_tail_summary.csv "
+    "strategy_acceptance_tail_monthly.csv strategy_acceptance_tail_concentration.csv "
+    "strategy_acceptance_bootstrap.csv strategy_acceptance_leave_one_out.csv "
+    "strategy_acceptance_trace.json _SUCCESS"
 )
-GAP_ATTRIBUTION_ARTIFACTS = (
-    "gap_attribution_outcomes_by_month.csv",
-    "gap_attribution_outcomes_overall.csv",
-    "gap_attribution_feature_exposure_overall.csv",
-    "gap_attribution_penalized_feature_delta.csv",
-    "gap_attribution_residual_penalized_vs_kept.csv",
-    "gap_attribution_trace.json",
+EXPOSURE_AUDIT_ARTIFACTS = _names(
+    "exposure_audit_group_metrics.csv exposure_audit_month_summary.csv exposure_audit_summary.csv "
+    "exposure_audit_category_summary.csv exposure_audit_industry_group_metrics.csv "
+    "exposure_audit_industry_month_summary.csv exposure_audit_industry_summary.csv "
+    "exposure_audit_daily_concentration.csv exposure_audit_concentration_summary.csv "
+    "exposure_audit_trace.json"
+)
+GAP_ATTRIBUTION_ARTIFACTS = _names(
+    "gap_attribution_outcomes_by_month.csv gap_attribution_outcomes_overall.csv "
+    "gap_attribution_feature_exposure_overall.csv gap_attribution_penalized_feature_delta.csv "
+    "gap_attribution_residual_penalized_vs_kept.csv gap_attribution_trace.json"
 )
 PRESENTATION_CORE_ARCHIVE_PROFILE = "presentation_core"
-PRESENTATION_CORE_REPORT_KEYS = {
-    "short_excess_rank_ic_plot_data",
-    "short_excess_rank_ic_figure",
-    "next_excess_rank_ic_plot_data",
-    "next_excess_rank_ic_figure",
-    "daily_cumulative_plot_data",
-    "daily_cumulative_figure",
-    "daily_cumulative_trace",
-}
+PRESENTATION_CORE_REPORT_KEYS = set(
+    _names(
+        "short_excess_rank_ic_plot_data short_excess_rank_ic_figure "
+        "next_excess_rank_ic_plot_data next_excess_rank_ic_figure "
+        "daily_cumulative_plot_data daily_cumulative_figure daily_cumulative_trace"
+    )
+)
 
 
 def require_file(path: Path) -> Path:
@@ -178,14 +186,15 @@ def record_named_artifacts(
     output_dir: Path,
     records_dir: Path,
     record_prefix: str,
-    names: tuple[str, ...],
+    names: tuple[str, ...] = (),
+    renames: tuple[tuple[str, str], ...] = (),
 ) -> list[Path]:
     archive_dir = records_dir / "backtests" / record_prefix
     copied = []
-    for name in names:
-        source = output_dir / name
+    for source_name, destination_name in renames or tuple((name, name) for name in names):
+        source = output_dir / source_name
         if source.exists():
-            destination = archive_dir / name
+            destination = archive_dir / destination_name
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
             copied.append(destination)
@@ -198,62 +207,47 @@ def record_requested_artifacts(
     records_dir: str,
     record_prefix: str,
     names: tuple[str, ...],
+    trace: tuple[Path, dict[str, object]] | None = None,
 ) -> list[Path]:
+    if trace:
+        write_json(trace[0], trace[1], ensure_ascii=True)
     if not records_dir:
         return []
-    return record_named_artifacts(
+    paths = record_named_artifacts(
         output_dir=output_dir,
         records_dir=Path(records_dir),
         record_prefix=record_prefix,
         names=names,
     )
+    if trace:
+        trace_path, payload = trace
+        payload["record_paths"] = [str(path) for path in paths]
+        write_json(trace_path, payload, ensure_ascii=True)
+        destination = Path(records_dir) / "backtests" / record_prefix / trace_path.name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(trace_path, destination)
+    return paths
 
 
-def is_score_risk_sweep(spec: RunSpec) -> bool:
-    return spec.kind == "score_risk_sweep"
+def print_recorded_artifacts(paths: list[Path], kind: str) -> None:
+    if paths:
+        print(f"\nrecorded_{kind}_outputs:")
+        for path in paths:
+            print(f"  {path}")
 
 
-def is_rolling_validation(spec: RunSpec) -> bool:
-    return spec.kind == "alpha_conditioned_rolling_validation"
-
-
-def is_gap_attribution(spec: RunSpec) -> bool:
-    return spec.kind == "gap_risk_attribution"
-
-
-def is_capacity_audit(spec: RunSpec) -> bool:
-    return spec.kind == "capacity_audit"
-
-
-def is_capacity_acceptance(spec: RunSpec) -> bool:
-    return spec.kind == "capacity_acceptance"
-
-
-def is_exposure_audit(spec: RunSpec) -> bool:
-    return spec.kind == "exposure_audit"
-
-
-def is_feature_audit(spec: RunSpec) -> bool:
-    return spec.kind == "feature_audit"
-
-
-def is_feature_hygiene(spec: RunSpec) -> bool:
-    return spec.kind == "feature_hygiene"
-
-
-def is_pool_internal_analysis(spec: RunSpec) -> bool:
-    return spec.pool_internal_analysis_enabled
+NON_STANDARD_ARTIFACT_KINDS = {
+    "alpha_conditioned_rolling_validation",
+    "capacity_acceptance",
+    "capacity_audit",
+    "exposure_audit",
+    "feature_audit",
+    "feature_hygiene",
+    "gap_risk_attribution",
+    "score_risk_sweep",
+    "strategy_acceptance",
+}
 
 
 def is_non_standard_artifact_run(spec: RunSpec) -> bool:
-    return (
-        is_score_risk_sweep(spec)
-        or is_rolling_validation(spec)
-        or is_gap_attribution(spec)
-        or is_capacity_acceptance(spec)
-        or is_capacity_audit(spec)
-        or spec.kind == "strategy_acceptance"
-        or is_exposure_audit(spec)
-        or is_feature_audit(spec)
-        or is_feature_hygiene(spec)
-    )
+    return spec.kind in NON_STANDARD_ARTIFACT_KINDS

@@ -64,35 +64,35 @@ def _drop_features_from_config(
     return labeled.drop(columns=drop_columns)
 
 
-def _cross_sectional_relative_columns_from_config(
+def _matching_feature_columns_from_config(
     labeled: pd.DataFrame,
     config: dict,
+    key_prefix: str,
 ) -> list[str]:
-    explicit = set(config_list(config, "features", "cross_sectional_relative_columns", []))
-    prefixes = tuple(config_list(config, "features", "cross_sectional_relative_prefixes", []))
+    explicit = set(config_list(config, "features", f"{key_prefix}_columns", []))
+    prefixes = tuple(config_list(config, "features", f"{key_prefix}_prefixes", []))
     patterns = [
         re.compile(pattern)
-        for pattern in config_list(config, "features", "cross_sectional_relative_regexes", [])
+        for pattern in config_list(config, "features", f"{key_prefix}_regexes", [])
     ]
-    columns: list[str] = []
-    for column in labeled.columns:
-        name = str(column)
-        if name in explicit:
-            columns.append(name)
-            continue
-        if prefixes and name.startswith(prefixes):
-            columns.append(name)
-            continue
-        if patterns and any(pattern.search(name) for pattern in patterns):
-            columns.append(name)
-    return list(dict.fromkeys(columns))
+    return list(
+        dict.fromkeys(
+            name
+            for name in map(str, labeled.columns)
+            if name in explicit
+            or (prefixes and name.startswith(prefixes))
+            or any(pattern.search(name) for pattern in patterns)
+        )
+    )
 
 
 def _apply_cross_sectional_relative_from_config(
     labeled: pd.DataFrame,
     config: dict,
 ) -> pd.DataFrame:
-    relative_columns = _cross_sectional_relative_columns_from_config(labeled, config)
+    relative_columns = _matching_feature_columns_from_config(
+        labeled, config, "cross_sectional_relative"
+    )
     if not relative_columns:
         raise SystemExit(
             "features.include_cross_sectional_relative=true but no "
@@ -216,27 +216,6 @@ def _apply_feature_transforms_from_config(
     return labeled
 
 
-def _historical_surprise_columns_from_config(labeled: pd.DataFrame, config: dict) -> list[str]:
-    explicit = set(config_list(config, "features", "historical_surprise_columns", []))
-    prefixes = tuple(config_list(config, "features", "historical_surprise_prefixes", []))
-    patterns = [
-        re.compile(pattern)
-        for pattern in config_list(config, "features", "historical_surprise_regexes", [])
-    ]
-    columns: list[str] = []
-    for column in labeled.columns:
-        name = str(column)
-        if name in explicit:
-            columns.append(name)
-            continue
-        if prefixes and name.startswith(prefixes):
-            columns.append(name)
-            continue
-        if patterns and any(pattern.search(name) for pattern in patterns):
-            columns.append(name)
-    return list(dict.fromkeys(columns))
-
-
 def _apply_post_sample_feature_transforms_from_config(
     labeled: pd.DataFrame,
     config: dict,
@@ -284,7 +263,7 @@ def _apply_post_sample_feature_transforms_from_config(
             ),
         )
     if config_bool(config, "features", "include_historical_same_minute_surprise", False):
-        columns = _historical_surprise_columns_from_config(labeled, config)
+        columns = _matching_feature_columns_from_config(labeled, config, "historical_surprise")
         if not columns:
             raise SystemExit(
                 "features.include_historical_same_minute_surprise=true but no "
@@ -425,6 +404,28 @@ def apply_target_transform_from_config(frame: pd.DataFrame, config: dict) -> pd.
     return out
 
 
+def _candidate_rule_options(
+    config: dict,
+    section: str,
+    *,
+    rank_method: str | None = None,
+) -> dict[str, object]:
+    return {
+        "min_values": config_float_mapping(config, section, "min"),
+        "max_values": config_float_mapping(config, section, "max"),
+        "rank_min_values": config_float_mapping(config, section, "rank_min"),
+        "rank_max_values": config_float_mapping(config, section, "rank_max"),
+        "rank_group_cols": config_list(
+            config, section, "rank_group_cols", ["date", "decision_target_timestamp"]
+        ),
+        "rank_method": (
+            rank_method
+            if rank_method is not None
+            else config_str(config, section, "rank_method", "first")
+        ),
+    }
+
+
 def apply_candidate_filter_from_config(
     frame: pd.DataFrame,
     config: dict,
@@ -433,25 +434,7 @@ def apply_candidate_filter_from_config(
         return frame
     return filter_opening_candidates(
         frame,
-        min_values=config_float_mapping(config, "candidate_filter", "min"),
-        max_values=config_float_mapping(config, "candidate_filter", "max"),
-        rank_min_values=config_float_mapping(
-            config,
-            "candidate_filter",
-            "rank_min",
-        ),
-        rank_max_values=config_float_mapping(
-            config,
-            "candidate_filter",
-            "rank_max",
-        ),
-        rank_group_cols=config_list(
-            config,
-            "candidate_filter",
-            "rank_group_cols",
-            ["date", "decision_target_timestamp"],
-        ),
-        rank_method=config_str(config, "candidate_filter", "rank_method", "first"),
+        **_candidate_rule_options(config, "candidate_filter"),
     )
 
 
@@ -487,17 +470,7 @@ def apply_sample_weight_from_config(
     fail_weight = config_float(config, "sample_weight", "fail_weight", 0.25)
     mask = opening_candidate_mask(
         frame,
-        min_values=config_float_mapping(config, "sample_weight", "min"),
-        max_values=config_float_mapping(config, "sample_weight", "max"),
-        rank_min_values=config_float_mapping(config, "sample_weight", "rank_min"),
-        rank_max_values=config_float_mapping(config, "sample_weight", "rank_max"),
-        rank_group_cols=config_list(
-            config,
-            "sample_weight",
-            "rank_group_cols",
-            ["date", "decision_target_timestamp"],
-        ),
-        rank_method=config_str(config, "sample_weight", "rank_method", "first"),
+        **_candidate_rule_options(config, "sample_weight"),
     )
     out = frame.copy()
     out[output_col] = np.where(mask.to_numpy(), pass_weight, fail_weight)
@@ -539,12 +512,7 @@ def apply_guard_features_from_config(
     if pass_col:
         mask = opening_candidate_mask(
             out,
-            min_values=config_float_mapping(config, "guard_features", "min"),
-            max_values=config_float_mapping(config, "guard_features", "max"),
-            rank_min_values=config_float_mapping(config, "guard_features", "rank_min"),
-            rank_max_values=config_float_mapping(config, "guard_features", "rank_max"),
-            rank_group_cols=rank_group_cols,
-            rank_method=rank_method,
+            **_candidate_rule_options(config, "guard_features", rank_method=rank_method),
         )
         out[pass_col] = mask.astype("int8")
     return out

@@ -140,6 +140,24 @@ def add_group_rank(frame: pd.DataFrame, score_col: str, rank_col: str) -> pd.Dat
     return frame
 
 
+def candidate_sample_weight(
+    candidate: pd.Series,
+    config: dict,
+    default: float,
+) -> pd.Series | None:
+    weights = (
+        config_float(config, "risk_layer", "non_candidate_weight", default),
+        config_float(config, "risk_layer", "candidate_weight", 1.0),
+    )
+    if weights == (1.0, 1.0):
+        return None
+    return pd.Series(
+        np.where(candidate, weights[1], weights[0]),
+        index=candidate.index,
+        dtype="float64",
+    )
+
+
 def alpha_conditioned_reversal_risk(
     labeled: pd.DataFrame,
     config: dict,
@@ -192,20 +210,7 @@ def alpha_conditioned_reversal_risk(
 
     risk = risk.where(candidate, 0.0).fillna(0.0).clip(lower=0.0, upper=1.0)
 
-    sample_weight: pd.Series | None = None
-    non_candidate_weight = config_float(
-        config,
-        "risk_layer",
-        "non_candidate_weight",
-        0.05,
-    )
-    candidate_weight = config_float(config, "risk_layer", "candidate_weight", 1.0)
-    if non_candidate_weight != 1.0 or candidate_weight != 1.0:
-        sample_weight = pd.Series(
-            np.where(candidate, candidate_weight, non_candidate_weight),
-            index=labeled.index,
-            dtype="float64",
-        )
+    sample_weight = candidate_sample_weight(candidate, config, 0.05)
     return risk, candidate.astype("bool"), sample_weight
 
 

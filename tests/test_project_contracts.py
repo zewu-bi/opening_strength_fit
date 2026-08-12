@@ -6,9 +6,11 @@ import sys
 import tomllib
 from pathlib import Path
 
-from opening_strength_fit import project_validation
+from opening_strength_fit.commands import project_contracts as project_validation
 from opening_strength_fit.commands.experiment_audit import (
     RunRecord,
+    collect_jobs,
+    collect_runs,
     metrics_status,
     summarize_values,
 )
@@ -25,9 +27,7 @@ def _audit_record(*, kind: str, status: str) -> RunRecord:
         model="lightgbm",
         status=status,
         selection_mode="cross_section",
-        tick_path="",
         pvc_dir="/mnt/output/test_run",
-        local_dir="output/legacy/analysis/test_run",
         missing_run_fields=(),
     )
 
@@ -76,6 +76,66 @@ def _run_audit_fixture(
 
 def test_project_contracts_are_satisfied() -> None:
     assert collect_errors() == []
+
+
+def test_indexed_job_can_cover_multiple_run_configs(tmp_path: Path) -> None:
+    (tmp_path / "cache_family_job.yaml").write_text(
+        'opening-strength-fit/run-ids: "cache_2019,cache_2020"\nkind: Job\n',
+        encoding="utf-8",
+    )
+
+    assert collect_jobs(tmp_path) == {
+        "cache_2019": {"training"},
+        "cache_2020": {"training"},
+    }
+
+
+def test_rendered_job_declaration_counts_as_retained_job(tmp_path: Path) -> None:
+    run_id = "rendered_run"
+    (tmp_path / f"{run_id}.toml").write_text(
+        f'''\
+[run]
+id = "{run_id}"
+kind = "experiment"
+description = "fixture"
+status = "completed"
+
+[k8s]
+render_mode = "sharded"
+render_sha256 = "{"0" * 64}"
+''',
+        encoding="utf-8",
+    )
+
+    record = collect_runs(tmp_path)[run_id]
+
+    assert record.rendered_job_kinds == frozenset({"sharded_training"})
+
+
+def test_run_can_declare_plain_and_sharded_rendered_jobs(tmp_path: Path) -> None:
+    run_id = "dual_rendered_run"
+    (tmp_path / f"{run_id}.toml").write_text(
+        f'''\
+[run]
+id = "{run_id}"
+kind = "experiment"
+description = "fixture"
+status = "completed"
+
+[k8s]
+render_mode = "training"
+render_sha256 = "{"0" * 64}"
+
+[k8s.sharded]
+render_mode = "sharded"
+render_sha256 = "{"1" * 64}"
+''',
+        encoding="utf-8",
+    )
+
+    record = collect_runs(tmp_path)[run_id]
+
+    assert record.rendered_job_kinds == frozenset({"training", "sharded_training"})
 
 
 def test_dependency_profiles_require_locked_direct_dependencies(monkeypatch) -> None:
@@ -143,6 +203,16 @@ def test_untracked_experiment_assets_require_incubator_registration(monkeypatch)
     assert errors == [
         "experiments/scripts/missing_probe.py: untracked experiment asset is missing from "
         "experiments/incubator.toml"
+    ]
+
+
+def test_project_contract_rejects_duplicate_markdown_documents() -> None:
+    errors: list[str] = []
+
+    project_validation.check_source_layout(["experiments/evidence/README.md"], errors)
+
+    assert errors == [
+        "experiments/evidence/README.md: duplicate project documentation is forbidden"
     ]
 
 

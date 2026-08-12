@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 
 import pandas as pd
 
+from opening_strength_fit import next_close_labels as _next_close_labels
 from opening_strength_fit.analysis import (
     NEXT_CLOSE_LABEL_COL,
 )
@@ -13,37 +13,45 @@ from opening_strength_fit.clickhouse_ticks import (
     DEFAULT_CLICKHOUSE_TICK_HOST,
     DEFAULT_CLICKHOUSE_TICK_PORT,
     DEFAULT_CLICKHOUSE_TICK_TABLE,
+    clickhouse_connection,
+)
+from opening_strength_fit.commands.arguments import (
+    add_arguments,
+    command_context,
+    required_io_paths,
 )
 from opening_strength_fit.config import (
     config_clock_list,
-    config_float,
-    config_int,
-    config_str,
-    load_toml,
-    run_id,
+    prepare_output_dir,
 )
 from opening_strength_fit.horizon_clickhouse_labels import (
     DEFAULT_CLOSE_LOOKBACK_SECONDS,
     DEFAULT_CLOSE_OFFSET_US,
 )
 from opening_strength_fit.io import frame_columns, read_frame, write_frame, write_json
-from opening_strength_fit.next_close_labels import fetch_next_close_labels
 from opening_strength_fit.reports import print_mapping
 from opening_strength_fit.schema import (
     DECISION_KEY_COLUMNS,
     ensure_timestamp_columns,
+    normalize_decision_keys,
     standardize_columns,
 )
 
 DEFAULT_DECISION_TIMES = tuple(f"09:{minute:02d}:00" for minute in range(31, 41))
 KEY_COLUMNS = DECISION_KEY_COLUMNS
+compute_clickhouse_close_labels = _next_close_labels.compute_clickhouse_close_labels
+_DEFAULT_LABEL_BUILDER = compute_clickhouse_close_labels
 
 
-def _available_columns(path: Path) -> set[str]:
-    try:
-        return frame_columns(path)
-    except SystemExit:
-        return set()
+def fetch_next_close_labels(base: pd.DataFrame, **kwargs) -> pd.DataFrame:
+    label_builder = compute_clickhouse_close_labels
+    if label_builder is _DEFAULT_LABEL_BUILDER:
+        label_builder = _next_close_labels.compute_clickhouse_close_labels
+    return _next_close_labels.fetch_next_close_labels(
+        base,
+        compute_labels=label_builder,
+        **kwargs,
+    )
 
 
 def _read_base_frame(
@@ -52,7 +60,7 @@ def _read_base_frame(
     buy_price_col: str,
     decision_times: tuple[str, ...],
 ) -> pd.DataFrame:
-    available = _available_columns(path)
+    available = frame_columns(path)
     time_col = (
         "decision_target_timestamp"
         if not available or "decision_target_timestamp" in available
@@ -70,12 +78,7 @@ def _read_base_frame(
         out["decision_target_timestamp"] = pd.to_datetime(out[time_col], errors="coerce")
     if buy_price_col != "buy_price":
         out = out.rename(columns={buy_price_col: "buy_price"})
-    out["date"] = out["date"].astype(str)
-    out["symbol"] = out["symbol"].astype(str)
-    out["decision_target_timestamp"] = pd.to_datetime(
-        out["decision_target_timestamp"],
-        errors="coerce",
-    )
+    out = normalize_decision_keys(out)
     if decision_times:
         clock = out["decision_target_timestamp"].dt.strftime("%H:%M:%S")
         out = out.loc[clock.isin(set(decision_times))].copy()
@@ -129,83 +132,32 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Fetch and cache ClickHouse next-close labels for labeled decision rows."
     )
-    parser.add_argument("--config", default="")
-    parser.add_argument("--input", default="")
-    parser.add_argument("--output", default="")
-    parser.add_argument("--output-dir", default="")
-    parser.add_argument("--buy-price-col", default="")
+    add_arguments(parser, "config input output output-dir buy-price-col", default="")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
 
-    config = load_toml(args.config) if args.config else {}
-    run_name = run_id(config, args.config) if args.config else "build_next_close_labels"
-    input_raw = args.input or config_str(config, "next_close_labels", "input_path", "")
-    output_raw = args.output or config_str(config, "next_close_labels", "output_path", "")
-    if not input_raw:
-        raise SystemExit("missing input path: pass --input or [next_close_labels].input_path")
-    if not output_raw:
-        raise SystemExit("missing output path: pass --output or [next_close_labels].output_path")
-
-    input_path = Path(input_raw)
-    output_path = Path(output_raw)
+    config, arguments, run_name = command_context(
+        args, "next_close_labels", default_run_name="build_next_close_labels"
+    )
+    input_path, output_path = required_io_paths(args, config, "next_close_labels")
     if output_path.exists() and not args.overwrite:
         raise SystemExit(f"output already exists, pass --overwrite: {output_path}")
 
-    output_dir = Path(
-        args.output_dir
-        or config_str(config, "output", "local_dir", f"output/legacy/analysis/{run_name}")
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = prepare_output_dir(config, args.output_dir, run_name)
 
-    decision_times = tuple(
-        config_clock_list(
-            config,
-            "next_close_labels",
-            "decision_times",
-            DEFAULT_DECISION_TIMES,
-        )
-    )
-    buy_price_col = args.buy_price_col or config_str(
-        config,
-        "next_close_labels",
-        "buy_price_col",
-        "buy_price",
-    )
-    host = (
-        config_str(config, "clickhouse", "host", "")
-        or os.environ.get("CLICKHOUSE_HOST", "")
-        or DEFAULT_CLICKHOUSE_TICK_HOST
-    )
-    port = int(
-        config_str(config, "clickhouse", "port", "")
-        or os.environ.get("CLICKHOUSE_PORT", DEFAULT_CLICKHOUSE_TICK_PORT)
-    )
-    username = os.environ.get("CLICKHOUSE_USER", "")
-    password = os.environ.get("CLICKHOUSE_PASSWORD", "")
-    table = (
-        config_str(config, "clickhouse", "table", "")
-        or os.environ.get("CLICKHOUSE_TICK_TABLE", "")
-        or DEFAULT_CLICKHOUSE_TICK_TABLE
-    )
-    close_offset_us = config_int(
-        config,
-        "next_close_labels",
-        "close_offset_us",
-        DEFAULT_CLOSE_OFFSET_US,
-    )
-    close_lookback_seconds = config_int(
-        config,
-        "next_close_labels",
-        "close_lookback_seconds",
-        DEFAULT_CLOSE_LOOKBACK_SECONDS,
-    )
-    calendar_days_after = config_int(
-        config,
-        "next_close_labels",
-        "calendar_days_after",
-        14,
-    )
-    fee_bps = config_float(config, "next_close_labels", "fee_bps", 0.0)
+    settings = {
+        "buy_price_col": arguments.string("buy_price_col", "buy_price"),
+        "decision_times": tuple(
+            config_clock_list(config, "next_close_labels", "decision_times", DEFAULT_DECISION_TIMES)
+        ),
+        **clickhouse_connection(config),
+        "close_offset_us": arguments.integer("close_offset_us", DEFAULT_CLOSE_OFFSET_US),
+        "close_lookback_seconds": arguments.integer(
+            "close_lookback_seconds", DEFAULT_CLOSE_LOOKBACK_SECONDS
+        ),
+        "calendar_days_after": arguments.integer("calendar_days_after", 14),
+        "fee_bps": arguments.float("fee_bps", 0.0),
+    }
 
     print_mapping(
         "next_close_labels",
@@ -213,27 +165,13 @@ def main() -> None:
             "run_id": run_name,
             "input": str(input_path),
             "output": str(output_path),
-            "buy_price_col": buy_price_col,
-            "decision_times": ",".join(decision_times),
-            "clickhouse_table": table,
+            "buy_price_col": settings["buy_price_col"],
+            "decision_times": ",".join(settings["decision_times"]),
+            "clickhouse_table": settings["table"],
         },
     )
 
-    base, labels = build_next_close_label_cache(
-        input_path,
-        output_path,
-        buy_price_col=buy_price_col,
-        decision_times=decision_times,
-        host=host,
-        port=port,
-        username=username,
-        password=password,
-        table=table,
-        close_offset_us=close_offset_us,
-        close_lookback_seconds=close_lookback_seconds,
-        calendar_days_after=calendar_days_after,
-        fee_bps=fee_bps,
-    )
+    base, labels = build_next_close_label_cache(input_path, output_path, **settings)
     summary = {
         "run_id": run_name,
         "input": str(input_path),
@@ -243,8 +181,8 @@ def main() -> None:
         "label_non_null": int(labels[NEXT_CLOSE_LABEL_COL].notna().sum()),
         "date_min": str(labels["date"].min()) if len(labels) else "",
         "date_max": str(labels["date"].max()) if len(labels) else "",
-        "decision_times": list(decision_times),
-        "buy_price_col": buy_price_col,
+        "decision_times": list(settings["decision_times"]),
+        "buy_price_col": settings["buy_price_col"],
     }
     write_json(output_dir / "next_close_label_cache_trace.json", summary)
     write_json(output_dir / "next_close_label_cache_summary.json", summary)

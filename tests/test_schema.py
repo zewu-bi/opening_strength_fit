@@ -43,7 +43,7 @@ def test_normalize_decision_keys_canonicalizes_join_columns() -> None:
         {
             "date": ["2026/01/02", "bad-date"],
             "symbol": [1, "000002.SZ"],
-            "decision_target_timestamp": ["2026-01-02 09:31", None],
+            "decision_target_timestamp": ["2026-01-02 09:31+08:00", None],
             "score": [0.1, 0.2],
         }
     )
@@ -53,3 +53,12 @@ def test_normalize_decision_keys_canonicalizes_join_columns() -> None:
     assert out["date"].tolist() == ["2026-01-02"]
     assert out["symbol"].tolist() == ["1"]
     assert out["decision_target_timestamp"].dt.strftime("%H:%M").tolist() == ["09:31"]
+    assert out["decision_target_timestamp"].dt.tz is None
+
+    with pytest.raises(SystemExit, match="duplicate-key rows"):
+        normalize_decision_keys(
+            pd.concat([out, out]),
+            drop_missing=False,
+            require_unique=True,
+            context="feature dataset",
+        )

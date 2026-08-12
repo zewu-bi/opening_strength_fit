@@ -10,14 +10,15 @@ import pandas as pd
 from opening_strength_fit.analysis import (
     clock_range,
     load_next_close_label_file,
-    selection_return_stats,
+    mean_aggregations,
+    selection_group_metrics,
     write_json,
 )
-from opening_strength_fit.io import frame_columns, read_frame
 from opening_strength_fit.next_close_labels import (
     add_next_close_label_arguments,
     load_or_fetch_next_close_labels_from_args,
 )
+from opening_strength_fit.prediction_frames import read_clock_predictions
 from opening_strength_fit.schema import DECISION_KEY_COLUMNS
 
 DEFAULT_INPUT = (
@@ -56,28 +57,16 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_predictions(path: Path, clocks: list[str], score_col: str) -> pd.DataFrame:
-    available = frame_columns(path)
-    requested = [
-        column for column in (*BASE_COLUMNS, "buy_price", *GUARD_COLUMNS) if column in available
-    ]
-    missing = [column for column in (*BASE_COLUMNS, score_col) if column not in available]
-    if missing:
-        raise SystemExit(f"prediction input missing columns: {missing}")
-    if score_col not in requested:
-        requested.append(score_col)
-
-    frame = read_frame(path, columns=requested)
-    frame = frame.dropna(
-        subset=["date", "symbol", "decision_target_timestamp", score_col, "label"]
-    ).copy()
-    frame["date"] = frame["date"].astype(str)
-    frame["symbol"] = frame["symbol"].astype(str)
-    frame["decision_target_timestamp"] = pd.to_datetime(
-        frame["decision_target_timestamp"],
-        errors="coerce",
+    trailing = () if score_col in BASE_COLUMNS else (score_col,)
+    frame = read_clock_predictions(
+        path,
+        required_columns=BASE_COLUMNS,
+        optional_columns=("buy_price", *GUARD_COLUMNS),
+        trailing_required_columns=trailing,
+        dropna_columns=(*KEY_COLUMNS, score_col, "label"),
+        clocks=clocks,
+        context="prediction input",
     )
-    frame["clock"] = frame["decision_target_timestamp"].dt.strftime("%H:%M")
-    frame = frame.loc[frame["clock"].isin(clocks)].copy()
     if score_col != "prediction":
         frame["prediction"] = pd.to_numeric(frame[score_col], errors="coerce")
     return frame.dropna(subset=["decision_target_timestamp", "prediction"])
@@ -101,136 +90,51 @@ def add_group_ranks(frame: pd.DataFrame, columns: tuple[str, ...]) -> pd.DataFra
     return out
 
 
-def between(column: str, low: float, high: float) -> Callable[[pd.DataFrame], pd.Series]:
-    rank_col = f"{column}_rp"
-
-    def _mask(frame: pd.DataFrame) -> pd.Series:
-        return frame[rank_col].between(low, high, inclusive="both")
-
-    return _mask
-
-
-def ge(column: str, value: float) -> Callable[[pd.DataFrame], pd.Series]:
-    rank_col = f"{column}_rp"
-
-    def _mask(frame: pd.DataFrame) -> pd.Series:
-        return frame[rank_col] >= value
-
-    return _mask
-
-
-def le(column: str, value: float) -> Callable[[pd.DataFrame], pd.Series]:
-    rank_col = f"{column}_rp"
-
-    def _mask(frame: pd.DataFrame) -> pd.Series:
-        return frame[rank_col] <= value
-
-    return _mask
-
-
-def combine_masks(
-    *parts: Callable[[pd.DataFrame], pd.Series],
+def guard_mask(
+    bounds: tuple[tuple[str, float, float], ...],
 ) -> Callable[[pd.DataFrame], pd.Series]:
     def _mask(frame: pd.DataFrame) -> pd.Series:
         mask = pd.Series(True, index=frame.index)
-        for part in parts:
-            mask &= part(frame).fillna(False)
+        for column, low, high in bounds:
+            mask &= frame[f"{column}_rp"].between(low, high, inclusive="both").fillna(False)
         return mask
 
     return _mask
 
 
 def guard_variants() -> dict[str, Callable[[pd.DataFrame], pd.Series] | None]:
+    inf = float("inf")
+    specs = {
+        "spread_le_p80": "spread_bps::0.8",
+        "spread_le_p70": "spread_bps::0.7",
+        "spread_le_p60": "spread_bps::0.6",
+        "liquid_spread_p80_tdiff30_ge_p50": "spread_bps::0.8 turnover_diff_30t:0.5:",
+        "liquid_spread_p70_tdiff30_ge_p50": "spread_bps::0.7 turnover_diff_30t:0.5:",
+        "liquid_spread_p80_turnover_ge_p50": "spread_bps::0.8 turnover:0.5:",
+        "liquid_spread_no_chase": "spread_bps::0.8 turnover_diff_30t:0.5: return_30t::0.8",
+        "liquid_spread_no_chase_10t": "spread_bps::0.8 turnover_diff_10t:0.5: return_10t::0.8",
+        "liquid_spread_no_chase_strict": "spread_bps::0.7 turnover_diff_30t:0.5: return_30t::0.7",
+        "mid_heat": "spread_bps::0.8 turnover_diff_30t:0.3:0.9 return_30t:0.2:0.8",
+        "mid_heat_10t": "spread_bps::0.8 turnover_diff_10t:0.3:0.9 return_10t:0.2:0.8",
+        "next_flip_guard_10t": "spread_bps::0.8 turnover_diff_10t:0.1:0.8 return_10t:0.2:0.7 ask_depth_10:0.4: depth_imbalance_10:0.2:0.7",
+        "next_flip_guard_10t_robust": "spread_bps::0.8 turnover_diff_10t:0.3:0.8 return_10t:0.2:0.7 ask_depth_10:0.4: depth_imbalance_10:0.3:0.7",
+        "depth_balanced": "spread_bps::0.8 ask_depth_10:0.3: depth_imbalance_10:0.3:0.7",
+        "all_guards_soft": "spread_bps::0.8 turnover_diff_30t:0.4: return_30t::0.8 ask_depth_10:0.3: depth_imbalance_10:0.25:0.75",
+        "all_guards_soft_10t": "spread_bps::0.8 turnover_diff_10t:0.4: return_10t::0.8 ask_depth_10:0.3: depth_imbalance_10:0.25:0.75",
+        "all_guards_strict": "spread_bps::0.7 turnover_diff_30t:0.5: return_30t::0.7 ask_depth_10:0.4: depth_imbalance_10:0.3:0.7",
+    }
     return {
         "baseline": None,
-        "spread_le_p80": le("spread_bps", 0.80),
-        "spread_le_p70": le("spread_bps", 0.70),
-        "spread_le_p60": le("spread_bps", 0.60),
-        "liquid_spread_p80_tdiff30_ge_p50": combine_masks(
-            le("spread_bps", 0.80),
-            ge("turnover_diff_30t", 0.50),
-        ),
-        "liquid_spread_p70_tdiff30_ge_p50": combine_masks(
-            le("spread_bps", 0.70),
-            ge("turnover_diff_30t", 0.50),
-        ),
-        "liquid_spread_p80_turnover_ge_p50": combine_masks(
-            le("spread_bps", 0.80),
-            ge("turnover", 0.50),
-        ),
-        "liquid_spread_no_chase": combine_masks(
-            le("spread_bps", 0.80),
-            ge("turnover_diff_30t", 0.50),
-            le("return_30t", 0.80),
-        ),
-        "liquid_spread_no_chase_10t": combine_masks(
-            le("spread_bps", 0.80),
-            ge("turnover_diff_10t", 0.50),
-            le("return_10t", 0.80),
-        ),
-        "liquid_spread_no_chase_strict": combine_masks(
-            le("spread_bps", 0.70),
-            ge("turnover_diff_30t", 0.50),
-            le("return_30t", 0.70),
-        ),
-        "mid_heat": combine_masks(
-            le("spread_bps", 0.80),
-            between("turnover_diff_30t", 0.30, 0.90),
-            between("return_30t", 0.20, 0.80),
-        ),
-        "mid_heat_10t": combine_masks(
-            le("spread_bps", 0.80),
-            between("turnover_diff_10t", 0.30, 0.90),
-            between("return_10t", 0.20, 0.80),
-        ),
-        "next_flip_guard_10t": combine_masks(
-            le("spread_bps", 0.80),
-            between("turnover_diff_10t", 0.10, 0.80),
-            between("return_10t", 0.20, 0.70),
-            ge("ask_depth_10", 0.40),
-            between("depth_imbalance_10", 0.20, 0.70),
-        ),
-        "next_flip_guard_10t_robust": combine_masks(
-            le("spread_bps", 0.80),
-            between("turnover_diff_10t", 0.30, 0.80),
-            between("return_10t", 0.20, 0.70),
-            ge("ask_depth_10", 0.40),
-            between("depth_imbalance_10", 0.30, 0.70),
-        ),
-        "depth_balanced": combine_masks(
-            le("spread_bps", 0.80),
-            ge("ask_depth_10", 0.30),
-            between("depth_imbalance_10", 0.30, 0.70),
-        ),
-        "all_guards_soft": combine_masks(
-            le("spread_bps", 0.80),
-            ge("turnover_diff_30t", 0.40),
-            le("return_30t", 0.80),
-            ge("ask_depth_10", 0.30),
-            between("depth_imbalance_10", 0.25, 0.75),
-        ),
-        "all_guards_soft_10t": combine_masks(
-            le("spread_bps", 0.80),
-            ge("turnover_diff_10t", 0.40),
-            le("return_10t", 0.80),
-            ge("ask_depth_10", 0.30),
-            between("depth_imbalance_10", 0.25, 0.75),
-        ),
-        "all_guards_strict": combine_masks(
-            le("spread_bps", 0.70),
-            ge("turnover_diff_30t", 0.50),
-            le("return_30t", 0.70),
-            ge("ask_depth_10", 0.40),
-            between("depth_imbalance_10", 0.30, 0.70),
-        ),
+        **{
+            name: guard_mask(
+                tuple(
+                    (column, float(low) if low else -inf, float(high) if high else inf)
+                    for column, low, high in (bound.split(":") for bound in encoded.split())
+                )
+            )
+            for name, encoded in specs.items()
+        },
     }
-
-
-def variant_required_rank_columns(mask_fn: Callable[[pd.DataFrame], pd.Series] | None) -> set[str]:
-    if mask_fn is None:
-        return set()
-    names = set(getattr(mask_fn, "__code__", ()).co_names)
-    return {name for name in names if name.endswith("_rp")}
 
 
 def summarize_variant(
@@ -247,35 +151,16 @@ def summarize_variant(
     ):
         candidates = group if mask_fn is None else group.loc[mask_fn(group)]
         selected = candidates.sort_values("prediction", ascending=False).head(top_n)
-        short_stats = selection_return_stats(
-            group,
-            selected,
-            label_col="label",
-            prefix="short",
-        )
-        next_stats = selection_return_stats(
-            group,
-            selected,
-            label_col="alpha_return_next_close",
-            prefix="next",
-        )
         rows.append(
             {
                 "variant": variant,
-                "date": str(date),
-                "decision_target_timestamp": pd.Timestamp(timestamp),
-                "clock": pd.Timestamp(timestamp).strftime("%H:%M"),
-                "rows": int(len(group)),
-                "candidate_rows": int(len(candidates)),
-                "selected_rows": int(len(selected)),
-                "short_all_mean_bps": short_stats["short_all_mean_bps"],
-                "short_top_mean_bps": short_stats["short_top_mean_bps"],
-                "short_top_excess_bps": short_stats["short_top_excess_bps"],
-                "short_top_win_rate": short_stats["short_top_win_rate"],
-                "next_all_mean_bps": next_stats["next_all_mean_bps"],
-                "next_top_mean_bps": next_stats["next_top_mean_bps"],
-                "next_top_excess_bps": next_stats["next_top_excess_bps"],
-                "next_top_win_rate": next_stats["next_top_win_rate"],
+                **selection_group_metrics(
+                    group,
+                    selected,
+                    date=date,
+                    timestamp=timestamp,
+                    candidate_counts={"candidate_rows": int(len(candidates))},
+                ),
             }
         )
 
@@ -309,14 +194,11 @@ def minute_summary(group_metrics: pd.DataFrame) -> pd.DataFrame:
         .agg(
             groups=("date", "size"),
             rows=("rows", "sum"),
-            candidate_rows=("candidate_rows", "mean"),
-            selected_rows=("selected_rows", "mean"),
-            short_top_mean_bps=("short_top_mean_bps", "mean"),
-            short_top_excess_bps=("short_top_excess_bps", "mean"),
-            short_top_win_rate=("short_top_win_rate", "mean"),
-            next_top_mean_bps=("next_top_mean_bps", "mean"),
-            next_top_excess_bps=("next_top_excess_bps", "mean"),
-            next_top_win_rate=("next_top_win_rate", "mean"),
+            **mean_aggregations(
+                *"candidate_rows selected_rows short_top_mean_bps short_top_excess_bps "
+                "short_top_win_rate next_top_mean_bps next_top_excess_bps "
+                "next_top_win_rate".split()
+            ),
         )
         .sort_values(["variant", "clock"])
     )
@@ -338,7 +220,6 @@ def main() -> None:
     frame = frame.dropna(subset=["label", "prediction", "alpha_return_next_close"]).copy()
     frame = add_group_ranks(frame, GUARD_COLUMNS)
 
-    rank_columns = set(frame.columns)
     group_rows: list[dict[str, object]] = []
     summary_rows = []
     skipped = []
@@ -352,10 +233,6 @@ def main() -> None:
             )
         except KeyError as exc:
             skipped.append({"variant": variant, "missing": str(exc)})
-            continue
-        missing_rank_columns = sorted(variant_required_rank_columns(mask_fn) - rank_columns)
-        if missing_rank_columns:
-            skipped.append({"variant": variant, "missing": ",".join(missing_rank_columns)})
             continue
         group_rows.extend(rows)
         summary_rows.append(summary)

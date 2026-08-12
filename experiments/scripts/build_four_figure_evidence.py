@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import csv
-import json
 from pathlib import Path
 
+from opening_strength_fit.artifact_catalog import (
+    CUMULATIVE_EVIDENCE_COLUMNS as CUMULATIVE_COLUMNS,
+)
 from opening_strength_fit.artifact_catalog import (
     artifact_file_manifest,
     copy_artifact_specs,
     copy_csv_columns,
+    four_figure_artifact_specs,
     require_file,
 )
+from opening_strength_fit.io import write_json
 
 ROOT = Path(__file__).resolve().parents[2]
 CANONICAL_RUN_ID = (
@@ -35,39 +39,18 @@ JOURNEY_RELATIVE_DIR = Path(
     "optimization_overlay_acceptance_lgbm328_mlp_base_gated_multiden_2022_2025"
 )
 
+_FOUR_FIGURE_SPECS = four_figure_artifact_specs(
+    OVERLAY_RELATIVE_DIR,
+    BUCKET_RELATIVE_DIR,
+    HISTOGRAM_RELATIVE_DIR,
+)
 COPY_SPECS = (
-    (
-        OVERLAY_RELATIVE_DIR / "optimization_directions_overlay_acceptance.svg",
-        "01_signal_acceptance.svg",
-    ),
-    (
-        OVERLAY_RELATIVE_DIR / "optimization_directions_overlay_acceptance_plot_data.csv",
-        "01_signal_acceptance.csv",
-    ),
-    (
-        OVERLAY_RELATIVE_DIR / "optimization_directions_net_alpha_cumulative.svg",
-        "02_top100_cumulative.svg",
-    ),
-    (
-        BUCKET_RELATIVE_DIR / "top1000_bucket_returns.svg",
-        "03_top1000_bucket_curve.svg",
-    ),
-    (
-        BUCKET_RELATIVE_DIR / "bucket_curve_plot_data.csv",
-        "03_top1000_bucket_curve.csv",
-    ),
+    *_FOUR_FIGURE_SPECS[:5],
     (
         BUCKET_RELATIVE_DIR / "pool_L_bucket_returns.svg",
         "03b_full_pool_bucket_curve.svg",
     ),
-    (
-        HISTOGRAM_RELATIVE_DIR / "top1000_score_bucket_return_100bps_counts.svg",
-        "04_top1000_return_distribution.svg",
-    ),
-    (
-        HISTOGRAM_RELATIVE_DIR / "top1000_score_bucket_return_100bps_counts.csv",
-        "04_top1000_return_distribution.csv",
-    ),
+    *_FOUR_FIGURE_SPECS[5:],
     (
         HISTOGRAM_RELATIVE_DIR / "top1000_score_bucket_return_100bps_counts_full_scale.svg",
         "04b_top1000_return_distribution_full_scale.svg",
@@ -98,14 +81,6 @@ JOURNEY_CUMULATIVE_SOURCE = (
     JOURNEY_RELATIVE_DIR / "optimization_directions_net_alpha_cumulative_plot_data.csv"
 )
 JOURNEY_CUMULATIVE_OUTPUT = "05_model_journey_cumulative.csv"
-CUMULATIVE_COLUMNS = (
-    "pool",
-    "pool_label",
-    "week_start",
-    "variant",
-    "next_cumulative_net_return_bps",
-    "next_cumulative_alpha_bps",
-)
 
 
 def _write_scope_rows(
@@ -178,10 +153,7 @@ def build_bundle(root: Path = ROOT) -> Path:
         "journey_cumulative_rows": journey_cumulative_rows,
         "files": artifact_file_manifest(destination, sources),
     }
-    (destination / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    write_json(destination / "manifest.json", manifest, sort_keys=True)
     return destination
 
 

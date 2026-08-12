@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-from datetime import UTC, datetime
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -14,29 +13,22 @@ import pandas as pd
 
 from opening_strength_fit.analysis import newey_west_mean_se
 from opening_strength_fit.legacy import multiscale_bucket_diag as ms
-from opening_strength_fit.legacy import rank_bucket_reaudit as rb
+from opening_strength_fit.legacy.top1000_rank_data import (
+    DEFAULT_DIAGNOSTIC_MONTHS as DEFAULT_MONTHS,
+)
 from opening_strength_fit.legacy.top1000_rank_data import (
     TOP1000_RETURN_HISTOGRAM_BIN_WIDTH_BPS,
-    load_ranked_pool_shard,
+    ranked_pool_shards,
+    run_trace,
+    save_figure,
 )
 from opening_strength_fit.model_metrics import array_corr
-from opening_strength_fit.stock_pool import load_stock_pool
 
-DEFAULT_MONTHS = (
-    "2022-01",
-    "2022-07",
-    "2023-01",
-    "2023-07",
-    "2024-01",
-    "2024-07",
-    "2025-01",
-    "2025-07",
+IC_METRICS = tuple(
+    "spearman_realized_rank_ic score_rank_raw_return_pearson_ic "
+    "raw_score_raw_return_pearson_ic".split()
 )
-IC_METRICS = (
-    "spearman_realized_rank_ic",
-    "score_rank_raw_return_pearson_ic",
-    "raw_score_raw_return_pearson_ic",
-)
+BUCKET_COUNTS = (10, 20, 50)
 
 
 def parse_args() -> argparse.Namespace:
@@ -59,26 +51,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--months", default=",".join(DEFAULT_MONTHS))
     parser.add_argument("--top-n", type=int, default=1000)
-    parser.add_argument(
-        "--rank-bucket-only",
-        action="store_true",
-        help="Write rank/bucket diagnostics without the additional multiscale diagnostics.",
-    )
-    parser.add_argument(
-        "--top100-positive-histogram-only",
-        action="store_true",
-        help="Only count Top100 positive excess returns in 10 bps intervals.",
-    )
-    parser.add_argument(
-        "--top100-return-histogram-only",
-        action="store_true",
-        help="Only count the full Top100 excess-return distribution.",
-    )
-    parser.add_argument(
-        "--top1000-bucket-return-histogram-only",
-        action="store_true",
-        help="Compare 100-name score-bucket return distributions within Top1000.",
-    )
+    modes = {
+        "rank-bucket": "Write rank/bucket diagnostics without the additional multiscale diagnostics.",
+        "top100-positive-histogram": "Only count Top100 positive excess returns in 10 bps intervals.",
+        "top100-return-histogram": "Only count the full Top100 excess-return distribution.",
+        "top1000-bucket-return-histogram": (
+            "Compare 100-name score-bucket return distributions within Top1000."
+        ),
+    }
+    for name, help_text in modes.items():
+        parser.add_argument(f"--{name}-only", action="store_true", help=help_text)
     parser.add_argument(
         "--histogram-bin-width-bps",
         type=int,
@@ -120,12 +102,6 @@ def build_group_ic(frame: pd.DataFrame, *, variant: str, top_n: int) -> pd.DataF
     return pd.DataFrame(rows)
 
 
-def hac_mean_t(values: pd.Series, max_lag: int = 5) -> tuple[float, float]:
-    mean, standard_error = newey_west_mean_se(values, lag=max_lag)
-    t_stat = mean / standard_error if standard_error else math.nan
-    return standard_error, t_stat
-
-
 def summarize_daily_ic(group_ic: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     daily = (
         group_ic.groupby(["variant", "scope", "date"], observed=True)[list(IC_METRICS)]
@@ -140,7 +116,8 @@ def summarize_daily_ic(group_ic: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
             mean = float(values.mean())
             std = float(values.std(ddof=1))
             naive_se = std / math.sqrt(n)
-            hac_se, hac_t = hac_mean_t(values)
+            _, hac_se = newey_west_mean_se(values, lag=5)
+            hac_t = mean / hac_se if hac_se else math.nan
             rows.append(
                 {
                     "variant": keys[0],
@@ -179,6 +156,113 @@ def summarize_group_ic(group_ic: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def build_bucket_diagnostics(
+    frame: pd.DataFrame,
+    *,
+    variant: str,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    ic_rows: list[dict[str, object]] = []
+    curve_parts: list[pd.DataFrame] = []
+    scopes = {
+        "top1000": frame.loc[frame["score_rank"] <= 1000],
+        "pool_L": frame,
+    }
+    for scope, scoped in scopes.items():
+        work = scoped.copy()
+        work["outcome_rank_pct"] = work.groupby(ms.GROUP_COLS, sort=False, observed=True)[
+            "alpha_return_next_close"
+        ].rank(method="average", pct=True)
+        for bucket_count in BUCKET_COUNTS:
+            divisor = 1000 if scope == "top1000" else work["group_size"]
+            work["bucket"] = (
+                ((work["score_rank"] - 1) * bucket_count // divisor + 1)
+                .clip(upper=bucket_count)
+                .astype(int)
+            )
+            group_bucket = (
+                work.groupby(ms.GROUP_COLS + ["month", "bucket"], observed=True)
+                .agg(
+                    mean_excess_bps=("excess_bps", "mean"),
+                    mean_outcome_rank_pct=("outcome_rank_pct", "mean"),
+                )
+                .reset_index()
+            )
+            curve_part = (
+                group_bucket.groupby("bucket", observed=True)
+                .agg(
+                    excess_sum=("mean_excess_bps", "sum"),
+                    outcome_rank_sum=("mean_outcome_rank_pct", "sum"),
+                    groups=("mean_excess_bps", "count"),
+                )
+                .reset_index()
+            )
+            curve_part.insert(0, "bucket_count", bucket_count)
+            curve_part.insert(0, "scope", scope)
+            curve_part.insert(0, "variant", variant)
+            curve_parts.append(curve_part)
+            for keys, group in group_bucket.groupby(ms.GROUP_COLS, sort=False, observed=True):
+                ic_rows.append(
+                    {
+                        "variant": variant,
+                        "date": keys[0],
+                        "decision_target_timestamp": keys[1],
+                        "month": group["month"].iloc[0],
+                        "scope": scope,
+                        "bucket_count": bucket_count,
+                        "bucket_rank_ic": ms.spearman_rank_ic(
+                            -group["bucket"].to_numpy(dtype="float64", copy=False),
+                            group["mean_excess_bps"].to_numpy(dtype="float64", copy=False),
+                        ),
+                    }
+                )
+    return pd.DataFrame(ic_rows), pd.concat(curve_parts, ignore_index=True)
+
+
+def finalize_curve_data(parts: pd.DataFrame) -> pd.DataFrame:
+    curves = (
+        parts.groupby(["variant", "scope", "bucket_count", "bucket"], observed=True)[
+            ["excess_sum", "outcome_rank_sum", "groups"]
+        ]
+        .sum()
+        .reset_index()
+    )
+    curves["mean_excess_bps"] = curves.pop("excess_sum") / curves["groups"]
+    curves["mean_within_group_outcome_rank_pct"] = curves.pop("outcome_rank_sum") / curves["groups"]
+    top = curves["scope"].eq("top1000")
+    curves["x"] = np.where(
+        top,
+        (curves["bucket"] - 0.5) * 1000 / curves["bucket_count"],
+        (curves["bucket"] - 0.5) * 100.0 / curves["bucket_count"],
+    )
+    return curves
+
+
+def summarize_ic(frame: pd.DataFrame, *, value: str, keys: list[str]) -> pd.DataFrame:
+    return (
+        frame.groupby(keys, observed=True)[value]
+        .agg(
+            groups="count",
+            mean="mean",
+            median="median",
+            positive_rate=lambda series: float((series > 0).mean()),
+        )
+        .reset_index()
+    )
+
+
+def curve_rank_ic(curves: pd.DataFrame) -> pd.DataFrame:
+    keys = ["variant", "scope", "bucket_count"]
+    return (
+        curves.groupby(keys, sort=False, observed=True)
+        .apply(
+            lambda group: ms.spearman_rank_ic(-group["bucket"], group["mean_excess_bps"]),
+            include_groups=False,
+        )
+        .rename("curve_rank_ic")
+        .reset_index()
+    )
+
+
 def exact_rank_part(frame: pd.DataFrame, *, top_n: int) -> pd.DataFrame:
     top = frame.loc[frame["score_rank"] <= top_n]
     return (
@@ -213,7 +297,7 @@ def exact_curve_summary(curve: pd.DataFrame) -> pd.DataFrame:
         "mean_rank_901_1000_bps": outcomes.iloc[-100:].mean(),
         "top100_minus_rank901_1000_bps": outcomes.iloc[:100].mean() - outcomes.iloc[-100:].mean(),
     }
-    for bucket_count in rb.BUCKET_COUNTS:
+    for bucket_count in BUCKET_COUNTS:
         size = len(curve) // bucket_count
         bucket = outcomes.groupby((curve["score_rank"] - 1) // size).mean()
         row[f"bucket{bucket_count}_curve_spearman_ic"] = pd.Series(
@@ -278,17 +362,14 @@ def plot_top100_exact_rank_curve(
     ax.set_xticks(np.arange(0, 101, 10))
     ax.grid(True, alpha=0.3)
     ax.legend(loc="best")
-    fig.tight_layout()
-    for extension in ("svg", "png"):
-        fig.savefig(output_dir / f"top100_exact_rank_returns.{extension}", dpi=140)
-    plt.close(fig)
+    save_figure(fig, output_dir, "top100_exact_rank_returns")
 
 
 def plot_bucket_curves(curves: pd.DataFrame, *, variant: str, output_dir: Path) -> None:
     for scope in ("top1000", "pool_L"):
         scoped = curves.loc[curves["scope"].eq(scope)]
         fig, ax = plt.subplots(figsize=(14, 8))
-        for bucket_count in rb.BUCKET_COUNTS:
+        for bucket_count in BUCKET_COUNTS:
             series = scoped.loc[scoped["bucket_count"].eq(bucket_count)].sort_values("bucket")
             ax.plot(
                 series["x"],
@@ -304,21 +385,13 @@ def plot_bucket_curves(curves: pd.DataFrame, *, variant: str, output_dir: Path) 
         ax.set_ylabel("Mean pool_L next internal excess (bps)")
         ax.grid(True, alpha=0.3)
         ax.legend(loc="best")
-        fig.tight_layout()
-        for extension in ("svg", "png"):
-            fig.savefig(output_dir / f"{scope}_bucket_returns.{extension}", dpi=140)
-        plt.close(fig)
+        save_figure(fig, output_dir, f"{scope}_bucket_returns")
 
 
 def keep_requested_variant(output_dir: Path, *, variant: str) -> None:
     """Remove the legacy synthetic average emitted for a single-variant run."""
-    for name in (
-        "bucket_width_distribution_summary.csv",
-        "topk_shape_summary.csv",
-        "topk_internal_ic_summary.csv",
-        "bucket_width_within_ic_summary.csv",
-        "local_ic_window_summary.csv",
-    ):
+    names = "bucket_width_distribution_summary.csv topk_shape_summary.csv topk_internal_ic_summary.csv bucket_width_within_ic_summary.csv local_ic_window_summary.csv"
+    for name in names.split():
         path = output_dir / name
         frame = pd.read_csv(path)
         ms.write_frame(path, frame.loc[frame["variant"].eq(variant)].copy())
@@ -337,56 +410,34 @@ def run_rank_bucket(
     top_n: int,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    pool = load_stock_pool(pool_path)
-    labels: dict[str, pd.DataFrame] = {}
     group_parts: list[pd.DataFrame] = []
     bucket_parts: list[pd.DataFrame] = []
     curve_parts: list[pd.DataFrame] = []
     exact_parts: list[pd.DataFrame] = []
-    trace: dict[str, object] = {
-        "created_at_utc": datetime.now(UTC).isoformat(),
-        "prediction_root": str(prediction_root),
-        "next_label_root": str(next_label_root) if next_label_root is not None else None,
-        "prediction_next_label_col": prediction_next_label_col or None,
-        "pool_path": pool_path,
-        "variant": variant,
-        "run_id": run_id,
-        "months": {},
-        "top_n": top_n,
-        "inference_unit": "trading_day",
-        "hac": "Bartlett/Newey-West, maximum lag 5",
-    }
-    for month in months:
-        year = month[:4]
-        if not prediction_next_label_col and year not in labels:
-            if next_label_root is None:
-                raise ValueError("next_label_root is required without embedded prediction labels")
-            labels.clear()
-            labels[year] = ms.load_label_for_year(ms.next_label_path(next_label_root, year))
-        pred_path = ms.prediction_path(prediction_root, run_id, month)
-        print(f"rank/bucket shard {month}: {pred_path}", flush=True)
-        frame, shard_trace = load_ranked_pool_shard(
-            pred_path=pred_path,
-            labels=labels.get(year),
-            pool=pool,
-            prediction_next_label_col=prediction_next_label_col,
-        )
-        group_sizes = frame.groupby(ms.GROUP_COLS, observed=True)["group_size"].first()
-        complete_groups = group_sizes.loc[group_sizes.ge(top_n)]
-        shard_trace["pool_group_size_min"] = int(group_sizes.min())
-        shard_trace["pool_groups_total"] = int(len(group_sizes))
-        shard_trace["pool_groups_with_top_n"] = int(len(complete_groups))
-        shard_trace["pool_groups_below_top_n"] = int(len(group_sizes) - len(complete_groups))
-        if complete_groups.empty:
-            raise ValueError(f"no pool group has at least Top{top_n} rows")
-        if len(complete_groups) != len(group_sizes):
-            complete_index = pd.MultiIndex.from_frame(
-                complete_groups.index.to_frame(index=False)[ms.GROUP_COLS]
-            )
-            frame_index = pd.MultiIndex.from_frame(frame[ms.GROUP_COLS])
-            frame = frame.loc[frame_index.isin(complete_index)].copy()
+    trace = run_trace(
+        prediction_root,
+        next_label_root,
+        pool_path,
+        prediction_next_label_col=prediction_next_label_col,
+        variant=variant,
+        run_id=run_id,
+        months={},
+        top_n=top_n,
+        inference_unit="trading_day",
+        hac="Bartlett/Newey-West, maximum lag 5",
+    )
+    for month, frame, shard_trace in ranked_pool_shards(
+        prediction_root,
+        next_label_root,
+        prediction_next_label_col,
+        pool_path,
+        run_id,
+        months,
+        top_n,
+        "rank/bucket",
+    ):
         group_parts.append(build_group_ic(frame, variant=variant, top_n=top_n))
-        bucket_ic, curve_part = rb.build_bucket_diagnostics(frame, variant=variant)
+        bucket_ic, curve_part = build_bucket_diagnostics(frame, variant=variant)
         bucket_parts.append(bucket_ic)
         curve_parts.append(curve_part)
         exact_parts.append(exact_rank_part(frame, top_n=top_n))
@@ -394,31 +445,30 @@ def run_rank_bucket(
 
     group_ic = pd.concat(group_parts, ignore_index=True)
     bucket_ic = pd.concat(bucket_parts, ignore_index=True)
-    curves = rb.finalize_curve_data(pd.concat(curve_parts, ignore_index=True))
+    curves = finalize_curve_data(pd.concat(curve_parts, ignore_index=True))
     exact_curve = finalize_exact_rank(exact_parts, variant=variant)
     top100_subbuckets = build_top_rank_subbuckets(exact_curve)
     daily_ic, daily_summary = summarize_daily_ic(group_ic)
 
-    ms.write_frame(output_dir / "group_ic_values.csv", group_ic)
-    ms.write_frame(output_dir / "group_ic_summary.csv", summarize_group_ic(group_ic))
-    ms.write_frame(output_dir / "daily_ic_values.csv", daily_ic)
-    ms.write_frame(output_dir / "daily_ic_summary.csv", daily_summary)
-    ms.write_frame(output_dir / "bucket_group_rank_ic_values.csv", bucket_ic)
-    ms.write_frame(
-        output_dir / "bucket_group_rank_ic_summary.csv",
-        rb.summarize_ic(
+    outputs = {
+        "group_ic_values.csv": group_ic,
+        "group_ic_summary.csv": summarize_group_ic(group_ic),
+        "daily_ic_values.csv": daily_ic,
+        "daily_ic_summary.csv": daily_summary,
+        "bucket_group_rank_ic_values.csv": bucket_ic,
+        "bucket_group_rank_ic_summary.csv": summarize_ic(
             bucket_ic,
             value="bucket_rank_ic",
             keys=["variant", "scope", "bucket_count"],
         ),
-    )
-    ms.write_frame(output_dir / "bucket_curve_plot_data.csv", curves)
-    ms.write_frame(output_dir / "bucket_curve_rank_ic.csv", rb.curve_rank_ic(curves))
-    ms.write_frame(output_dir / "top1000_exact_rank_curve.csv", exact_curve)
-    ms.write_frame(
-        output_dir / "top1000_exact_rank_curve_summary.csv", exact_curve_summary(exact_curve)
-    )
-    ms.write_frame(output_dir / "top100_rank10_summary.csv", top100_subbuckets)
+        "bucket_curve_plot_data.csv": curves,
+        "bucket_curve_rank_ic.csv": curve_rank_ic(curves),
+        "top1000_exact_rank_curve.csv": exact_curve,
+        "top1000_exact_rank_curve_summary.csv": exact_curve_summary(exact_curve),
+        "top100_rank10_summary.csv": top100_subbuckets,
+    }
+    for name, frame in outputs.items():
+        ms.write_frame(output_dir / name, frame)
     plot_bucket_curves(curves, variant=variant, output_dir=output_dir)
     plot_top100_exact_rank_curve(
         exact_curve,
@@ -458,54 +508,39 @@ def main() -> None:
             "embedded prediction labels currently require --rank-bucket-only; "
             "the multiscale diagnostic still requires --next-label-root"
         )
+    common = {
+        "prediction_root": args.prediction_root,
+        "next_label_root": args.next_label_root,
+        "pool_path": args.pool_path,
+        "variant": args.variant,
+        "run_id": args.run_id,
+        "months": months,
+    }
     if args.top1000_bucket_return_histogram_only:
         run_top1000_bucket_return_histogram(
-            prediction_root=args.prediction_root,
-            next_label_root=args.next_label_root,
             prediction_next_label_col=args.prediction_next_label_col,
-            pool_path=args.pool_path,
             output_dir=args.output_dir,
-            variant=args.variant,
-            run_id=args.run_id,
-            months=months,
             bin_width_bps=args.histogram_bin_width_bps,
+            **common,
         )
         return
     if args.top100_return_histogram_only:
         run_top100_return_histogram(
-            prediction_root=args.prediction_root,
-            next_label_root=args.next_label_root,
-            pool_path=args.pool_path,
             output_dir=args.output_dir,
-            variant=args.variant,
-            run_id=args.run_id,
-            months=months,
             bin_width_bps=args.histogram_bin_width_bps,
+            **common,
         )
         return
     if args.top100_positive_histogram_only:
-        run_top100_positive_histogram(
-            prediction_root=args.prediction_root,
-            next_label_root=args.next_label_root,
-            pool_path=args.pool_path,
-            output_dir=args.output_dir,
-            variant=args.variant,
-            run_id=args.run_id,
-            months=months,
-        )
+        run_top100_positive_histogram(output_dir=args.output_dir, **common)
         return
     rank_output = args.output_dir / "rank_bucket"
     multiscale_output = args.output_dir / "multiscale"
     run_rank_bucket(
-        prediction_root=args.prediction_root,
-        next_label_root=args.next_label_root,
         prediction_next_label_col=args.prediction_next_label_col,
-        pool_path=args.pool_path,
         output_dir=rank_output,
-        variant=args.variant,
-        run_id=args.run_id,
-        months=months,
         top_n=args.top_n,
+        **common,
     )
     if args.rank_bucket_only:
         print(f"wrote {args.output_dir}", flush=True)

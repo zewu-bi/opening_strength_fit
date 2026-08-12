@@ -37,6 +37,10 @@ def frame_files(path: str | Path) -> list[Path]:
     return files
 
 
+def frame_files_many(paths: Iterable[str | Path]) -> list[Path]:
+    return [file for path in paths for file in frame_files(path)]
+
+
 def _filter_frame(frame: pd.DataFrame, filters: FrameFilters | None) -> pd.DataFrame:
     if not filters:
         return frame
@@ -122,6 +126,14 @@ def available_frame_columns(files: Iterable[Path]) -> set[str]:
     return columns
 
 
+def select_available_columns(
+    required: Iterable[str], optional: Iterable[str], available: set[str]
+) -> list[str]:
+    return list(
+        dict.fromkeys((*required, *(item for item in optional if item and item in available)))
+    )
+
+
 def read_frame_files(
     files: list[Path],
     *,
@@ -144,6 +156,33 @@ def read_frame_files(
     if not frames:
         raise SystemExit("no input files supplied")
     return pd.concat(frames, ignore_index=True)
+
+
+def merge_frame_support(
+    frame: pd.DataFrame,
+    support: pd.DataFrame,
+    *,
+    keys: Iterable[str],
+) -> pd.DataFrame:
+    if support.empty:
+        return frame
+    key_columns = list(keys)
+    keyed = support.drop_duplicates(key_columns, keep="last")
+    overlap = [
+        column for column in keyed.columns if column not in key_columns and column in frame.columns
+    ]
+    merged = frame.merge(
+        keyed,
+        on=key_columns,
+        how="left",
+        suffixes=("", "_support"),
+        validate="many_to_one",
+    )
+    for column in overlap:
+        support_col = f"{column}_support"
+        if support_col in merged.columns:
+            merged[column] = merged[column].combine_first(merged.pop(support_col))
+    return merged
 
 
 def write_frame(df: pd.DataFrame, path: str | Path, *, index: bool = False) -> None:

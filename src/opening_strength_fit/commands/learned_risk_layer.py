@@ -3,13 +3,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from opening_strength_fit.alpha_conditioning import (
     KEY_COLUMNS,
     add_group_rank,
     alpha_conditioned_reversal_risk,
+    candidate_sample_weight,
     fit_lgbm_config_section,
     predict_model_score,
     section_str,
@@ -17,24 +17,18 @@ from opening_strength_fit.alpha_conditioning import (
 from opening_strength_fit.analysis import (
     write_json,
 )
+from opening_strength_fit.commands.arguments import command_config
 from opening_strength_fit.config import (
     config_bool,
     config_float,
     config_float_mapping,
     config_int,
-    config_optional_int,
     config_str,
     config_value,
-    load_toml,
-    run_id,
-)
-from opening_strength_fit.feature_config import (
-    feature_filters_from_config,
-    feature_limit,
+    prepare_output_dir,
 )
 from opening_strength_fit.io import read_frame, write_frame
-from opening_strength_fit.labels import finite_numeric_series
-from opening_strength_fit.model import evaluate_prediction_frame, fit_lightgbm_frame, predict_frame
+from opening_strength_fit.model import evaluate_prediction_frame, predict_frame
 from opening_strength_fit.next_close_labels import add_next_close_label_arguments
 from opening_strength_fit.reports import (
     dataset_summary,
@@ -42,23 +36,17 @@ from opening_strength_fit.reports import (
     print_mapping,
 )
 from opening_strength_fit.risk_labels import (
+    RISK_RANK_MAX,
+    RISK_RANK_MIN,
     load_risk_next_close_labels,
     next_close_label_request,
+    rank_risk_components,
+    short_next_ranks,
 )
+from opening_strength_fit.schema import normalize_decision_keys
 from opening_strength_fit.training_args import build_training_parser
 from opening_strength_fit.training_data import load_labeled_pvc_frame
 from opening_strength_fit.training_windows import date_splits
-
-RISK_RANK_MIN = {
-    "ask_depth_10": 0.40,
-    "depth_imbalance_10": 0.20,
-}
-RISK_RANK_MAX = {
-    "spread_bps": 0.80,
-    "turnover_diff_10t": 0.80,
-    "return_10t": 0.70,
-    "depth_imbalance_10": 0.70,
-}
 
 
 def parse_args() -> argparse.Namespace:
@@ -67,70 +55,44 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def risk_rank_config(config: dict) -> tuple[dict[str, float], dict[str, float]]:
+def manual_dirty_risk(frame: pd.DataFrame, config: dict) -> pd.Series:
     rank_min = config_float_mapping(config, "risk_layer", "risk_rank_min") or RISK_RANK_MIN
     rank_max = config_float_mapping(config, "risk_layer", "risk_rank_max") or RISK_RANK_MAX
-    return rank_min, rank_max
-
-
-def manual_dirty_risk(frame: pd.DataFrame, config: dict) -> pd.Series:
-    rank_min, rank_max = risk_rank_config(config)
-    groupers = [frame["date"], frame["decision_target_timestamp"]]
-    components = []
-    for column in sorted(set(rank_min) | set(rank_max)):
-        if column not in frame.columns:
-            raise SystemExit(f"risk teacher missing required column: {column}")
-        values = pd.to_numeric(frame[column], errors="coerce").replace(
-            [np.inf, -np.inf],
-            np.nan,
-        )
-        rank = values.groupby(groupers).rank(method="average", pct=True)
-        risks = []
-        if column in rank_min:
-            threshold = float(rank_min[column])
-            risks.append(((threshold - rank) / threshold).clip(lower=0.0, upper=1.0))
-        if column in rank_max:
-            threshold = float(rank_max[column])
-            risks.append(((rank - threshold) / (1.0 - threshold)).clip(lower=0.0, upper=1.0))
-        components.append(pd.concat(risks, axis=1).max(axis=1).fillna(0.0))
-    if not components:
+    if not rank_min and not rank_max:
         raise SystemExit("risk teacher config produced no risk components")
-    return pd.concat(components, axis=1).mean(axis=1).clip(lower=0.0, upper=1.0)
+    return rank_risk_components(
+        frame,
+        rank_min=rank_min,
+        rank_max=rank_max,
+        context="risk teacher",
+    ).mean(axis=1)
 
 
-def load_or_fetch_next_close_labels(
+def add_next_close_labels(
     labeled: pd.DataFrame,
-    *,
     args: argparse.Namespace,
     config: dict,
     output_dir: Path,
 ) -> pd.DataFrame:
-    return load_risk_next_close_labels(
-        labeled,
-        request=next_close_label_request(args, config),
-        output_dir=output_dir,
+    return labeled.merge(
+        load_risk_next_close_labels(
+            labeled,
+            request=next_close_label_request(args, config),
+            output_dir=output_dir,
+        ),
+        on=list(KEY_COLUMNS),
+        how="left",
     )
+
+
+def _target_column(config: dict, default: str) -> str:
+    return config_str(config, "risk_layer", "target_col", default)
 
 
 def bad_tail_risk(labeled: pd.DataFrame, config: dict) -> pd.Series:
-    if "alpha_return_next_close" not in labeled.columns:
-        raise SystemExit("bad-tail target requires alpha_return_next_close")
     short_rank_min = config_float(config, "risk_layer", "short_rank_min", 0.50)
     next_rank_max = config_float(config, "risk_layer", "next_rank_max", 0.50)
-    groupers = [labeled["date"], labeled["decision_target_timestamp"]]
-    short_rank = (
-        finite_numeric_series(labeled["label"])
-        .groupby(groupers)
-        .rank(
-            method="average",
-            pct=True,
-        )
-    )
-    next_rank = (
-        finite_numeric_series(labeled["alpha_return_next_close"])
-        .groupby(groupers)
-        .rank(method="average", pct=True)
-    )
+    short_rank, next_rank = short_next_ranks(labeled, context="bad-tail target")
     short_component = ((short_rank - short_rank_min) / (1.0 - short_rank_min)).clip(
         lower=0.0,
         upper=1.0,
@@ -147,13 +109,7 @@ def normalize_candidate_alpha_scores(frame: pd.DataFrame, *, score_col: str) -> 
     missing = [column for column in required if column not in frame.columns]
     if missing:
         raise SystemExit(f"candidate alpha input missing columns: {missing}")
-    out = frame[required].copy()
-    out["date"] = out["date"].astype(str)
-    out["symbol"] = out["symbol"].astype(str)
-    out["decision_target_timestamp"] = pd.to_datetime(
-        out["decision_target_timestamp"],
-        errors="coerce",
-    )
+    out = normalize_decision_keys(frame[required])
     out["candidate_alpha_score"] = pd.to_numeric(out[score_col], errors="coerce")
     return out.dropna(
         subset=["decision_target_timestamp", "candidate_alpha_score"]
@@ -211,17 +167,6 @@ def add_fit_alpha_conditioning_rank(
         errors="coerce",
     )
     alpha_predictions["candidate_alpha_score"] = alpha_predictions["alpha_conditioning_prediction"]
-    keep_columns = [
-        column
-        for column in [
-            *KEY_COLUMNS,
-            "label",
-            "alpha_conditioning_prediction",
-            "candidate_alpha_score",
-        ]
-        if column in alpha_predictions.columns
-    ]
-    alpha_predictions = alpha_predictions[keep_columns].copy()
     alpha_predictions.to_parquet(output_dir / "alpha_conditioning_predictions.parquet", index=False)
 
     out = labeled.merge(
@@ -291,21 +236,9 @@ def conditional_bad_tail_risk(
     labeled: pd.DataFrame,
     config: dict,
 ) -> tuple[pd.Series, pd.Series, pd.Series | None]:
-    if "alpha_return_next_close" not in labeled.columns:
-        raise SystemExit("conditional bad-tail target requires alpha_return_next_close")
-    groupers = [labeled["date"], labeled["decision_target_timestamp"]]
-    short_rank = (
-        finite_numeric_series(labeled["label"])
-        .groupby(groupers)
-        .rank(
-            method="average",
-            pct=True,
-        )
-    )
-    next_rank = (
-        finite_numeric_series(labeled["alpha_return_next_close"])
-        .groupby(groupers)
-        .rank(method="average", pct=True)
+    short_rank, next_rank = short_next_ranks(
+        labeled,
+        context="conditional bad-tail target",
     )
 
     candidate = pd.Series(False, index=labeled.index)
@@ -351,21 +284,20 @@ def conditional_bad_tail_risk(
 
     risk = risk.where(candidate, 0.0).fillna(0.0).clip(lower=0.0, upper=1.0)
 
-    sample_weight: pd.Series | None = None
-    non_candidate_weight = config_float(
-        config,
-        "risk_layer",
-        "non_candidate_weight",
-        1.0,
-    )
-    candidate_weight = config_float(config, "risk_layer", "candidate_weight", 1.0)
-    if non_candidate_weight != 1.0 or candidate_weight != 1.0:
-        sample_weight = pd.Series(
-            np.where(candidate, candidate_weight, non_candidate_weight),
-            index=labeled.index,
-            dtype="float64",
-        )
+    sample_weight = candidate_sample_weight(candidate, config, 1.0)
     return risk, candidate.astype("bool"), sample_weight
+
+
+def apply_risk_sample_weight(
+    labeled: pd.DataFrame,
+    sample_weight: pd.Series | None,
+    config: dict,
+) -> None:
+    if sample_weight is None:
+        return
+    weight_col = config_str(config, "risk_layer", "sample_weight_col", "risk_sample_weight")
+    labeled[weight_col] = sample_weight
+    config.setdefault("model", {}).setdefault("sample_weight_col", weight_col)
 
 
 def add_risk_target(
@@ -377,18 +309,12 @@ def add_risk_target(
 ) -> tuple[pd.DataFrame, str]:
     target_kind = config_str(config, "risk_layer", "target", "guard_teacher").strip().lower()
     if target_kind in {"guard_teacher", "dirty_risk", "manual_dirty_risk"}:
-        target_col = config_str(config, "risk_layer", "target_col", "target_dirty_risk")
+        target_col = _target_column(config, "target_dirty_risk")
         labeled[target_col] = manual_dirty_risk(labeled, config)
         return labeled, target_col
     if target_kind in {"bad_tail", "next_flip", "next_underperformance"}:
-        target_col = config_str(config, "risk_layer", "target_col", "target_bad_tail_risk")
-        labels = load_or_fetch_next_close_labels(
-            labeled,
-            args=args,
-            config=config,
-            output_dir=output_dir,
-        )
-        labeled = labeled.merge(labels, on=list(KEY_COLUMNS), how="left")
+        target_col = _target_column(config, "target_bad_tail_risk")
+        labeled = add_next_close_labels(labeled, args, config, output_dir)
         labeled[target_col] = bad_tail_risk(labeled, config)
         return labeled, target_col
     if target_kind in {
@@ -396,69 +322,31 @@ def add_risk_target(
         "conditional_reversal",
         "conditional_next_flip",
     }:
-        target_col = config_str(
-            config,
-            "risk_layer",
-            "target_col",
-            "target_conditional_bad_tail_risk",
-        )
-        labels = load_or_fetch_next_close_labels(
-            labeled,
-            args=args,
-            config=config,
-            output_dir=output_dir,
-        )
-        labeled = labeled.merge(labels, on=list(KEY_COLUMNS), how="left")
+        target_col = _target_column(config, "target_conditional_bad_tail_risk")
+        labeled = add_next_close_labels(labeled, args, config, output_dir)
         labeled = add_candidate_alpha_rank(labeled, config)
         risk, candidate, sample_weight = conditional_bad_tail_risk(labeled, config)
         labeled[target_col] = risk
         labeled["target_conditional_candidate"] = candidate
-        if sample_weight is not None:
-            weight_col = config_str(
-                config,
-                "risk_layer",
-                "sample_weight_col",
-                "risk_sample_weight",
-            )
-            labeled[weight_col] = sample_weight
-            config.setdefault("model", {}).setdefault("sample_weight_col", weight_col)
+        apply_risk_sample_weight(labeled, sample_weight, config)
         return labeled, target_col
     if target_kind in {
         "alpha_conditioned_reversal",
         "alpha_conditioned_bad_tail",
         "alpha_conditioned_next_flip",
     }:
-        target_col = config_str(
-            config,
-            "risk_layer",
-            "target_col",
-            "target_alpha_conditioned_reversal_risk",
-        )
+        target_col = _target_column(config, "target_alpha_conditioned_reversal_risk")
         labeled = add_alpha_conditioning_rank(
             labeled,
             args=args,
             config=config,
             output_dir=output_dir,
         )
-        labels = load_or_fetch_next_close_labels(
-            labeled,
-            args=args,
-            config=config,
-            output_dir=output_dir,
-        )
-        labeled = labeled.merge(labels, on=list(KEY_COLUMNS), how="left")
+        labeled = add_next_close_labels(labeled, args, config, output_dir)
         risk, candidate, sample_weight = alpha_conditioned_reversal_risk(labeled, config)
         labeled[target_col] = risk
         labeled["target_alpha_conditioned_candidate"] = candidate
-        if sample_weight is not None:
-            weight_col = config_str(
-                config,
-                "risk_layer",
-                "sample_weight_col",
-                "risk_sample_weight",
-            )
-            labeled[weight_col] = sample_weight
-            config.setdefault("model", {}).setdefault("sample_weight_col", weight_col)
+        apply_risk_sample_weight(labeled, sample_weight, config)
         return labeled, target_col
     raise SystemExit(
         f"unknown [risk_layer].target={target_kind!r}; expected guard_teacher, "
@@ -479,26 +367,13 @@ def fit_predict_split(
 ) -> tuple[pd.DataFrame, dict[str, object], dict[str, object]]:
     train = labeled.loc[labeled["date"].isin(split.train_dates)].copy()
     test = labeled.loc[labeled["date"].isin(split.test_dates)].copy()
-    model, train_stats = fit_lightgbm_frame(
+    model, train_stats = fit_lgbm_config_section(
         train,
-        feature_limit=feature_limit(args, config),
+        args=args,
+        config=config,
+        section="model",
         target_col=target_col,
         sample_weight_col=config_str(config, "model", "sample_weight_col", ""),
-        feature_filters=feature_filters_from_config(config),
-        n_estimators=config_int(config, "model", "n_estimators", 300),
-        learning_rate=config_float(config, "model", "learning_rate", 0.03),
-        num_leaves=config_int(config, "model", "num_leaves", 63),
-        max_depth=config_int(config, "model", "max_depth", -1),
-        min_child_samples=config_int(config, "model", "min_child_samples", 200),
-        subsample=config_float(config, "model", "subsample", 1.0),
-        colsample_bytree=config_float(config, "model", "colsample_bytree", 1.0),
-        reg_alpha=config_float(config, "model", "reg_alpha", 0.0),
-        reg_lambda=config_float(config, "model", "reg_lambda", 0.0),
-        random_state=config_int(config, "model", "random_state", 7),
-        n_jobs=config_int(config, "model", "n_jobs", -1),
-        device_type=config_str(config, "model", "device_type", "cpu"),
-        max_bin=config_optional_int(config, "model", "max_bin", None),
-        gpu_use_dp=False,
     )
     predictions = predict_frame(model, test)
     predictions["prediction"] = pd.to_numeric(predictions["prediction"], errors="coerce")
@@ -538,13 +413,8 @@ def fit_predict_split(
 
 def main() -> None:
     args = parse_args()
-    config = load_toml(args.config) if args.config else {}
-    run_name = run_id(config, args.config) if args.config else "learned_risk_layer"
-    output_dir = Path(
-        args.output_dir
-        or config_str(config, "output", "local_dir", f"output/legacy/analysis/{run_name}")
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
+    config, run_name = command_config(args, "learned_risk_layer")
+    output_dir = prepare_output_dir(config, args.output_dir, run_name)
 
     labeled = load_labeled_pvc_frame(args, config)
     labeled, target_col = add_risk_target(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from functools import cached_property
+from functools import cached_property, partial
 
 import numpy as np
 import pandas as pd
@@ -28,6 +28,24 @@ _COUNT_COLUMNS = {
     "total_ask_count",
     "total_bid_count",
 }
+
+_REFERENCE_PRICE_COLUMNS = ("ask_price_1", "mid_price", "preopen_last_price", "avg_ask_price")
+_MARKET_CAP_COLUMNS = (
+    "market_cap",
+    "total_market_cap",
+    "mkt_cap",
+    "total_mkt_cap",
+    "float_market_cap",
+)
+_SHARE_COLUMNS = (
+    "total_shares",
+    "shares_outstanding",
+    "total_share",
+    "share_capital",
+    "float_shares",
+    "circulating_shares",
+    "free_float_shares",
+)
 
 _DIMENSIONLESS_NAME_MARKERS = (
     "_bps",
@@ -144,14 +162,21 @@ def _reference_mid(frame: pd.DataFrame) -> pd.Series:
     return _positive(fallback)
 
 
+def _first_positive_column(
+    frame: pd.DataFrame,
+    columns: tuple[str, ...],
+) -> pd.Series | None:
+    for column in columns:
+        if column in frame.columns:
+            values = _positive(_clean_values(frame, column))
+            if values.notna().any():
+                return values
+    return None
+
+
 def _reference_price(frame: pd.DataFrame) -> pd.Series:
-    for column in ("ask_price_1", "mid_price", "preopen_last_price", "avg_ask_price"):
-        if column not in frame.columns:
-            continue
-        values = _positive(_clean_values(frame, column))
-        if values.notna().any():
-            return values
-    return pd.Series(np.nan, index=frame.index, dtype="float64")
+    values = _first_positive_column(frame, _REFERENCE_PRICE_COLUMNS)
+    return values if values is not None else pd.Series(np.nan, index=frame.index, dtype="float64")
 
 
 def _side_depth(frame: pd.DataFrame, column: str) -> pd.Series:
@@ -176,18 +201,9 @@ def _historical_ratio(frame: pd.DataFrame, column: str) -> pd.Series | None:
 
 
 def _reference_market_cap(frame: pd.DataFrame) -> pd.Series:
-    for column in (
-        "market_cap",
-        "total_market_cap",
-        "mkt_cap",
-        "total_mkt_cap",
-        "float_market_cap",
-    ):
-        if column not in frame.columns:
-            continue
-        values = _positive(_clean_values(frame, column))
-        if values.notna().any():
-            return values
+    values = _first_positive_column(frame, _MARKET_CAP_COLUMNS)
+    if values is not None:
+        return values
 
     historical_turnover = _historical_daily_activity_reference(frame, "turnover")
     if historical_turnover.notna().any():
@@ -200,35 +216,13 @@ def _reference_market_cap(frame: pd.DataFrame) -> pd.Series:
 
 
 def _reference_shares(frame: pd.DataFrame) -> pd.Series:
-    for column in (
-        "total_shares",
-        "shares_outstanding",
-        "total_share",
-        "share_capital",
-        "float_shares",
-        "circulating_shares",
-        "free_float_shares",
-    ):
-        if column not in frame.columns:
-            continue
-        values = _positive(_clean_values(frame, column))
-        if values.notna().any():
-            return values
+    shares = _first_positive_column(frame, _SHARE_COLUMNS)
+    if shares is not None:
+        return shares
 
-    market_cap = pd.Series(np.nan, index=frame.index, dtype="float64")
-    for column in (
-        "market_cap",
-        "total_market_cap",
-        "mkt_cap",
-        "total_mkt_cap",
-        "float_market_cap",
-    ):
-        if column not in frame.columns:
-            continue
-        values = _positive(_clean_values(frame, column))
-        if values.notna().any():
-            market_cap = values
-            break
+    market_cap = _first_positive_column(frame, _MARKET_CAP_COLUMNS)
+    if market_cap is None:
+        market_cap = pd.Series(np.nan, index=frame.index, dtype="float64")
     price = _reference_price(frame)
     market_cap_shares = _positive(pd.Series(safe_divide(market_cap, price), index=frame.index))
     if market_cap_shares.notna().any():
@@ -246,11 +240,6 @@ def _historical_daily_activity_reference(frame: pd.DataFrame, kind: str) -> pd.S
         if values.notna().any():
             return values
     return pd.Series(np.nan, index=frame.index, dtype="float64")
-
-
-def _total_book_count(frame: pd.DataFrame) -> pd.Series:
-    total = _clean_values(frame, "total_ask_count") + _clean_values(frame, "total_bid_count")
-    return _positive(total)
 
 
 class _MechanismizedV3References:
@@ -433,6 +422,29 @@ def mechanismized_v3_changed_feature_columns(columns: tuple[str, ...]) -> tuple[
     return tuple(changed)
 
 
+def _mechanismized_price_series(
+    name: str,
+    values: pd.Series,
+    *,
+    mid: pd.Series,
+    price: pd.Series,
+    tick_size: float,
+) -> pd.Series:
+    if name == "mid_price":
+        return pd.Series(safe_divide(float(tick_size), _positive(values)) * 10_000.0)
+    if name == "ask_price_1":
+        transformed = safe_divide(values - mid, mid)
+    elif name == "bid_price_1":
+        transformed = safe_divide(mid - values, mid)
+    elif name.startswith("trade_vwap_"):
+        transformed = safe_divide(values - price, price)
+    elif _is_price_diff_name(name):
+        transformed = safe_divide(values, price)
+    else:
+        transformed = safe_divide(values - mid, mid)
+    return pd.Series(transformed * 10_000.0, index=values.index)
+
+
 def _mechanismized_feature_series(
     frame: pd.DataFrame,
     column: str,
@@ -457,17 +469,7 @@ def _mechanismized_feature_series(
         return values
 
     if _is_raw_price_name(name):
-        if name == "mid_price":
-            return pd.Series(safe_divide(float(tick_size), _positive(values)) * 10_000.0)
-        if name == "ask_price_1":
-            return pd.Series(safe_divide(values - mid, mid) * 10_000.0, index=frame.index)
-        if name == "bid_price_1":
-            return pd.Series(safe_divide(mid - values, mid) * 10_000.0, index=frame.index)
-        if name.startswith("trade_vwap_"):
-            return pd.Series(safe_divide(values - price, price) * 10_000.0, index=frame.index)
-        if _is_price_diff_name(name):
-            return pd.Series(safe_divide(values, price) * 10_000.0, index=frame.index)
-        return pd.Series(safe_divide(values - mid, mid) * 10_000.0, index=frame.index)
+        return _mechanismized_price_series(name, values, mid=mid, price=price, tick_size=tick_size)
 
     if _is_share_volume_name(name):
         base_depth = _side_depth(frame, name)
@@ -510,17 +512,7 @@ def _mechanismized_v2_feature_series(
         return ratio if ratio is not None else np.log1p(values.clip(lower=0.0))
 
     if _is_raw_price_name(name):
-        if name == "mid_price":
-            return pd.Series(safe_divide(float(tick_size), _positive(values)) * 10_000.0)
-        if name == "ask_price_1":
-            return pd.Series(safe_divide(values - mid, mid) * 10_000.0, index=frame.index)
-        if name == "bid_price_1":
-            return pd.Series(safe_divide(mid - values, mid) * 10_000.0, index=frame.index)
-        if name.startswith("trade_vwap_"):
-            return pd.Series(safe_divide(values - price, price) * 10_000.0, index=frame.index)
-        if _is_price_diff_name(name):
-            return pd.Series(safe_divide(values, price) * 10_000.0, index=frame.index)
-        return pd.Series(safe_divide(values - mid, mid) * 10_000.0, index=frame.index)
+        return _mechanismized_price_series(name, values, mid=mid, price=price, tick_size=tick_size)
 
     if _is_book_depth_name(name):
         return _signed_log1p(values * price)
@@ -570,31 +562,12 @@ def _mechanismized_v3_feature_series(
         return pd.Series(safe_divide(values, float(tick_size)), index=frame.index)
 
     if _is_raw_price_name(name):
-        if name == "mid_price":
-            return pd.Series(safe_divide(float(tick_size), _positive(values)) * 10_000.0)
-        if name == "ask_price_1":
-            return pd.Series(
-                safe_divide(values - references.mid, references.mid) * 10_000.0,
-                index=frame.index,
-            )
-        if name == "bid_price_1":
-            return pd.Series(
-                safe_divide(references.mid - values, references.mid) * 10_000.0,
-                index=frame.index,
-            )
-        if name.startswith("trade_vwap_"):
-            return pd.Series(
-                safe_divide(values - references.price, references.price) * 10_000.0,
-                index=frame.index,
-            )
-        if _is_price_diff_name(name):
-            return pd.Series(
-                safe_divide(values, references.price) * 10_000.0,
-                index=frame.index,
-            )
-        return pd.Series(
-            safe_divide(values - references.mid, references.mid) * 10_000.0,
-            index=frame.index,
+        return _mechanismized_price_series(
+            name,
+            values,
+            mid=references.mid,
+            price=references.price,
+            tick_size=tick_size,
         )
 
     if _is_book_level_share_name(name):
@@ -686,9 +659,7 @@ def transform_mechanismized_feature_values(
         group_cols=group_cols,
         rank_method=rank_method,
         cross_sectional_mode=cross_sectional_mode,
-        transform=lambda column: _mechanismized_feature_series(
-            frame, column, tick_size=float(tick_size)
-        ),
+        transform=partial(_mechanismized_feature_series, frame, tick_size=float(tick_size)),
     )
 
 
@@ -709,9 +680,7 @@ def transform_mechanismized_v2_feature_values(
         group_cols=group_cols,
         rank_method=rank_method,
         cross_sectional_mode=cross_sectional_mode,
-        transform=lambda column: _mechanismized_v2_feature_series(
-            frame, column, tick_size=float(tick_size)
-        ),
+        transform=partial(_mechanismized_v2_feature_series, frame, tick_size=float(tick_size)),
     )
 
 
@@ -733,9 +702,9 @@ def transform_mechanismized_v3_feature_values(
         group_cols=group_cols,
         rank_method=rank_method,
         cross_sectional_mode=cross_sectional_mode,
-        transform=lambda column: _mechanismized_v3_feature_series(
+        transform=partial(
+            _mechanismized_v3_feature_series,
             frame,
-            column,
             tick_size=float(tick_size),
             references=references,
         ),

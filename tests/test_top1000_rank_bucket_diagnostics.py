@@ -12,6 +12,7 @@ from opening_strength_fit.legacy.top1000_rank_data import (
     TOP1000_RETURN_HISTOGRAM_Y_LIMITS,
     TOP1000_SCORE_BUCKETS,
     load_ranked_pool_shard,
+    ranked_pool_shards,
 )
 from opening_strength_fit.legacy.top1000_return_histograms import (
     plot_score_bucket_histograms,
@@ -62,6 +63,48 @@ def test_ranked_pool_shard_can_reuse_embedded_next_label(tmp_path: Path) -> None
     assert frame["excess_bps"].tolist() == pytest.approx([200.0, 0.0, -200.0])
     assert trace["next_label_source"] == "prediction:label_next_close"
     assert trace["missing_labels"] == 0
+
+
+def test_ranked_pool_shards_discards_groups_smaller_than_top_n(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pred_path = tmp_path / "run" / "month_2025-01" / "predictions.parquet"
+    pred_path.parent.mkdir(parents=True)
+    timestamps = ["2025-01-02 09:31:00"] * 3 + ["2025-01-02 09:32:00"] * 2
+    symbols = [f"00000{index}.SZ" for index in range(1, 6)]
+    pd.DataFrame(
+        {
+            "date": ["2025-01-02"] * 5,
+            "symbol": symbols,
+            "decision_target_timestamp": pd.to_datetime(timestamps),
+            "prediction": [0.5, 0.4, 0.3, 0.2, 0.1],
+            "label_next_close": [0.05, 0.04, 0.03, 0.02, 0.01],
+        }
+    ).to_parquet(pred_path, index=False)
+    pool = pd.DataFrame([[True] * 5], index=["2025-01-02"], columns=symbols)
+    monkeypatch.setattr(
+        "opening_strength_fit.legacy.multiscale_bucket_diag.load_stock_pool", lambda _: pool
+    )
+
+    shards = list(
+        ranked_pool_shards(
+            tmp_path,
+            None,
+            "label_next_close",
+            "unused",
+            "run",
+            ["2025-01"],
+            3,
+            "test",
+        )
+    )
+
+    month, frame, trace = shards[0]
+    assert month == "2025-01"
+    assert len(frame) == 3
+    assert trace["pool_groups_total"] == 2
+    assert trace["pool_groups_with_top_n"] == 1
+    assert trace["pool_groups_below_top_n"] == 1
 
 
 def test_score_bucket_histogram_plot_has_fixed_acceptance_window(

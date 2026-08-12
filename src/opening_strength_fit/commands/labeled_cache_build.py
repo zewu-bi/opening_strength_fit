@@ -9,7 +9,13 @@ from opening_strength_fit.cache_manifest import (
     validate_cache_manifest,
     write_cache_manifest,
 )
-from opening_strength_fit.config import config_list, config_str, config_value, load_toml, run_id
+from opening_strength_fit.commands.arguments import command_config
+from opening_strength_fit.config import (
+    config_list,
+    config_str,
+    config_value,
+    prepare_output_dir,
+)
 from opening_strength_fit.io import read_frame, write_json
 from opening_strength_fit.reports import dataset_summary, print_mapping
 from opening_strength_fit.training_args import build_training_parser
@@ -65,14 +71,9 @@ def main() -> None:
         "Build a labeled opening cache from ClickHouse without training a model."
     )
     args = parser.parse_args()
-    config = load_toml(args.config) if args.config else {}
+    config, run_name = command_config(args, "labeled_cache")
     shard_year = _apply_cache_year_shard(config)
-    run_name = run_id(config, args.config) if args.config else "labeled_cache"
-    output_dir = Path(
-        args.output_dir
-        or config_str(config, "output", "local_dir", f"output/legacy/analysis/{run_name}")
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = prepare_output_dir(config, args.output_dir, run_name)
 
     cache_path = resolve_cache_path(config)
     if cache_path is None:

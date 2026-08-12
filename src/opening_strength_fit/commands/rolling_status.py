@@ -74,17 +74,13 @@ def main() -> None:
     args = parse_args()
     config_path = Path(args.config)
     config = load_toml(config_path)
+    window = config["window"]
+    test_months = int(window.get("test_months", 1) or 1)
     windows = month_window_periods(
-        str(config["window"]["test_start_month"]),
-        str(config["window"]["test_end_month"]),
-        test_months=int(config.get("window", {}).get("test_months", 1) or 1),
-        stride_months=int(
-            config.get("window", {}).get(
-                "test_stride_months",
-                config.get("window", {}).get("test_months", 1),
-            )
-            or 1
-        ),
+        str(window["test_start_month"]),
+        str(window["test_end_month"]),
+        test_months=test_months,
+        stride_months=int(window.get("test_stride_months", test_months) or 1),
     )
     month_labels = [start if start == end else f"{start}..{end}" for start, end in windows]
     job_name = args.job_name or rendered_job_name(config_path, Path(args.jobs_dir), config)

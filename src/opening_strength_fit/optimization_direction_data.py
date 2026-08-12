@@ -11,6 +11,57 @@ RETURN_BPS_DENOMINATOR = 10_000.0
 NEXT_CLOSE_CAPITAL_DIVISOR = 2.0
 DEFAULT_POOL_FEE_MODE = "stock_pool_membership"
 POOL_FEE_MODES = ("round_trip", "stock_pool_membership", "summary_estimate")
+CAPACITY_CUMULATIVE_FEE_COLUMNS = (
+    "capacity_fee_bps_per_trade",
+    "capacity_audit_fee_bps_per_trade",
+    "capacity_additional_fee_bps_per_trade",
+    "capacity_additional_fee_bps",
+)
+CUMULATIVE_PLOT_VALUE_COLUMNS = (
+    "decision_groups",
+    "clocks",
+    "candidate_rows",
+    "selected_rows",
+    "capacity_decision_groups",
+    "capacity_daily_capital_fraction",
+    "capacity_total_notional",
+    "capacity_decision_notional",
+    "pool_next_mean_bps",
+    "pool_turnover",
+    "pool_turnover_source",
+    "pool_fee_bps",
+    "pool_next_net_return_bps",
+    "pool_next_capital_net_return_bps",
+    "pool_next_cumulative_net_return_bps",
+    "pool_next_net_pnl",
+    "pool_next_cumulative_net_pnl",
+    "selected_next_mean_bps",
+    "selected_turnover",
+    "selected_fee_bps",
+    "next_internal_excess_bps",
+    "next_capital_internal_excess_bps",
+    "next_cumulative_internal_excess_return_bps",
+    "next_internal_excess_pnl",
+    "next_cumulative_internal_excess_pnl",
+    "fee_bps",
+    "next_net_return_bps",
+    "next_capital_net_return_bps",
+    "next_cumulative_net_return_bps",
+    "next_net_pnl",
+    "next_cumulative_net_pnl",
+)
+REALIZED_SOURCE_VALUE_COLUMNS = (
+    "decision_groups",
+    "clocks",
+    "candidate_rows",
+    "selected_rows",
+    "pool_short_mean_bps",
+    "selected_short_mean_bps",
+    "short_internal_excess_bps",
+    "pool_next_mean_bps",
+    "selected_next_mean_bps",
+    "next_internal_excess_bps",
+)
 
 
 @dataclass(frozen=True)
@@ -44,6 +95,17 @@ DEFAULT_DIRECTIONS = (
 )
 
 
+def _read_pool_rows(path: Path, required: set[str], pool: str) -> pd.DataFrame:
+    frame = pd.read_csv(path)
+    missing = sorted(required - set(frame.columns))
+    if missing:
+        raise ValueError(f"{path} missing columns: {missing}")
+    item = frame.loc[frame["pool"].astype(str).eq(pool)].copy()
+    if item.empty:
+        raise ValueError(f"{path} has no rows for pool {pool!r}")
+    return item
+
+
 def load_horizon_plot_data(
     *,
     backtests_root: Path,
@@ -62,13 +124,7 @@ def load_horizon_plot_data(
     frames = []
     for direction in directions:
         path = backtests_root / direction.run_id / f"{horizon}_excess_rank_ic_plot_data.csv"
-        frame = pd.read_csv(path)
-        missing = sorted(required - set(frame.columns))
-        if missing:
-            raise ValueError(f"{path} missing columns: {missing}")
-        item = frame.loc[frame["pool"].astype(str).eq(pool)].copy()
-        if item.empty:
-            raise ValueError(f"{path} has no rows for pool {pool!r}")
+        item = _read_pool_rows(path, required, pool)
         item["pool"] = direction.key
         item["pool_label"] = direction.label
         item["variant"] = direction.label
@@ -94,104 +150,84 @@ def load_realized_cumulative_plot_data(
 ) -> pd.DataFrame:
     if pool_fee_mode not in POOL_FEE_MODES:
         raise ValueError(f"unknown pool_fee_mode {pool_fee_mode!r}; expected {POOL_FEE_MODES}")
-    required = {
-        "pool",
-        "date",
-        "candidate_rows",
-        "selected_rows",
-        "pool_short_mean_bps",
-        "selected_short_mean_bps",
-        "short_internal_excess_bps",
-        "pool_next_mean_bps",
-        "selected_next_mean_bps",
-        "next_internal_excess_bps",
-    }
+    required = {"pool", "date", *REALIZED_SOURCE_VALUE_COLUMNS[2:]}
     pool_turnover_by_date = (
         try_load_pool_turnover_by_date(_resolve_pool_turnover_path(pool, pool_turnover_path))
         if pool_fee_mode == "stock_pool_membership"
         else None
     )
-    frames = []
+    sources: list[tuple[DirectionSpec, str, bool, pd.Series | None]] = []
     if include_baseline_pool:
-        frames.append(
-            _load_one_realized_plot_data(
-                path=backtests_root / baseline_run_id / "daily_pool_internal_summary.csv",
-                source_pool=pool,
-                key="baseline_pool_l",
-                label=baseline_label,
-                required=required,
-                fee_bps=fee_bps,
-                pool_turnover_by_date=pool_turnover_by_date,
-                pool_fee_mode=pool_fee_mode,
+        sources.append(
+            (
+                DirectionSpec("baseline_pool_l", baseline_run_id, baseline_label),
+                pool,
+                False,
+                pool_turnover_by_date,
             )
         )
     if include_baseline_universe:
-        frames.append(
-            _load_one_realized_plot_data(
-                path=backtests_root / baseline_run_id / "daily_pool_internal_summary.csv",
-                source_pool="universe",
-                key="baseline_universe",
-                label=f"{baseline_label} universe",
-                required=required,
-                fee_bps=fee_bps,
-                next_only=True,
-                pool_turnover_by_date=None,
-                pool_fee_mode=pool_fee_mode,
+        sources.append(
+            (
+                DirectionSpec("baseline_universe", baseline_run_id, f"{baseline_label} universe"),
+                "universe",
+                True,
+                None,
             )
         )
-    for direction in directions:
-        frames.append(
-            _load_one_realized_plot_data(
-                path=backtests_root / direction.run_id / "daily_pool_internal_summary.csv",
-                source_pool=pool,
-                key=direction.key,
-                label=direction.label,
-                required=required,
-                fee_bps=fee_bps,
-                pool_turnover_by_date=pool_turnover_by_date,
-                pool_fee_mode=pool_fee_mode,
-            )
+    sources.extend((direction, pool, False, pool_turnover_by_date) for direction in directions)
+    frames = [
+        _load_one_realized_plot_data(
+            path=backtests_root / direction.run_id / "daily_pool_internal_summary.csv",
+            source_pool=source_pool,
+            key=direction.key,
+            label=direction.label,
+            required=required,
+            fee_bps=fee_bps,
+            pool_turnover_by_date=turnover,
+            pool_fee_mode=pool_fee_mode,
+            next_only=next_only,
         )
+        for direction, source_pool, next_only, turnover in sources
+    ]
 
     combined = pd.concat(frames, ignore_index=True)
     combined["week_start"] = pd.to_datetime(combined["week_start"], errors="coerce")
     combined = combined.dropna(subset=["week_start"]).sort_values(["pool", "week_start"])
-    default_capital_fraction = 1.0 / NEXT_CLOSE_CAPITAL_DIVISOR
-    for _, index in combined.groupby("pool", sort=False).groups.items():
-        item = combined.loc[index].sort_values("week_start")
-        short_values = pd.to_numeric(item["short_net_return_bps"], errors="coerce")
-        next_values = pd.to_numeric(item["next_net_return_bps"], errors="coerce")
-        pool_next_values = pd.to_numeric(item["pool_next_net_return_bps"], errors="coerce")
-        decision_groups = pd.to_numeric(item["decision_groups"], errors="coerce")
-        capital_fraction = pd.Series(
-            default_capital_fraction,
-            index=item.index,
-            dtype="float64",
-        )
-        next_capital_values = next_values * capital_fraction
-        pool_next_capital_values = pool_next_values * capital_fraction
-        next_internal_excess_values = (
-            pd.to_numeric(item["next_internal_excess_bps"], errors="coerce") * capital_fraction
-        )
-        combined.loc[item.index, "capacity_decision_groups"] = decision_groups.to_numpy()
-        combined.loc[item.index, "capacity_daily_capital_fraction"] = capital_fraction.to_numpy()
-        combined.loc[item.index, "capacity_total_notional"] = pd.NA
-        combined.loc[item.index, "capacity_decision_notional"] = pd.NA
-        combined.loc[item.index, "next_capital_net_return_bps"] = next_capital_values
-        combined.loc[item.index, "pool_next_capital_net_return_bps"] = pool_next_capital_values
-        combined.loc[item.index, "next_capital_internal_excess_bps"] = next_internal_excess_values
-        combined.loc[item.index, "short_cumulative_net_return_bps"] = cumulative_sum_bps(
-            short_values
-        )
-        combined.loc[item.index, "next_cumulative_net_return_bps"] = cumulative_sum_bps(
-            next_capital_values
-        )
-        combined.loc[item.index, "pool_next_cumulative_net_return_bps"] = cumulative_sum_bps(
-            pool_next_capital_values
-        )
-        combined.loc[item.index, "next_cumulative_internal_excess_return_bps"] = cumulative_sum_bps(
-            next_internal_excess_values
-        )
+    numeric_columns = (
+        "decision_groups",
+        "short_net_return_bps",
+        "next_net_return_bps",
+        "pool_next_net_return_bps",
+        "next_internal_excess_bps",
+    )
+    combined[list(numeric_columns)] = combined[list(numeric_columns)].apply(
+        pd.to_numeric, errors="coerce"
+    )
+    capital_fraction = 1.0 / NEXT_CLOSE_CAPITAL_DIVISOR
+    combined["capacity_decision_groups"] = combined["decision_groups"]
+    combined["capacity_daily_capital_fraction"] = capital_fraction
+    combined["capacity_total_notional"] = pd.NA
+    combined["capacity_decision_notional"] = pd.NA
+    combined["next_capital_net_return_bps"] = combined["next_net_return_bps"] * capital_fraction
+    combined["pool_next_capital_net_return_bps"] = (
+        combined["pool_next_net_return_bps"] * capital_fraction
+    )
+    combined["next_capital_internal_excess_bps"] = (
+        combined["next_internal_excess_bps"] * capital_fraction
+    )
+    cumulative_columns = (
+        ("short_cumulative_net_return_bps", "short_net_return_bps"),
+        ("next_cumulative_net_return_bps", "next_capital_net_return_bps"),
+        ("pool_next_cumulative_net_return_bps", "pool_next_capital_net_return_bps"),
+        (
+            "next_cumulative_internal_excess_return_bps",
+            "next_capital_internal_excess_bps",
+        ),
+    )
+    for index in combined.groupby("pool", sort=False).groups.values():
+        for target, source in cumulative_columns:
+            combined.loc[index, target] = cumulative_sum_bps(combined.loc[index, source])
     combined["week_start"] = combined["week_start"].dt.strftime("%Y-%m-%d")
     return combined
 
@@ -223,13 +259,7 @@ def load_capacity_cumulative_plot_data(
                 f"{source_label} cumulative mode requires {summary_filename} "
                 f"for {direction.key!r}; missing {path}"
             )
-        frame = pd.read_csv(path)
-        missing = sorted(required - set(frame.columns))
-        if missing:
-            raise ValueError(f"{path} missing columns: {missing}")
-        item = frame.loc[frame["pool"].astype(str).eq(pool)].copy()
-        if item.empty:
-            raise ValueError(f"{path} has no rows for pool {pool!r}")
+        item = _read_pool_rows(path, required, pool)
         item["pool"] = direction.key
         item["pool_label"] = direction.label
         item["variant"] = direction.label
@@ -275,29 +305,18 @@ def load_capacity_cumulative_plot_data(
                 / RETURN_BPS_DENOMINATOR
                 * item["capacity_total_notional"]
             )
-        item["candidate_rows"] = pd.NA
+        for column in CUMULATIVE_PLOT_VALUE_COLUMNS:
+            if column not in item.columns:
+                item[column] = pd.NA
         item["decision_groups"] = item["capacity_decision_groups"]
         item["clocks"] = item["capacity_decision_groups"]
         item["selected_next_mean_bps"] = item.get(
             "gross_next_return_bps",
             item["next_net_return_bps"] + item["fee_bps"],
         )
-        item["selected_turnover"] = pd.NA
         item["selected_fee_bps"] = item["fee_bps"]
-        item["pool_next_mean_bps"] = pd.NA
-        item["pool_turnover"] = pd.NA
         item["pool_turnover_source"] = "capacity_acceptance_pool_source_pending"
         item["pool_fee_bps"] = 0.0
-        item["pool_next_net_return_bps"] = pd.NA
-        item["pool_next_capital_net_return_bps"] = pd.NA
-        item["pool_next_cumulative_net_return_bps"] = pd.NA
-        item["pool_next_net_pnl"] = pd.NA
-        item["pool_next_cumulative_net_pnl"] = pd.NA
-        item["next_internal_excess_bps"] = pd.NA
-        item["next_capital_internal_excess_bps"] = pd.NA
-        item["next_cumulative_internal_excess_return_bps"] = pd.NA
-        item["next_internal_excess_pnl"] = pd.NA
-        item["next_cumulative_internal_excess_pnl"] = pd.NA
         item["next_cumulative_net_return_bps"] = cumulative_sum_bps(
             item["next_capital_net_return_bps"]
         )
@@ -309,37 +328,7 @@ def load_capacity_cumulative_plot_data(
                     "pool",
                     "pool_label",
                     "week_start",
-                    "decision_groups",
-                    "clocks",
-                    "candidate_rows",
-                    "selected_rows",
-                    "capacity_decision_groups",
-                    "capacity_daily_capital_fraction",
-                    "capacity_total_notional",
-                    "capacity_decision_notional",
-                    "pool_next_mean_bps",
-                    "pool_turnover",
-                    "pool_turnover_source",
-                    "pool_fee_bps",
-                    "pool_next_net_return_bps",
-                    "pool_next_capital_net_return_bps",
-                    "pool_next_cumulative_net_return_bps",
-                    "pool_next_net_pnl",
-                    "pool_next_cumulative_net_pnl",
-                    "selected_next_mean_bps",
-                    "selected_turnover",
-                    "selected_fee_bps",
-                    "next_internal_excess_bps",
-                    "next_capital_internal_excess_bps",
-                    "next_cumulative_internal_excess_return_bps",
-                    "next_internal_excess_pnl",
-                    "next_cumulative_internal_excess_pnl",
-                    "fee_bps",
-                    "next_net_return_bps",
-                    "next_capital_net_return_bps",
-                    "next_cumulative_net_return_bps",
-                    "next_net_pnl",
-                    "next_cumulative_net_pnl",
+                    *CUMULATIVE_PLOT_VALUE_COLUMNS,
                     "target_notional",
                     "variant",
                 ]
@@ -360,13 +349,7 @@ def _load_one_realized_plot_data(
     pool_fee_mode: str,
     next_only: bool = False,
 ) -> pd.DataFrame:
-    frame = pd.read_csv(path)
-    missing = sorted(required - set(frame.columns))
-    if missing:
-        raise ValueError(f"{path} missing columns: {missing}")
-    item = frame.loc[frame["pool"].astype(str).eq(source_pool)].copy()
-    if item.empty:
-        raise ValueError(f"{path} has no rows for pool {source_pool!r}")
+    item = _read_pool_rows(path, required, source_pool)
     item["week_start"] = pd.to_datetime(item["date"], errors="coerce")
     item["pool"] = key
     item["pool_label"] = label
@@ -377,18 +360,7 @@ def _load_one_realized_plot_data(
     if "clocks" not in item.columns:
         item["clocks"] = pd.NA
 
-    for column in (
-        "decision_groups",
-        "clocks",
-        "candidate_rows",
-        "selected_rows",
-        "pool_short_mean_bps",
-        "selected_short_mean_bps",
-        "short_internal_excess_bps",
-        "pool_next_mean_bps",
-        "selected_next_mean_bps",
-        "next_internal_excess_bps",
-    ):
+    for column in REALIZED_SOURCE_VALUE_COLUMNS:
         item[column] = pd.to_numeric(item[column], errors="coerce") / CUMULATIVE_DECISION_NORMALIZER
     item["selected_turnover"] = 1.0
     estimated_pool_turnover = estimate_pool_turnover(item)
@@ -422,16 +394,7 @@ def _load_one_realized_plot_data(
             "pool",
             "pool_label",
             "week_start",
-            "decision_groups",
-            "clocks",
-            "candidate_rows",
-            "selected_rows",
-            "pool_short_mean_bps",
-            "selected_short_mean_bps",
-            "short_internal_excess_bps",
-            "pool_next_mean_bps",
-            "selected_next_mean_bps",
-            "next_internal_excess_bps",
+            *REALIZED_SOURCE_VALUE_COLUMNS,
             "fee_bps_per_trade",
             "selected_turnover",
             "pool_turnover",
@@ -497,20 +460,6 @@ def cumulative_sum_bps(return_bps: pd.Series) -> pd.Series:
     return pd.to_numeric(return_bps, errors="coerce").fillna(0.0).cumsum()
 
 
-def line_axis(values: pd.Series) -> tuple[float, float]:
-    from opening_strength_fit.pool_internal_plot_svg import nice_line_axis
-
-    axis, _ = nice_line_axis(values, include_zero=True, target_ticks=9)
-    return axis
-
-
-def line_step(values: pd.Series) -> float:
-    from opening_strength_fit.pool_internal_plot_svg import nice_line_axis
-
-    _, step = nice_line_axis(values, include_zero=True, target_ticks=9)
-    return step
-
-
 def sort_month_major(frame: pd.DataFrame) -> pd.DataFrame:
     data = frame.copy()
     data["_mean_order"] = data["test_month"].astype(str).eq("Mean").astype("int8")
@@ -521,16 +470,16 @@ def sort_month_major(frame: pd.DataFrame) -> pd.DataFrame:
 def source_files(
     backtests_root: Path, directions: tuple[DirectionSpec, ...]
 ) -> dict[str, dict[str, str]]:
+    filenames = {
+        "short": "short_excess_rank_ic_plot_data.csv",
+        "next": "next_excess_rank_ic_plot_data.csv",
+        "daily_cumulative": "daily_cumulative_plot_data.csv",
+        "daily_realized": "daily_pool_internal_summary.csv",
+    }
     return {
         direction.key: {
-            "short": str(backtests_root / direction.run_id / "short_excess_rank_ic_plot_data.csv"),
-            "next": str(backtests_root / direction.run_id / "next_excess_rank_ic_plot_data.csv"),
-            "daily_cumulative": str(
-                backtests_root / direction.run_id / "daily_cumulative_plot_data.csv"
-            ),
-            "daily_realized": str(
-                backtests_root / direction.run_id / "daily_pool_internal_summary.csv"
-            ),
+            key: str(backtests_root / direction.run_id / filename)
+            for key, filename in filenames.items()
         }
         for direction in directions
     }

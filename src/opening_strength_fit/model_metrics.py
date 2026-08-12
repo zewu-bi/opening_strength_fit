@@ -7,6 +7,25 @@ import pandas as pd
 
 from opening_strength_fit.evaluation import resolve_group_cols
 
+PREDICTION_METRIC_COLUMNS = (
+    "overall_ic",
+    "overall_rank_ic",
+    "group_ic_mean",
+    "group_ic_std",
+    "group_ic_ir",
+    "group_rank_ic_mean",
+    "group_rank_ic_std",
+    "group_rank_ic_ir",
+    "daily_ic_mean",
+    "daily_ic_std",
+    "daily_ic_ir",
+    "daily_rank_ic_mean",
+    "daily_rank_ic_std",
+    "daily_rank_ic_ir",
+    "mean_label",
+    "win_rate",
+)
+
 
 def corr(a: pd.Series, b: pd.Series, method: str, *, min_count: int = 2) -> float:
     values = pd.DataFrame({"a": a, "b": b}).replace([np.inf, -np.inf], np.nan).dropna()
@@ -35,6 +54,22 @@ def ir(mean: float, std: float) -> float:
     return mean / std
 
 
+def _prediction_metric_row(
+    group: pd.DataFrame,
+    label_col: str,
+    score_col: str,
+) -> pd.Series:
+    return pd.Series(
+        {
+            "rows": len(group),
+            "ic": corr(group[label_col], group[score_col], "pearson"),
+            "rank_ic": corr(group[label_col], group[score_col], "spearman"),
+            "mean_label": float(group[label_col].mean()),
+            "win_rate": float((group[label_col] > 0).mean()),
+        }
+    )
+
+
 def daily_prediction_metrics(
     df: pd.DataFrame,
     *,
@@ -45,15 +80,7 @@ def daily_prediction_metrics(
     return (
         frame.groupby("date")
         .apply(
-            lambda group: pd.Series(
-                {
-                    "rows": len(group),
-                    "ic": corr(group[label_col], group[score_col], "pearson"),
-                    "rank_ic": corr(group[label_col], group[score_col], "spearman"),
-                    "mean_label": float(group[label_col].mean()),
-                    "win_rate": float((group[label_col] > 0).mean()),
-                }
-            ),
+            lambda group: _prediction_metric_row(group, label_col, score_col),
             include_groups=False,
         )
         .reset_index()
@@ -86,15 +113,7 @@ def grouped_prediction_metrics(
     return (
         frame.groupby(list(available_group_cols))
         .apply(
-            lambda group: pd.Series(
-                {
-                    "rows": len(group),
-                    "ic": corr(group[label_col], group[score_col], "pearson"),
-                    "rank_ic": corr(group[label_col], group[score_col], "spearman"),
-                    "mean_label": float(group[label_col].mean()),
-                    "win_rate": float((group[label_col] > 0).mean()),
-                }
-            ),
+            lambda group: _prediction_metric_row(group, label_col, score_col),
             include_groups=False,
         )
         .reset_index()

@@ -1,49 +1,28 @@
 from __future__ import annotations
 
+import argparse
 import os
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
 import pyarrow.parquet as pq
 
-from opening_strength_fit.clickhouse_ticks import validate_table_name
-from opening_strength_fit.config import config_int
-from opening_strength_fit.feature_utils import finite_numeric
-from opening_strength_fit.schema import normalize_date_series, normalize_text_series
+from opening_strength_fit.clickhouse_ticks import (
+    DEFAULT_CLICKHOUSE_TICK_HOST,
+    DEFAULT_CLICKHOUSE_TICK_PORT,
+    DEFAULT_CLICKHOUSE_TICK_TABLE,
+    TICK_SOURCE_COLUMNS,
+    managed_tick_client,
+    validate_table_name,
+)
+from opening_strength_fit.config import config_int, config_str, load_toml, run_id
+from opening_strength_fit.universe import DEFAULT_A_SHARE_SYMBOL_REGEX
 
 RAW_SOURCE_SCHEMA_VERSION = "raw_source_v2"
 
-TICK_COLUMNS = (
-    "TradingDay",
-    "Symbol",
-    "ExchTimeOffsetUs",
-    "HighPrice",
-    "LowPrice",
-    "LastPrice",
-    "TradeNum",
-    "Volume",
-    "Turnover",
-    "Status",
-    "AvgAskPrice",
-    "TotalAskVolume",
-    "TotalAskCount",
-    "AvgBidPrice",
-    "TotalBidVolume",
-    "TotalBidCount",
-    "IOPV",
-    *(
-        column
-        for level in range(1, 11)
-        for column in (
-            f"AskPrice{level}",
-            f"AskVolume{level}",
-            f"AskCount{level}",
-            f"BidPrice{level}",
-            f"BidVolume{level}",
-            f"BidCount{level}",
-        )
-    ),
-)
+TICK_COLUMNS = TICK_SOURCE_COLUMNS
 
 DAILY_REFERENCE_COLUMNS = (
     "TradingDay",
@@ -69,61 +48,6 @@ CLOSE_REFERENCE_COLUMNS = (
 )
 
 CALENDAR_COLUMNS = ("TradingDay",)
-
-
-def read_daily_limit_flags(
-    raw_source_root: Path,
-    year: int,
-    *,
-    output_column: str = "final_up_limit",
-) -> pd.DataFrame:
-    frame = pd.read_parquet(
-        raw_source_root / f"year={year}" / "daily_reference.parquet",
-        columns=["TradingDay", "Symbol", "UpdownLimitStatus"],
-    ).rename(columns={"TradingDay": "date", "Symbol": "symbol"})
-    frame["date"] = normalize_date_series(frame["date"])
-    frame["symbol"] = normalize_text_series(frame["symbol"])
-    frame[output_column] = pd.to_numeric(frame["UpdownLimitStatus"], errors="coerce").eq(1)
-    return frame.loc[
-        frame["date"].str.startswith(str(year), na=False),
-        ["date", "symbol", output_column],
-    ].drop_duplicates(["date", "symbol"], keep="last")
-
-
-def read_daily_market_events(raw_source_root: Path, year: int) -> pd.DataFrame:
-    frame = pd.read_parquet(
-        raw_source_root / f"year={year}" / "daily_reference.parquet",
-        columns=[
-            "TradingDay",
-            "Symbol",
-            "PreClosePrice",
-            "ClosePrice",
-            "STStatus",
-            "UpdownLimitStatus",
-        ],
-    ).rename(
-        columns={
-            "TradingDay": "date",
-            "Symbol": "symbol",
-            "PreClosePrice": "prev_close",
-            "ClosePrice": "daily_close",
-            "STStatus": "st_status",
-            "UpdownLimitStatus": "limit_status",
-        }
-    )
-    frame["date"] = normalize_date_series(frame["date"])
-    frame["symbol"] = normalize_text_series(frame["symbol"])
-    for column in ("prev_close", "daily_close", "st_status", "limit_status"):
-        frame[column] = finite_numeric(frame[column])
-    frame["daily_return_bps"] = (
-        frame["daily_close"].div(frame["prev_close"].where(frame["prev_close"].gt(0))).sub(1)
-        * 10_000.0
-    )
-    frame["limit_up"] = frame["limit_status"].eq(1)
-    frame["limit_down"] = frame["limit_status"].lt(0)
-    frame["limit_event"] = frame["limit_up"] | frame["limit_down"]
-    frame["st_flag"] = frame["st_status"].fillna(0).ne(0)
-    return frame.drop_duplicates(["date", "symbol"], keep="last")
 
 
 def parse_tick_windows(config: dict) -> tuple[tuple[int, int], ...]:
@@ -156,6 +80,51 @@ def parse_raw_source_years(config: dict) -> tuple[int, ...]:
     if len(set(years)) != len(years):
         raise SystemExit("[raw_source].years must be unique")
     return years
+
+
+def raw_source_parser(description: str) -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--year", type=int)
+    parser.add_argument("--output-root")
+    parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--clickhouse-host", default=os.environ.get("CLICKHOUSE_HOST", ""))
+    parser.add_argument(
+        "--clickhouse-port",
+        type=int,
+        default=int(os.environ.get("CLICKHOUSE_PORT", DEFAULT_CLICKHOUSE_TICK_PORT)),
+    )
+    return parser
+
+
+def run_raw_source_builder(
+    args: argparse.Namespace,
+    *,
+    default_output_root: str,
+    build_year: Callable[..., object],
+) -> None:
+    config_path = Path(args.config)
+    config = load_toml(config_path)
+    years = parse_raw_source_years(config)
+    selected_years = (int(args.year),) if args.year is not None else years
+    if unknown_years := sorted(set(selected_years).difference(years)):
+        raise SystemExit(f"requested years are not configured: {unknown_years}")
+    output_root = Path(
+        args.output_root or config_str(config, "raw_source", "output_root", default_output_root)
+    )
+    with managed_tick_client(
+        host=args.clickhouse_host or DEFAULT_CLICKHOUSE_TICK_HOST,
+        port=int(args.clickhouse_port),
+    ) as client:
+        for year in selected_years:
+            build_year(
+                client,
+                config=config,
+                config_path=config_path,
+                year=year,
+                output_root=output_root,
+                overwrite=bool(args.overwrite),
+            )
 
 
 def parse_short_label_horizons(config: dict) -> tuple[int, ...]:
@@ -391,3 +360,97 @@ def stream_parquet_atomic(
     finally:
         if partial.exists():
             partial.unlink()
+
+
+def build_tick_source_files(
+    client,
+    *,
+    table: str,
+    windows: tuple[tuple[int, int], ...],
+    symbol_regex: str,
+    year: int,
+    output_root: Path,
+    columns: tuple[str, ...],
+    overwrite: bool,
+    run_name: str,
+) -> tuple[list[str], list[dict[str, object]], int, int]:
+    dates = query_trading_dates(client, table=table, year=year, symbol_regex=symbol_regex)
+    parameters: dict[str, object] = {"symbol_regex": symbol_regex}
+    for index, (start, end) in enumerate(windows):
+        parameters[f"window_start_{index}"] = start
+        parameters[f"window_end_{index}"] = end
+    query = tick_source_sql(table, windows, output_columns=columns)
+    files: list[dict[str, object]] = []
+    rows = size = 0
+    for index, trading_day in enumerate(dates, start=1):
+        output_path = output_root / f"year={year}" / "ticks" / f"date={trading_day}.parquet"
+        metadata = stream_parquet_atomic(
+            client,
+            query=query,
+            parameters={**parameters, "trading_day": trading_day},
+            output_path=output_path,
+            expected_columns=columns,
+            overwrite=overwrite,
+        )
+        rows += int(metadata["rows"])
+        size += int(metadata["bytes"])
+        files.append(
+            {"date": trading_day, "path": str(output_path.relative_to(output_root)), **metadata}
+        )
+        print(
+            f"[{run_name}] year={year} tick={index}/{len(dates)} "
+            f"date={trading_day} rows={metadata['rows']} reused={metadata['reused']}",
+            flush=True,
+        )
+    return dates, files, rows, size
+
+
+def build_tick_source_manifest(
+    client,
+    *,
+    config: dict,
+    config_path: Path,
+    year: int,
+    output_root: Path,
+    columns: tuple[str, ...],
+    overwrite: bool,
+    schema_version: str,
+) -> tuple[dict[str, object], Path]:
+    table = config_str(config, "raw_source", "tick_table", DEFAULT_CLICKHOUSE_TICK_TABLE)
+    symbol_regex = config_str(config, "raw_source", "symbol_regex", DEFAULT_A_SHARE_SYMBOL_REGEX)
+    windows = parse_tick_windows(config)
+    year_root = output_root / f"year={year}"
+    success_path = year_root / "_SUCCESS"
+    if overwrite and success_path.exists():
+        success_path.unlink()
+    name = run_id(config, config_path)
+    dates, files, rows, size = build_tick_source_files(
+        client,
+        table=table,
+        windows=windows,
+        symbol_regex=symbol_regex,
+        year=year,
+        output_root=output_root,
+        columns=columns,
+        overwrite=overwrite,
+        run_name=name,
+    )
+    return {
+        "schema_version": schema_version,
+        "run_id": name,
+        "year": int(year),
+        "created_at_utc": datetime.now(UTC).isoformat(),
+        "source_revision": os.environ.get(
+            "OPENING_STRENGTH_SOURCE_REVISION", os.environ.get("SOURCE_REVISION", "unknown")
+        ),
+        "config_path": str(config_path),
+        "contains_features": False,
+        "contains_labels": False,
+        "source_table": table,
+        "symbol_regex": symbol_regex,
+        "tick_windows_us": [list(window) for window in windows],
+        "tick_columns": list(columns),
+        "trading_dates": {"count": len(dates), "first": dates[0], "last": dates[-1]},
+        "tick_files": files,
+        "ticks": {"rows": rows, "bytes": size},
+    }, year_root

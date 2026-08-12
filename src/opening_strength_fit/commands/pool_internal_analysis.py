@@ -10,10 +10,12 @@ from typing import Any
 import pandas as pd
 
 from opening_strength_fit.analysis import KEY_COLUMNS, NEXT_CLOSE_LABEL_COL, write_json
+from opening_strength_fit.artifact_catalog import print_recorded_artifacts
+from opening_strength_fit.commands.arguments import add_arguments, add_options
 from opening_strength_fit.io import read_frame
 from opening_strength_fit.io.frames import csv_ready
 from opening_strength_fit.pool_internal_artifacts import record_pool_internal_outputs
-from opening_strength_fit.pool_internal_company import (
+from opening_strength_fit.pool_internal_company import (  # noqa: F401
     COMPANY_API_TIMES,
     COMPANY_SCORE_AGGS,
     COMPANY_SCORE_TRANSFORMS,
@@ -41,237 +43,194 @@ from opening_strength_fit.pool_internal_plots import (
     slug_label,
     write_daily_pool_internal_cumulative_plot,
     write_universe_sml_pool_internal_plots,
-    write_weekly_pool_internal_rolling_plot,
 )
 from opening_strength_fit.pool_internal_weekly import (
     build_daily_summary,
-    build_weekly_pool_internal_summaries,
+    write_weekly_pool_internal_outputs,
 )
 from opening_strength_fit.prediction_frames import (
     next_close_files,
     normalize_keys,
     prediction_files,
 )
-from opening_strength_fit.stock_pool import (
-    DEFAULT_STOCK_POOL_PATHS,
-    load_stock_pool,
-    stock_pool_membership_mask,
-)
+from opening_strength_fit.reports import print_mapping
+from opening_strength_fit.stock_pool import filter_named_stock_pool
 
 DEFAULT_POOLS = ("universe", "S", "M", "L")
 BACKTEST_MODES = ("self", "company-api", "both")
 
-__all__ = [
-    "build_company_neutral_score_matrix",
-    "build_company_score_matrix",
-    "company_backtest_neutral_comparison_plot_data",
-    "company_backtest_relative_plot_data",
-    "create_company_backtest_payload",
-    "decode_company_backtest_result",
-    "filter_company_backtest_scores",
-    "main",
-    "normalize_clock",
-    "parse_args",
-    "write_company_api_outputs",
-]
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=(
-            "Evaluate TopN pool-internal short/next-close excess for synced prediction shards."
-        )
+        description="Evaluate TopN pool-internal short/next-close excess for synced prediction shards."
     )
-    parser.add_argument(
-        "--predictions",
-        action="append",
-        required=True,
-        help=(
-            "Prediction parquet/csv file or directory. May be repeated. If a "
-            "directory contains raw/predictions_*.parquet, those shards are used."
-        ),
+    add_options(
+        parser,
+        predictions={
+            "action": "append",
+            "required": True,
+            "help": (
+                "Prediction parquet/csv file or directory. May be repeated. If a "
+                "directory contains raw/predictions_*.parquet, those shards are used."
+            ),
+        },
+        next_close_label_input={
+            "default": "",
+            "help": "Next-close label parquet file or directory containing yearly label shards.",
+        },
+        backtest_mode={
+            "default": "self",
+            "choices": BACKTEST_MODES,
+            "help": (
+                "self keeps the existing pool-internal label-based analysis; company-api "
+                "sends scores to the company backtest API; both does both."
+            ),
+        },
+        output_dir={"required": True},
     )
-    parser.add_argument(
-        "--next-close-label-input",
+    add_arguments(parser, "run-id variant", default="")
+    add_options(
+        parser,
+        score_col={"default": "prediction"},
+        short_label_col={"default": "label"},
+        next_label_col={"default": NEXT_CLOSE_LABEL_COL},
+        top_n={"type": int, "default": 100},
+        report_dir={
+            "default": "",
+            "help": (
+                "Optional report directory. When set, writes the universe/S/M/L "
+                "pool-internal excess and Rank IC SVG panels plus plot data."
+            ),
+        },
+        plot_prefix={
+            "default": "",
+            "help": (
+                "Filename/directory prefix for generated report plots. Defaults to "
+                "--variant when present, otherwise --run-id."
+            ),
+        },
+        plot_variant_label={
+            "default": "",
+            "help": "Display label used in generated report plot titles. Defaults to --variant.",
+        },
+        plot_period={
+            "choices": ["month", "quarter"],
+            "default": "month",
+            "help": "Period aggregation used for report bar plots. Defaults to month.",
+        },
+        pool={
+            "action": "append",
+            "choices": ["universe", "S", "M", "L"],
+            "help": "Pools to evaluate. Defaults to universe, S, M, and L.",
+        },
+        pool_date_lag_sessions={"type": int, "default": 0},
+        weekly_report_dir={
+            "default": "",
+            "help": "Optional directory for weekly trading-day-equal diagnostics derived from group metrics.",
+        },
+        weekly_output_prefix={"default": ""},
+        weekly_rolling_weeks={"type": int, "default": 4},
+        records_dir={
+            "default": "",
+            "help": "Optional experiments/results style directory for lightweight archived outputs.",
+        },
+        record_prefix={
+            "default": "",
+            "help": "Filename prefix used under --records-dir/backtests. Defaults to --run-id.",
+        },
+        company_clock={
+            "action": "append",
+            "help": (
+                "Decision clock to keep for company API input, for example 09:40 or 0940. "
+                "May be repeated. If omitted, all clocks are eligible before range filters."
+            ),
+        },
+    )
+    add_arguments(parser, "company-start-clock company-end-clock", default="")
+    add_options(
+        parser,
+        company_score_agg={"default": "mean", "choices": COMPANY_SCORE_AGGS},
+        company_score_transform={
+            "default": "identity",
+            "choices": COMPANY_SCORE_TRANSFORMS,
+            "help": (
+                "Transform scores before sending them to the company API. The default "
+                "identity preserves the local higher-prediction-is-better convention; "
+                "use negate only when reproducing historical runs or when an endpoint "
+                "is known to prefer lower scores."
+            ),
+        },
+        company_neutral_baseline={
+            "action": "store_true",
+            "help": (
+                "Also run a neutral stock-pool baseline through the company API by "
+                "replacing every finite model score with --company-neutral-score. Use "
+                "with --company-top-n 0 for a full pool baseline."
+            ),
+        },
+        company_neutral_score={"type": float, "default": 0.0},
+        company_top_n={
+            "type": int,
+            "default": None,
+            "help": "Top N names per date sent to company API. Defaults to --top-n.",
+        },
+        company_pool={
+            "default": "L",
+            "choices": ["", "S", "M", "L"],
+            "help": "Optional stock-pool membership filter before company API input construction.",
+        },
+        company_pool_path={
+            "default": "",
+            "help": "Override company API stock-pool parquet path. Defaults to --company-pool path.",
+        },
+        company_api_time={"default": "950", "choices": COMPANY_API_TIMES},
+        company_daily={
+            "action": "store_true",
+            "help": "Send a daily score matrix instead of an intraday {time: matrix} payload.",
+        },
+        company_tar={"default": "I500", "choices": ["I500", "large", "small"]},
+    )
+    add_arguments(parser, "company-cap company-trgain company-vol-limit", type=float, default=None)
+    add_options(
+        parser,
+        company_fee={
+            "dest": "company_fee",
+            "action": "store_true",
+            "default": None,
+            "help": "Explicitly enable API fees. Omit to use API default.",
+        },
+        company_no_fee={"dest": "company_fee", "action": "store_false"},
+        company_return_eod={"action": "store_true"},
+        company_skip_api={
+            "action": "store_true",
+            "help": "Only write company API score inputs and trace; do not POST to the API.",
+        },
+        company_endpoint={"action": "append"},
+        company_timeout={"type": float, "default": 600.0},
+        company_output_dir={
+            "default": "",
+            "help": "Directory for company API score inputs and raw outputs. Defaults under --output-dir.",
+        },
+        company_plot_dir={
+            "default": "",
+            "help": "Directory for company API cumulative plot. Defaults to --report-dir or --output-dir.",
+        },
+    )
+    add_arguments(
+        parser,
+        "company-series-key company-series-label company-series-color",
         default="",
-        help="Next-close label parquet file or directory containing yearly label shards.",
     )
-    parser.add_argument(
-        "--backtest-mode",
-        default="self",
-        choices=BACKTEST_MODES,
-        help=(
-            "self keeps the existing pool-internal label-based analysis; company-api "
-            "sends scores to the company backtest API; both does both."
-        ),
-    )
-    parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--run-id", default="")
-    parser.add_argument("--variant", default="")
-    parser.add_argument("--score-col", default="prediction")
-    parser.add_argument("--short-label-col", default="label")
-    parser.add_argument("--next-label-col", default=NEXT_CLOSE_LABEL_COL)
-    parser.add_argument("--top-n", type=int, default=100)
-    parser.add_argument(
-        "--report-dir",
-        default="",
-        help=(
-            "Optional report directory. When set, writes the universe/S/M/L "
-            "pool-internal excess and Rank IC SVG panels plus plot data."
-        ),
-    )
-    parser.add_argument(
-        "--plot-prefix",
-        default="",
-        help=(
-            "Filename/directory prefix for generated report plots. Defaults to "
-            "--variant when present, otherwise --run-id."
-        ),
-    )
-    parser.add_argument(
-        "--plot-variant-label",
-        default="",
-        help="Display label used in generated report plot titles. Defaults to --variant.",
-    )
-    parser.add_argument(
-        "--plot-period",
-        choices=["month", "quarter"],
-        default="month",
-        help="Period aggregation used for report bar plots. Defaults to month.",
-    )
-    parser.add_argument(
-        "--pool",
-        action="append",
-        choices=["universe", "S", "M", "L"],
-        help="Pools to evaluate. Defaults to universe, S, M, and L.",
-    )
-    parser.add_argument("--pool-date-lag-sessions", type=int, default=0)
-    parser.add_argument(
-        "--weekly-report-dir",
-        default="",
-        help="Optional directory for weekly trading-day-equal diagnostics derived from group metrics.",
-    )
-    parser.add_argument("--weekly-output-prefix", default="")
-    parser.add_argument("--weekly-rolling-weeks", type=int, default=4)
-    parser.add_argument(
-        "--records-dir",
-        default="",
-        help="Optional experiments/results style directory for lightweight archived outputs.",
-    )
-    parser.add_argument(
-        "--record-prefix",
-        default="",
-        help="Filename prefix used under --records-dir/backtests. Defaults to --run-id.",
-    )
-    parser.add_argument(
-        "--company-clock",
-        action="append",
-        help=(
-            "Decision clock to keep for company API input, for example 09:40 or 0940. "
-            "May be repeated. If omitted, all clocks are eligible before range filters."
-        ),
-    )
-    parser.add_argument("--company-start-clock", default="")
-    parser.add_argument("--company-end-clock", default="")
-    parser.add_argument("--company-score-agg", default="mean", choices=COMPANY_SCORE_AGGS)
-    parser.add_argument(
-        "--company-score-transform",
-        default="identity",
-        choices=COMPANY_SCORE_TRANSFORMS,
-        help=(
-            "Transform scores before sending them to the company API. The default "
-            "identity preserves the local higher-prediction-is-better convention; "
-            "use negate only when reproducing historical runs or when an endpoint "
-            "is known to prefer lower scores."
-        ),
-    )
-    parser.add_argument(
-        "--company-neutral-baseline",
-        action="store_true",
-        help=(
-            "Also run a neutral stock-pool baseline through the company API by "
-            "replacing every finite model score with --company-neutral-score. Use "
-            "with --company-top-n 0 for a full pool baseline."
-        ),
-    )
-    parser.add_argument("--company-neutral-score", type=float, default=0.0)
-    parser.add_argument(
-        "--company-top-n",
-        type=int,
-        default=None,
-        help="Top N names per date sent to company API. Defaults to --top-n.",
-    )
-    parser.add_argument(
-        "--company-pool",
-        default="L",
-        choices=["", "S", "M", "L"],
-        help="Optional stock-pool membership filter before company API input construction.",
-    )
-    parser.add_argument(
-        "--company-pool-path",
-        default="",
-        help="Override company API stock-pool parquet path. Defaults to --company-pool path.",
-    )
-    parser.add_argument("--company-api-time", default="950", choices=COMPANY_API_TIMES)
-    parser.add_argument(
-        "--company-daily",
-        action="store_true",
-        help="Send a daily score matrix instead of an intraday {time: matrix} payload.",
-    )
-    parser.add_argument("--company-tar", default="I500", choices=["I500", "large", "small"])
-    parser.add_argument("--company-cap", type=float, default=None)
-    parser.add_argument("--company-trgain", type=float, default=None)
-    parser.add_argument("--company-vol-limit", type=float, default=None)
-    parser.add_argument(
-        "--company-fee",
-        dest="company_fee",
-        action="store_true",
-        default=None,
-        help="Explicitly enable API fees. Omit to use API default.",
-    )
-    parser.add_argument("--company-no-fee", dest="company_fee", action="store_false")
-    parser.add_argument("--company-return-eod", action="store_true")
-    parser.add_argument(
-        "--company-skip-api",
-        action="store_true",
-        help="Only write company API score inputs and trace; do not POST to the API.",
-    )
-    parser.add_argument("--company-endpoint", action="append")
-    parser.add_argument("--company-timeout", type=float, default=600.0)
-    parser.add_argument(
-        "--company-output-dir",
-        default="",
-        help="Directory for company API score inputs and raw outputs. Defaults under --output-dir.",
-    )
-    parser.add_argument(
-        "--company-plot-dir",
-        default="",
-        help="Directory for company API cumulative plot. Defaults to --report-dir or --output-dir.",
-    )
-    parser.add_argument("--company-series-key", default="")
-    parser.add_argument("--company-series-label", default="")
-    parser.add_argument("--company-series-color", default="")
     return parser.parse_args()
 
 
-def read_predictions(paths: list[str], *, score_col: str, short_label_col: str) -> pd.DataFrame:
-    required = [*KEY_COLUMNS, score_col, short_label_col]
+def read_predictions(
+    paths: list[str], *, score_col: str, short_label_col: str = ""
+) -> pd.DataFrame:
+    required = [*KEY_COLUMNS, score_col, *([short_label_col] if short_label_col else [])]
     files = [file for raw in paths for file in prediction_files(Path(raw))]
-    print(f"reading_predictions: files={len(files)}")
-    frames = []
-    for file in files:
-        frame = read_frame(file, columns=required)
-        print(f"  {file}: rows={len(frame)}")
-        frames.append(frame)
-    if not frames:
-        raise SystemExit("no prediction files supplied")
-    return normalize_keys(pd.concat(frames, ignore_index=True))
-
-
-def read_prediction_scores(paths: list[str], *, score_col: str) -> pd.DataFrame:
-    required = [*KEY_COLUMNS, score_col]
-    files = [file for raw in paths for file in prediction_files(Path(raw))]
-    print(f"reading_prediction_scores: files={len(files)}")
+    context = "reading_predictions" if short_label_col else "reading_prediction_scores"
+    print(f"{context}: files={len(files)}")
     frames = []
     for file in files:
         frame = read_frame(file, columns=required)
@@ -296,67 +255,6 @@ def read_next_close_labels(path: str, *, years: set[str], next_label_col: str) -
     labels = normalize_keys(pd.concat(frames, ignore_index=True))
     labels = labels.dropna(subset=list(KEY_COLUMNS) + [next_label_col])
     return labels.drop_duplicates(list(KEY_COLUMNS), keep="last")
-
-
-def write_weekly_outputs(
-    group_metrics: pd.DataFrame,
-    output_dir: Path,
-    *,
-    output_prefix: str,
-    variant_label: str,
-    pools: tuple[str, ...],
-    rolling_weeks: int,
-) -> dict[str, str]:
-    daily, weekly, overall, worst = build_weekly_pool_internal_summaries(
-        group_metrics,
-        pools=pools,
-        rolling_weeks=rolling_weeks,
-    )
-    output_dir.mkdir(parents=True, exist_ok=True)
-    daily_path = output_dir / "daily_pool_internal_summary.csv"
-    weekly_path = output_dir / "weekly_pool_internal_summary.csv"
-    overall_path = output_dir / "weekly_pool_internal_overall_summary.csv"
-    worst_path = output_dir / "weekly_worst_windows.csv"
-    csv_ready(daily).to_csv(daily_path, index=False, float_format="%.6f")
-    csv_ready(weekly).to_csv(weekly_path, index=False, float_format="%.6f")
-    overall.to_csv(overall_path, index=False, float_format="%.6f")
-    worst.to_csv(worst_path, index=False, float_format="%.6f")
-    plot_paths = write_weekly_pool_internal_rolling_plot(
-        weekly,
-        output_dir,
-        input_path=weekly_path,
-        output_prefix=output_prefix,
-        variant_label=variant_label,
-        pools=pools,
-        rolling_weeks=rolling_weeks,
-    )
-    trace_path = output_dir / "weekly_pool_internal_trace.json"
-    write_json(
-        trace_path,
-        {
-            "created_at_utc": datetime.now(UTC).isoformat(),
-            "daily_summary": str(daily_path),
-            "weekly_summary": str(weekly_path),
-            "overall_summary": str(overall_path),
-            "worst_windows": str(worst_path),
-            "plot_paths": plot_paths,
-            "pools": list(pools),
-            "rolling_weeks": rolling_weeks,
-            "weighting": (
-                "date x pool is first averaged across decision clocks; weekly summaries and "
-                "rolling windows are equal weighted by trading day"
-            ),
-        },
-        ensure_ascii=True,
-    )
-    return {
-        "daily": str(daily_path),
-        "weekly": str(weekly_path),
-        "overall": str(overall_path),
-        "worst": str(worst_path),
-        "trace": str(trace_path),
-        **plot_paths,
-    }
 
 
 @dataclass
@@ -394,20 +292,11 @@ def _run_self_analysis(
 
     group_frames = []
     for pool in pools:
-        if pool == "universe":
-            pool_frame = frame
-            pool_name = "universe"
-        else:
-            pool_path = DEFAULT_STOCK_POOL_PATHS[pool]
-            print(f"loading_stock_pool: pool={pool} path={pool_path}")
-            pool_frame = frame.loc[
-                stock_pool_membership_mask(
-                    frame,
-                    load_stock_pool(pool_path),
-                    date_lag_sessions=args.pool_date_lag_sessions,
-                )
-            ].copy()
-            pool_name = f"pool_{pool}"
+        pool_name, pool_frame = filter_named_stock_pool(
+            frame,
+            pool,
+            date_lag_sessions=args.pool_date_lag_sessions,
+        )
         print(f"evaluating_pool: pool={pool_name} rows={len(pool_frame)}")
         group_frames.append(
             evaluate_pool(
@@ -479,7 +368,7 @@ def _run_self_analysis(
                 )
             )
     if args.weekly_report_dir:
-        weekly_outputs = write_weekly_outputs(
+        weekly_outputs, _ = write_weekly_pool_internal_outputs(
             group_metrics,
             Path(args.weekly_report_dir),
             output_prefix=args.weekly_output_prefix
@@ -511,14 +400,11 @@ def main() -> None:
     if run_self and not args.next_close_label_input:
         raise SystemExit("--next-close-label-input is required when --backtest-mode uses self")
 
-    if run_self:
-        predictions = read_predictions(
-            args.predictions,
-            score_col=args.score_col,
-            short_label_col=args.short_label_col,
-        )
-    else:
-        predictions = read_prediction_scores(args.predictions, score_col=args.score_col)
+    predictions = read_predictions(
+        args.predictions,
+        score_col=args.score_col,
+        short_label_col=args.short_label_col if run_self else "",
+    )
 
     plot_pools = tuple("universe" if pool == "universe" else f"pool_{pool}" for pool in pools)
     analysis = (
@@ -526,25 +412,14 @@ def main() -> None:
         if run_self
         else _SelfAnalysis()
     )
-    frame = analysis.frame
-    missing_next = analysis.missing_next
-    summary = analysis.summary
     report_plots = analysis.report_plots
     weekly_outputs = analysis.weekly_outputs
     company_trace: dict[str, Any] = {}
 
     if run_company:
-        company_output_dir = (
-            Path(args.company_output_dir)
-            if args.company_output_dir
-            else (output_dir / "company_backtest_api")
-        )
+        company_output_dir = Path(args.company_output_dir or output_dir / "company_backtest_api")
         default_plot_dir = Path(args.report_dir) if args.report_dir else output_dir
-        company_plot_dir = (
-            Path(args.company_plot_dir)
-            if args.company_plot_dir
-            else (default_plot_dir / "company_backtest_api")
-        )
+        company_plot_dir = Path(args.company_plot_dir or default_plot_dir / "company_backtest_api")
         company_trace = run_company_backtest_analysis(
             predictions,
             company_output_dir,
@@ -560,8 +435,8 @@ def main() -> None:
         "backtest_mode": args.backtest_mode,
         "predictions": args.predictions,
         "next_close_label_input": args.next_close_label_input,
-        "rows": int(len(frame) if run_self else len(predictions)),
-        "missing_next_close_rows": missing_next,
+        "rows": int(len(analysis.frame) if run_self else len(predictions)),
+        "missing_next_close_rows": analysis.missing_next,
         "pools": list(pools),
         "top_n": args.top_n,
         "pool_date_lag_sessions": args.pool_date_lag_sessions,
@@ -592,19 +467,12 @@ def main() -> None:
         shutil.copy2(trace_path, destination)
 
     print("pool_internal_summary:")
-    print(summary.to_string(index=False))
+    print(analysis.summary.to_string(index=False))
     if report_plots:
-        print("\npool_internal_report_plots:")
-        for label, path in report_plots.items():
-            print(f"  {label}: {path}")
+        print_mapping("pool_internal_report_plots", report_plots)
     if weekly_outputs:
-        print("\nweekly_pool_internal_outputs:")
-        for label, path in weekly_outputs.items():
-            print(f"  {label}: {path}")
-    if record_paths:
-        print("\nrecorded_pool_internal_outputs:")
-        for path in record_paths:
-            print(f"  {path}")
+        print_mapping("weekly_pool_internal_outputs", weekly_outputs)
+    print_recorded_artifacts(record_paths, "pool_internal")
     print(f"\nwrote outputs: {output_dir}")
 
 

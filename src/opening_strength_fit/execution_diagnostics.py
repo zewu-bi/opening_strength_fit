@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -90,8 +91,7 @@ def diagnostic_case_from_values(
     ]
 
 
-def normalize_keys(frame: pd.DataFrame) -> pd.DataFrame:
-    return normalize_decision_keys(frame, key_columns=KEYS)
+normalize_keys = partial(normalize_decision_keys, key_columns=KEYS)
 
 
 def _csv_selected_chunks(path: Path, *, columns: list[str], name: str) -> list[pd.DataFrame]:

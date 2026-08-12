@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -33,57 +32,6 @@ def newey_west_mean_se(values: pd.Series, lag: int = 5) -> tuple[float, float]:
     return float(array.mean()), float(standard_error)
 
 
-def newey_west_mean_ci(values: pd.Series, lag: int = 5) -> tuple[float, float]:
-    mean, standard_error = newey_west_mean_se(values, lag=lag)
-    delta = 1.96 * standard_error
-    return mean - delta, mean + delta
-
-
-def equal_weighted_period_means(
-    frame: pd.DataFrame,
-    *,
-    by: Sequence[str],
-    period_column: str,
-    value_columns: Sequence[str],
-    count_name: str = "",
-) -> pd.DataFrame:
-    groups = list(by)
-    values = list(value_columns)
-    summary = (
-        frame.groupby([*groups, period_column], sort=False)[values]
-        .mean()
-        .groupby(groups, sort=False)
-        .mean()
-        .reset_index()
-    )
-    if not count_name:
-        return summary
-    counts = frame.groupby(groups, sort=False).size().rename(count_name).reset_index()
-    return summary.merge(counts, on=groups, validate="one_to_one")
-
-
-def write_analysis_result(
-    output_dir: Path,
-    metrics: pd.DataFrame,
-    summary: pd.DataFrame,
-    *,
-    metrics_filename: str,
-    summary_filename: str,
-    trace: dict[str, object],
-) -> None:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    metrics_path = output_dir / metrics_filename
-    if metrics_path.suffix == ".parquet":
-        metrics.to_parquet(metrics_path, index=False)
-    else:
-        metrics.to_csv(metrics_path, index=False)
-    summary.to_csv(output_dir / summary_filename, index=False)
-    write_json(output_dir / "trace.json", trace, ensure_ascii=False, sort_keys=True)
-    print("SUMMARY_CSV")
-    print(summary.to_csv(index=False).strip())
-    print("TRACE_JSON=" + json.dumps(trace, ensure_ascii=False, sort_keys=True))
-
-
 def clock_range(start: str, end: str) -> list[str]:
     start_ts = pd.Timestamp(f"2000-01-01 {start}")
     end_ts = pd.Timestamp(f"2000-01-01 {end}")
@@ -92,10 +40,6 @@ def clock_range(start: str, end: str) -> list[str]:
     return [
         timestamp.strftime("%H:%M") for timestamp in pd.date_range(start_ts, end_ts, freq="min")
     ]
-
-
-def month_periods(start_month: str, end_month: str) -> list[str]:
-    return [str(month) for month in pd.period_range(start_month, end_month, freq="M")]
 
 
 def month_window_periods(
@@ -206,6 +150,10 @@ def positive_count(series: pd.Series) -> int:
     return int((values > 0).sum())
 
 
+def mean_aggregations(*columns: str) -> dict[str, tuple[str, str]]:
+    return {column: (column, "mean") for column in columns}
+
+
 def selection_return_stats(
     full_group: pd.DataFrame,
     selected: pd.DataFrame,
@@ -224,6 +172,41 @@ def selection_return_stats(
         if len(selected)
         else float("nan"),
     }
+
+
+def selection_group_metrics(
+    full_group: pd.DataFrame,
+    selected: pd.DataFrame,
+    *,
+    date: object,
+    timestamp: object,
+    candidate_counts: Mapping[str, object],
+    selection_counts: Mapping[str, object] | None = None,
+    include_all_mean: bool = True,
+    include_win_rate: bool = True,
+) -> dict[str, object]:
+    timestamp = pd.Timestamp(timestamp)
+    row: dict[str, object] = {
+        "date": str(date),
+        "decision_target_timestamp": timestamp,
+        "clock": timestamp.strftime("%H:%M"),
+        "rows": int(len(full_group)),
+        **candidate_counts,
+        "selected_rows": int(len(selected)),
+        **(selection_counts or {}),
+    }
+    for prefix, label_col in (("short", "label"), ("next", NEXT_CLOSE_LABEL_COL)):
+        for key, value in selection_return_stats(
+            full_group,
+            selected,
+            label_col=label_col,
+            prefix=prefix,
+        ).items():
+            if (include_all_mean or not key.endswith("_all_mean_bps")) and (
+                include_win_rate or not key.endswith("_top_win_rate")
+            ):
+                row[key] = value
+    return row
 
 
 def write_artifact_fetch_trace(

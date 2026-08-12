@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import argparse
-import shutil
 from datetime import UTC, datetime
-from pathlib import Path
 
-from opening_strength_fit.analysis import write_json
-from opening_strength_fit.artifact_catalog import record_requested_artifacts
+from opening_strength_fit.artifact_catalog import (
+    print_recorded_artifacts,
+    record_requested_artifacts,
+)
 from opening_strength_fit.capacity_acceptance import load_label_frame
-from opening_strength_fit.commands.arguments import CommandArguments
-from opening_strength_fit.config import load_toml, run_id
+from opening_strength_fit.commands import arguments as cmd
+from opening_strength_fit.config import config_str, prepare_output_dir
 from opening_strength_fit.realistic_acceptance import (
     DEFAULT_REALISTIC_LABEL_COL,
     REALISTIC_DAILY_SUMMARY,
@@ -36,13 +36,12 @@ ARTIFACTS = (
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
+    parser = cmd.command_parser(
         description=(
             "Replay capacity-selected child orders with practical execution constraints "
             "and compute capacity-weighted next-close acceptance returns."
         )
     )
-    parser.add_argument("--config", default="")
     parser.add_argument("--selected-input", action="append")
     parser.add_argument(
         "--execution-input",
@@ -53,9 +52,7 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--label-input", action="append")
-    parser.add_argument("--output-dir", default="")
-    parser.add_argument("--run-id", default="")
-    parser.add_argument("--variant", default="")
+    cmd.add_arguments(parser, "output-dir run-id variant", default="")
     parser.add_argument("--label-col", default="")
     parser.add_argument("--fee-bps", type=float, default=None)
     parser.add_argument("--capacity-total-notional", type=float, default=None)
@@ -69,12 +66,9 @@ def parse_args() -> argparse.Namespace:
             "by the selected input and is not collapsed into a daily turnover budget."
         ),
     )
-    parser.add_argument("--execution-fill-rate", type=float, default=None)
-    parser.add_argument("--min-child-notional", type=float, default=None)
-    parser.add_argument("--max-symbol-decision-count", type=int, default=None)
-    parser.add_argument("--round-lot-shares", type=int, default=None)
-    parser.add_argument("--price-col", default="")
-    parser.add_argument("--status-col", default="")
+    cmd.add_arguments(parser, "execution-fill-rate min-child-notional", type=float, default=None)
+    cmd.add_arguments(parser, "max-symbol-decision-count round-lot-shares", type=int, default=None)
+    cmd.add_arguments(parser, "price-col status-col", default="")
     parser.add_argument("--tradable-status", action="append")
     parser.add_argument("--spread-bps-col", default="")
     parser.add_argument("--max-spread-bps", type=float, default=None)
@@ -84,86 +78,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-ask-depth-participation-rate", type=float, default=None)
     parser.add_argument("--industry-col", default="")
     parser.add_argument("--max-daily-industry-weight", type=float, default=None)
-    parser.add_argument("--records-dir", default="")
-    parser.add_argument("--record-prefix", default="")
+    cmd.add_arguments(parser, "records-dir record-prefix", default="")
     return parser.parse_args()
 
 
-def _constraints(arguments: CommandArguments) -> RealisticExecutionConstraints:
-    defaults = RealisticExecutionConstraints()
-    return RealisticExecutionConstraints(
-        capacity_total_notional=arguments.float(
-            "capacity_total_notional",
-            defaults.capacity_total_notional,
-        ),
-        fee_bps=arguments.float("fee_bps", defaults.fee_bps),
-        max_daily_symbol_weight=arguments.float(
-            "max_daily_symbol_weight",
-            defaults.max_daily_symbol_weight,
-        ),
-        max_daily_symbol_participation_rate=arguments.float(
-            "max_daily_symbol_participation_rate",
-            defaults.max_daily_symbol_participation_rate,
-        ),
-        daily_capacity_method=arguments.string(
-            "daily_capacity_method",
-            defaults.daily_capacity_method,
-        ),
-        execution_fill_rate=arguments.float(
-            "execution_fill_rate",
-            defaults.execution_fill_rate,
-        ),
-        min_child_notional=arguments.float(
-            "min_child_notional",
-            defaults.min_child_notional,
-        ),
-        max_symbol_decision_count=arguments.integer(
-            "max_symbol_decision_count",
-            defaults.max_symbol_decision_count,
-        ),
-        round_lot_shares=arguments.integer(
-            "round_lot_shares",
-            defaults.round_lot_shares,
-        ),
-        price_col=arguments.string("price_col", defaults.price_col),
-        status_col=arguments.string("status_col", defaults.status_col),
-        tradable_statuses=arguments.aliased_tuple(
-            "tradable_status",
-            "tradable_statuses",
-        ),
-        spread_bps_col=arguments.string("spread_bps_col", defaults.spread_bps_col),
-        max_spread_bps=arguments.float("max_spread_bps", defaults.max_spread_bps),
-        limit_up_room_bps_col=arguments.string(
-            "limit_up_room_bps_col",
-            defaults.limit_up_room_bps_col,
-        ),
-        min_limit_up_room_bps=arguments.float(
-            "min_limit_up_room_bps",
-            defaults.min_limit_up_room_bps,
-        ),
-        ask_depth_notional_col=arguments.string(
-            "ask_depth_notional_col",
-            defaults.ask_depth_notional_col,
-        ),
-        max_ask_depth_participation_rate=arguments.float(
-            "max_ask_depth_participation_rate",
-            defaults.max_ask_depth_participation_rate,
-        ),
-        industry_col=arguments.string("industry_col", defaults.industry_col),
-        max_daily_industry_weight=arguments.float(
-            "max_daily_industry_weight",
-            defaults.max_daily_industry_weight,
-        ),
+def _constraints(arguments: cmd.CommandArguments) -> RealisticExecutionConstraints:
+    return arguments.resolve_dataclass(
+        RealisticExecutionConstraints(),
+        tuple_aliases={"tradable_statuses": "tradable_status"},
     )
 
 
 def main() -> None:
     args = parse_args()
-    config = load_toml(args.config) if args.config else {}
-    arguments = CommandArguments(args, config, "realistic_acceptance")
-    run_name = args.run_id or (
-        run_id(config, args.config) if args.config else "realistic_acceptance"
-    )
+    config, arguments, run_name = cmd.command_context(args, "realistic_acceptance")
     selected_inputs = arguments.tuple("selected_input")
     execution_inputs = arguments.tuple("execution_input")
     label_inputs = arguments.tuple("label_input")
@@ -172,14 +100,9 @@ def main() -> None:
     if not label_inputs:
         raise SystemExit("pass --label-input or set [realistic_acceptance].label_input")
 
-    output_dir_value = CommandArguments(args, config, "output").string(
-        "output_dir",
-        config_name="local_dir",
-    )
-    if not output_dir_value:
+    if not (args.output_dir or config_str(config, "output", "local_dir", "")):
         raise SystemExit("pass --output-dir or set [output].local_dir")
-    output_dir = Path(output_dir_value)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir = prepare_output_dir(config, args.output_dir, run_name)
     label_col = arguments.string("label_col", DEFAULT_REALISTIC_LABEL_COL)
     constraints = _constraints(arguments)
 
@@ -240,8 +163,6 @@ def main() -> None:
             "turnover into a same-day turnover budget."
         ),
     }
-    write_json(trace_path, trace, ensure_ascii=True)
-
     records_dir = arguments.string("records_dir")
     record_prefix = arguments.string("record_prefix") or run_name
     record_paths = record_requested_artifacts(
@@ -249,20 +170,12 @@ def main() -> None:
         records_dir=records_dir,
         record_prefix=record_prefix,
         names=ARTIFACTS,
+        trace=(trace_path, trace),
     )
-    if records_dir:
-        trace["record_paths"] = [str(path) for path in record_paths]
-        write_json(trace_path, trace, ensure_ascii=True)
-        destination = Path(records_dir) / "backtests" / record_prefix / trace_path.name
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(trace_path, destination)
 
     print("realistic_acceptance_summary:")
     print(summary.to_string(index=False) if not summary.empty else "empty")
-    if record_paths:
-        print("\nrecorded_realistic_acceptance_outputs:")
-        for path in record_paths:
-            print(f"  {path}")
+    print_recorded_artifacts(record_paths, "realistic_acceptance")
     print(f"\nwrote outputs: {output_dir}")
 
 

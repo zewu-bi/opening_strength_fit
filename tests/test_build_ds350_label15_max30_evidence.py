@@ -10,6 +10,9 @@ ROOT = Path(__file__).parents[1]
 EVIDENCE = (
     ROOT / "experiments/evidence/backtests/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1"
 )
+HISTORICAL_EVIDENCE = (
+    ROOT / "experiments/evidence/backtests/nn_ds350_label12_36m_grouped_gated_v2_mse_v1"
+)
 
 
 def test_ds350_max30_evidence_is_complete_and_self_consistent() -> None:
@@ -51,3 +54,26 @@ def test_ds350_top1000_evidence_reused_embedded_next_label() -> None:
             month["next_label_source"] == "prediction:label_next_close"
             for month in trace["months"].values()
         )
+
+
+def test_ds350_max10_evidence_has_compact_complete_traces() -> None:
+    manifest = json.loads((HISTORICAL_EVIDENCE / "manifest.json").read_text(encoding="utf-8"))
+    trace_bundle = json.loads((HISTORICAL_EVIDENCE / "traces.json").read_text(encoding="utf-8"))
+    expected_cases = set(pd.read_csv(HISTORICAL_EVIDENCE / "matrix_group_pooled.csv")["case"])
+
+    assert manifest["status"] == "superseded"
+    assert manifest["cases"] == trace_bundle["case_count"] == len(expected_cases) == 15
+    assert set(trace_bundle["cases"]) == expected_cases
+    assert "traces.json" in manifest["files"]
+    assert not any(name.startswith("traces/") for name in manifest["files"])
+
+    for case, trace in trace_bundle["cases"].items():
+        assert trace["variant"] == case
+        assert trace["run_id"] == f"nn_ds350_{case}_36m_grouped_gated_v2_mse_v1"
+        assert trace["rows"] > 0
+        assert 0 <= trace["missing_next_close_rows"] < trace["rows"]
+
+    for name, metadata in manifest["files"].items():
+        path = HISTORICAL_EVIDENCE / name
+        assert path.stat().st_size == metadata["bytes"]
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == metadata["sha256"]

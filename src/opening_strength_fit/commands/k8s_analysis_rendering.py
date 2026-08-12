@@ -2,27 +2,12 @@ from __future__ import annotations
 
 import shlex
 import textwrap
-from datetime import date
 from pathlib import Path
 
-import pandas as pd
-
+from opening_strength_fit import k8s_rendering_support as _render_support
 from opening_strength_fit.commands.artifact_sync_metrics import DEFAULT_NEXT_CLOSE_LABEL_PVC_DIR
+from opening_strength_fit.config import coerce_bool, coerce_str_list, run_id
 from opening_strength_fit.config import config_value as get
-from opening_strength_fit.config import run_id
-from opening_strength_fit.k8s_rendering_support import (
-    avoid_nodes_affinity_yaml as _avoid_nodes_affinity_yaml,
-)
-from opening_strength_fit.k8s_rendering_support import (
-    env_from_secrets_yaml as _env_from_secrets_yaml,
-)
-from opening_strength_fit.k8s_rendering_support import k8s_job_name as _k8s_job_name
-from opening_strength_fit.k8s_rendering_support import (
-    node_selector_yaml as _node_selector_yaml,
-)
-from opening_strength_fit.k8s_rendering_support import (
-    wait_for_specific_paths_yaml as _wait_for_specific_paths_yaml,
-)
 from opening_strength_fit.pvc_layout import (
     output_layout,
     rolling_shard_dir_name,
@@ -30,12 +15,12 @@ from opening_strength_fit.pvc_layout import (
     yearly_shard_dir_name,
 )
 
+_training_support = _render_support
+
 
 def _analysis_config(config: dict) -> dict:
     analysis = config.get("analysis", {})
-    if not isinstance(analysis, dict):
-        return {}
-    pool_internal = analysis.get("pool_internal", {})
+    pool_internal = analysis.get("pool_internal", {}) if isinstance(analysis, dict) else {}
     return pool_internal if isinstance(pool_internal, dict) else {}
 
 
@@ -44,21 +29,11 @@ def _analysis_get(config: dict, key: str, default):
 
 
 def _analysis_list(config: dict, key: str, default: list[str] | tuple[str, ...]) -> list[str]:
-    value = _analysis_get(config, key, default)
-    if value is None:
-        return []
-    if isinstance(value, str):
-        parts = value.replace(",", " ").split()
-    else:
-        parts = [str(item) for item in value]
-    return [part.strip() for part in parts if part and part.strip()]
+    return coerce_str_list(_analysis_get(config, key, default))
 
 
 def _analysis_bool(config: dict, key: str, default: bool) -> bool:
-    value = _analysis_get(config, key, default)
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
-    return bool(value)
+    return coerce_bool(_analysis_get(config, key, default))
 
 
 def _analysis_resources(config: dict) -> dict:
@@ -67,70 +42,32 @@ def _analysis_resources(config: dict) -> dict:
 
 
 def _analysis_env_from(config: dict, indent: int = 22) -> str:
-    secret_names = []
-    clickhouse_secret = str(
-        _analysis_get(config, "clickhouse_secret", get(config, "k8s", "clickhouse_secret", ""))
-        or ""
-    )
-    if clickhouse_secret:
-        secret_names.append(clickhouse_secret)
-    secret_names.extend(_analysis_list(config, "env_secrets", []))
-    ceph_secret = str(_analysis_get(config, "ceph_secret", "") or "")
-    if ceph_secret:
-        secret_names.append(ceph_secret)
-    return _env_from_secrets_yaml(secret_names, indent=indent)
+    clickhouse_secret = get(config, "k8s", "clickhouse_secret", "")
+    secret_names = [
+        str(_analysis_get(config, "clickhouse_secret", clickhouse_secret) or ""),
+        *_analysis_list(config, "env_secrets", []),
+        str(_analysis_get(config, "ceph_secret", "") or ""),
+    ]
+    return _render_support.env_from_secrets_yaml(secret_names, indent=indent)
 
 
 def _analysis_scheduler_yaml(config: dict, indent: int = 14) -> str:
     analysis = _analysis_config(config)
-    scheduler_config = {"k8s": {}}
-    if isinstance(analysis.get("node_selector", {}), dict):
-        scheduler_config["k8s"]["node_selector"] = analysis.get("node_selector", {})
-    if "avoid_nodes" in analysis:
-        scheduler_config["k8s"]["avoid_nodes"] = analysis.get("avoid_nodes", [])
-    else:
-        scheduler_config["k8s"]["avoid_nodes"] = get(config, "k8s", "avoid_nodes", [])
-    return _node_selector_yaml(scheduler_config, indent=indent) + _avoid_nodes_affinity_yaml(
-        scheduler_config, indent=indent
+    selector = analysis.get("node_selector", {})
+    scheduler_config = {
+        "k8s": {
+            "node_selector": selector if isinstance(selector, dict) else {},
+            "avoid_nodes": analysis.get("avoid_nodes", get(config, "k8s", "avoid_nodes", [])),
+        }
+    }
+    toleration_resources = (
+        {"gpu_limit": 1} if _analysis_bool(config, "tolerate_gpu_nodes", False) else {}
     )
-
-
-def _window_mode(config: dict) -> str:
-    return str(get(config, "window", "mode", "chronological"))
-
-
-def _month_range_from_config(config: dict) -> list[str]:
-    start = get(config, "window", "test_start_month", None)
-    end = get(config, "window", "test_end_month", None)
-    if not start or not end:
-        raise SystemExit(
-            "--analysis monthly requires [window].test_start_month and [window].test_end_month"
-        )
-    return [str(month) for month in pd.period_range(str(start), str(end), freq="M")]
-
-
-def _month_windows_from_config(config: dict) -> list[tuple[str, str]]:
-    months = _month_range_from_config(config)
-    test_months = int(get(config, "window", "test_months", 1) or 1)
-    stride_months = int(get(config, "window", "test_stride_months", test_months) or test_months)
-    first = pd.Period(months[0], freq="M")
-    last = pd.Period(months[-1], freq="M")
-    windows: list[tuple[str, str]] = []
-    test_start = first
-    while test_start <= last:
-        test_end = test_start + test_months - 1
-        if test_end > last:
-            break
-        windows.append((str(test_start), str(test_end)))
-        test_start += stride_months
-    return windows
-
-
-def _year_from_config(config: dict, key: str) -> int:
-    value = get(config, "window", key, None)
-    if not value:
-        raise SystemExit(f"--analysis requires [window].{key} for yearly waits")
-    return date.fromisoformat(str(value)).year
+    return (
+        _render_support.node_selector_yaml(scheduler_config, indent=indent)
+        + _training_support.gpu_tolerations_yaml(toleration_resources, indent=indent)
+        + _render_support.avoid_nodes_affinity_yaml(scheduler_config, indent=indent)
+    )
 
 
 def _shell_command_yaml(args: list[str], indent: int) -> str:
@@ -143,29 +80,24 @@ def _shell_command_yaml(args: list[str], indent: int) -> str:
     return "\n".join(lines)
 
 
-def _analysis_prediction_inputs(config: dict, pvc_dir: str) -> list[str]:
-    predictions = _analysis_list(config, "predictions", [])
-    return predictions or [pvc_dir]
-
-
 def _analysis_wait_paths(config: dict, pvc_dir: str) -> list[str]:
     explicit = _analysis_list(config, "wait_for_paths", [])
     if explicit:
         return explicit
-    completion_file = str(_analysis_get(config, "wait_for_completion_file", "metrics_by_year.csv"))
-    completion_file = completion_file.strip()
-    if not completion_file:
-        completion_file = "predictions.parquet"
-    if _window_mode(config) == "rolling_monthly":
+    completion_file = (
+        str(_analysis_get(config, "wait_for_completion_file", "metrics_by_year.csv")).strip()
+        or "predictions.parquet"
+    )
+    if _training_support.window_mode(config) == "rolling_monthly":
         layout = output_layout(config)
         return [
             f"{pvc_dir.rstrip('/')}/"
             f"{rolling_shard_dir_name(start_month, end_month, layout)}/{completion_file}"
-            for start_month, end_month in _month_windows_from_config(config)
+            for start_month, end_month in _training_support.month_windows_from_config(config)
         ]
     try:
-        start_year = _year_from_config(config, "test_start_date")
-        end_year = _year_from_config(config, "test_end_date")
+        start_year = _training_support.year_from_config(config, "test_start_date")
+        end_year = _training_support.year_from_config(config, "test_end_date")
     except SystemExit:
         return [f"{pvc_dir.rstrip('/')}/{completion_file}"]
     layout = output_layout(config)
@@ -178,7 +110,6 @@ def _analysis_wait_paths(config: dict, pvc_dir: str) -> list[str]:
 def _analysis_command_args(
     config: dict,
     *,
-    config_path: Path,
     run_id_value: str,
     pvc_dir: str,
     analysis_dir: str,
@@ -194,7 +125,7 @@ def _analysis_command_args(
         or DEFAULT_NEXT_CLOSE_LABEL_PVC_DIR
     )
     args = ["osf-analyze-pool-internal-top100"]
-    for prediction_input in _analysis_prediction_inputs(config, pvc_dir):
+    for prediction_input in _analysis_list(config, "predictions", []) or [pvc_dir]:
         args.extend(["--predictions", prediction_input])
     args.extend(
         [
@@ -238,80 +169,54 @@ def _analysis_command_args(
 
 def render_pool_internal_analysis_job(config_path: Path, config: dict, image: str) -> str:
     run_id_value = run_id(config, config_path)
-    namespace = get(config, "k8s", "namespace", "bizewu")
-    pull_secret = get(config, "k8s", "image_pull_secret", "highfort")
-    pvc = get(config, "k8s", "pvc", "bizewu-private-data")
     mount_path = get(config, "k8s", "mount_path", "/mnt/output")
     pvc_dir = run_output_dir(config, run_id_value, mount_path=str(mount_path))
     analysis_dir = str(
         _analysis_get(config, "output_dir", f"{pvc_dir.rstrip('/')}/analysis/pool_internal_top100")
     )
     report_dir = str(_analysis_get(config, "report_dir", f"{analysis_dir.rstrip('/')}/reports"))
-    job_name = str(
-        _analysis_get(config, "job_name", _k8s_job_name("os-analyze", run_id_value, "pool")) or ""
-    )
+    default_job_name = _render_support.k8s_job_name("os-analyze", run_id_value, "pool")
+    job_name = str(_analysis_get(config, "job_name", default_job_name) or "")
     resources = _analysis_resources(config)
-    wait_for_paths = _wait_for_specific_paths_yaml(
+    wait_for_paths = _render_support.wait_for_specific_paths_yaml(
         _analysis_wait_paths(config, pvc_dir),
         timeout_seconds=int(_analysis_get(config, "wait_for_path_timeout_seconds", 86400) or 86400),
         interval_seconds=int(_analysis_get(config, "wait_for_path_interval_seconds", 120) or 120),
-        indent=22,
+        indent=0,
     )
     command_yaml = _shell_command_yaml(
         _analysis_command_args(
             config,
-            config_path=config_path,
             run_id_value=run_id_value,
             pvc_dir=pvc_dir,
             analysis_dir=analysis_dir,
             report_dir=report_dir,
         ),
-        indent=22,
+        indent=0,
     )
-    return textwrap.dedent(
+    resources_yaml = _render_support.container_resources_yaml(
+        resources,
+        indent=10,
+        defaults=("4", "128Gi", "8", "256Gi"),
+    )
+    script = textwrap.indent(
         f"""\
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          name: {job_name}
-          namespace: {namespace}
-        spec:
-          backoffLimit: 0
-          ttlSecondsAfterFinished: 86400
-          template:
-            spec:
-              restartPolicy: Never
-              imagePullSecrets:
-                - name: {pull_secret}
-              volumes:
-                - name: opening-strength-output
-                  persistentVolumeClaim:
-                    claimName: {pvc}
-{_analysis_scheduler_yaml(config, indent=14).rstrip()}
-              containers:
-                - name: opening-strength-fit
-                  image: {image}
-                  imagePullPolicy: Always
-{_analysis_env_from(config, indent=18)}                  workingDir: /app/opening_strength_fit
-                  command:
-                    - /bin/bash
-                    - -lc
-                    - |
-                      set -euo pipefail
+set -euo pipefail
 {wait_for_paths.rstrip()}
-                      rm -rf {shlex.quote(analysis_dir)}
-                      mkdir -p {shlex.quote(analysis_dir)}
-                      mkdir -p {shlex.quote(report_dir)}
+rm -rf {shlex.quote(analysis_dir)}
+mkdir -p {shlex.quote(analysis_dir)}
+mkdir -p {shlex.quote(report_dir)}
 {command_yaml}
-                  volumeMounts:
-                    - name: opening-strength-output
-                      mountPath: {mount_path}
-                  resources:
-                    requests:
-                      cpu: "{resources.get("cpu_request", "4")}"
-                      memory: {resources.get("memory_request", "128Gi")}
-                    limits:
-                      cpu: "{resources.get("cpu_limit", "8")}"
-                      memory: {resources.get("memory_limit", "256Gi")}
-        """
+""",
+        " " * 14,
+    )
+    return _render_support.job_manifest_yaml(
+        _render_support.configured_job_pod_header_yaml(config, job_name),
+        _analysis_scheduler_yaml(config, indent=6),
+        image,
+        script,
+        mount_path,
+        resources_yaml,
+        env_from=_analysis_env_from(config, indent=10),
+        env_before_workdir=True,
     )

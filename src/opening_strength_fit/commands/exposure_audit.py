@@ -7,9 +7,13 @@ from pathlib import Path
 import pandas as pd
 
 from opening_strength_fit.analysis import KEY_COLUMNS, write_json
-from opening_strength_fit.artifact_catalog import record_requested_artifacts
-from opening_strength_fit.commands.arguments import CommandArguments
-from opening_strength_fit.config import config_str, load_toml, run_id
+from opening_strength_fit.artifact_catalog import (
+    EXPOSURE_AUDIT_ARTIFACTS,
+    print_recorded_artifacts,
+    record_requested_artifacts,
+)
+from opening_strength_fit.commands import arguments as cmd
+from opening_strength_fit.config import config_str
 from opening_strength_fit.exposure_audit import (
     active_default_exposures,
     add_derived_exposure_columns,
@@ -28,37 +32,27 @@ from opening_strength_fit.exposure_audit import (
 from opening_strength_fit.io import (
     available_frame_columns,
     frame_columns,
-    frame_files,
+    merge_frame_support,
     read_frame,
     read_frame_files,
+    select_available_columns,
 )
-from opening_strength_fit.prediction_frames import prediction_files
+from opening_strength_fit.io import (
+    frame_files_many as _generic_files,
+)
+from opening_strength_fit.prediction_frames import prediction_files_many as _prediction_files
+from opening_strength_fit.schema import normalize_decision_keys
 from opening_strength_fit.stock_pool import (
-    DEFAULT_STOCK_POOL_PATHS,
-    load_stock_pool,
-    stock_pool_membership_mask,
+    filter_named_stock_pool,
 )
 
 DEFAULT_POOLS = ("L",)
-OUTPUT_FILES = (
-    "exposure_audit_group_metrics.csv",
-    "exposure_audit_month_summary.csv",
-    "exposure_audit_summary.csv",
-    "exposure_audit_category_summary.csv",
-    "exposure_audit_industry_group_metrics.csv",
-    "exposure_audit_industry_month_summary.csv",
-    "exposure_audit_industry_summary.csv",
-    "exposure_audit_daily_concentration.csv",
-    "exposure_audit_concentration_summary.csv",
-    "exposure_audit_trace.json",
-)
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
+    parser = cmd.command_parser(
         description=("Audit TopN or supplied-portfolio exposure versus its candidate pool.")
     )
-    parser.add_argument("--config", default="")
     parser.add_argument("--predictions", action="append")
     parser.add_argument(
         "--exposure-input",
@@ -68,14 +62,10 @@ def parse_args() -> argparse.Namespace:
             "date,symbol or date,symbol,decision_target_timestamp. May be repeated."
         ),
     )
-    parser.add_argument("--output-dir", default="")
-    parser.add_argument("--run-id", default="")
-    parser.add_argument("--variant", default="")
+    cmd.add_arguments(parser, "output-dir run-id variant", default="")
     parser.add_argument("--score-col", default="")
     parser.add_argument("--top-n", type=int, default=None)
-    parser.add_argument("--selection-col", default="")
-    parser.add_argument("--weight-col", default="")
-    parser.add_argument("--industry-col", default="")
+    cmd.add_arguments(parser, "selection-col weight-col industry-col", default="")
     parser.add_argument(
         "--skip-score-exposure-corr",
         action="store_true",
@@ -93,54 +83,8 @@ def parse_args() -> argparse.Namespace:
         help="Pool to audit. Defaults to L.",
     )
     parser.add_argument("--pool-date-lag-sessions", type=int, default=None)
-    parser.add_argument("--records-dir", default="")
-    parser.add_argument("--record-prefix", default="")
+    cmd.add_arguments(parser, "records-dir record-prefix", default="")
     return parser.parse_args()
-
-
-def _prediction_files(paths: list[str]) -> list[Path]:
-    return [file for raw in paths for file in prediction_files(Path(raw))]
-
-
-def _generic_files(paths: list[str]) -> list[Path]:
-    return [file for raw in paths for file in frame_files(raw)]
-
-
-def _normalize_support_frame(frame: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
-    out = frame.copy()
-    out["date"] = pd.to_datetime(out["date"], errors="coerce").dt.strftime("%Y-%m-%d")
-    out["symbol"] = out["symbol"].astype(str)
-    if "decision_target_timestamp" in keys:
-        out["decision_target_timestamp"] = pd.to_datetime(
-            out["decision_target_timestamp"],
-            errors="coerce",
-        )
-    return out.dropna(subset=keys).copy()
-
-
-def _merge_support_frame(
-    frame: pd.DataFrame,
-    support: pd.DataFrame,
-    *,
-    keys: list[str],
-) -> pd.DataFrame:
-    if support.empty:
-        return frame
-    keyed = support.drop_duplicates(keys, keep="last")
-    overlap = [column for column in keyed.columns if column not in keys and column in frame.columns]
-    merged = frame.merge(
-        keyed,
-        on=keys,
-        how="left",
-        suffixes=("", "_support"),
-        validate="many_to_one",
-    )
-    for column in overlap:
-        support_col = f"{column}_support"
-        if support_col in merged.columns:
-            merged[column] = merged[column].combine_first(merged[support_col])
-            merged = merged.drop(columns=[support_col])
-    return merged
 
 
 def _merge_exposure_files(
@@ -159,14 +103,13 @@ def _merge_exposure_files(
         missing_keys = sorted(set(keys) - available)
         if missing_keys:
             raise SystemExit(f"{file}: missing exposure key columns: {missing_keys}")
-        columns = [*keys]
-        for column in [*exposure_columns, industry_col]:
-            if column and column in available and column not in columns:
-                columns.append(column)
+        columns = select_available_columns(keys, [*exposure_columns, industry_col], available)
         if len(columns) == len(keys):
             continue
-        support = _normalize_support_frame(read_frame(file, columns=columns), keys)
-        frame = _merge_support_frame(frame, support, keys=keys)
+        support = normalize_decision_keys(
+            read_frame(file, columns=columns), key_columns=tuple(keys)
+        )
+        frame = merge_frame_support(frame, support, keys=keys)
         merge_trace.append(
             {
                 "file": str(file),
@@ -222,10 +165,9 @@ def _load_audit_frame(
         raise SystemExit(f"selection column is missing from predictions: {selection_col}")
     if weight_col and weight_col not in prediction_available:
         raise SystemExit(f"weight column is missing from predictions: {weight_col}")
-    prediction_columns = [*KEY_COLUMNS]
-    for column in (score_col, selection_col, weight_col):
-        if column and column in prediction_available and column not in prediction_columns:
-            prediction_columns.append(column)
+    prediction_columns = select_available_columns(
+        KEY_COLUMNS, (score_col, selection_col, weight_col), prediction_available
+    )
 
     external_exposure_columns = [
         column for column in active_exposure_columns if column in exposure_available
@@ -242,12 +184,11 @@ def _load_audit_frame(
     prediction_derived_source_columns = [
         column for column in derived_source_columns if column in prediction_available
     ]
-    for column in prediction_exposure_columns:
-        if column not in prediction_columns:
-            prediction_columns.append(column)
-    for column in prediction_derived_source_columns:
-        if column not in prediction_columns:
-            prediction_columns.append(column)
+    prediction_columns = select_available_columns(
+        prediction_columns,
+        [*prediction_exposure_columns, *prediction_derived_source_columns],
+        prediction_available,
+    )
     if (
         industry_col
         and industry_col in prediction_available
@@ -300,63 +241,9 @@ def _load_audit_frame(
     return frame, active_exposure_columns, trace
 
 
-def _pool_frame(
-    frame: pd.DataFrame,
-    *,
-    pool: str,
-    pool_date_lag_sessions: int,
-) -> tuple[str, pd.DataFrame]:
-    if pool == "universe":
-        return "universe", frame
-    pool_path = DEFAULT_STOCK_POOL_PATHS[pool]
-    print(f"loading_stock_pool: pool={pool} path={pool_path}")
-    stock_pool = load_stock_pool(pool_path)
-    mask = stock_pool_membership_mask(
-        frame,
-        stock_pool,
-        date_lag_sessions=pool_date_lag_sessions,
-    )
-    return f"pool_{pool}", frame.loc[mask].copy()
-
-
-def _write_outputs(
-    *,
-    output_dir: Path,
-    group_metrics: pd.DataFrame,
-    month_summary: pd.DataFrame,
-    summary: pd.DataFrame,
-    categories: pd.DataFrame,
-    industry_group_metrics_frame: pd.DataFrame,
-    industry_month_summary: pd.DataFrame,
-    industry_summary: pd.DataFrame,
-    daily: pd.DataFrame,
-    concentration: pd.DataFrame,
-    trace: dict[str, object],
-) -> None:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    group_metrics.to_csv(output_dir / "exposure_audit_group_metrics.csv", index=False)
-    month_summary.to_csv(output_dir / "exposure_audit_month_summary.csv", index=False)
-    summary.to_csv(output_dir / "exposure_audit_summary.csv", index=False)
-    categories.to_csv(output_dir / "exposure_audit_category_summary.csv", index=False)
-    industry_group_metrics_frame.to_csv(
-        output_dir / "exposure_audit_industry_group_metrics.csv",
-        index=False,
-    )
-    industry_month_summary.to_csv(
-        output_dir / "exposure_audit_industry_month_summary.csv",
-        index=False,
-    )
-    industry_summary.to_csv(output_dir / "exposure_audit_industry_summary.csv", index=False)
-    daily.to_csv(output_dir / "exposure_audit_daily_concentration.csv", index=False)
-    concentration.to_csv(output_dir / "exposure_audit_concentration_summary.csv", index=False)
-    write_json(output_dir / "exposure_audit_trace.json", trace, ensure_ascii=True)
-
-
 def main() -> None:
     args = parse_args()
-    config = load_toml(args.config) if args.config else {}
-    arguments = CommandArguments(args, config, "exposure_audit")
-    run_name = args.run_id or (run_id(config, args.config) if args.config else "exposure_audit")
+    config, arguments, run_name = cmd.command_context(args, "exposure_audit")
     prediction_paths = arguments.list("predictions")
     if not prediction_paths:
         raise SystemExit("pass --predictions or set [exposure_audit].predictions")
@@ -390,44 +277,39 @@ def main() -> None:
     daily_frames = []
     industry_frames = []
     for pool in pools:
-        pool_name, pool_data = _pool_frame(
+        pool_name, pool_data = filter_named_stock_pool(
             frame,
-            pool=pool,
-            pool_date_lag_sessions=pool_date_lag_sessions,
+            pool,
+            date_lag_sessions=pool_date_lag_sessions,
         )
         print(f"auditing_pool: pool={pool_name} rows={len(pool_data)}")
+        selection_options = {
+            "pool": pool_name,
+            "score_col": score_col,
+            "top_n": top_n,
+            "selection_col": selection_col,
+            "weight_col": weight_col,
+        }
         group_frames.append(
             exposure_group_metrics(
                 pool_data,
                 specs,
-                pool=pool_name,
-                score_col=score_col,
-                top_n=top_n,
-                selection_col=selection_col,
-                weight_col=weight_col,
+                **selection_options,
                 compute_score_corr=not skip_score_exposure_corr,
             )
         )
         daily_frames.append(
             daily_concentration(
                 pool_data,
-                pool=pool_name,
-                score_col=score_col,
-                top_n=top_n,
-                selection_col=selection_col,
-                weight_col=weight_col,
+                **selection_options,
                 industry_col=industry_col,
             )
         )
         industry_frames.append(
             industry_group_metrics(
                 pool_data,
+                **selection_options,
                 industry_col=industry_col,
-                pool=pool_name,
-                score_col=score_col,
-                top_n=top_n,
-                selection_col=selection_col,
-                weight_col=weight_col,
             )
         )
 
@@ -469,55 +351,37 @@ def main() -> None:
         "pool_date_lag_sessions": pool_date_lag_sessions,
         **load_trace,
     }
-    _write_outputs(
-        output_dir=output_dir,
-        group_metrics=group_metrics,
-        month_summary=month_summary,
-        summary=summary,
-        categories=categories,
-        industry_group_metrics_frame=industry_metrics,
-        industry_month_summary=industry_month_summary,
-        industry_summary=industry_summary,
-        daily=daily,
-        concentration=concentration,
-        trace=trace,
-    )
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for name, output in (
+        ("group_metrics", group_metrics),
+        ("month_summary", month_summary),
+        ("summary", summary),
+        ("category_summary", categories),
+        ("industry_group_metrics", industry_metrics),
+        ("industry_month_summary", industry_month_summary),
+        ("industry_summary", industry_summary),
+        ("daily_concentration", daily),
+        ("concentration_summary", concentration),
+    ):
+        output.to_csv(output_dir / f"exposure_audit_{name}.csv", index=False)
+    write_json(output_dir / "exposure_audit_trace.json", trace, ensure_ascii=True)
 
     records_dir = arguments.string("records_dir")
     record_paths = record_requested_artifacts(
         output_dir=output_dir,
         records_dir=records_dir,
         record_prefix=arguments.string("record_prefix") or run_name,
-        names=OUTPUT_FILES,
+        names=EXPOSURE_AUDIT_ARTIFACTS,
     )
 
     print("\nexposure_audit_summary:")
-    display_cols = [
-        "pool",
-        "category",
-        "exposure",
-        "selected_mean_rank",
-        "selected_mean_z",
-        "selected_top_decile_share",
-        "score_exposure_spearman",
-    ]
+    display_cols = "pool category exposure selected_mean_rank selected_mean_z selected_top_decile_share score_exposure_spearman".split()
     print(summary[display_cols].head(40).to_string(index=False) if not summary.empty else "empty")
     if not industry_summary.empty:
         print("\nexposure_audit_industry_summary:")
-        industry_display_cols = [
-            "pool",
-            "industry_col",
-            "industry",
-            "candidate_share",
-            "selected_share",
-            "active_share",
-            "abs_active_share",
-        ]
+        industry_display_cols = "pool industry_col industry candidate_share selected_share active_share abs_active_share".split()
         print(industry_summary[industry_display_cols].head(30).to_string(index=False))
-    if record_paths:
-        print("\nrecorded_exposure_audit_outputs:")
-        for path in record_paths:
-            print(f"  {path}")
+    print_recorded_artifacts(record_paths, "exposure_audit")
     print(f"\nwrote outputs: {output_dir}")
 
 

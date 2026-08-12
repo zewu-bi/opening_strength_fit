@@ -6,6 +6,8 @@ from importlib import import_module
 import pandas as pd
 
 from opening_strength_fit.optimization_direction_data import (
+    CAPACITY_CUMULATIVE_FEE_COLUMNS,
+    CUMULATIVE_PLOT_VALUE_COLUMNS,
     DEFAULT_DIRECTIONS,
     NEXT_CLOSE_CAPITAL_DIVISOR,
     RETURN_BPS_DENOMINATOR,
@@ -76,6 +78,42 @@ OVERLAY_EXCESS_HORIZON_NEXT = "next"
 OVERLAY_EXCESS_HORIZONS = (
     OVERLAY_EXCESS_HORIZON_SHORT,
     OVERLAY_EXCESS_HORIZON_NEXT,
+)
+_BASELINE_RELATIVE_COLUMN_SPECS = (
+    ("next_vs_baseline_bps", "next_net_return_bps", "baseline_next_net_bps"),
+    (
+        "next_cumulative_vs_baseline_bps",
+        "next_cumulative_net_return_bps",
+        "baseline_next_cumulative_net_bps",
+    ),
+    (
+        "next_internal_excess_vs_baseline_bps",
+        "next_capital_internal_excess_bps",
+        "baseline_next_capital_internal_excess_bps",
+    ),
+    (
+        "next_cumulative_internal_excess_vs_baseline_bps",
+        "next_cumulative_internal_excess_return_bps",
+        "baseline_next_cumulative_internal_excess_return_bps",
+    ),
+)
+_MARKET_RELATIVE_COLUMN_SPECS = (
+    ("next_alpha_vs_market_bps", "next_net_return_bps", "market_next_net_bps"),
+    (
+        "next_capital_alpha_vs_market_bps",
+        "next_capital_net_return_bps",
+        "market_next_capital_net_bps",
+    ),
+    (
+        "next_cumulative_alpha_vs_market_bps",
+        "next_cumulative_net_return_bps",
+        "market_next_cumulative_net_bps",
+    ),
+)
+_CAPACITY_SCALING_COLUMNS = (
+    "capacity_daily_capital_fraction",
+    "capacity_total_notional",
+    "capacity_decision_notional",
 )
 
 
@@ -148,42 +186,11 @@ def combine_net_alpha_cumulative_data(
     realized_cumulative_output: pd.DataFrame,
 ) -> pd.DataFrame:
     key_columns = ["pool", "pool_label", "week_start", "variant"]
+    fee_index = CUMULATIVE_PLOT_VALUE_COLUMNS.index("pool_next_mean_bps")
     value_columns = [
-        "decision_groups",
-        "clocks",
-        "candidate_rows",
-        "selected_rows",
-        "capacity_decision_groups",
-        "capacity_daily_capital_fraction",
-        "capacity_total_notional",
-        "capacity_decision_notional",
-        "capacity_fee_bps_per_trade",
-        "capacity_audit_fee_bps_per_trade",
-        "capacity_additional_fee_bps_per_trade",
-        "capacity_additional_fee_bps",
-        "pool_next_mean_bps",
-        "pool_turnover",
-        "pool_turnover_source",
-        "pool_fee_bps",
-        "pool_next_net_return_bps",
-        "pool_next_capital_net_return_bps",
-        "pool_next_cumulative_net_return_bps",
-        "pool_next_net_pnl",
-        "pool_next_cumulative_net_pnl",
-        "selected_next_mean_bps",
-        "selected_turnover",
-        "selected_fee_bps",
-        "next_internal_excess_bps",
-        "next_capital_internal_excess_bps",
-        "next_cumulative_internal_excess_return_bps",
-        "next_internal_excess_pnl",
-        "next_cumulative_internal_excess_pnl",
-        "fee_bps",
-        "next_net_return_bps",
-        "next_capital_net_return_bps",
-        "next_cumulative_net_return_bps",
-        "next_net_pnl",
-        "next_cumulative_net_pnl",
+        *CUMULATIVE_PLOT_VALUE_COLUMNS[:fee_index],
+        *CAPACITY_CUMULATIVE_FEE_COLUMNS,
+        *CUMULATIVE_PLOT_VALUE_COLUMNS[fee_index:],
     ]
     columns = key_columns + [
         column for column in value_columns if column in realized_cumulative_output
@@ -236,12 +243,7 @@ def add_background_cumulative_data(
     background["selected_next_mean_bps"] = pd.NA
     background["selected_turnover"] = pd.NA
     background["selected_fee_bps"] = pd.NA
-    for column in (
-        "capacity_fee_bps_per_trade",
-        "capacity_audit_fee_bps_per_trade",
-        "capacity_additional_fee_bps_per_trade",
-        "capacity_additional_fee_bps",
-    ):
+    for column in CAPACITY_CUMULATIVE_FEE_COLUMNS:
         if column in background.columns:
             background[column] = pd.NA
     background["next_internal_excess_bps"] = pd.NA
@@ -334,15 +336,7 @@ def add_market_cumulative_data(
         market["next_cumulative_alpha_pnl"] = pd.NA
     market["next_capital_internal_excess_bps"] = pd.NA
     market["next_cumulative_internal_excess_return_bps"] = pd.NA
-    for column in (
-        "next_vs_baseline_bps",
-        "next_cumulative_vs_baseline_bps",
-        "next_internal_excess_vs_baseline_bps",
-        "next_cumulative_internal_excess_vs_baseline_bps",
-        "next_alpha_vs_market_bps",
-        "next_capital_alpha_vs_market_bps",
-        "next_cumulative_alpha_vs_market_bps",
-    ):
+    for column, *_ in (*_BASELINE_RELATIVE_COLUMN_SPECS, *_MARKET_RELATIVE_COLUMN_SPECS):
         market[column] = pd.NA
 
     out = cumulative_data.loc[~cumulative_data["pool"].astype(str).eq(source_key)].copy()
@@ -357,84 +351,60 @@ def add_market_cumulative_data(
     return pd.concat([out, market], ignore_index=True)
 
 
+def _add_cumulative_relative_data(
+    cumulative_data: pd.DataFrame,
+    *,
+    reference_key: str,
+    comparison_keys: tuple[str, ...],
+    reference_kind: str,
+    column_specs: tuple[tuple[str, str, str], ...],
+    required_reference_column: str = "",
+) -> pd.DataFrame:
+    data = cumulative_data.copy()
+    data["week_start"] = pd.to_datetime(data["week_start"], errors="coerce")
+    data = data.dropna(subset=["week_start"])
+    source_columns = [source for _, source, _ in column_specs]
+    reference = data.loc[
+        data["pool"].astype(str).eq(reference_key),
+        ["week_start", *source_columns],
+    ].rename(columns={source: reference for _, source, reference in column_specs})
+    if reference.empty:
+        raise ValueError(f"cumulative data has no {reference_kind} rows for {reference_key!r}")
+    for output_column, _, _ in column_specs:
+        data[output_column] = pd.NA
+    for key in comparison_keys:
+        item = data.loc[data["pool"].astype(str).eq(key), ["week_start"]].merge(
+            reference,
+            on="week_start",
+            how="left",
+        )
+        index = data.index[data["pool"].astype(str).eq(key)]
+        if len(index) != len(item):
+            raise ValueError(f"cannot align cumulative {reference_kind} rows for {key!r}")
+        if required_reference_column and item[required_reference_column].isna().any():
+            raise ValueError(f"missing {reference_kind} rows for cumulative alpha key {key!r}")
+        for output_column, source_column, reference_column in column_specs:
+            data.loc[index, output_column] = (
+                pd.to_numeric(data.loc[index, source_column], errors="coerce").to_numpy()
+                - pd.to_numeric(item[reference_column], errors="coerce").to_numpy()
+            )
+    data["week_start"] = data["week_start"].dt.strftime("%Y-%m-%d")
+    return data
+
+
 def add_cumulative_baseline_relative_data(
     cumulative_data: pd.DataFrame,
     *,
     baseline_key: str,
     comparison_keys: tuple[str, ...],
 ) -> pd.DataFrame:
-    data = cumulative_data.copy()
-    data["week_start"] = pd.to_datetime(data["week_start"], errors="coerce")
-    data = data.dropna(subset=["week_start"])
-    baseline = data.loc[
-        data["pool"].astype(str).eq(baseline_key),
-        [
-            "week_start",
-            "next_net_return_bps",
-            "next_cumulative_net_return_bps",
-            "next_capital_internal_excess_bps",
-            "next_cumulative_internal_excess_return_bps",
-        ],
-    ].rename(
-        columns={
-            "next_net_return_bps": "baseline_next_net_bps",
-            "next_cumulative_net_return_bps": "baseline_next_cumulative_net_bps",
-            "next_capital_internal_excess_bps": "baseline_next_capital_internal_excess_bps",
-            "next_cumulative_internal_excess_return_bps": (
-                "baseline_next_cumulative_internal_excess_return_bps"
-            ),
-        }
+    return _add_cumulative_relative_data(
+        cumulative_data,
+        reference_key=baseline_key,
+        comparison_keys=comparison_keys,
+        reference_kind="baseline",
+        column_specs=_BASELINE_RELATIVE_COLUMN_SPECS,
     )
-    if baseline.empty:
-        raise ValueError(f"cumulative data has no baseline rows for {baseline_key!r}")
-    data["next_vs_baseline_bps"] = pd.NA
-    data["next_cumulative_vs_baseline_bps"] = pd.NA
-    data["next_internal_excess_vs_baseline_bps"] = pd.NA
-    data["next_cumulative_internal_excess_vs_baseline_bps"] = pd.NA
-    for key in comparison_keys:
-        item = data.loc[data["pool"].astype(str).eq(key), ["week_start"]].merge(
-            baseline,
-            on="week_start",
-            how="left",
-        )
-        index = data.index[data["pool"].astype(str).eq(key)]
-        if len(index) != len(item):
-            raise ValueError(f"cannot align cumulative baseline rows for {key!r}")
-        daily_relative_bps = (
-            pd.to_numeric(data.loc[index, "next_net_return_bps"], errors="coerce").to_numpy()
-            - pd.to_numeric(item["baseline_next_net_bps"], errors="coerce").to_numpy()
-        )
-        data.loc[index, "next_vs_baseline_bps"] = daily_relative_bps
-        daily_internal_relative_bps = (
-            pd.to_numeric(
-                data.loc[index, "next_capital_internal_excess_bps"],
-                errors="coerce",
-            ).to_numpy()
-            - pd.to_numeric(
-                item["baseline_next_capital_internal_excess_bps"],
-                errors="coerce",
-            ).to_numpy()
-        )
-        data.loc[index, "next_internal_excess_vs_baseline_bps"] = daily_internal_relative_bps
-        data.loc[index, "next_cumulative_vs_baseline_bps"] = (
-            pd.to_numeric(
-                data.loc[index, "next_cumulative_net_return_bps"],
-                errors="coerce",
-            ).to_numpy()
-            - pd.to_numeric(item["baseline_next_cumulative_net_bps"], errors="coerce").to_numpy()
-        )
-        data.loc[index, "next_cumulative_internal_excess_vs_baseline_bps"] = (
-            pd.to_numeric(
-                data.loc[index, "next_cumulative_internal_excess_return_bps"],
-                errors="coerce",
-            ).to_numpy()
-            - pd.to_numeric(
-                item["baseline_next_cumulative_internal_excess_return_bps"],
-                errors="coerce",
-            ).to_numpy()
-        )
-    data["week_start"] = data["week_start"].dt.strftime("%Y-%m-%d")
-    return data
 
 
 def add_cumulative_market_relative_data(
@@ -443,65 +413,14 @@ def add_cumulative_market_relative_data(
     market_key: str,
     comparison_keys: tuple[str, ...],
 ) -> pd.DataFrame:
-    data = cumulative_data.copy()
-    data["week_start"] = pd.to_datetime(data["week_start"], errors="coerce")
-    data = data.dropna(subset=["week_start"])
-    market = data.loc[
-        data["pool"].astype(str).eq(market_key),
-        [
-            "week_start",
-            "next_net_return_bps",
-            "next_capital_net_return_bps",
-            "next_cumulative_net_return_bps",
-        ],
-    ].rename(
-        columns={
-            "next_net_return_bps": "market_next_net_bps",
-            "next_capital_net_return_bps": "market_next_capital_net_bps",
-            "next_cumulative_net_return_bps": "market_next_cumulative_net_bps",
-        }
+    return _add_cumulative_relative_data(
+        cumulative_data,
+        reference_key=market_key,
+        comparison_keys=comparison_keys,
+        reference_kind="market",
+        column_specs=_MARKET_RELATIVE_COLUMN_SPECS,
+        required_reference_column="market_next_cumulative_net_bps",
     )
-    if market.empty:
-        raise ValueError(f"cumulative data has no market rows for {market_key!r}")
-
-    data["next_alpha_vs_market_bps"] = pd.NA
-    data["next_capital_alpha_vs_market_bps"] = pd.NA
-    data["next_cumulative_alpha_vs_market_bps"] = pd.NA
-    for key in comparison_keys:
-        item = data.loc[data["pool"].astype(str).eq(key), ["week_start"]].merge(
-            market,
-            on="week_start",
-            how="left",
-        )
-        index = data.index[data["pool"].astype(str).eq(key)]
-        if len(index) != len(item):
-            raise ValueError(f"cannot align cumulative market rows for {key!r}")
-        if item["market_next_cumulative_net_bps"].isna().any():
-            raise ValueError(f"missing market rows for cumulative alpha key {key!r}")
-        data.loc[index, "next_alpha_vs_market_bps"] = (
-            pd.to_numeric(data.loc[index, "next_net_return_bps"], errors="coerce").to_numpy()
-            - pd.to_numeric(item["market_next_net_bps"], errors="coerce").to_numpy()
-        )
-        data.loc[index, "next_capital_alpha_vs_market_bps"] = (
-            pd.to_numeric(
-                data.loc[index, "next_capital_net_return_bps"],
-                errors="coerce",
-            ).to_numpy()
-            - pd.to_numeric(item["market_next_capital_net_bps"], errors="coerce").to_numpy()
-        )
-        data.loc[index, "next_cumulative_alpha_vs_market_bps"] = (
-            pd.to_numeric(
-                data.loc[index, "next_cumulative_net_return_bps"],
-                errors="coerce",
-            ).to_numpy()
-            - pd.to_numeric(item["market_next_cumulative_net_bps"], errors="coerce").to_numpy()
-        )
-    data["week_start"] = data["week_start"].dt.strftime("%Y-%m-%d")
-    return data
-
-
-def _panel_values(data: pd.DataFrame, *, pools: tuple[str, ...], column: str) -> pd.Series:
-    return data.loc[data["pool"].astype(str).isin(pools), column]
 
 
 def apply_display_labels(frame: pd.DataFrame) -> pd.DataFrame:
@@ -543,21 +462,12 @@ def _attach_capacity_fraction_to_market_source(
 ) -> pd.DataFrame:
     fraction_source = capacity_data.loc[
         capacity_data["pool"].astype(str).eq("baseline_pool_l"),
-        [
-            "week_start",
-            "capacity_daily_capital_fraction",
-            "capacity_total_notional",
-            "capacity_decision_notional",
-        ],
+        ["week_start", *_CAPACITY_SCALING_COLUMNS],
     ].copy()
     if fraction_source.empty:
         raise ValueError("capacity cumulative data has no baseline rows for market scaling")
     out = market_source.drop(
-        columns=[
-            "capacity_daily_capital_fraction",
-            "capacity_total_notional",
-            "capacity_decision_notional",
-        ],
+        columns=_CAPACITY_SCALING_COLUMNS,
         errors="ignore",
     ).merge(fraction_source, on="week_start", how="left")
     if out["capacity_daily_capital_fraction"].isna().any():
@@ -588,11 +498,7 @@ def _replace_capacity_pool_source(
     source = source.rename(columns={column: f"{column}_source" for column in source_columns[1:]})
     out = capacity_data.drop(
         columns=[
-            "pool_next_mean_bps",
-            "pool_turnover",
-            "pool_turnover_source",
-            "pool_fee_bps",
-            "pool_next_net_return_bps",
+            *source_columns[1:],
             "pool_next_capital_net_return_bps",
             "pool_next_cumulative_net_return_bps",
             "pool_next_net_pnl",
@@ -628,19 +534,15 @@ def _replace_capacity_pool_source(
         out["next_capital_internal_excess_bps"] / RETURN_BPS_DENOMINATOR * total_notional
     )
     out = out.sort_values(["pool", "week_start"]).copy()
+    cumulative_columns = {
+        "pool_next_cumulative_net_return_bps": "pool_next_capital_net_return_bps",
+        "next_cumulative_internal_excess_return_bps": "next_capital_internal_excess_bps",
+        "pool_next_cumulative_net_pnl": "pool_next_net_pnl",
+        "next_cumulative_internal_excess_pnl": "next_internal_excess_pnl",
+    }
     for _, item in out.groupby("pool", sort=False):
-        out.loc[item.index, "pool_next_cumulative_net_return_bps"] = (
-            item["pool_next_capital_net_return_bps"].fillna(0.0).cumsum()
-        )
-        out.loc[item.index, "next_cumulative_internal_excess_return_bps"] = (
-            item["next_capital_internal_excess_bps"].fillna(0.0).cumsum()
-        )
-        out.loc[item.index, "pool_next_cumulative_net_pnl"] = (
-            item["pool_next_net_pnl"].fillna(0.0).cumsum()
-        )
-        out.loc[item.index, "next_cumulative_internal_excess_pnl"] = (
-            item["next_internal_excess_pnl"].fillna(0.0).cumsum()
-        )
+        for target, source in cumulative_columns.items():
+            out.loc[item.index, target] = item[source].fillna(0.0).cumsum()
     return out
 
 

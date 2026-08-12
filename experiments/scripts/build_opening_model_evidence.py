@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
+from opening_strength_fit.artifact_catalog import (
+    CUMULATIVE_EVIDENCE_COLUMNS as CUMULATIVE_COLUMNS,
+)
 from opening_strength_fit.artifact_catalog import (
     artifact_file_manifest,
     copy_artifact_specs,
     copy_csv_columns,
+    four_figure_artifact_specs,
 )
+from opening_strength_fit.io import write_json
 
 ROOT = Path(__file__).resolve().parents[2]
 V4_RUN_ID = (
@@ -35,34 +39,7 @@ HISTOGRAM_DIR = Path(
 BUNDLE_DIR = Path("experiments/evidence/backtests") / V6_RUN_ID
 
 COPY_SPECS = (
-    (
-        COMPARISON_DIR / "optimization_directions_overlay_acceptance.svg",
-        "01_signal_acceptance.svg",
-    ),
-    (
-        COMPARISON_DIR / "optimization_directions_overlay_acceptance_plot_data.csv",
-        "01_signal_acceptance.csv",
-    ),
-    (
-        COMPARISON_DIR / "optimization_directions_net_alpha_cumulative.svg",
-        "02_top100_cumulative.svg",
-    ),
-    (
-        BUCKET_DIR / "top1000_bucket_returns.svg",
-        "03_top1000_bucket_curve.svg",
-    ),
-    (
-        BUCKET_DIR / "bucket_curve_plot_data.csv",
-        "03_top1000_bucket_curve.csv",
-    ),
-    (
-        HISTOGRAM_DIR / "top1000_score_bucket_return_100bps_counts.svg",
-        "04_top1000_return_distribution.svg",
-    ),
-    (
-        HISTOGRAM_DIR / "top1000_score_bucket_return_100bps_counts.csv",
-        "04_top1000_return_distribution.csv",
-    ),
+    *four_figure_artifact_specs(COMPARISON_DIR, BUCKET_DIR, HISTOGRAM_DIR),
     (
         V6_BACKTEST_DIR / "pool_internal_summary.csv",
         "pool_internal_summary.csv",
@@ -84,14 +61,6 @@ COPY_SPECS = (
 )
 CUMULATIVE_SOURCE = COMPARISON_DIR / "optimization_directions_net_alpha_cumulative_plot_data.csv"
 CUMULATIVE_OUTPUT = "02_top100_cumulative.csv"
-CUMULATIVE_COLUMNS = (
-    "pool",
-    "pool_label",
-    "week_start",
-    "variant",
-    "next_cumulative_net_return_bps",
-    "next_cumulative_alpha_bps",
-)
 
 
 def build_bundle(root: Path = ROOT) -> Path:
@@ -121,10 +90,7 @@ def build_bundle(root: Path = ROOT) -> Path:
         "cumulative_rows": cumulative_rows,
         "files": artifact_file_manifest(destination, sources),
     }
-    (destination / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    write_json(destination / "manifest.json", manifest, sort_keys=True)
     return destination
 
 

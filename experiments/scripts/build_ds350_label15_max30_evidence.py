@@ -6,11 +6,16 @@ from pathlib import Path
 import pandas as pd
 
 from opening_strength_fit.artifact_catalog import (
+    CUMULATIVE_EVIDENCE_COLUMNS as CUMULATIVE_COLUMNS,
+)
+from opening_strength_fit.artifact_catalog import (
     artifact_file_manifest,
     copy_artifact_specs,
     copy_csv_columns,
+    four_figure_artifact_specs,
     require_file,
 )
+from opening_strength_fit.io import write_json
 
 ROOT = Path(__file__).resolve().parents[2]
 RUN_ID = "nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1"
@@ -43,33 +48,10 @@ TOP1000_DIR = Path("experiments/results/backtests") / TOP1000_RUN_ID
 BUNDLE_DIR = Path("experiments/evidence/backtests") / RUN_ID
 
 COPY_SPECS = (
-    (
-        COMPARISON_DIR / "optimization_directions_overlay_acceptance.svg",
-        "01_signal_acceptance.svg",
-    ),
-    (
-        COMPARISON_DIR / "optimization_directions_overlay_acceptance_plot_data.csv",
-        "01_signal_acceptance.csv",
-    ),
-    (
-        COMPARISON_DIR / "optimization_directions_net_alpha_cumulative.svg",
-        "02_top100_cumulative.svg",
-    ),
-    (
-        TOP1000_DIR / "top1000_rank/rank_bucket/top1000_bucket_returns.svg",
-        "03_top1000_bucket_curve.svg",
-    ),
-    (
-        TOP1000_DIR / "top1000_rank/rank_bucket/bucket_curve_plot_data.csv",
-        "03_top1000_bucket_curve.csv",
-    ),
-    (
-        TOP1000_DIR / "top1000_distribution/top1000_score_bucket_return_100bps_counts.svg",
-        "04_top1000_return_distribution.svg",
-    ),
-    (
-        TOP1000_DIR / "top1000_distribution/top1000_score_bucket_return_100bps_counts.csv",
-        "04_top1000_return_distribution.csv",
+    *four_figure_artifact_specs(
+        COMPARISON_DIR,
+        TOP1000_DIR / "top1000_rank/rank_bucket",
+        TOP1000_DIR / "top1000_distribution",
     ),
     (
         TOP1000_DIR / "top1000_distribution/top1000_score_bucket_distribution_summary.csv",
@@ -84,14 +66,6 @@ COPY_SPECS = (
     (CASE_BACKTEST_DIR / "pool_internal_summary.csv", "w0931_h1m_pool_internal_summary.csv"),
 )
 CUMULATIVE_SOURCE = COMPARISON_DIR / "optimization_directions_net_alpha_cumulative_plot_data.csv"
-CUMULATIVE_COLUMNS = (
-    "pool",
-    "pool_label",
-    "week_start",
-    "variant",
-    "next_cumulative_net_return_bps",
-    "next_cumulative_alpha_bps",
-)
 
 
 def _case_parts(case: str) -> tuple[str, str]:
@@ -184,66 +158,6 @@ def _matrix_table(pool_summary: pd.DataFrame, folds: pd.DataFrame) -> pd.DataFra
     return pd.DataFrame(rows)
 
 
-def _write_readme(destination: Path, matrix: pd.DataFrame, folds: pd.DataFrame) -> None:
-    display = matrix.copy().rename(
-        columns={
-            "universe_short_rank_ic": "universe short IC",
-            "pool_L_short_excess_bps": "pool_L short excess bps",
-            "pool_L_next_excess_bps": "pool_L next excess bps",
-            "pool_L_next_rank_ic": "pool_L next IC",
-            "mean_best_epoch": "mean best epoch",
-        }
-    )
-    for column in (
-        "universe short IC",
-        "pool_L short excess bps",
-        "pool_L next excess bps",
-        "pool_L next IC",
-        "mean best epoch",
-    ):
-        display[column] = display[column].map(lambda value: f"{value:.4f}")
-    columns = list(display.columns)
-    table_lines = [
-        "| " + " | ".join(columns) + " |",
-        "| " + " | ".join("---" for _ in columns) + " |",
-    ]
-    table_lines.extend(
-        "| " + " | ".join(str(value) for value in row) + " |"
-        for row in display.itertuples(index=False, name=None)
-    )
-    table = "\n".join(table_lines)
-    best_epochs = pd.to_numeric(folds["best_epoch"])
-    readme = f"""# ds350 max-30 15-label result archive
-
-This is the authoritative compact archive for `{RUN_ID}`. All 15 matrix cases and all
-120 rolling OOS folds completed. The mean best epoch is `{best_epochs.mean():.2f}`;
-`{int((best_epochs > 10).sum())}/120` folds selected an epoch after 10 and
-`{int((best_epochs == 30).sum())}/120` selected epoch 30.
-
-The standard four figures below focus on `09:31-09:40 / 1m`. Figures 1-2 compare the
-authoritative max-30 result with the matching prior v6 1m / 10-epoch run. Figure 2 applies an
-8 bps realized fee and shows next-close economic follow-through relative to each run's matching
-`pool_L`. Figures 3-4 diagnose the current max-30 score head over Top1000 only.
-
-![Signal acceptance](01_signal_acceptance.svg)
-
-![Top100 cumulative](02_top100_cumulative.svg)
-
-![Top1000 bucket curve](03_top1000_bucket_curve.svg)
-
-![Top1000 return distribution](04_top1000_return_distribution.svg)
-
-## Fifteen-label matrix
-
-{table}
-
-The aggregate training, OOS, and pool-internal sources are retained as compact CSVs. Large
-predictions, model binaries, and row-level labels remain on the PVC and are addressed by the run
-config, source revision, input lineage, and hashes in `manifest.json`.
-"""
-    (destination / "README.md").write_text(readme, encoding="utf-8")
-
-
 def build_bundle(root: Path = ROOT) -> Path:
     source_root = root / ARCHIVE_SOURCE
     destination = root / BUNDLE_DIR
@@ -276,8 +190,6 @@ def build_bundle(root: Path = ROOT) -> Path:
         frame.to_csv(destination / name, index=False)
         sources[name] = f"generated from {ARCHIVE_SOURCE.as_posix()}"
 
-    _write_readme(destination, matrix, folds)
-    sources["README.md"] = "generated archive guide"
     manifest = {
         "schema_version": 1,
         "run_id": RUN_ID,
@@ -289,10 +201,7 @@ def build_bundle(root: Path = ROOT) -> Path:
         "four_figure_comparison_run_id": COMPARISON_RUN_ID,
         "files": artifact_file_manifest(destination, sources),
     }
-    (destination / "manifest.json").write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    write_json(destination / "manifest.json", manifest, sort_keys=True)
     return destination
 
 

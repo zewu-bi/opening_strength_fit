@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import argparse
+from functools import partial
 from pathlib import Path
 
 from opening_strength_fit.capacity_acceptance import (
     DEFAULT_CAPACITY_SLICES,
     DEFAULT_CAPACITY_TOTAL_NOTIONAL,
 )
+from opening_strength_fit.commands import arguments as cmd
 from opening_strength_fit.optimization_acceptance_plots import (
     CUMULATIVE_MODE_TOP100,
     CUMULATIVE_MODES,
@@ -56,60 +58,53 @@ def build_parser() -> argparse.ArgumentParser:
             "baseline plus 1-3 comparison model results."
         )
     )
-    parser.add_argument(
-        "--backtests-root",
+    add = partial(cmd.add_arguments, parser)
+    add(
+        "backtests-root",
         type=Path,
         default=Path("experiments/results/backtests"),
         help="Root containing per-run pool-internal backtest directories.",
     )
-    parser.add_argument(
-        "--output-dir",
+    add(
+        "output-dir",
         type=Path,
         default=Path("experiments/results/backtests/optimization_overlay_acceptance_2022_2025"),
         help="Directory for comparison SVGs, CSV plot data, and trace JSON.",
     )
-    parser.add_argument(
-        "--pool",
-        default="pool_L",
-        help="Pool slice to compare across directions.",
-    )
-    parser.add_argument(
-        "--title-prefix",
-        default="2022-2025",
-        help="Figure title prefix.",
-    )
-    parser.add_argument(
-        "--baseline-run-id",
+    add("pool", default="pool_L", help="Pool slice to compare across directions.")
+    add("title-prefix", default="2022-2025", help="Figure title prefix.")
+    add(
+        "baseline-run-id",
         default="baseline_2022_2025_cluster",
         help="Backtest directory used for the baseline pool reference.",
     )
-    parser.add_argument(
-        "--baseline-label",
+    add(
+        "baseline-label",
         default="baseline",
         help="Display label for the baseline run in both acceptance figures.",
     )
-    parser.add_argument(
-        "--top-n",
+    add(
+        "top-n",
         type=int,
         default=100,
         help="Selection count label used in plot titles and trace metadata.",
     )
-    parser.add_argument(
-        "--realized-fee-bps",
+    add(
+        "realized-fee-bps",
         type=float,
         default=DEFAULT_REALIZED_FEE_BPS,
         help="Per-trade fee bps subtracted from selected returns in the cumulative plot.",
     )
-    parser.add_argument(
-        "--pool-turnover-path",
+    add(
+        "pool-turnover-path",
         default="auto",
         help=(
             "Stock-pool parquet path used to compute equal-weight pool turnover fees. "
             "Used only with --pool-fee-mode stock_pool_membership. Use 'auto' to infer from --pool."
         ),
     )
-    parser.add_argument(
-        "--pool-fee-mode",
+    add(
+        "pool-fee-mode",
         choices=POOL_FEE_MODES,
         default=DEFAULT_POOL_FEE_MODE,
         help=(
@@ -118,8 +113,8 @@ def build_parser() -> argparse.ArgumentParser:
             "round_trip charges the full pool every day."
         ),
     )
-    parser.add_argument(
-        "--capacity-total-notional",
+    add(
+        "capacity-total-notional",
         type=float,
         default=0.0,
         help=(
@@ -127,8 +122,8 @@ def build_parser() -> argparse.ArgumentParser:
             f"Use {DEFAULT_CAPACITY_TOTAL_NOTIONAL:g} for the 1bn split20 convention."
         ),
     )
-    parser.add_argument(
-        "--capacity-decision-notional",
+    add(
+        "capacity-decision-notional",
         type=float,
         default=0.0,
         help=(
@@ -136,20 +131,20 @@ def build_parser() -> argparse.ArgumentParser:
             "--capacity-total-notional, it is derived as total / --capacity-slices."
         ),
     )
-    parser.add_argument(
-        "--capacity-slices",
+    add(
+        "capacity-slices",
         type=float,
         default=DEFAULT_CAPACITY_SLICES,
         help="Execution slices used to derive per-decision notional from total capital.",
     )
-    parser.add_argument(
-        "--cumulative-mode",
+    add(
+        "cumulative-mode",
         choices=CUMULATIVE_MODES,
         default=CUMULATIVE_MODE_TOP100,
         help="Cumulative plot source: TopN pool-internal summaries or capacity acceptance summaries.",
     )
-    parser.add_argument(
-        "--cumulative-relative-mode",
+    add(
+        "cumulative-relative-mode",
         choices=CUMULATIVE_RELATIVE_MODES,
         default=CUMULATIVE_RELATIVE_MODE_MARKET,
         help=(
@@ -157,44 +152,44 @@ def build_parser() -> argparse.ArgumentParser:
             "cumulative net return minus pool_L cumulative net return."
         ),
     )
-    parser.add_argument(
-        "--overlay-excess-horizon",
+    add(
+        "overlay-excess-horizon",
         choices=OVERLAY_EXCESS_HORIZONS,
         default=OVERLAY_EXCESS_HORIZON_NEXT,
         help="Pool TopN excess horizon shown in the lower panel of the overlay figure.",
     )
-    parser.add_argument(
-        "--capacity-baseline-run-id",
+    add(
+        "capacity-baseline-run-id",
         default="",
         help="Capacity acceptance backtest directory for the baseline model in capacity mode.",
     )
-    parser.add_argument(
-        "--capacity-direction",
+    add(
+        "capacity-direction",
         action="append",
         type=parse_key_run_id,
         help="Capacity acceptance run for a comparison model, as key=run_id. Repeat as needed.",
     )
-    parser.add_argument(
-        "--realistic-baseline-run-id",
+    add(
+        "realistic-baseline-run-id",
         default="",
         help="Realistic acceptance backtest directory for the baseline model in realistic mode.",
     )
-    parser.add_argument(
-        "--realistic-direction",
+    add(
+        "realistic-direction",
         action="append",
         type=parse_key_run_id,
         help="Realistic acceptance run for a comparison model, as key=run_id. Repeat as needed.",
     )
-    parser.add_argument(
-        "--include-baseline-universe-cumulative",
+    add(
+        "include-baseline-universe-cumulative",
         action="store_true",
         help=(
             "Compatibility flag retained in trace metadata; the cumulative plot now always "
             "loads baseline universe data to derive the full-market reference line."
         ),
     )
-    parser.add_argument(
-        "--direction",
+    add(
+        "direction",
         action="append",
         type=parse_direction_spec,
         help=(

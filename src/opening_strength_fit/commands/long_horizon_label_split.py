@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
 
-from opening_strength_fit.config import load_toml
+from opening_strength_fit.commands.arguments import run_config_year_command
 from opening_strength_fit.label_splitting import split_mixed_label_year
 
 
@@ -61,25 +60,10 @@ def split_label_year(
     )
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Split combined long-horizon labels into model-ready mixed roots."
-    )
-    parser.add_argument("--config", required=True)
-    parser.add_argument("--year", type=int, required=True)
-    parser.add_argument("--overwrite", action="store_true")
-    return parser
-
-
 def main() -> None:
-    args = build_parser().parse_args()
-    config_path = Path(args.config)
-    config = load_toml(config_path)
-    split_label_year(
-        config,
-        config_path,
-        year=int(args.year),
-        overwrite=bool(args.overwrite),
+    run_config_year_command(
+        split_label_year,
+        "Split combined long-horizon labels into model-ready mixed roots.",
     )
 
 

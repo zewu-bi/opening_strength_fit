@@ -86,23 +86,35 @@ def normalize_decision_keys(
     *,
     key_columns: tuple[str, ...] = DECISION_KEY_COLUMNS,
     drop_missing: bool = True,
+    require_unique: bool = False,
+    context: str | None = None,
 ) -> pd.DataFrame:
     """Normalize the shared date/symbol/decision timestamp join keys."""
 
+    if context is not None:
+        missing = [column for column in key_columns if column not in frame.columns]
+        if missing:
+            raise SystemExit(f"{context} is missing join keys {missing}")
     out = frame.copy()
-    out["date"] = normalize_date_series(out["date"])
-    out["symbol"] = normalize_text_series(out["symbol"])
-    out["decision_target_timestamp"] = pd.to_datetime(
-        out["decision_target_timestamp"],
-        errors="coerce",
-    )
+    if "date" in out:
+        out["date"] = normalize_date_series(out["date"])
+    if "symbol" in out:
+        out["symbol"] = normalize_text_series(out["symbol"])
+    if "decision_target_timestamp" in out:
+        out["decision_target_timestamp"] = pd.to_datetime(
+            out["decision_target_timestamp"], errors="coerce"
+        ).dt.tz_localize(None)
     if drop_missing:
-        return out.dropna(subset=list(key_columns)).copy()
+        out = out.dropna(subset=list(key_columns)).copy()
+    elif (
+        context is not None and (invalid := out.loc[:, list(key_columns)].isna().any(axis=1)).any()
+    ):
+        raise SystemExit(f"{context} has {int(invalid.sum())} null-key rows")
+    if require_unique:
+        duplicate = out.duplicated(list(key_columns), keep=False)
+        if duplicate.any():
+            raise SystemExit(f"{context} has {int(duplicate.sum())} duplicate-key rows")
     return out
-
-
-def normalize_decision_keys_preserving_rows(frame: pd.DataFrame) -> pd.DataFrame:
-    return normalize_decision_keys(frame, drop_missing=False)
 
 
 def _depth_aliases() -> dict[str, str]:

@@ -7,20 +7,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from opening_strength_fit.cache_lock import (
-    CacheLockHeartbeat as _CacheLockHeartbeat,
-)
-from opening_strength_fit.cache_lock import (
-    acquire_cache_lock as _acquire_cache_lock,
-)
-from opening_strength_fit.cache_lock import (
-    clear_cache_ready as _clear_cache_ready,
-)
-from opening_strength_fit.cache_lock import (
-    mark_cache_ready as _mark_cache_ready,
-)
-from opening_strength_fit.cache_lock import (
-    release_cache_lock as _release_cache_lock,
+from opening_strength_fit import (
+    cache_lock,
+    training_pvc_columns,
+    training_pvc_reuse,
+    training_sources,
 )
 from opening_strength_fit.cache_manifest import (
     cache_manifest_path,
@@ -52,38 +43,19 @@ from opening_strength_fit.config import (
     run_id,
 )
 from opening_strength_fit.feature_config import feature_filters_from_config
-from opening_strength_fit.io import frame_columns, read_frame, write_frame_atomic
+from opening_strength_fit.io import frame_columns, frame_files, read_frame, write_frame_atomic
 from opening_strength_fit.model import feature_columns
 from opening_strength_fit.reports import dataset_summary, print_mapping
 from opening_strength_fit.schema import (
     DECISION_KEY_COLUMNS,
     ensure_timestamp_columns,
+    normalize_decision_keys,
     standardize_columns,
 )
 from opening_strength_fit.training_labeled import (
     apply_candidate_filter_from_config,
     build_labeled_frame_from_config,
     filter_labeled_frame,
-)
-from opening_strength_fit.training_pvc_columns import (
-    labeled_pvc_read_columns as _labeled_pvc_read_columns,
-)
-from opening_strength_fit.training_pvc_reuse import (
-    attach_reused_labeled_features as _attach_reused_labeled_features,
-)
-from opening_strength_fit.training_sources import (
-    clickhouse_date_bounds as _clickhouse_date_bounds,
-)
-from opening_strength_fit.training_sources import (
-    clickhouse_setting as _clickhouse_setting,
-)
-from opening_strength_fit.training_sources import (
-    input_kind as _input_kind,
-)
-from opening_strength_fit.training_sources import (
-    load_training_frame,
-    resolve_cache_path,
-    resolve_data_source,
 )
 from opening_strength_fit.training_windows import (
     resolve_window_mode,
@@ -93,20 +65,19 @@ from opening_strength_fit.universe import DEFAULT_A_SHARE_SYMBOL_REGEX, load_sym
 
 DATASET_JOIN_KEYS = DECISION_KEY_COLUMNS
 
-__all__ = [
-    "_attach_reused_labeled_features",
-    "_clickhouse_date_bounds",
-    "_clickhouse_setting",
-    "_input_kind",
-    "_labeled_pvc_files",
-    "_labeled_pvc_path",
-    "_labeled_pvc_read_columns",
-    "load_clickhouse_labeled_frame",
-    "load_labeled_pvc_frame",
-    "load_training_frame",
-    "resolve_cache_path",
-    "resolve_data_source",
-]
+_CacheLockHeartbeat = cache_lock.CacheLockHeartbeat
+_acquire_cache_lock = cache_lock.acquire_cache_lock
+_clear_cache_ready = cache_lock.clear_cache_ready
+_mark_cache_ready = cache_lock.mark_cache_ready
+_release_cache_lock = cache_lock.release_cache_lock
+_labeled_pvc_read_columns = training_pvc_columns.labeled_pvc_read_columns
+_attach_reused_labeled_features = training_pvc_reuse.attach_reused_labeled_features
+_clickhouse_date_bounds = training_sources.clickhouse_date_bounds
+_clickhouse_setting = training_sources.clickhouse_setting
+_input_kind = training_sources.input_kind
+load_training_frame = training_sources.load_training_frame
+resolve_cache_path = training_sources.resolve_cache_path
+resolve_data_source = training_sources.resolve_data_source
 
 
 def _labeled_pvc_path(args: argparse.Namespace, config: dict) -> Path:
@@ -152,25 +123,7 @@ def _labeled_pvc_date_filters(
 def _labeled_pvc_files(path: Path) -> list[Path]:
     if not path.is_dir():
         return [path]
-    files = _unique_labeled_pvc_files(list(path.rglob("*.parquet")))
-    if files:
-        return files
-    files = _unique_labeled_pvc_files(list(path.rglob("*.csv")) + list(path.rglob("*.csv.gz")))
-    if files:
-        return files
-    raise SystemExit(f"no parquet/csv files found under directory: {path}")
-
-
-def _unique_labeled_pvc_files(files: list[Path]) -> list[Path]:
-    unique: list[Path] = []
-    seen: set[Path] = set()
-    for file in sorted(files, key=lambda item: (item.is_symlink(), str(item))):
-        target = file.resolve()
-        if target in seen:
-            continue
-        seen.add(target)
-        unique.append(file)
-    return unique
+    return frame_files(path)
 
 
 def _read_labeled_pvc_file(
@@ -206,42 +159,26 @@ def _read_labeled_pvc_frame(
 ) -> pd.DataFrame:
     files = _labeled_pvc_files(path)
     if len(files) == 1:
-        return _downcast_labeled_pvc_frame(
-            filter_labeled_frame(
-                _read_labeled_pvc_file(
-                    files[0],
-                    columns=columns,
-                    filters=filters,
-                ),
-                config,
-            ),
-            config,
-        )
-
-    parts = []
-    for file in files:
-        part = _read_labeled_pvc_file(
-            file,
+        labeled = _read_labeled_pvc_file(
+            files[0],
             columns=columns,
             filters=filters,
         )
-        if part.empty:
-            continue
-        parts.append(part)
-        print_mapping(
-            "labeled_pvc_part",
-            {
-                "file": file.name,
-                "rows": len(part),
-                "columns": len(part.columns),
-            },
-        )
-    if not parts:
-        return pd.DataFrame()
-    return _downcast_labeled_pvc_frame(
-        filter_labeled_frame(pd.concat(parts, ignore_index=True), config),
-        config,
-    )
+    else:
+        parts = []
+        for file in files:
+            part = _read_labeled_pvc_file(file, columns=columns, filters=filters)
+            if part.empty:
+                continue
+            parts.append(part)
+            print_mapping(
+                "labeled_pvc_part",
+                {"file": file.name, "rows": len(part), "columns": len(part.columns)},
+            )
+        if not parts:
+            return pd.DataFrame()
+        labeled = pd.concat(parts, ignore_index=True)
+    return _downcast_labeled_pvc_frame(filter_labeled_frame(labeled, config), config)
 
 
 def _read_dataset_pvc_parts(
@@ -267,23 +204,12 @@ def _read_dataset_pvc_parts(
 
 
 def _normalize_dataset_join_keys(frame: pd.DataFrame, *, kind: str) -> pd.DataFrame:
-    out = standardize_columns(frame)
-    missing = [column for column in DATASET_JOIN_KEYS if column not in out.columns]
-    if missing:
-        raise SystemExit(f"{kind} dataset is missing join keys {missing}")
-    out = out.copy(deep=False)
-    parsed_date = pd.to_datetime(out["date"], errors="coerce")
-    parsed_timestamp = pd.to_datetime(out["decision_target_timestamp"], errors="coerce")
-    out["date"] = parsed_date.dt.strftime("%Y-%m-%d")
-    out["symbol"] = out["symbol"].astype("string")
-    out["decision_target_timestamp"] = parsed_timestamp
-    null_keys = out.loc[:, list(DATASET_JOIN_KEYS)].isna().any(axis=1)
-    if null_keys.any():
-        raise SystemExit(f"{kind} dataset has {int(null_keys.sum())} null-key rows")
-    duplicate = out.duplicated(list(DATASET_JOIN_KEYS), keep=False)
-    if duplicate.any():
-        raise SystemExit(f"{kind} dataset has {int(duplicate.sum())} duplicate-key rows")
-    return out
+    return normalize_decision_keys(
+        standardize_columns(frame),
+        drop_missing=False,
+        require_unique=True,
+        context=f"{kind} dataset",
+    )
 
 
 def _validate_model_ready_split_keys(
@@ -461,117 +387,54 @@ def _load_labeled_cache(path: Path, config: dict) -> pd.DataFrame:
         config,
         required=config_bool(config, "cache", "require_manifest", False),
     )
-    labeled = read_frame(path)
-    return ensure_timestamp_columns(standardize_columns(labeled))
+    return ensure_timestamp_columns(standardize_columns(read_frame(path)))
 
 
-def _write_labeled_cache(labeled: pd.DataFrame, path: Path) -> None:
-    write_frame_atomic(labeled, path)
-
-
-def _cache_ready_paths(cache_path: Path, config: dict, *, cache_write: bool) -> tuple[Path, ...]:
-    if cache_write or config_bool(config, "cache", "require_manifest", False):
-        return (cache_manifest_path(cache_path),)
-    return ()
+def _load_filtered_labeled_cache(
+    path: Path,
+    config: dict,
+    *,
+    action: str,
+) -> pd.DataFrame:
+    print_mapping("labeled_cache", {"action": action, "path": str(path)})
+    return apply_candidate_filter_from_config(_load_labeled_cache(path, config), config)
 
 
 def _cache_artifacts_exist(cache_path: Path, ready_paths: tuple[Path, ...]) -> bool:
     return cache_path.exists() and all(path.exists() for path in ready_paths)
 
 
-def _manifest_run_name(args: argparse.Namespace, config: dict, cache_path: Path) -> str:
-    config_path = getattr(args, "config", None)
-    if config_path:
-        return run_id(config, config_path)
-    return str(config.get("run", {}).get("id", cache_path.stem))
-
-
-def _publish_labeled_cache(
-    labeled: pd.DataFrame,
-    path: Path,
-    args: argparse.Namespace,
-    config: dict,
-) -> None:
-    _write_labeled_cache(labeled, path)
-    publish_cache_manifest(
-        labeled,
-        cache_path=path,
-        config=config,
-        run_name=_manifest_run_name(args, config, path),
-        config_path=getattr(args, "config", "") or "",
-    )
-
-
 def _build_clickhouse_labeled_frame(
     args: argparse.Namespace,
     config: dict,
 ) -> pd.DataFrame:
-    host = str(
-        _clickhouse_setting(
+    def source_setting(name: str, default, *, env_name: str | None = None):
+        return _clickhouse_setting(
             args,
             config,
-            "clickhouse_host",
-            "host",
-            "CLICKHOUSE_HOST",
-            DEFAULT_CLICKHOUSE_TICK_HOST,
+            f"clickhouse_{name}",
+            name,
+            env_name or f"CLICKHOUSE_{name.upper()}",
+            default,
         )
-    )
-    port = int(
-        _clickhouse_setting(
-            args,
-            config,
-            "clickhouse_port",
-            "port",
-            "CLICKHOUSE_PORT",
-            DEFAULT_CLICKHOUSE_TICK_PORT,
+
+    def offset_setting(name: str, default: int) -> int:
+        cli_value = getattr(args, name)
+        return int(
+            cli_value
+            if cli_value is not None
+            else config_value(config, "clickhouse", name, default)
         )
-    )
-    user = _clickhouse_setting(
-        args,
-        config,
-        "clickhouse_user",
-        "user",
-        "CLICKHOUSE_USER",
-        None,
-    )
-    password = _clickhouse_setting(
-        args,
-        config,
-        "clickhouse_password",
-        "password",
-        "CLICKHOUSE_PASSWORD",
-        None,
-    )
+
+    host = str(source_setting("host", DEFAULT_CLICKHOUSE_TICK_HOST))
+    port = int(source_setting("port", DEFAULT_CLICKHOUSE_TICK_PORT))
+    user = source_setting("user", None)
+    password = source_setting("password", None)
     table = str(
-        _clickhouse_setting(
-            args,
-            config,
-            "clickhouse_table",
-            "table",
-            "CLICKHOUSE_TICK_TABLE",
-            DEFAULT_CLICKHOUSE_TICK_TABLE,
-        )
+        source_setting("table", DEFAULT_CLICKHOUSE_TICK_TABLE, env_name="CLICKHOUSE_TICK_TABLE")
     )
-    start_offset_us = int(
-        args.start_offset_us
-        if args.start_offset_us is not None
-        else config_value(
-            config,
-            "clickhouse",
-            "start_offset_us",
-            DEFAULT_TICK_START_OFFSET_US,
-        )
-    )
-    end_offset_us = int(
-        args.end_offset_us
-        if args.end_offset_us is not None
-        else config_value(
-            config,
-            "clickhouse",
-            "end_offset_us",
-            DEFAULT_TICK_END_OFFSET_US,
-        )
-    )
+    start_offset_us = offset_setting("start_offset_us", DEFAULT_TICK_START_OFFSET_US)
+    end_offset_us = offset_setting("end_offset_us", DEFAULT_TICK_END_OFFSET_US)
     if not user or not password:
         raise SystemExit(
             "missing ClickHouse credentials: set CLICKHOUSE_USER and "
@@ -588,35 +451,17 @@ def _build_clickhouse_labeled_frame(
         if use_universe
         else None
     )
-    daily_reference_enabled = config_bool(
-        config,
-        "daily_market_reference",
-        "enabled",
-        False,
-    )
+    reference_section = "daily_market_reference"
+    daily_reference_enabled = config_bool(config, reference_section, "enabled", False)
     daily_reference_table = config_str(
-        config,
-        "daily_market_reference",
-        "table",
-        DEFAULT_DAILY_MARKET_REFERENCE_TABLE,
+        config, reference_section, "table", DEFAULT_DAILY_MARKET_REFERENCE_TABLE
     )
-    daily_reference_lag_sessions = config_int(
-        config,
-        "daily_market_reference",
-        "lag_sessions",
-        1,
-    )
+    daily_reference_lag_sessions = config_int(config, reference_section, "lag_sessions", 1)
     market_cap_unit_multiplier = config_float(
-        config,
-        "daily_market_reference",
-        "market_cap_unit_multiplier",
-        10_000.0,
+        config, reference_section, "market_cap_unit_multiplier", 10_000.0
     )
     share_unit_multiplier = config_float(
-        config,
-        "daily_market_reference",
-        "share_unit_multiplier",
-        10_000.0,
+        config, reference_section, "share_unit_multiplier", 10_000.0
     )
     print_mapping(
         "clickhouse_source",
@@ -723,14 +568,16 @@ def load_clickhouse_labeled_frame(
     cache_write = config_bool(config, "cache", "write", True)
 
     ready_paths = (
-        _cache_ready_paths(cache_path, config, cache_write=cache_write) if cache_path else ()
+        (cache_manifest_path(cache_path),)
+        if cache_path and (cache_write or config_bool(config, "cache", "require_manifest", False))
+        else ()
     )
-    if cache_path and cache_read and _cache_artifacts_exist(cache_path, ready_paths):
-        print_mapping("labeled_cache", {"action": "read", "path": str(cache_path)})
-        return apply_candidate_filter_from_config(_load_labeled_cache(cache_path, config), config)
-    if cache_path and cache_read and cache_path.exists() and ready_paths and not cache_write:
-        print_mapping("labeled_cache", {"action": "read", "path": str(cache_path)})
-        return apply_candidate_filter_from_config(_load_labeled_cache(cache_path, config), config)
+    cache_is_readable = cache_path and (
+        _cache_artifacts_exist(cache_path, ready_paths)
+        or (cache_path.exists() and bool(ready_paths) and not cache_write)
+    )
+    if cache_read and cache_is_readable:
+        return _load_filtered_labeled_cache(cache_path, config, action="read")
 
     if not cache_path or not cache_write:
         return apply_candidate_filter_from_config(
@@ -748,24 +595,10 @@ def load_clickhouse_labeled_frame(
         ready_paths=ready_paths,
     )
     if lock_status == "cache_ready":
-        print_mapping(
-            "labeled_cache",
-            {"action": "read_after_wait", "path": str(cache_path)},
-        )
-        return apply_candidate_filter_from_config(
-            _load_labeled_cache(cache_path, config),
-            config,
-        )
+        return _load_filtered_labeled_cache(cache_path, config, action="read_after_wait")
     if lock_status == "timeout":
         if cache_read and _cache_artifacts_exist(cache_path, ready_paths):
-            print_mapping(
-                "labeled_cache",
-                {"action": "read_after_wait", "path": str(cache_path)},
-            )
-            return apply_candidate_filter_from_config(
-                _load_labeled_cache(cache_path, config),
-                config,
-            )
+            return _load_filtered_labeled_cache(cache_path, config, action="read_after_wait")
         raise SystemExit(
             f"timed out waiting for labeled cache lock: {lock_path}; cache file was not created"
         )
@@ -781,7 +614,19 @@ def load_clickhouse_labeled_frame(
             else:
                 _clear_cache_ready(lock_path)
                 base_labeled = _build_clickhouse_labeled_frame(args, config)
-                _publish_labeled_cache(base_labeled, cache_path, args, config)
+                config_path = getattr(args, "config", "") or ""
+                write_frame_atomic(base_labeled, cache_path)
+                publish_cache_manifest(
+                    base_labeled,
+                    cache_path=cache_path,
+                    config=config,
+                    run_name=(
+                        run_id(config, config_path)
+                        if config_path
+                        else str(config.get("run", {}).get("id", cache_path.stem))
+                    ),
+                    config_path=config_path,
+                )
                 _mark_cache_ready(cache_path, lock_path)
                 print_mapping(
                     "labeled_cache",

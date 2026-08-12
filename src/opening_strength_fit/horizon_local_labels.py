@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -134,20 +135,20 @@ def merge_label_input(
     else:
         read_cols = None
     labels = normalize_frame_times(read_selected_frame(label_input, read_cols))
-    label_cols = []
-    for spec in horizons:
-        column = find_existing_label_column(labels, spec.name, explicit)
-        if column is not None:
-            label_cols.append(column)
-    label_cols = list(dict.fromkeys(label_cols))
+    resolved = {
+        spec.name: column
+        for spec in horizons
+        if (column := find_existing_label_column(labels, spec.name, explicit)) is not None
+    }
+    label_cols = list(dict.fromkeys(resolved.values()))
     if not label_cols:
         return predictions
     labels = labels[[*key_cols, *label_cols]].drop_duplicates(key_cols)
-    rename = {}
-    for spec in horizons:
-        column = find_existing_label_column(labels, spec.name, explicit)
-        if column and column != label_column_name(spec.name):
-            rename[column] = label_column_name(spec.name)
+    rename = {
+        column: label_column_name(name)
+        for name, column in resolved.items()
+        if column != label_column_name(name)
+    }
     labels = labels.rename(columns=rename)
     merged = predictions.merge(labels, on=key_cols, how="left", suffixes=("", "_labelctx"))
     for spec in horizons:
@@ -227,6 +228,29 @@ def resolve_price_column(ticks: pd.DataFrame, price_col: str) -> tuple[pd.DataFr
     raise SystemExit("tick input needs mid_price, last_price, or bid/ask level 1 for price exits")
 
 
+def _align_future_state(
+    samples: pd.DataFrame,
+    states: pd.DataFrame,
+    *,
+    offset_seconds: int,
+    tolerance: pd.Timedelta | None,
+) -> pd.DataFrame:
+    left = pd.DataFrame(
+        {
+            "_row": samples.index.to_numpy(),
+            "_target_ts": samples["entry_timestamp"] + pd.to_timedelta(offset_seconds, unit="s"),
+        }
+    ).sort_values("_target_ts")
+    return pd.merge_asof(
+        left,
+        states,
+        left_on="_target_ts",
+        right_on="_future_ts",
+        direction="forward",
+        tolerance=tolerance,
+    ).set_index("_row")
+
+
 def future_vwap_labels(
     samples: pd.DataFrame,
     ticks: pd.DataFrame,
@@ -267,36 +291,15 @@ def future_vwap_labels(
         )
         if right_frame.empty:
             continue
-        left_start = pd.DataFrame(
-            {
-                "_row": sample_group.index.to_numpy(),
-                "_target_ts": sample_group["entry_timestamp"]
-                + pd.to_timedelta(horizon.seconds, unit="s"),
-            }
-        ).sort_values("_target_ts")
-        left_end = pd.DataFrame(
-            {
-                "_row": sample_group.index.to_numpy(),
-                "_target_ts": sample_group["entry_timestamp"]
-                + pd.to_timedelta(horizon.seconds + sell_window_seconds, unit="s"),
-            }
-        ).sort_values("_target_ts")
-        start = pd.merge_asof(
-            left_start,
+
+        aligned = partial(
+            _align_future_state,
+            sample_group,
             right_frame,
-            left_on="_target_ts",
-            right_on="_future_ts",
-            direction="forward",
             tolerance=tolerance,
-        ).set_index("_row")
-        end = pd.merge_asof(
-            left_end,
-            right_frame,
-            left_on="_target_ts",
-            right_on="_future_ts",
-            direction="forward",
-            tolerance=tolerance,
-        ).set_index("_row")
+        )
+        start = aligned(offset_seconds=int(horizon.seconds))
+        end = aligned(offset_seconds=int(horizon.seconds) + int(sell_window_seconds))
         common = start.index.intersection(end.index)
         if common.empty:
             continue
@@ -481,7 +484,7 @@ def load_sample_context(
 ) -> pd.DataFrame:
     key_cols = ["date", "symbol", "decision_target_timestamp"]
     required_columns = [*key_cols, exit_price_col]
-    columns = [*key_cols, exit_price_col]
+    columns = required_columns.copy()
     if exit_price_col == "mid_price":
         columns.extend(["ask_price_1", "bid_price_1"])
     columns = list(dict.fromkeys(columns))
@@ -519,6 +522,63 @@ def load_sample_context(
     )
 
 
+def _intraday_targets(
+    predictions: pd.DataFrame,
+    horizons: list[HorizonLike],
+    target_end_seconds: int | None,
+) -> tuple[list[HorizonLike], list[str], pd.DataFrame, pd.DataFrame]:
+    timed = [spec for spec in horizons if spec.seconds is not None]
+    keys = key_columns_for_merge(predictions)
+    output = predictions[keys].copy()
+    sample = predictions[[*keys, "buy_price"]].copy()
+    sample["_row"] = np.arange(len(sample), dtype="int64")
+    sample["date"] = sample["date"].astype(str)
+    sample["symbol"] = sample["symbol"].astype(str)
+    sample["decision_target_timestamp"] = pd.to_datetime(
+        sample["decision_target_timestamp"], errors="coerce"
+    )
+    sample["buy_price"] = pd.to_numeric(sample["buy_price"], errors="coerce")
+    sample = sample.dropna(subset=["decision_target_timestamp", "buy_price"])
+    parts = []
+    for spec in timed:
+        targets = sample.copy()
+        targets["horizon"] = spec.name
+        targets["target_timestamp"] = targets["decision_target_timestamp"] + pd.to_timedelta(
+            int(spec.seconds), unit="s"
+        )
+        if target_end_seconds is not None:
+            seconds = (
+                targets["target_timestamp"].dt.hour * 3_600
+                + targets["target_timestamp"].dt.minute * 60
+                + targets["target_timestamp"].dt.second
+            )
+            targets = targets.loc[seconds <= int(target_end_seconds)]
+        parts.append(targets)
+    return timed, keys, output, pd.concat(parts, ignore_index=True)
+
+
+def _attach_intraday_labels(
+    output: pd.DataFrame,
+    targets: pd.DataFrame,
+    horizons: list[HorizonLike],
+    *,
+    exit_price_col: str,
+    fee_bps: float,
+) -> pd.DataFrame:
+    keys = key_columns_for_merge(output)
+    if targets.empty:
+        return output.drop_duplicates(keys)
+    targets["label"] = safe_price_return(
+        targets[exit_price_col], targets["buy_price"], fee_bps=fee_bps
+    )
+    wide = targets.pivot_table(index="_row", columns="horizon", values="label", aggfunc="first")
+    output["_row"] = np.arange(len(output), dtype="int64")
+    for spec in horizons:
+        if spec.name in wide:
+            output[label_column_name(spec.name)] = output["_row"].map(wide[spec.name])
+    return output.drop(columns="_row").drop_duplicates(keys)
+
+
 def compute_sampled_intraday_labels(
     predictions: pd.DataFrame,
     context: pd.DataFrame,
@@ -539,49 +599,16 @@ def compute_sampled_intraday_labels(
     if missing:
         raise SystemExit(f"sampled intraday labels require prediction columns: {missing}")
 
-    base = predictions[required].copy()
-    base["_row"] = np.arange(len(base), dtype="int64")
-    base["date"] = base["date"].astype(str)
-    base["symbol"] = base["symbol"].astype(str)
-    base["decision_target_timestamp"] = pd.to_datetime(
-        base["decision_target_timestamp"],
-        errors="coerce",
+    timed_horizons, _, output, targets = _intraday_targets(
+        predictions, timed_horizons, target_end_seconds
     )
-    base["buy_price"] = pd.to_numeric(base["buy_price"], errors="coerce")
-
-    output = predictions[key_cols].copy()
-    output["_row"] = np.arange(len(output), dtype="int64")
     right = context.rename(
         columns={
-            "decision_target_timestamp": "_target_ts",
+            "decision_target_timestamp": "target_timestamp",
             exit_price_col: "_exit_price",
         }
-    )[["date", "symbol", "_target_ts", "_exit_price"]]
-
-    for spec in timed_horizons:
-        target_col = label_column_name(spec.name)
-        left = base[["_row", "date", "symbol", "decision_target_timestamp", "buy_price"]].copy()
-        left["_target_ts"] = left["decision_target_timestamp"] + pd.to_timedelta(
-            int(spec.seconds),
-            unit="s",
-        )
-        if target_end_seconds is not None:
-            target_seconds = (
-                left["_target_ts"].dt.hour.astype("int64") * 3_600
-                + left["_target_ts"].dt.minute.astype("int64") * 60
-                + left["_target_ts"].dt.second.astype("int64")
-            )
-            left = left.loc[target_seconds <= int(target_end_seconds)].copy()
-        merged = left.merge(
-            right,
-            on=["date", "symbol", "_target_ts"],
-            how="left",
-            sort=False,
-        )
-        exit_price = pd.to_numeric(merged["_exit_price"], errors="coerce")
-        buy_price = pd.to_numeric(merged["buy_price"], errors="coerce")
-        label = safe_price_return(exit_price, buy_price, fee_bps=fee_bps)
-        aligned = pd.Series(label.to_numpy(), index=merged["_row"].to_numpy())
-        output[target_col] = output["_row"].map(aligned)
-
-    return output.drop(columns=["_row"]).drop_duplicates(key_cols)
+    )[["date", "symbol", "target_timestamp", "_exit_price"]]
+    targets = targets.merge(right, on=["date", "symbol", "target_timestamp"], how="left")
+    return _attach_intraday_labels(
+        output, targets, timed_horizons, exit_price_col="_exit_price", fee_bps=fee_bps
+    )

@@ -8,17 +8,8 @@ from opening_strength_fit.legacy.rank_bucket_reaudit import (
     RankBucketReauditConfig,
     run_rank_bucket_reaudit,
 )
+from opening_strength_fit.legacy.top1000_rank_data import DEFAULT_DIAGNOSTIC_MONTHS
 
-MONTHS = [
-    "2022-01",
-    "2022-07",
-    "2023-01",
-    "2023-07",
-    "2024-01",
-    "2024-07",
-    "2025-01",
-    "2025-07",
-]
 RUN_ID = "nn_delay2_36m_2022_2025_auction_fresh_pruned_grouped_gated_v2_mech_v3_gelu_mse_v1"
 PREDICTION_ROOT = Path("/mnt/output/opening_strength_fit/nn")
 NEXT_LABEL_ROOT = Path(
@@ -30,31 +21,23 @@ OUT_ROOT = Path("/mnt/output/opening_strength_fit/runs/analyses/rank-bucket")
 
 def main() -> None:
     run_ids = {"auction_fresh_pruned": RUN_ID}
+    shared = {
+        "prediction_root": PREDICTION_ROOT,
+        "next_label_root": NEXT_LABEL_ROOT,
+        "pool_path": POOL_PATH,
+        "run_ids": run_ids,
+        "months": list(DEFAULT_DIAGNOSTIC_MONTHS),
+    }
     rank_output = OUT_ROOT / "rank_bucket_reaudit_auction_fresh_pruned_2022_2025_v1"
     multiscale_output = OUT_ROOT / "multiscale_bucket_diag_auction_fresh_pruned_2022_2025_v1"
-    run_rank_bucket_reaudit(
-        RankBucketReauditConfig(
-            prediction_root=PREDICTION_ROOT,
-            next_label_root=NEXT_LABEL_ROOT,
-            pool_path=POOL_PATH,
-            output_dir=rank_output,
-            run_ids=run_ids,
-            months=MONTHS,
-        )
-    )
+    run_rank_bucket_reaudit(RankBucketReauditConfig(output_dir=rank_output, **shared))
     run_multiscale_bucket_diagnostics(
         MultiscaleBucketDiagConfig(
-            prediction_root=PREDICTION_ROOT,
-            next_label_root=NEXT_LABEL_ROOT,
-            pool_path=POOL_PATH,
             output_dir=multiscale_output,
-            run_ids=run_ids,
-            months=MONTHS,
             bucket_widths=[50, 100, 200],
             top_k=[50, 100, 150, 200, 500, 1000],
             window_widths=[50, 100, 200],
-            window_stride=50,
-            top_n=1000,
+            **shared,
         )
     )
     print(f"rank_bucket_output={rank_output}", flush=True)

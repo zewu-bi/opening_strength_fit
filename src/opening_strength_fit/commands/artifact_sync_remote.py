@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import subprocess
 import tarfile
+from functools import partial
 from pathlib import Path
 
 from opening_strength_fit.k8s import RunSpec, command_succeeds, run_command
+
+
+def _kubectl_exec(hfcli: str, namespace: str, pod_name: str, *command: str) -> list[str]:
+    return [hfcli, "kubectl", "exec", "-n", namespace, pod_name, "--", *command]
 
 
 def _remote_path_exists(
@@ -15,37 +20,12 @@ def _remote_path_exists(
     kind: str,
 ) -> bool:
     return command_succeeds(
-        [
-            hfcli,
-            "kubectl",
-            "exec",
-            "-n",
-            namespace,
-            pod_name,
-            "--",
-            "/bin/sh",
-            "-lc",
-            f"test -{kind} '{remote_path}'",
-        ]
+        _kubectl_exec(hfcli, namespace, pod_name, "/bin/sh", "-lc", f"test -{kind} '{remote_path}'")
     )
 
 
-def remote_file_exists(
-    hfcli: str,
-    namespace: str,
-    pod_name: str,
-    remote_path: str,
-) -> bool:
-    return _remote_path_exists(hfcli, namespace, pod_name, remote_path, "f")
-
-
-def remote_dir_exists(
-    hfcli: str,
-    namespace: str,
-    pod_name: str,
-    remote_path: str,
-) -> bool:
-    return _remote_path_exists(hfcli, namespace, pod_name, remote_path, "d")
+remote_file_exists = partial(_remote_path_exists, kind="f")
+remote_dir_exists = partial(_remote_path_exists, kind="d")
 
 
 def fetch_binary_file(
@@ -56,17 +36,7 @@ def fetch_binary_file(
     local_path: Path,
 ) -> None:
     local_path.parent.mkdir(parents=True, exist_ok=True)
-    command = [
-        hfcli,
-        "kubectl",
-        "exec",
-        "-n",
-        namespace,
-        pod_name,
-        "--",
-        "cat",
-        remote_path,
-    ]
+    command = _kubectl_exec(hfcli, namespace, pod_name, "cat", remote_path)
     with local_path.open("wb") as file:
         run_command(command, stdout=file)
 
@@ -82,21 +52,9 @@ def fetch_remote_directory_if_exists(
         return False
     print(f"fetching {remote_dir}/ -> {local_dir}/")
     local_dir.mkdir(parents=True, exist_ok=True)
-    command = [
-        hfcli,
-        "kubectl",
-        "exec",
-        "-n",
-        spec.namespace,
-        pod_name,
-        "--",
-        "tar",
-        "-C",
-        remote_dir,
-        "-cf",
-        "-",
-        ".",
-    ]
+    command = _kubectl_exec(
+        hfcli, spec.namespace, pod_name, "tar", "-C", remote_dir, "-cf", "-", "."
+    )
     process = subprocess.Popen(command, stdout=subprocess.PIPE)
     if process.stdout is None:
         raise SystemExit(f"failed to open tar stream for {remote_dir}")
