@@ -95,7 +95,7 @@ next-close 和 target cache。六组 3×2 网格已经完成并归档；它们�
 [experiment log](experiment_log.md)。
 
 15-label 的逐 case 指标见
-[max-30 evidence](../experiments/evidence/backtests/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/README.md)。
+[max-30 matrix](../experiments/evidence/backtests/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/matrix_summary.csv)。
 不同 horizon 改变了监督目标，表中最好数字不能直接解释为单变量模型提升。
 
 ## 验收逻辑

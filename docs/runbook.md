@@ -20,14 +20,6 @@ make contracts
 安装面按职责拆分：`-e .` 是 core；`.[data]`、`.[models]`、`.[plots]` 按需增加 adapter、LightGBM 和
 绘图；`.[dev]` 用于 CI/开发；`.[cluster]` 用于完整集群镜像。Torch/CUDA wheel 按目标节点单独安装。
 
-本地产物只做 read-only 清单，不自动删除：
-
-```bash
-osf audit storage --older-than-days 30
-```
-
-确认具体目录可重建且无需保留后，再单独发起删除；Git 历史、PVC 和对象存储不属于此命令范围。
-
 ## 2. 外部数据
 
 ```text
@@ -60,7 +52,7 @@ data.source = path          读取本地 parquet/csv
 `opening_label_matrix` 是逻辑短名，长 run id/PVC 路径是不可变来源。同名语义变化必须新建 run，promotion
 同时更新 `experiments/canonical/opening.toml`、project brief、experiment log、evidence 和测试。
 
-尚未形成正式 workflow 的一次性 probe/audit 登记在 `experiments/incubator.toml`，必须声明 owner、目的、
+尚未形成正式 workflow 的一次性 probe/audit 必须新建 `experiments/incubator.toml` 登记，并声明 owner、目的、
 复审日期、晋级条件和精确资产。到期、复用、用于结论或被调度后，只能提升为 package command + run，
 或者连同结论归档。
 
@@ -68,13 +60,13 @@ data.source = path          读取本地 parquet/csv
 
 ```bash
 osf-probe-clickhouse-data --start-date <YYYY-MM-DD> --end-date <YYYY-MM-DD>
-osf data build-raw --config experiments/runs/opening_<window>_raw_source.toml --year <YYYY>
-osf data build-dataset --config experiments/runs/opening_<window>_features_350.toml --kind features --year <YYYY>
-osf data build-dataset --config experiments/runs/opening_<window>_labels_5.toml --kind labels --year <YYYY>
-osf data split-labels --config experiments/runs/opening_<window>_labels_horizon_split.toml --year <YYYY>
-osf data build-long-raw --config experiments/runs/opening_0931_1010_long_label_raw_source_v1.toml --year <YYYY>
-osf data build-long-labels --config experiments/runs/opening_<window>_labels_10m_1h_close.toml --year <YYYY>
-osf data split-long-labels --config experiments/runs/opening_<window>_labels_10m_1h_close_split.toml --year <YYYY>
+osf-build-raw-source-cache --config experiments/runs/opening_<window>_raw_source.toml --year <YYYY>
+osf-build-training-datasets --config experiments/runs/opening_<window>_features_350.toml --kind features --year <YYYY>
+osf-build-training-datasets --config experiments/runs/opening_<window>_labels_5.toml --kind labels --year <YYYY>
+osf-split-horizon-labels --config experiments/runs/opening_<window>_labels_horizon_split.toml --year <YYYY>
+osf-build-long-label-raw-source --config experiments/runs/opening_0931_1010_long_label_raw_source_v1.toml --year <YYYY>
+osf-build-long-horizon-labels --config experiments/runs/opening_<window>_labels_10m_1h_close.toml --year <YYYY>
+osf-split-long-horizon-labels --config experiments/runs/opening_<window>_labels_10m_1h_close_split.toml --year <YYYY>
 ```
 
 后续实验从一个最终 label 的独立目录取数：
@@ -94,7 +86,7 @@ osf data split-long-labels --config experiments/runs/opening_<window>_labels_10m
 训练直接传入同窗口的 feature 与最终 label，不再生成合并 cache：
 
 ```bash
-osf train \
+osf-train \
   --config experiments/runs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1.toml \
   --feature-input /mnt/output/opening_strength_fit/datasets/opening_<window>_features_350 \
   --label-input /mnt/output/opening_strength_fit/datasets/opening_<window>_labels_<horizon>_<version> \
@@ -123,13 +115,15 @@ Job 只允许 `A100-80`、`H100-80` 和 `H20`，排除 32GB 5090。
 best epoch 10。因而每 Pod 申请 `8 CPU / 256Gi / 1 GPU`、上限 `16 CPU / 384Gi / 1 GPU`；
 内存不能按训练期常驻量下调，因为峰值出现在 dataframe 到标准化矩阵的过渡阶段。
 
-四个清单覆盖全部 15 个 Job，默认全部 suspend；发布后由一个持久队列脚本逐个放行：
+矩阵配置渲染全部 15 个 Job，默认全部 suspend；发布后由一个持久队列脚本逐个放行：
 
 ```bash
-hfcli kubectl apply -f experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w0931_jobs.yaml
-hfcli kubectl apply -f experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w1001_jobs.yaml
-hfcli kubectl apply -f experiments/jobs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_w1401_jobs.yaml
-hfcli kubectl apply -f experiments/jobs/nn_ds350_label15_36m_grouped_gated_v2_mse_v1_h5m_jobs.yaml
+render_dir=$(mktemp -d)
+osf-render-k8s-job \
+  --config experiments/runs/nn_ds350_label12_36m_grouped_gated_v2_mse_v1.toml \
+  --matrix --output-dir "$render_dir"
+hfcli kubectl apply \
+  -f "$render_dir/nn_ds350_label12_36m_grouped_gated_v2_mse_v1_matrix_job.yaml"
 
 systemd-run --user --unit os-nn-ds350-label15-queue \
   --working-directory "$(pwd)" \
@@ -146,11 +140,19 @@ epoch 9→10 的 validation loss 仍下降。因此另设完全隔离的 max-30 
 数据、seed、rolling split 和资源不变：
 
 ```bash
-hfcli kubectl apply -f experiments/jobs/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1_sharded_job.yaml
+render_dir=$(mktemp -d)
+osf-render-k8s-job \
+  --config experiments/runs/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1.toml \
+  --matrix --output-dir "$render_dir"
+hfcli kubectl apply \
+  -f "$render_dir/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1_matrix_job.yaml"
 
 systemd-run --user --unit os-nn-ds350-label15-max30-queue \
   --working-directory "$(pwd)" \
   experiments/scripts/run_ds350_label15_max30_training_queue.sh
+
+hfcli kubectl apply \
+  -f experiments/jobs/support/ds350_label15_pool_internal_analysis_job.yaml
 
 systemd-run --user --unit os-nn-ds350-label15-max30-queue-reverse \
   --working-directory "$(pwd)" \
@@ -184,17 +186,23 @@ docker build \
   --build-arg SOURCE_REVISION=$(git rev-parse HEAD) \
   -t "$IMAGE" .
 
-osf experiment render-job --config experiments/runs/<run_id>.toml --image "$IMAGE" --sharded
+osf-render-k8s-job --config experiments/runs/<run_id>.toml --image "$IMAGE" --sharded
 <kubectl-wrapper> apply --dry-run=client -f experiments/jobs/<run_id>_sharded_job.yaml
 <kubectl-wrapper> apply -f experiments/jobs/<run_id>_sharded_job.yaml
 ```
 
-本地只运行 core workflow 时可用 `DEPENDENCY_PROFILE=core`。镜像默认只包含 package、run/canonical/
-template 和 experiment scripts；不要把测试、docs、output、results 或整个 checkout 加回 runtime 层。
+配置已记录不可变 `k8s.helper_image` 时可省略 `--image`。声明 `render_mode` 和
+`render_sha256` 的历史 Job 不重复存 YAML；contracts 会重新渲染并核对原 manifest 哈希。训练分片用
+`--sharded`，年度数据构建用 `--indexed`，pool-internal 分析用 `--analysis`，旧 Top1000 诊断用
+`--top1000`。同一 run 需要普通和分片两个入口时，在 `[k8s.sharded]` 中声明分片覆写；长周期 label
+流水线也在执行时渲染临时 Job，不再依赖仓库中的派生 YAML。
+
+本地只运行 core workflow 时可用 `DEPENDENCY_PROFILE=core`。镜像默认只包含 package、run/canonical
+和 experiment scripts；不要把测试、docs、output、results 或整个 checkout 加回 runtime 层。
 
 ```bash
-osf experiment status --config experiments/runs/<run_id>.toml
-osf experiment status --config experiments/runs/<run_id>.toml --tail 160
+osf-rolling-job-status --config experiments/runs/<run_id>.toml
+osf-rolling-job-status --config experiments/runs/<run_id>.toml --tail 160
 ```
 
 Job `Complete` 后仍要检查 shard 输出、metrics 和 trace。
@@ -202,16 +210,16 @@ Job `Complete` 后仍要检查 shard 输出、metrics 和 trace。
 ## 6. 分析与 evidence
 
 ```bash
-osf experiment render-job --config experiments/runs/<run_id>.toml --analysis --image <cpu-image>
-osf experiment sync --config experiments/runs/<run_id>.toml --all
-osf experiment audit --summary-only
-osf experiment audit --require-metrics
-osf audit contracts
+osf-render-k8s-job --config experiments/runs/<run_id>.toml --analysis --image <cpu-image>
+osf-sync-experiment-artifacts --config experiments/runs/<run_id>.toml --all
+osf-audit-experiments --summary-only
+osf-audit-experiments --require-metrics
+osf-check-project-contracts
 ```
 
 原始同步结果留在 ignored mirror；Git 只保留 summary、trace、小型审计表和标准图。正式信号比较固定使用
-short IC/Top100 excess、费用后累和、Top1000 分桶和收益分布四图。证据范围见
-[evidence README](../experiments/evidence/README.md)。
+short IC/Top100 excess、费用后累和、Top1000 分桶和收益分布四图；证据口径和当前结论统一记录在
+[项目报告](project_brief.md) 与 [实验日志](experiment_log.md)，evidence 目录不再维护重复说明文档。
 
 evidence 单文件不得超过 1MB，不接收 Parquet、pickle、模型或逐行 replay。正式 Kubernetes Job 必须使用
 package 入口并设置 `ttlSecondsAfterFinished`；TTL 只清理 Job 对象，不替代 PVC 和 evidence 保留策略。
