@@ -73,6 +73,20 @@ def _file_sha256(path: str | Path) -> str:
 
 def train_from_args(args: argparse.Namespace) -> None:
     config = load_run_config(args.config)
+    include_columns = getattr(args, "include_feature_column", None)
+    include_prefixes = getattr(args, "include_feature_prefix", None)
+    if include_columns is not None or include_prefixes is not None:
+        config = {
+            section: dict(values) if isinstance(values, dict) else values
+            for section, values in config.items()
+        }
+        features = dict(config.get("features", {}))
+        if include_columns is not None:
+            features["include_feature_columns"] = list(include_columns)
+        if include_prefixes is not None:
+            features["include_feature_prefixes"] = list(include_prefixes)
+        features["include_feature_regexes"] = []
+        config["features"] = features
     config = apply_stock_pool_cli_overrides(config, args)
     stock_pool_settings = stock_pool_config_from_mapping(config)
     tick_path = (

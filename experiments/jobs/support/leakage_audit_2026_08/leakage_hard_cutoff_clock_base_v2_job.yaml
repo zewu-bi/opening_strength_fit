@@ -1,0 +1,79 @@
+# osf-contract: archived-legacy-job
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-leak-cutoff-clock-base-v2
+  namespace: bizewu
+  labels: {app: os-leak-cutoff-clock-base-v2}
+spec:
+  activeDeadlineSeconds: 604800
+  backoffLimit: 2
+  completionMode: Indexed
+  completions: 350
+  parallelism: 32
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels: {app: os-leak-cutoff-clock-base-v2}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+        - name: audit-code
+          configMap: {name: os-leakage-audit-code-v1}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: kubernetes.io/hostname, operator: NotIn, values: [node7, node8]}
+      containers:
+        - name: builder
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260804-training-datasets-v2
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          env:
+            - name: JOB_COMPLETION_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.annotations['batch.kubernetes.io/job-completion-index']"
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              YEARS=(2019 2020 2021 2022 2023 2024 2025)
+              CUTOFFS=(0 2 10 30 60)
+              CLOCKS=(09:31:00 09:32:00 09:33:00 09:34:00 09:35:00 09:36:00 09:37:00 09:38:00 09:39:00 09:40:00)
+              INDEX="${JOB_COMPLETION_INDEX:?missing completion index}"
+              CUTOFF_INDEX=$((INDEX / 70))
+              REMAINDER=$((INDEX % 70))
+              YEAR_INDEX=$((REMAINDER / 10))
+              CLOCK_INDEX=$((REMAINDER % 10))
+              CUTOFF="${CUTOFFS[${CUTOFF_INDEX}]}"
+              YEAR="${YEARS[${YEAR_INDEX}]}"
+              CLOCK="${CLOCKS[${CLOCK_INDEX}]}"
+              OUTPUT_ROOT="/mnt/output/opening_strength_fit/leakage_audit/feature_base_cutoff_${CUTOFF}s_v2"
+              exec osf-build-training-datasets \
+                --config experiments/runs/opening_0931_0940_features_350.toml \
+                --kind features \
+                --year "${YEAR}" \
+                --output-root "${OUTPUT_ROOT}" \
+                --physical-tick-cutoff-seconds "${CUTOFF}" \
+                --feature-base-clock "${CLOCK}" \
+                --overwrite
+          volumeMounts:
+            - {name: output, mountPath: /mnt/output}
+            - name: audit-code
+              mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/sampling.py
+              subPath: sampling.py
+            - name: audit-code
+              mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/training_dataset_features.py
+              subPath: training_dataset_features.py
+            - name: audit-code
+              mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/commands/training_dataset_build.py
+              subPath: training_dataset_build.py
+          resources:
+            requests: {cpu: "4", memory: 64Gi}
+            limits: {cpu: "8", memory: 128Gi}

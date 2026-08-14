@@ -1,0 +1,12 @@
+[run]
+id = "opening_1101_1110_labels_horizon_split"
+kind = "training_horizon_label_split"
+description = "Split the 11:01-11:10 combined labels into model-ready horizon roots."
+status = "completed"
+
+[dataset]
+years = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+label_output_root = "/mnt/output/opening_strength_fit/datasets/opening_1101_1110_labels_1m_3m_5m_next_mixed"
+horizon_label_output_template = "/mnt/output/opening_strength_fit/datasets/opening_1101_1110_labels_h{horizon_minutes}m_v2"
+mixed_next_close_weight = 0.30
+mixed_min_group_size = 50

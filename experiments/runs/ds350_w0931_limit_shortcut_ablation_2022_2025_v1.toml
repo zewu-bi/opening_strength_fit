@@ -1,0 +1,44 @@
+[run]
+id = "ds350_w0931_limit_shortcut_ablation_2022_2025_v1"
+kind = "comparison_analysis"
+description = "Closeout comparison of 3-sigma target clipping, no-limit training, and pure-short targets for DS350 09:31-09:40 1m/close models."
+status = "completed"
+
+[grid]
+window = "09:31-09:40"
+label_horizons = ["1m", "close"]
+experiments = ["clip3", "no_limit_training", "pure_short"]
+train_months = 36
+test_months = 6
+max_epochs = 30
+test_start_month = "2022-01"
+test_end_month = "2025-12"
+source_run_ids = [
+  "nn_ds350_1m_label_clip3_36m_grouped_gated_v2_mse_max30_v1",
+  "nn_ds350_w0931_hclose_label_clip3_36m_grouped_gated_v2_mse_max30_v1",
+  "nn_ds350_1m_train_ordinary_36m_grouped_gated_v2_mse_max30_v1",
+  "nn_ds350_w0931_hclose_train_ordinary_36m_grouped_gated_v2_mse_max30_v1",
+  "nn_ds350_1m_pure_short_36m_grouped_gated_v2_mse_max30_v1",
+  "nn_ds350_w0931_hclose_pure_short_36m_grouped_gated_v2_mse_max30_v1",
+]
+
+[evaluation]
+pool = "L"
+top_n = 100
+metrics = [
+  "universe_label_rank_ic",
+  "pool_L_top100_label_excess_bps",
+  "pool_L_top100_close_excess_bps",
+  "pool_L_top100_next_close_excess_bps",
+  "final_limit_contribution_bps",
+  "selected_final_limit_rate",
+]
+
+[analysis]
+comparison_job = "experiments/jobs/support/ds350_limit_shortcut_2022_2025_v1/ds350_w0931_three_experiment_tables_job.yaml"
+label_distribution_job = "experiments/jobs/support/ds350_limit_shortcut_2022_2025_v1/ds350_w0931_label_extremes_analysis_job.yaml"
+comparison_output = "/mnt/output/opening_strength_fit/analysis/ds350_w0931_three_experiment_tables_v1"
+label_distribution_output = "/mnt/output/opening_strength_fit/analysis/ds350_w0931_label_extremes_v1"
+
+[output]
+evidence_dir = "experiments/evidence/backtests/ds350_w0931_limit_shortcut_ablation_2022_2025_v1"

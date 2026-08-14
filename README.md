@@ -1,5 +1,7 @@
 # opening_strength_fit
 
+> **项目状态：已于 2026-08-14 冻结归档。** 当前仓库是最终研究快照，不再安排新实验；PVC 上的大型数据不随 Git 归档。
+
 `opening_strength_fit` 是 A 股开盘阶段分钟级 overlay 信号研究工具：从因果可见的 tick 状态生成样本，
 在既定股票池内完成训练、排序、容量和执行诊断。它不是完整交易系统。
 
@@ -13,10 +15,11 @@ tick / labeled input
   -> capacity / execution / risk diagnostics
 ```
 
-当前信号基准为 `opening_model`；当前结论、数据合同和下一步见
+当前信号基准为 `opening_model`；当前结论、数据合同和封存边界见
 [project brief](docs/project_brief.md)，不可变来源见
 [canonical registry](experiments/canonical/opening.toml)，历史事实见
-[experiment log](docs/experiment_log.md)。
+[experiment log](docs/experiment_log.md)，未来信息边界见
+[leakage audit](docs/leakage_audit.md)。
 
 `opening_label_matrix` 是当前权威 15-label 研究矩阵，但只代表诊断结论；在完成同口径策略验收前，
 不会替换 `opening_model`。
@@ -86,5 +89,6 @@ CLI / Kubernetes
 ## 四份主文档
 
 - [项目目标与当前结论](docs/project_brief.md)
+- [未来信息专项审计](docs/leakage_audit.md)
 - [复现和集群操作](docs/runbook.md)
 - [实验历史与决策](docs/experiment_log.md)

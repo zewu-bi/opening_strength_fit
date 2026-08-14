@@ -42,7 +42,9 @@ def split_label_year(
             "output_root": _output_root(config, horizon_minutes),
             "manifest": {"horizon_minutes": horizon_minutes},
             "target_definition": (
-                f"xs_zscore({short_column}) + {weight:g} * xs_zscore(label_next_close)"
+                f"xs_zscore({short_column})"
+                if weight == 0.0
+                else f"xs_zscore({short_column}) + {weight:g} * xs_zscore(label_next_close)"
             ),
             "log_label": f"horizon={horizon_minutes}m",
         }

@@ -1,0 +1,7 @@
+experiment,label,rank_ic,label_excess_bps,close_excess_bps,next_close_excess_bps
+clip3,1m,0.15219,12.02,18.02,17.63
+clip3,close,0.02806,18.97,18.97,18.16
+no_limit_training,1m,0.15122,11.34,19.33,14.35
+no_limit_training,close,0.03606,22.18,22.18,14.33
+pure_short,1m,0.14923,12.09,17.56,15.05
+pure_short,close,0.02276,22.84,22.84,19.88

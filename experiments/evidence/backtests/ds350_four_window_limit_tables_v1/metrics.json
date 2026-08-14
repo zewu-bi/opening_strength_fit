@@ -1,0 +1,580 @@
+{
+  "pool_l_final_limit_pct": 0.9611492930833764,
+  "pool_l_daily_rows": 3357751,
+  "cases": {
+    "09:31-09:40|Baseline|1m": {
+      "root": "/mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/w0931_0940_h1m",
+      "groups": 9690,
+      "candidate_rows": 32690836,
+      "selected_rows": 969000,
+      "candidate_rows_mean": 3373.667285861713,
+      "selected_rows_mean": 100.0,
+      "selected_final_limit_pct": 4.617440660474716,
+      "outcomes": {
+        "own_label": {
+          "rank_ic": 0.1474714733070567,
+          "excess_bps": 11.960897445678711,
+          "final_limit_contribution_bps": 2.8325672877868886,
+          "non_final_limit_contribution_bps": 9.128329499069086,
+          "contribution_sum_bps": 11.960896786855974,
+          "contribution_residual_bps": 6.588227368098387e-07
+        },
+        "same_day_close": {
+          "rank_ic": 0.021514324679334833,
+          "excess_bps": 18.06670570373535,
+          "final_limit_contribution_bps": 24.041895430760196,
+          "non_final_limit_contribution_bps": -5.97518992815888,
+          "contribution_sum_bps": 18.066705502601316,
+          "contribution_residual_bps": 2.0113403564891996e-07
+        },
+        "next_close": {
+          "rank_ic": 0.009322818020368863,
+          "excess_bps": 17.612455368041992,
+          "final_limit_contribution_bps": 30.750801029099932,
+          "non_final_limit_contribution_bps": -13.138346973431384,
+          "contribution_sum_bps": 17.61245405566855,
+          "contribution_residual_bps": 1.3123734419195898e-06
+        }
+      }
+    },
+    "09:31-09:40|无涨跌停|1m": {
+      "root": "/mnt/output/opening_strength_fit/nn/nn_ds350_1m_train_ordinary_36m_grouped_gated_v2_mse_max30_v1/w0931_0940_h1m",
+      "groups": 9690,
+      "candidate_rows": 32690836,
+      "selected_rows": 969000,
+      "candidate_rows_mean": 3373.667285861713,
+      "selected_rows_mean": 100.0,
+      "selected_final_limit_pct": 2.4895768833849328,
+      "outcomes": {
+        "own_label": {
+          "rank_ic": 0.1512226250170773,
+          "excess_bps": 11.342179298400879,
+          "final_limit_contribution_bps": 1.2962741149358887,
+          "non_final_limit_contribution_bps": 10.045904594573377,
+          "contribution_sum_bps": 11.342178709509266,
+          "contribution_residual_bps": 5.888916128071742e-07
+        },
+        "same_day_close": {
+          "rank_ic": 0.026745880267987358,
+          "excess_bps": 19.331804275512695,
+          "final_limit_contribution_bps": 12.976982718184605,
+          "non_final_limit_contribution_bps": 6.354822539111464,
+          "contribution_sum_bps": 19.331805257296068,
+          "contribution_residual_bps": -9.817833728220648e-07
+        },
+        "next_close": {
+          "rank_ic": 0.013158910959921426,
+          "excess_bps": 14.34563159942627,
+          "final_limit_contribution_bps": 15.871152801337937,
+          "non_final_limit_contribution_bps": -1.525521298140075,
+          "contribution_sum_bps": 14.345631503197861,
+          "contribution_residual_bps": 9.622840835277202e-08
+        }
+      }
+    },
+    "09:31-09:40|Baseline|3m": {
+      "root": "/mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/w0931_0940_h3m",
+      "groups": 9690,
+      "candidate_rows": 32672869,
+      "selected_rows": 969000,
+      "candidate_rows_mean": 3371.8131062951497,
+      "selected_rows_mean": 100.0,
+      "candidate_final_limit_pct": 0.7667860450210234,
+      "selected_final_limit_pct": 4.662435500515996,
+      "outcomes": {
+        "own_label": {
+          "rank_ic": 0.09709039694892523,
+          "excess_bps": 12.816535949707031,
+          "final_limit_contribution_bps": 4.839202137680152,
+          "non_final_limit_contribution_bps": 7.9773341801251165,
+          "contribution_sum_bps": 12.81653631780527,
+          "contribution_residual_bps": -3.680982381126796e-07
+        },
+        "same_day_close": {
+          "rank_ic": null,
+          "excess_bps": 20.635690689086914,
+          "final_limit_contribution_bps": 25.016458081877385,
+          "non_final_limit_contribution_bps": -4.380767363500665,
+          "contribution_sum_bps": 20.635690718376722,
+          "contribution_residual_bps": -2.9289807912391552e-08
+        },
+        "next_close": {
+          "rank_ic": null,
+          "excess_bps": 20.46698570251465,
+          "final_limit_contribution_bps": 32.06815479627011,
+          "non_final_limit_contribution_bps": -11.601168440370317,
+          "contribution_sum_bps": 20.46698635589979,
+          "contribution_residual_bps": -6.533851433232485e-07
+        }
+      }
+    },
+    "09:31-09:40|无涨跌停|3m": {
+      "root": "/mnt/output/opening_strength_fit/nn/nn_ds350_two_window_h3m_h10m_train_ordinary_36m_grouped_gated_v2_mse_max30_v1/w0931_0940_h3m",
+      "groups": 9690,
+      "candidate_rows": 32672869,
+      "selected_rows": 969000,
+      "candidate_rows_mean": 3371.8131062951497,
+      "selected_rows_mean": 100.0,
+      "candidate_final_limit_pct": 0.7667860450210234,
+      "selected_final_limit_pct": 2.034468524251806,
+      "outcomes": {
+        "own_label": {
+          "rank_ic": 0.10440833345564517,
+          "excess_bps": 11.939093589782715,
+          "final_limit_contribution_bps": 1.6730601957890185,
+          "non_final_limit_contribution_bps": 10.266033871814228,
+          "contribution_sum_bps": 11.939094067603246,
+          "contribution_residual_bps": -4.778205315858486e-07
+        },
+        "same_day_close": {
+          "rank_ic": null,
+          "excess_bps": 21.361173629760742,
+          "final_limit_contribution_bps": 10.832535712157933,
+          "non_final_limit_contribution_bps": 10.528639005588813,
+          "contribution_sum_bps": 21.361174717746746,
+          "contribution_residual_bps": -1.0879860035117872e-06
+        },
+        "next_close": {
+          "rank_ic": null,
+          "excess_bps": 15.068535804748535,
+          "final_limit_contribution_bps": 12.976752806638295,
+          "non_final_limit_contribution_bps": 2.091783568854927,
+          "contribution_sum_bps": 15.068536375493222,
+          "contribution_residual_bps": -5.707446870673039e-07
+        }
+      }
+    },
+    "10:01-10:10|Baseline|1m": {
+      "root": "/mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/w1001_1010_h1m",
+      "groups": 9690,
+      "candidate_rows": 32340933,
+      "selected_rows": 969000,
+      "candidate_rows_mean": 3337.5575851393187,
+      "selected_rows_mean": 100.0,
+      "candidate_final_limit_pct": 0.5566165948273664,
+      "selected_final_limit_pct": 2.580185758513932,
+      "outcomes": {
+        "own_label": {
+          "rank_ic": 0.2511668231137075,
+          "excess_bps": 8.519936561584473,
+          "final_limit_contribution_bps": 0.6494710327159844,
+          "non_final_limit_contribution_bps": 7.870464942804421,
+          "contribution_sum_bps": 8.519935975520406,
+          "contribution_residual_bps": 5.860640666099926e-07
+        },
+        "same_day_close": {
+          "rank_ic": 0.025956527957875772,
+          "excess_bps": 9.983325004577637,
+          "final_limit_contribution_bps": 10.599929292070458,
+          "non_final_limit_contribution_bps": -0.6166038838716836,
+          "contribution_sum_bps": 9.983325408198775,
+          "contribution_residual_bps": -4.0362113828962265e-07
+        },
+        "next_close": {
+          "rank_ic": 0.004640595942619631,
+          "excess_bps": 7.173771381378174,
+          "final_limit_contribution_bps": 14.08233926633486,
+          "non_final_limit_contribution_bps": -6.908567730786493,
+          "contribution_sum_bps": 7.173771535548366,
+          "contribution_residual_bps": -1.5417019216812378e-07
+        }
+      }
+    },
+    "10:01-10:10|无涨跌停|1m": {
+      "root": "/mnt/output/opening_strength_fit/nn/nn_ds350_w1001_h1m_train_ordinary_36m_grouped_gated_v2_mse_max30_v1/w1001_1010_h1m",
+      "groups": 9690,
+      "candidate_rows": 32340933,
+      "selected_rows": 969000,
+      "candidate_rows_mean": 3337.5575851393187,
+      "selected_rows_mean": 100.0,
+      "candidate_final_limit_pct": 0.5566165948273664,
+      "selected_final_limit_pct": 1.7497420020639833,
+      "outcomes": {
+        "own_label": {
+          "rank_ic": 0.25549208001435525,
+          "excess_bps": 8.479995727539062,
+          "final_limit_contribution_bps": 0.4253416166021578,
+          "non_final_limit_contribution_bps": 8.054653829042184,
+          "contribution_sum_bps": 8.479995445644342,
+          "contribution_residual_bps": 2.81894720899345e-07
+        },
+        "same_day_close": {
+          "rank_ic": 0.029101460762298546,
+          "excess_bps": 11.357504844665527,
+          "final_limit_contribution_bps": 7.313513318342249,
+          "non_final_limit_contribution_bps": 4.043991680591447,
+          "contribution_sum_bps": 11.357504998933695,
+          "contribution_residual_bps": -1.5426816801777932e-07
+        },
+        "next_close": {
+          "rank_ic": 0.00624724424913015,
+          "excess_bps": 3.257904529571533,
+          "final_limit_contribution_bps": 9.338673218576993,
+          "non_final_limit_contribution_bps": -6.08076821338322,
+          "contribution_sum_bps": 3.2579050051937726,
+          "contribution_residual_bps": -4.7562223937092085e-07
+        }
+      }
+    },
+    "10:01-10:10|Baseline|3m": {
+      "root": "/mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/w1001_1010_h3m",
+      "groups": 9690,
+      "candidate_rows": 32310589,
+      "selected_rows": 969000,
+      "candidate_rows_mean": 3334.426109391125,
+      "selected_rows_mean": 100.0,
+      "candidate_final_limit_pct": 0.5570557689307366,
+      "selected_final_limit_pct": 2.8126934984520124,
+      "outcomes": {
+        "own_label": {
+          "rank_ic": 0.17938418698440342,
+          "excess_bps": 8.535252571105957,
+          "final_limit_contribution_bps": 1.0637167041129283,
+          "non_final_limit_contribution_bps": 7.471535189294684,
+          "contribution_sum_bps": 8.535251893407612,
+          "contribution_residual_bps": 6.776983454415131e-07
+        },
+        "same_day_close": {
+          "rank_ic": null,
+          "excess_bps": 12.531744003295898,
+          "final_limit_contribution_bps": 11.962963179690334,
+          "non_final_limit_contribution_bps": 0.56878091373585,
+          "contribution_sum_bps": 12.531744093426184,
+          "contribution_residual_bps": -9.0130285457235e-08
+        },
+        "next_close": {
+          "rank_ic": null,
+          "excess_bps": 9.360877990722656,
+          "final_limit_contribution_bps": 15.695561657117903,
+          "non_final_limit_contribution_bps": -6.334684330647617,
+          "contribution_sum_bps": 9.360877326470286,
+          "contribution_residual_bps": 6.642523704414316e-07
+        }
+      }
+    },
+    "10:01-10:10|无涨跌停|3m": {
+      "root": "/mnt/output/opening_strength_fit/nn/nn_ds350_two_window_h3m_h10m_train_ordinary_36m_grouped_gated_v2_mse_max30_v1/w1001_1010_h3m",
+      "groups": 9690,
+      "candidate_rows": 32310589,
+      "selected_rows": 969000,
+      "candidate_rows_mean": 3334.426109391125,
+      "selected_rows_mean": 100.0,
+      "candidate_final_limit_pct": 0.5570557689307366,
+      "selected_final_limit_pct": 1.6236326109391124,
+      "outcomes": {
+        "own_label": {
+          "rank_ic": 0.1856981261128901,
+          "excess_bps": 8.407146453857422,
+          "final_limit_contribution_bps": 0.5353145079482865,
+          "non_final_limit_contribution_bps": 7.871831838963003,
+          "contribution_sum_bps": 8.40714634691129,
+          "contribution_residual_bps": 1.0694613195028069e-07
+        },
+        "same_day_close": {
+          "rank_ic": null,
+          "excess_bps": 14.003289222717285,
+          "final_limit_contribution_bps": 6.94426827955994,
+          "non_final_limit_contribution_bps": 7.059020413429382,
+          "contribution_sum_bps": 14.003288692989322,
+          "contribution_residual_bps": 5.297279628280194e-07
+        },
+        "next_close": {
+          "rank_ic": null,
+          "excess_bps": 5.615106582641602,
+          "final_limit_contribution_bps": 8.63667564882729,
+          "non_final_limit_contribution_bps": -3.021569214953745,
+          "contribution_sum_bps": 5.615106433873546,
+          "contribution_residual_bps": 1.487680556522264e-07
+        }
+      }
+    },
+    "14:01-14:10|Baseline|1m": {
+      "root": "/mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/w1401_1410_h1m",
+      "groups": 9690,
+      "candidate_rows": 31601907,
+      "selected_rows": 969000,
+      "candidate_rows_mean": 3261.2907120743034,
+      "selected_rows_mean": 100.0,
+      "candidate_final_limit_pct": 0.16386985760068212,
+      "selected_final_limit_pct": 0.6830753353973168,
+      "outcomes": {
+        "own_label": {
+          "rank_ic": 0.3739309023882164,
+          "excess_bps": 7.631932735443115,
+          "final_limit_contribution_bps": 0.16313560103737493,
+          "non_final_limit_contribution_bps": 7.468797108525621,
+          "contribution_sum_bps": 7.631932709562996,
+          "contribution_residual_bps": 2.5880119380872202e-08
+        },
+        "same_day_close": {
+          "rank_ic": null,
+          "excess_bps": 7.589507579803467,
+          "final_limit_contribution_bps": 1.547748950494671,
+          "non_final_limit_contribution_bps": 6.04175888065843,
+          "contribution_sum_bps": 7.589507831153101,
+          "contribution_residual_bps": -2.513496344391797e-07
+        },
+        "next_close": {
+          "rank_ic": null,
+          "excess_bps": 1.1503431797027588,
+          "final_limit_contribution_bps": 1.6547525284401938,
+          "non_final_limit_contribution_bps": -0.5044096805489979,
+          "contribution_sum_bps": 1.150342847891196,
+          "contribution_residual_bps": 3.3181156289252556e-07
+        }
+      }
+    },
+    "14:01-14:10|无涨跌停|1m": {
+      "root": "/mnt/output/opening_strength_fit/nn/nn_ds350_w1401_h1m_h3m_train_ordinary_36m_grouped_gated_v2_mse_max30_v1/w1401_1410_h1m",
+      "groups": 9690,
+      "candidate_rows": 31601907,
+      "selected_rows": 969000,
+      "candidate_rows_mean": 3261.2907120743034,
+      "selected_rows_mean": 100.0,
+      "candidate_final_limit_pct": 0.16386985760068212,
+      "selected_final_limit_pct": 0.5169246646026832,
+      "outcomes": {
+        "own_label": {
+          "rank_ic": 0.3777716312157739,
+          "excess_bps": 7.750064373016357,
+          "final_limit_contribution_bps": 0.1348054049191534,
+          "non_final_limit_contribution_bps": 7.6152586575342465,
+          "contribution_sum_bps": 7.7500640624534,
+          "contribution_residual_bps": 3.1056295757281305e-07
+        },
+        "same_day_close": {
+          "rank_ic": null,
+          "excess_bps": 8.153404235839844,
+          "final_limit_contribution_bps": 1.272058515484704,
+          "non_final_limit_contribution_bps": 6.8813451379778865,
+          "contribution_sum_bps": 8.15340365346259,
+          "contribution_residual_bps": 5.823772539770289e-07
+        },
+        "next_close": {
+          "rank_ic": null,
+          "excess_bps": -4.204020023345947,
+          "final_limit_contribution_bps": 1.3154498101789596,
+          "non_final_limit_contribution_bps": -5.519469973156099,
+          "contribution_sum_bps": -4.204020162977139,
+          "contribution_residual_bps": 1.3963119194215778e-07
+        }
+      }
+    },
+    "14:01-14:10|Baseline|3m": {
+      "root": "/mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/w1401_1410_h3m",
+      "groups": 9690,
+      "candidate_rows": 31590294,
+      "selected_rows": 969000,
+      "candidate_rows_mean": 3260.0922600619197,
+      "selected_rows_mean": 100.0,
+      "candidate_final_limit_pct": 0.16390793957156588,
+      "selected_final_limit_pct": 0.7066047471620227,
+      "outcomes": {
+        "own_label": {
+          "rank_ic": 0.31077960651149816,
+          "excess_bps": 8.084341049194336,
+          "final_limit_contribution_bps": 0.2724374193121823,
+          "non_final_limit_contribution_bps": 7.811903979356907,
+          "contribution_sum_bps": 8.084341398669089,
+          "contribution_residual_bps": -3.4947475313629184e-07
+        },
+        "same_day_close": {
+          "rank_ic": null,
+          "excess_bps": 9.695466041564941,
+          "final_limit_contribution_bps": 1.6803219313610234,
+          "non_final_limit_contribution_bps": 8.015143944858256,
+          "contribution_sum_bps": 9.695465876219279,
+          "contribution_residual_bps": 1.6534566249504223e-07
+        },
+        "next_close": {
+          "rank_ic": null,
+          "excess_bps": 2.1615962982177734,
+          "final_limit_contribution_bps": 1.8405444281440264,
+          "non_final_limit_contribution_bps": 0.3210519056721044,
+          "contribution_sum_bps": 2.1615963338161306,
+          "contribution_residual_bps": -3.55983571509455e-08
+        }
+      }
+    },
+    "14:01-14:10|无涨跌停|3m": {
+      "root": "/mnt/output/opening_strength_fit/nn/nn_ds350_w1401_h1m_h3m_train_ordinary_36m_grouped_gated_v2_mse_max30_v1/w1401_1410_h3m",
+      "groups": 9690,
+      "candidate_rows": 31590294,
+      "selected_rows": 969000,
+      "candidate_rows_mean": 3260.0922600619197,
+      "selected_rows_mean": 100.0,
+      "candidate_final_limit_pct": 0.16390793957156588,
+      "selected_final_limit_pct": 0.43931888544891645,
+      "outcomes": {
+        "own_label": {
+          "rank_ic": 0.3142694846934043,
+          "excess_bps": 8.167423248291016,
+          "final_limit_contribution_bps": 0.18568930047702636,
+          "non_final_limit_contribution_bps": 7.981733839716209,
+          "contribution_sum_bps": 8.167423140193236,
+          "contribution_residual_bps": 1.0809777961640066e-07
+        },
+        "same_day_close": {
+          "rank_ic": null,
+          "excess_bps": 9.95756721496582,
+          "final_limit_contribution_bps": 1.1027942481443025,
+          "non_final_limit_contribution_bps": 8.854773572707058,
+          "contribution_sum_bps": 9.957567820851361,
+          "contribution_residual_bps": -6.058855408497266e-07
+        },
+        "next_close": {
+          "rank_ic": null,
+          "excess_bps": -0.26216375827789307,
+          "final_limit_contribution_bps": 1.1096847070804763,
+          "non_final_limit_contribution_bps": -1.371848570525178,
+          "contribution_sum_bps": -0.26216386344470166,
+          "contribution_residual_bps": 1.0516680859495864e-07
+        }
+      }
+    },
+    "11:01-11:10|Baseline|1m": {
+      "root": "/mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/w1101_1110_h1m",
+      "groups": 9690,
+      "candidate_rows": 31455593,
+      "selected_rows": 969000,
+      "candidate_rows_mean": 3246.1912280701754,
+      "selected_rows_mean": 100.0,
+      "candidate_final_limit_pct": 0.3963492279417527,
+      "selected_final_limit_pct": 1.6011351909184728,
+      "outcomes": {
+        "own_label": {
+          "rank_ic": null,
+          "excess_bps": 7.77020263671875,
+          "final_limit_contribution_bps": 0.3268231337299893,
+          "non_final_limit_contribution_bps": 7.443380305935756,
+          "contribution_sum_bps": 7.770203439665745,
+          "contribution_residual_bps": -8.029469951154056e-07
+        },
+        "same_day_close": {
+          "rank_ic": null,
+          "excess_bps": 7.624375343322754,
+          "final_limit_contribution_bps": 5.368839503224392,
+          "non_final_limit_contribution_bps": 2.255536176636915,
+          "contribution_sum_bps": 7.624375679861307,
+          "contribution_residual_bps": -3.3653855346926775e-07
+        },
+        "next_close": {
+          "rank_ic": null,
+          "excess_bps": 4.582350254058838,
+          "final_limit_contribution_bps": 7.1289881984780985,
+          "non_final_limit_contribution_bps": -2.546637980274364,
+          "contribution_sum_bps": 4.582350218203734,
+          "contribution_residual_bps": 3.585510377490664e-08
+        }
+      }
+    },
+    "11:01-11:10|无涨跌停|1m": {
+      "root": "/mnt/output/opening_strength_fit/nn/nn_ds350_w1101_h1m_h3m_train_ordinary_36m_grouped_gated_v2_mse_max30_v1/w1101_1110_h1m",
+      "groups": 9690,
+      "candidate_rows": 31455593,
+      "selected_rows": 969000,
+      "candidate_rows_mean": 3246.1912280701754,
+      "selected_rows_mean": 100.0,
+      "candidate_final_limit_pct": 0.3963492279417527,
+      "selected_final_limit_pct": 1.1402476780185757,
+      "outcomes": {
+        "own_label": {
+          "rank_ic": null,
+          "excess_bps": 7.823708534240723,
+          "final_limit_contribution_bps": 0.24102721976210903,
+          "non_final_limit_contribution_bps": 7.582681601476389,
+          "contribution_sum_bps": 7.8237088212384975,
+          "contribution_residual_bps": -2.869977748787278e-07
+        },
+        "same_day_close": {
+          "rank_ic": null,
+          "excess_bps": 9.004260063171387,
+          "final_limit_contribution_bps": 3.833045404702602,
+          "non_final_limit_contribution_bps": 5.171215535251531,
+          "contribution_sum_bps": 9.004260939954133,
+          "contribution_residual_bps": -8.767827459621458e-07
+        },
+        "next_close": {
+          "rank_ic": null,
+          "excess_bps": 0.6027854084968567,
+          "final_limit_contribution_bps": 4.918930469702795,
+          "non_final_limit_contribution_bps": -4.3161454988813786,
+          "contribution_sum_bps": 0.6027849708214168,
+          "contribution_residual_bps": 4.3767543989048363e-07
+        }
+      }
+    },
+    "11:01-11:10|Baseline|3m": {
+      "root": "/mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/w1101_1110_h3m",
+      "groups": 9690,
+      "candidate_rows": 31417108,
+      "selected_rows": 969000,
+      "candidate_rows_mean": 3242.219607843137,
+      "selected_rows_mean": 100.0,
+      "candidate_final_limit_pct": 0.396809279835687,
+      "selected_final_limit_pct": 1.637358101135191,
+      "outcomes": {
+        "own_label": {
+          "rank_ic": null,
+          "excess_bps": 7.916740894317627,
+          "final_limit_contribution_bps": 0.5039287602668449,
+          "non_final_limit_contribution_bps": 7.412812073005261,
+          "contribution_sum_bps": 7.916740833272106,
+          "contribution_residual_bps": 6.104552063845858e-08
+        },
+        "same_day_close": {
+          "rank_ic": null,
+          "excess_bps": 8.822891235351562,
+          "final_limit_contribution_bps": 5.633424733105025,
+          "non_final_limit_contribution_bps": 3.189466286662529,
+          "contribution_sum_bps": 8.822891019767555,
+          "contribution_residual_bps": 2.1558400753463047e-07
+        },
+        "next_close": {
+          "rank_ic": null,
+          "excess_bps": 4.811326026916504,
+          "final_limit_contribution_bps": 7.4913410312019995,
+          "non_final_limit_contribution_bps": -2.6800150287209035,
+          "contribution_sum_bps": 4.8113260024810955,
+          "contribution_residual_bps": 2.4435408363387978e-08
+        }
+      }
+    },
+    "11:01-11:10|无涨跌停|3m": {
+      "root": "/mnt/output/opening_strength_fit/nn/nn_ds350_w1101_h1m_h3m_train_ordinary_36m_grouped_gated_v2_mse_max30_v1/w1101_1110_h3m",
+      "groups": 9690,
+      "candidate_rows": 31417108,
+      "selected_rows": 969000,
+      "candidate_rows_mean": 3242.219607843137,
+      "selected_rows_mean": 100.0,
+      "candidate_final_limit_pct": 0.396809279835687,
+      "selected_final_limit_pct": 1.0113519091847265,
+      "outcomes": {
+        "own_label": {
+          "rank_ic": null,
+          "excess_bps": 8.011690139770508,
+          "final_limit_contribution_bps": 0.3185525755377913,
+          "non_final_limit_contribution_bps": 7.693138084134764,
+          "contribution_sum_bps": 8.011690659672556,
+          "contribution_residual_bps": -5.199020485235906e-07
+        },
+        "same_day_close": {
+          "rank_ic": null,
+          "excess_bps": 10.295689582824707,
+          "final_limit_contribution_bps": 3.505158178734184,
+          "non_final_limit_contribution_bps": 6.790531068103547,
+          "contribution_sum_bps": 10.295689246837732,
+          "contribution_residual_bps": 3.3598697513070874e-07
+        },
+        "next_close": {
+          "rank_ic": null,
+          "excess_bps": 1.097885251045227,
+          "final_limit_contribution_bps": 4.490229995754907,
+          "non_final_limit_contribution_bps": -3.3923451188804417,
+          "contribution_sum_bps": 1.0978848768744656,
+          "contribution_residual_bps": 3.741707614857148e-07
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,151 @@
+# osf-contract: archived-legacy-job
+# osf-contract: mounted-script-entrypoint
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-ds350-pureshort-labelrepair-w0931-v1
+  namespace: bizewu
+  labels:
+    app: os-ds350-pureshort-labelrepair-w0931-v1
+    osf-exp: ds350-w0931-pure-short-label-repair-v1
+spec:
+  activeDeadlineSeconds: 86400
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 172800
+  template:
+    metadata:
+      labels:
+        app: os-ds350-pureshort-labelrepair-w0931-v1
+        osf-exp: ds350-w0931-pure-short-label-repair-v1
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+        - name: code
+          configMap: {name: os-ds350-pureshort-code-v1}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: kubernetes.io/hostname, operator: NotIn, values: [node7, node8]}
+      containers:
+        - name: repair
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:8eb66ef731709af980fa7e047ccb59748c0ed8f4ed36aa3460ee9b1f4a9fe0b6
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              H1M_CONFIG=/tmp/opening_0931_0940_labels_h1m_pure_short_v1.toml
+              HCLOSE_CONFIG=/tmp/opening_0931_0940_labels_hclose_pure_short_v1.toml
+              cat > "${H1M_CONFIG}" <<'EOF'
+              [run]
+              id = "opening_0931_0940_labels_h1m_pure_short_v1"
+
+              [dataset]
+              label_output_root = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_1m_3m_5m_next_mixed"
+              mixed_next_close_weight = 0.0
+              mixed_min_group_size = 50
+
+              [[dataset.mixed_labels]]
+              name = "1m"
+              source_column = "label_short_1m"
+              output_root = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_h1m_pure_short_v1"
+              EOF
+              cat > "${HCLOSE_CONFIG}" <<'EOF'
+              [run]
+              id = "opening_0931_0940_labels_hclose_pure_short_v1"
+
+              [dataset]
+              label_output_root = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_10m_1h_close_next"
+              mixed_next_close_weight = 0.0
+              mixed_min_group_size = 50
+
+              [[dataset.mixed_labels]]
+              name = "close"
+              source_column = "label_same_day_close"
+              output_root = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_hclose_pure_short_v1"
+              EOF
+
+              python - "${H1M_CONFIG}" "${HCLOSE_CONFIG}" <<'PY'
+              from __future__ import annotations
+
+              import json
+              import sys
+              from pathlib import Path
+
+              import pyarrow.parquet as pq
+
+              from opening_strength_fit.commands import long_horizon_label_split as splitter
+              from opening_strength_fit.config import load_toml
+              from opening_strength_fit.io import write_frame
+
+              h1m_config = Path(sys.argv[1])
+              hclose_config = Path(sys.argv[2])
+              repairs = (
+                  (
+                      h1m_config,
+                      Path("/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_h1m_pure_short_v1"),
+                      (2022, 2025),
+                  ),
+                  (
+                      hclose_config,
+                      Path("/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_hclose_pure_short_v1"),
+                      (2022, 2023),
+                  ),
+              )
+
+              # This job is the sole writer, so publish directly to avoid the stale
+              # temporary-file rename observed on the shared PVC.
+              splitter.write_frame_atomic = write_frame
+              for config_path, root, years in repairs:
+                  config = load_toml(config_path)
+                  for year in years:
+                      year_root = root / f"year={year}"
+                      for temporary in year_root.glob(".labels.parquet.*.tmp.parquet"):
+                          temporary.unlink()
+                      splitter.split_label_year(
+                          config,
+                          config_path,
+                          year=year,
+                          overwrite=True,
+                      )
+
+              expected_definitions = {
+                  repairs[0][1]: "xs_zscore(label_short_1m)",
+                  repairs[1][1]: "xs_zscore(label_same_day_close)",
+              }
+              for root, target_definition in expected_definitions.items():
+                  temporary = list(root.rglob(".labels.parquet.*.tmp.parquet"))
+                  if temporary:
+                      raise SystemExit(f"temporary parquet files remain: {temporary}")
+                  for year in range(2019, 2026):
+                      year_root = root / f"year={year}"
+                      parquet_path = year_root / "labels.parquet"
+                      manifest_path = year_root / "manifest.json"
+                      success_path = year_root / "_SUCCESS"
+                      if not parquet_path.is_file() or not manifest_path.is_file() or not success_path.is_file():
+                          raise SystemExit(f"incomplete label partition: {year_root}")
+                      manifest = json.loads(manifest_path.read_text())
+                      rows = pq.ParquetFile(parquet_path).metadata.num_rows
+                      if rows != int(manifest["rows"]):
+                          raise SystemExit(
+                              f"row mismatch for {parquet_path}: parquet={rows} manifest={manifest['rows']}"
+                          )
+                      if manifest["target_definition"] != target_definition:
+                          raise SystemExit(
+                              f"target mismatch for {parquet_path}: {manifest['target_definition']}"
+                          )
+                      print(f"validated root={root.name} year={year} rows={rows}", flush=True)
+              PY
+          volumeMounts:
+            - {name: output, mountPath: /mnt/output}
+            - {name: code, mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/commands/horizon_label_split.py, subPath: horizon_label_split.py}
+            - {name: code, mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/commands/long_horizon_label_split.py, subPath: long_horizon_label_split.py}
+          resources:
+            requests: {cpu: "4", memory: 8Gi}
+            limits: {cpu: "12", memory: 32Gi}

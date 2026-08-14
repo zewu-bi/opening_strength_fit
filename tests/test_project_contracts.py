@@ -184,6 +184,44 @@ spec:
     ]
 
 
+def test_archived_support_job_can_preserve_legacy_source_overlay(monkeypatch) -> None:
+    monkeypatch.setattr(
+        project_validation,
+        "read",
+        lambda _path: (
+            "# osf-contract: archived-legacy-job\n"
+            "kind: Job\n"
+            "site-packages/opening_strength_fit/model.py\n"
+        ),
+    )
+    errors: list[str] = []
+
+    project_validation.check_k8s_jobs(
+        ["experiments/jobs/support/historical_job.yaml"],
+        errors,
+        incubator_assets=set(),
+    )
+
+    assert errors == []
+
+
+def test_archived_legacy_marker_is_rejected_outside_support(monkeypatch) -> None:
+    monkeypatch.setattr(
+        project_validation,
+        "read",
+        lambda _path: "# osf-contract: archived-legacy-job\nkind: Job\n",
+    )
+    errors: list[str] = []
+
+    project_validation.check_k8s_jobs(
+        ["experiments/jobs/formal_job.yaml"], errors, incubator_assets=set()
+    )
+
+    assert errors == [
+        "experiments/jobs/formal_job.yaml: archived legacy marker is only allowed for support jobs"
+    ]
+
+
 def test_untracked_experiment_assets_require_incubator_registration(monkeypatch) -> None:
     monkeypatch.setattr(
         project_validation,
@@ -297,6 +335,24 @@ status = "submitted"
     assert result.returncode == 1
     assert "alignment_errors:" in result.stdout
     assert "unknown status='submitted'" in result.stdout
+
+
+def test_experiment_audit_allows_prepared_run_without_job(tmp_path: Path) -> None:
+    result = _run_audit_fixture(
+        tmp_path,
+        run_id="prepared_target",
+        run_toml="""\
+[run]
+id = "prepared_target"
+kind = "target_ablation"
+description = "prepared target fixture"
+status = "prepared"
+""",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "prepared_target" in result.stdout
+    assert "local" in result.stdout.split("prepared_target", 1)[1].splitlines()[0]
 
 
 def test_experiment_audit_requires_inactive_closeout_reason(tmp_path: Path) -> None:

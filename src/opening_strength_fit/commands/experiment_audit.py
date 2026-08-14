@@ -20,10 +20,11 @@ JOB_SUFFIXES = tuple(
         strict=True,
     )
 )
+PREPARED_STATUS = "prepared"
 ACTIVE_STATUSES = set("queued running".split())
 COMPLETED_STATUS = "completed"
 INACTIVE_STATUSES = set("canceled superseded".split())
-KNOWN_STATUSES = {*ACTIVE_STATUSES, COMPLETED_STATUS, *INACTIVE_STATUSES}
+KNOWN_STATUSES = {PREPARED_STATUS, *ACTIVE_STATUSES, COMPLETED_STATUS, *INACTIVE_STATUSES}
 LOCAL_ONLY_RUN_KINDS = set("comparison_analysis opening_limit_audit realistic_acceptance".split())
 TRAINING_JOB_KINDS = set("training sharded_training indexed_builder".split())
 ARTIFACT_RUN_KINDS = set(
@@ -170,7 +171,7 @@ def is_artifact_run(record: RunRecord) -> bool:
 
 
 def requires_job(record: RunRecord) -> bool:
-    return record.kind not in LOCAL_ONLY_RUN_KINDS
+    return record.status != PREPARED_STATUS and record.kind not in LOCAL_ONLY_RUN_KINDS
 
 
 def jobs_status(record: RunRecord, kinds: set[str]) -> str:
@@ -214,7 +215,10 @@ def print_summary(records: list[dict[str, str]], *, require_metrics: bool) -> No
     print("\naudit_summary:")
     print(f"  metrics_requirement: {'strict' if require_metrics else 'optional'}")
     summaries = (
-        ("status", ("queued", "running", "completed", "canceled", "superseded")),
+        (
+            "status",
+            ("prepared", "queued", "running", "completed", "canceled", "superseded"),
+        ),
         ("metrics", ("missing", "pending", "unexpected", "yes", "n/a")),
     )
     for column, order in summaries:
@@ -271,7 +275,7 @@ def main() -> None:
         if record.status not in KNOWN_STATUSES:
             errors.append(
                 f"{run_id}: unknown status={record.status!r}; use queued, running, "
-                "completed, canceled, or superseded"
+                "completed, canceled, superseded, or prepared"
             )
 
         if has_jobs and not has_metrics and is_running and not is_artifact:

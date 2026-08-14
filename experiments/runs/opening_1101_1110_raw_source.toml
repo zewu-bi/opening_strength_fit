@@ -1,0 +1,39 @@
+[run]
+id = "opening_1101_1110_raw_source"
+kind = "raw_source_cache"
+description = "Label-free and feature-free raw source cache for 11:01:00-11:10:00 training samples."
+status = "completed"
+
+[raw_source]
+output_root = "/mnt/output/opening_strength_fit/cache/opening_1101_1110_raw_source"
+years = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+tick_table = "stock.tick"
+daily_table = "stock.daily_bar_jy"
+symbol_regex = "^(?:(?:00|30)\\d{4}\\.SZ|(?:60|68)\\d{4}\\.SH)$"
+# Keep the pre-open state and the local 10:50-11:20 feature/label window.
+# The latest 5m VWAP label ends at 11:16:06, leaving a 234-second tail buffer.
+tick_windows = [[33300000000, 33930000000], [39000000000, 40800000000]]
+decision_end_offset_us = 40200000000
+entry_delay_seconds = 6
+short_label_horizons_seconds = [60, 180, 300]
+short_label_sell_window_seconds = 60
+context_before_days = 31
+context_after_days = 14
+close_start_offset_us = 52200000000
+close_end_offset_us = 54000000000
+
+[k8s]
+namespace = "bizewu"
+job_name = "os-raw-source-w1101-1110-v2"
+pvc = "bizewu-private-data"
+mount_path = "/mnt/output"
+image_pull_secret = "highfort"
+clickhouse_secret = "opening-strength-clickhouse"
+avoid_nodes = ["node7", "node8"]
+shard_parallelism = 4
+
+[k8s.resources]
+cpu_request = "2"
+cpu_limit = "8"
+memory_request = "8Gi"
+memory_limit = "24Gi"

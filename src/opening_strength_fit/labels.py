@@ -81,21 +81,60 @@ def cross_sectional_mixed_target(
     weight: float,
     min_group_size: int,
     usable: pd.Series | None = None,
+    clip_std_multiple: float = 0.0,
 ) -> pd.Series:
     """Combine short and next-close returns after causal cross-sectional scaling."""
     short = pd.to_numeric(frame[short_column], errors="coerce")
     long = pd.to_numeric(frame["label_next_close"], errors="coerce")
-    usable = short.notna() & long.notna() if usable is None else usable.astype(bool)
+    weight = float(weight)
+    clip_std_multiple = float(clip_std_multiple)
+    if usable is None:
+        usable = short.notna() if weight == 0.0 else short.notna() & long.notna()
+    else:
+        usable = usable.astype(bool) & short.notna()
+        if weight != 0.0:
+            usable &= long.notna()
     keys = [frame["date"], frame["decision_target_timestamp"]]
     short_group = short.where(usable).groupby(keys, sort=False)
-    long_group = long.where(usable).groupby(keys, sort=False)
     count = short_group.transform("count")
+    short_mean = short_group.transform("mean")
     short_std = short_group.transform(lambda values: values.std(ddof=0))
+    usable &= count.ge(int(min_group_size)) & short_std.gt(1e-12)
+    if weight == 0.0:
+        if clip_std_multiple > 0.0:
+            short = short.clip(
+                lower=short_mean - clip_std_multiple * short_std,
+                upper=short_mean + clip_std_multiple * short_std,
+            )
+            short_group = short.where(usable).groupby(keys, sort=False)
+            short_mean = short_group.transform("mean")
+            short_std = short_group.transform(lambda values: values.std(ddof=0))
+            usable &= short_std.gt(1e-12)
+        return ((short - short_mean) / short_std).where(usable)
+
+    long_group = long.where(usable).groupby(keys, sort=False)
+    long_mean = long_group.transform("mean")
     long_std = long_group.transform(lambda values: values.std(ddof=0))
-    usable &= count.ge(int(min_group_size)) & short_std.gt(1e-12) & long_std.gt(1e-12)
-    short_z = (short - short_group.transform("mean")) / short_std
-    long_z = (long - long_group.transform("mean")) / long_std
-    return (short_z + float(weight) * long_z).where(usable)
+    usable &= long_std.gt(1e-12)
+    if clip_std_multiple > 0.0:
+        short = short.clip(
+            lower=short_mean - clip_std_multiple * short_std,
+            upper=short_mean + clip_std_multiple * short_std,
+        )
+        long = long.clip(
+            lower=long_mean - clip_std_multiple * long_std,
+            upper=long_mean + clip_std_multiple * long_std,
+        )
+        short_group = short.where(usable).groupby(keys, sort=False)
+        long_group = long.where(usable).groupby(keys, sort=False)
+        short_mean = short_group.transform("mean")
+        long_mean = long_group.transform("mean")
+        short_std = short_group.transform(lambda values: values.std(ddof=0))
+        long_std = long_group.transform(lambda values: values.std(ddof=0))
+        usable &= short_std.gt(1e-12) & long_std.gt(1e-12)
+    short_z = (short - short_mean) / short_std
+    long_z = (long - long_mean) / long_std
+    return (short_z + weight * long_z).where(usable)
 
 
 def _future_values(

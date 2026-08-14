@@ -21,6 +21,20 @@ from opening_strength_fit.schema import normalize_date_series
 from opening_strength_fit.training_labeled import _apply_feature_transforms_from_config
 
 RAW_FEATURE_TICK_COLUMNS = TICK_SOURCE_COLUMNS
+LAGGED_DAILY_FEATURE_COLUMNS = (
+    "TradingDay",
+    "Symbol",
+    "TotalMarketValue",
+    "TotalFloatMarketValue",
+    "TotalShareToday",
+    "FloatAShare",
+    "FreeShareToday",
+)
+
+
+def _clock_offset_us(clock: str) -> int:
+    timestamp = pd.Timestamp(f"2000-01-01 {clock}")
+    return int((timestamp - timestamp.normalize()) / pd.Timedelta(microseconds=1))
 
 
 def decode_clickhouse_text(values: pd.Series) -> pd.Series:
@@ -47,7 +61,8 @@ def _daily_reference_for_day(
 ) -> pd.DataFrame:
     daily_path = raw_year_root / "daily_reference.parquet"
     if daily_path not in cache:
-        daily = read_frame(daily_path)
+        # Same-day close/high/low/limit status must never enter feature construction.
+        daily = read_frame(daily_path, columns=list(LAGGED_DAILY_FEATURE_COLUMNS))
         daily["TradingDay"] = normalize_clickhouse_date(daily["TradingDay"])
         daily["Symbol"] = decode_clickhouse_text(daily["Symbol"])
         cache[daily_path] = daily
@@ -140,10 +155,23 @@ def build_raw_feature_day(
     feature_config: dict,
     dataset_config: dict,
     daily_cache: dict[Path, pd.DataFrame],
+    *,
+    output_decision_time: str | None = None,
+    source_cutoff_seconds: int = 0,
 ) -> pd.DataFrame:
     """Compress one raw tick day into transformed context decision rows."""
 
-    raw = read_frame(raw_path, columns=list(RAW_FEATURE_TICK_COLUMNS))
+    read_filters = None
+    if output_decision_time is not None:
+        physical_end_us = _clock_offset_us(output_decision_time) - int(
+            source_cutoff_seconds * 1_000_000
+        )
+        read_filters = [("ExchTimeOffsetUs", "<=", physical_end_us)]
+    raw = read_frame(
+        raw_path,
+        columns=list(RAW_FEATURE_TICK_COLUMNS),
+        filters=read_filters,
+    )
     raw["TradingDay"] = trading_day
     raw["Symbol"] = decode_clickhouse_text(raw["Symbol"])
     raw["Status"] = decode_clickhouse_text(raw["Status"])
@@ -170,20 +198,35 @@ def build_raw_feature_day(
         ),
     )
     core = _attach_preopen_features(core, ticks, feature_config)
+    context_decision_times = tuple(
+        config_list(dataset_config, "dataset", "context_decision_times", [])
+    )
+    if output_decision_time is not None:
+        output_offset_us = _clock_offset_us(output_decision_time)
+        context_decision_times = tuple(
+            clock for clock in context_decision_times if _clock_offset_us(clock) <= output_offset_us
+        )
     sampled = sample_labeled_frame(
         core,
         mode="decision_points",
-        decision_times=tuple(config_list(dataset_config, "dataset", "context_decision_times", [])),
+        decision_times=context_decision_times,
         max_lag_seconds=None,
         alignment="clock_state",
         max_state_age_seconds=None,
+        source_cutoff_seconds=source_cutoff_seconds,
     )
-    return _apply_feature_transforms_from_config(
+    transformed = _apply_feature_transforms_from_config(
         sampled,
         feature_config,
         include_cross_sectional_relative=False,
         drop_features=False,
     )
+    if output_decision_time is None:
+        return transformed
+    decision_clock = pd.to_datetime(
+        transformed["decision_target_timestamp"], errors="coerce"
+    ).dt.strftime("%H:%M:%S")
+    return transformed.loc[decision_clock.eq(output_decision_time)].copy()
 
 
 __all__ = [

@@ -1,0 +1,18 @@
+[run]
+id = "opening_1101_1110_labels_close"
+kind = "training_close_label_dataset"
+description = "Build model-ready same-day-close mixed labels for 11:01-11:10 from raw PVC data."
+status = "completed"
+
+[dataset]
+years = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+raw_source_root = "/mnt/output/opening_strength_fit/cache/opening_1101_1110_raw_source"
+next_close_label_root = "/mnt/output/opening_strength_fit/datasets/opening_1101_1110_labels_h1m_v2"
+label_output_root = "/mnt/output/opening_strength_fit/datasets/opening_1101_1110_labels_hclose_v1"
+decision_times = ["11:01:00", "11:02:00", "11:03:00", "11:04:00", "11:05:00", "11:06:00", "11:07:00", "11:08:00", "11:09:00", "11:10:00"]
+feature_tick_start_offset_us = 39000000000
+entry_delay_seconds = 6
+fee_bps = 0.0
+tradable_statuses = ["T0", "20", "TRADE"]
+mixed_next_close_weight = 0.30
+mixed_min_group_size = 50

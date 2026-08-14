@@ -1,0 +1,46 @@
+[run]
+id = "ds350_w0931_nonlimit_rank_2026h1_v1"
+kind = "target_ablation"
+description = "Prepared 2026H1 holdout comparison of close-return, bounded-rank, and non-limit/ordinary training targets for DS350 09:31-09:40."
+status = "prepared"
+
+[sample]
+train_start = "2023-01"
+train_end = "2025-12"
+test_start = "2026-01"
+test_end = "2026-06"
+purge_train_sessions = 1
+features = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_features_350"
+source_labels = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_hclose_v1"
+variant_labels = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_hclose_train_variants_v1"
+
+[grid]
+variants = [
+  "close_z_all",
+  "mixed_nonup",
+  "mixed_ordinary",
+  "rank_mixed_all",
+  "rank_close_all",
+  "rank_close_nonup",
+  "rank_close_ordinary",
+]
+model = "grouped_gated_v2"
+loss = "mse"
+max_epochs = 30
+random_seed = 31
+
+[evaluation]
+pool = "L"
+top_n = 100
+metrics = [
+  "close_rank_ic",
+  "close_top100_excess_bps",
+  "final_limit_enrichment_x",
+  "non_final_limit_contribution_bps",
+]
+
+[jobs]
+prepare = "experiments/jobs/support/ds350_nonlimit_label_variants_prep_job.yaml"
+train = "experiments/jobs/support/ds350_nonlimit_rank_2023_2025_train_2026h1_job.yaml"
+analyze = "experiments/jobs/support/ds350_nonlimit_rank_2026h1_analysis_job.yaml"
+analysis_output = "/mnt/output/opening_strength_fit/nn/audits/ds350_2026h1_nonlimit_rank_training_v1"

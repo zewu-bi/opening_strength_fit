@@ -44,7 +44,12 @@ def split_label_year(
                     "source_label_column": source_column,
                 },
                 "target_definition": (
-                    f"xs_zscore({source_column}) + {weight:g} * xs_zscore(reused label_next_close)"
+                    f"xs_zscore({source_column})"
+                    if weight == 0.0
+                    else (
+                        f"xs_zscore({source_column}) + {weight:g} "
+                        "* xs_zscore(reused label_next_close)"
+                    )
                 ),
                 "log_label": f"horizon={spec['name']}",
             }

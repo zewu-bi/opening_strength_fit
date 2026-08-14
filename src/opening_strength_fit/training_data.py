@@ -216,9 +216,9 @@ def _validate_model_ready_split_keys(
     features: pd.DataFrame,
     labels: pd.DataFrame,
     *,
-    sample_rows: int = 4096,
+    chunk_rows: int = 1_000_000,
 ) -> None:
-    """Cheaply validate the row-order contract of published model-ready datasets."""
+    """Validate every key without copying either wide model-ready dataset."""
     for kind, frame in (("feature", features), ("label", labels)):
         missing = [column for column in DATASET_JOIN_KEYS if column not in frame.columns]
         if missing:
@@ -231,23 +231,24 @@ def _validate_model_ready_split_keys(
     if not len(features):
         return
 
-    count = min(max(2, int(sample_rows)), len(features))
-    positions = np.unique(np.linspace(0, len(features) - 1, num=count, dtype=np.int64))
-    for column in DATASET_JOIN_KEYS:
-        feature_keys = features[column].iloc[positions].reset_index(drop=True)
-        label_keys = labels[column].iloc[positions].reset_index(drop=True)
-        if column == "decision_target_timestamp":
-            feature_values = pd.to_datetime(feature_keys, errors="coerce").to_numpy()
-            label_values = pd.to_datetime(label_keys, errors="coerce").to_numpy()
-        else:
-            feature_values = feature_keys.astype(str).to_numpy()
-            label_values = label_keys.astype(str).to_numpy()
-        if not np.array_equal(feature_values, label_values):
-            raise SystemExit(
-                "model-ready feature/label sampled key mismatch in "
-                f"{column!r}; rebuild the published datasets or disable "
-                "data.trusted_model_ready_split for a full key join"
-            )
+    chunk_rows = max(1, int(chunk_rows))
+    for start in range(0, len(features), chunk_rows):
+        stop = min(start + chunk_rows, len(features))
+        for column in DATASET_JOIN_KEYS:
+            feature_keys = features[column].iloc[start:stop]
+            label_keys = labels[column].iloc[start:stop]
+            if column == "decision_target_timestamp":
+                feature_values = pd.to_datetime(feature_keys, errors="coerce").to_numpy()
+                label_values = pd.to_datetime(label_keys, errors="coerce").to_numpy()
+            else:
+                feature_values = feature_keys.astype(str).to_numpy()
+                label_values = label_keys.astype(str).to_numpy()
+            if not np.array_equal(feature_values, label_values):
+                raise SystemExit(
+                    "model-ready feature/label full key mismatch in "
+                    f"{column!r} at rows {start}:{stop}; rebuild the published "
+                    "datasets or disable data.trusted_model_ready_split for a key join"
+                )
 
 
 def _read_split_feature_label_pvc_frame(
@@ -311,7 +312,7 @@ def _read_split_feature_label_pvc_frame(
             merged[column] = labels[column].to_numpy(copy=False)
         feature_only = 0
         label_only = 0
-        alignment = "trusted_sampled_order" if trusted_model_ready else "same_order"
+        alignment = "trusted_full_key_order" if trusted_model_ready else "same_order"
     else:
         merged = features.merge(
             labels.loc[:, label_columns],

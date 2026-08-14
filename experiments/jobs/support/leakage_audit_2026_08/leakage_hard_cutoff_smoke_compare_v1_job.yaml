@@ -1,0 +1,79 @@
+# osf-contract: mounted-script-entrypoint
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-leak-smoke-compare-v1
+  namespace: bizewu
+  labels: {app: os-leak-smoke-compare-v1}
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels: {app: os-leak-smoke-compare-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+      containers:
+        - name: compare
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260804-training-datasets-v2
+          imagePullPolicy: Always
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              python - <<'PY'
+              import json
+              from pathlib import Path
+              import numpy as np
+              import pandas as pd
+
+              root = Path('/mnt/output/opening_strength_fit/leakage_audit')
+              left = pd.read_parquet(root / 'smoke_features_cutoff_0s/year=2025/features.parquet')
+              right = pd.read_parquet(root / 'smoke_features_cutoff_2s/year=2025/features.parquet')
+              keys = ['date', 'symbol', 'decision_target_timestamp']
+              if not left[keys].equals(right[keys]):
+                  raise SystemExit('cutoff smoke feature keys differ')
+              features = [column for column in left if column not in keys]
+              a = left[features].to_numpy(dtype='float64', copy=False)
+              b = right[features].to_numpy(dtype='float64', copy=False)
+              both_nan = np.isnan(a) & np.isnan(b)
+              changed = (~both_nan) & ~np.isclose(a, b, rtol=1e-7, atol=1e-9, equal_nan=True)
+              finite_pair = np.isfinite(a) & np.isfinite(b)
+              abs_diff = np.abs(a - b)
+              per_feature = []
+              for index, feature in enumerate(features):
+                  feature_changed = changed[:, index]
+                  if not feature_changed.any():
+                      continue
+                  finite = finite_pair[:, index]
+                  per_feature.append({
+                      'feature': feature,
+                      'changed_rows': int(feature_changed.sum()),
+                      'mean_abs_diff_on_finite': (
+                          float(abs_diff[finite, index].mean()) if finite.any() else None
+                      ),
+                  })
+              per_feature.sort(key=lambda item: item['changed_rows'], reverse=True)
+              report = {
+                  'rows': int(len(left)),
+                  'features': len(features),
+                  'keys_exactly_equal': True,
+                  'rows_with_any_feature_change': int(changed.any(axis=1).sum()),
+                  'rows_with_any_feature_change_fraction': float(changed.any(axis=1).mean()),
+                  'feature_cells_changed': int(changed.sum()),
+                  'feature_cells_changed_fraction': float(changed.mean()),
+                  'features_with_any_change': len(per_feature),
+                  'top_changed_features': per_feature[:25],
+              }
+              output = root / 'smoke_cutoff_0s_vs_2s.json'
+              output.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+              print(json.dumps(report, indent=2), flush=True)
+              PY
+          volumeMounts: [{name: output, mountPath: /mnt/output}]
+          resources:
+            requests: {cpu: "4", memory: 16Gi}
+            limits: {cpu: "8", memory: 32Gi}

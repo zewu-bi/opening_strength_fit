@@ -1,0 +1,135 @@
+apiVersion: v1
+kind: List
+items:
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: os-ds350-pureshort-labelsplit-w0931-h1m-v1
+      namespace: bizewu
+      labels: {app: os-ds350-pureshort-labelsplit-w0931-h1m-v1, osf-exp: ds350-w0931-h1m-pure-short-v1}
+    spec:
+      activeDeadlineSeconds: 86400
+      backoffLimit: 2
+      completionMode: Indexed
+      completions: 7
+      parallelism: 7
+      ttlSecondsAfterFinished: 172800
+      template:
+        metadata:
+          labels: {app: os-ds350-pureshort-labelsplit-w0931-h1m-v1, osf-exp: ds350-w0931-h1m-pure-short-v1}
+        spec:
+          restartPolicy: Never
+          imagePullSecrets: [{name: highfort}]
+          volumes:
+            - name: output
+              persistentVolumeClaim: {claimName: bizewu-private-data}
+            - name: code
+              configMap: {name: os-ds350-pureshort-code-v1}
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - {key: kubernetes.io/hostname, operator: NotIn, values: [node7, node8]}
+          containers:
+            - name: splitter
+              image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:8eb66ef731709af980fa7e047ccb59748c0ed8f4ed36aa3460ee9b1f4a9fe0b6
+              imagePullPolicy: Always
+              workingDir: /app/opening_strength_fit
+              env:
+                - name: JOB_COMPLETION_INDEX
+                  valueFrom:
+                    fieldRef: {fieldPath: "metadata.annotations['batch.kubernetes.io/job-completion-index']"}
+              command: [/bin/bash, -lc]
+              args:
+                - |
+                  set -euo pipefail
+                  YEARS=(2019 2020 2021 2022 2023 2024 2025)
+                  YEAR="${YEARS[${JOB_COMPLETION_INDEX:?missing JOB_COMPLETION_INDEX}]}"
+                  CONFIG="/tmp/opening_0931_0940_labels_h1m_pure_short_v1.toml"
+                  {
+                    printf '[run]\n'
+                    printf 'id = "opening_0931_0940_labels_h1m_pure_short_v1"\n\n'
+                    printf '[dataset]\n'
+                    printf 'label_output_root = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_1m_3m_5m_next_mixed"\n'
+                    printf 'mixed_next_close_weight = 0.0\n'
+                    printf 'mixed_min_group_size = 50\n\n'
+                    printf '[[dataset.mixed_labels]]\n'
+                    printf 'name = "1m"\n'
+                    printf 'source_column = "label_short_1m"\n'
+                    printf 'output_root = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_h1m_pure_short_v1"\n'
+                  } > "${CONFIG}"
+                  exec osf-split-long-horizon-labels --config "${CONFIG}" --year "${YEAR}" --overwrite
+              volumeMounts:
+                - {name: output, mountPath: /mnt/output}
+                - {name: code, mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/commands/horizon_label_split.py, subPath: horizon_label_split.py}
+                - {name: code, mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/commands/long_horizon_label_split.py, subPath: long_horizon_label_split.py}
+              resources:
+                requests: {cpu: "4", memory: 8Gi}
+                limits: {cpu: "12", memory: 32Gi}
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: os-ds350-pureshort-labelsplit-w0931-hclose-v1
+      namespace: bizewu
+      labels: {app: os-ds350-pureshort-labelsplit-w0931-hclose-v1, osf-exp: ds350-w0931-hclose-pure-short-v1}
+    spec:
+      activeDeadlineSeconds: 86400
+      backoffLimit: 2
+      completionMode: Indexed
+      completions: 7
+      parallelism: 7
+      ttlSecondsAfterFinished: 172800
+      template:
+        metadata:
+          labels: {app: os-ds350-pureshort-labelsplit-w0931-hclose-v1, osf-exp: ds350-w0931-hclose-pure-short-v1}
+        spec:
+          restartPolicy: Never
+          imagePullSecrets: [{name: highfort}]
+          volumes:
+            - name: output
+              persistentVolumeClaim: {claimName: bizewu-private-data}
+            - name: code
+              configMap: {name: os-ds350-pureshort-code-v1}
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - {key: kubernetes.io/hostname, operator: NotIn, values: [node7, node8]}
+          containers:
+            - name: splitter
+              image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:8eb66ef731709af980fa7e047ccb59748c0ed8f4ed36aa3460ee9b1f4a9fe0b6
+              imagePullPolicy: Always
+              workingDir: /app/opening_strength_fit
+              env:
+                - name: JOB_COMPLETION_INDEX
+                  valueFrom:
+                    fieldRef: {fieldPath: "metadata.annotations['batch.kubernetes.io/job-completion-index']"}
+              command: [/bin/bash, -lc]
+              args:
+                - |
+                  set -euo pipefail
+                  YEARS=(2019 2020 2021 2022 2023 2024 2025)
+                  YEAR="${YEARS[${JOB_COMPLETION_INDEX:?missing JOB_COMPLETION_INDEX}]}"
+                  CONFIG="/tmp/opening_0931_0940_labels_hclose_pure_short_v1.toml"
+                  {
+                    printf '[run]\n'
+                    printf 'id = "opening_0931_0940_labels_hclose_pure_short_v1"\n\n'
+                    printf '[dataset]\n'
+                    printf 'label_output_root = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_10m_1h_close_next"\n'
+                    printf 'mixed_next_close_weight = 0.0\n'
+                    printf 'mixed_min_group_size = 50\n\n'
+                    printf '[[dataset.mixed_labels]]\n'
+                    printf 'name = "close"\n'
+                    printf 'source_column = "label_same_day_close"\n'
+                    printf 'output_root = "/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_hclose_pure_short_v1"\n'
+                  } > "${CONFIG}"
+                  exec osf-split-long-horizon-labels --config "${CONFIG}" --year "${YEAR}" --overwrite
+              volumeMounts:
+                - {name: output, mountPath: /mnt/output}
+                - {name: code, mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/commands/horizon_label_split.py, subPath: horizon_label_split.py}
+                - {name: code, mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/commands/long_horizon_label_split.py, subPath: long_horizon_label_split.py}
+              resources:
+                requests: {cpu: "4", memory: 8Gi}
+                limits: {cpu: "12", memory: 32Gi}

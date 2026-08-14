@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[3]
 INCUBATOR_MANIFEST = "experiments/incubator.toml"
 MAX_COMMAND_MODULE_LINES = 800
 MAX_EVIDENCE_FILE_BYTES = 1_000_000
+ARCHIVED_LEGACY_JOB_MARKER = "osf-contract: archived-legacy-job"
+MOUNTED_SCRIPT_JOB_MARKER = "osf-contract: mounted-script-entrypoint"
 CANONICAL_EVIDENCE_RUN_ID = (
     "nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_"
     "grouped_gated_v2_mech_v3_gelu_mse_v1"
@@ -26,7 +28,8 @@ CANONICAL_EVIDENCE_DIR = f"experiments/evidence/backtests/{CANONICAL_EVIDENCE_RU
 REQUIRED_REPRODUCIBILITY_FILES = tuple(
     ".env.example Dockerfile Dockerfile.overlay Makefile README.md examples/smoke/labeled.csv "
     "examples/smoke/ridge.toml experiments/scripts/build_four_figure_evidence.py pyproject.toml "
-    "requirements.lock docs/experiment_log.md docs/project_brief.md docs/runbook.md".split()
+    "requirements.lock docs/experiment_log.md docs/leakage_audit.md docs/project_brief.md "
+    "docs/runbook.md".split()
 ) + tuple(
     f"{CANONICAL_EVIDENCE_DIR}/{name}"
     for name in (
@@ -340,6 +343,10 @@ def check_k8s_jobs(files: list[str], errors: list[str], incubator_assets: set[st
         ):
             continue
         text = read(job)
+        if ARCHIVED_LEGACY_JOB_MARKER in text:
+            if not job.startswith("experiments/jobs/support/"):
+                errors.append(f"{job}: archived legacy marker is only allowed for support jobs")
+            continue
         if "kind: Job" in text and "ttlSecondsAfterFinished:" not in text:
             errors.append(f"{job}: completed Job cleanup TTL is missing")
         if "site-packages/" in text:
@@ -348,6 +355,8 @@ def check_k8s_jobs(files: list[str], errors: list[str], incubator_assets: set[st
             )
         if "scripts/" in text:
             errors.append(f"{job}: k8s job uses legacy scripts/ entrypoint")
+        if MOUNTED_SCRIPT_JOB_MARKER in text:
+            continue
         if not any(entrypoint in text for entrypoint in K8S_JOB_ENTRYPOINTS):
             errors.append(f"{job}: k8s job does not use a declared project entrypoint")
 

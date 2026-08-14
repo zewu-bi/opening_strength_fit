@@ -44,6 +44,7 @@ def split_mixed_label_year(
 
     weight = config_float(config, "dataset", "mixed_next_close_weight", 0.30)
     min_group_size = config_int(config, "dataset", "mixed_min_group_size", 50)
+    clip_std_multiple = config_float(config, "dataset", "mixed_clip_std_multiple", 0.0)
     manifests = []
     for spec in specs:
         source_column = str(spec["source_column"])
@@ -64,6 +65,7 @@ def split_mixed_label_year(
             short_column=source_column,
             weight=weight,
             min_group_size=min_group_size,
+            clip_std_multiple=clip_std_multiple,
         )
         value_columns = ["label_short", "label_next_close", "target_label"]
         output[value_columns] = output[value_columns].astype("float32")
@@ -83,6 +85,7 @@ def split_mixed_label_year(
             "label_columns": value_columns,
             "target_definition": str(spec["target_definition"]),
             "mixed_min_group_size": int(min_group_size),
+            "mixed_clip_std_multiple": float(clip_std_multiple),
             "source": str(source_path),
             "non_null_rows": {
                 column: int(output[column].notna().sum()) for column in value_columns

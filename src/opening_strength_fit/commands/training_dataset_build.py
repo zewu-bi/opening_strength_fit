@@ -9,7 +9,6 @@ from pathlib import Path
 import pandas as pd
 import pyarrow.parquet as pq
 
-from opening_strength_fit.commands.arguments import add_arguments
 from opening_strength_fit.config import (
     config_bool,
     config_float,
@@ -23,19 +22,18 @@ from opening_strength_fit.feature_config import feature_filters_from_config
 from opening_strength_fit.io import read_frame, write_frame_atomic, write_json
 from opening_strength_fit.model_features import feature_columns
 from opening_strength_fit.model_preprocessing import lightgbm_feature_value_frame
-from opening_strength_fit.training_dataset_features import (
-    build_raw_feature_day,
+from opening_strength_fit.training_dataset_features import build_raw_feature_day
+from opening_strength_fit.training_dataset_labels import (
+    build_label_base as _build_label_base,
 )
 from opening_strength_fit.training_dataset_labels import (
-    KEY_COLUMNS,
-    RAW_LABEL_TICK_COLUMNS,
-    build_label_base,
-    compute_clock_vwap_label_set,
-    filter_decision_clocks,
-    mixed_target_label,
-    next_close_label,
-    normalize_dataset_keys,
-    validate_dataset_keys,
+    compute_clock_vwap_label_set as compute_short_label_set,
+)
+from opening_strength_fit.training_dataset_labels import (
+    mixed_target_label as _mixed_label,
+)
+from opening_strength_fit.training_dataset_labels import (
+    next_close_label as _next_close_label,
 )
 from opening_strength_fit.training_labeled import (
     _apply_cross_sectional_relative_from_config,
@@ -44,14 +42,51 @@ from opening_strength_fit.training_labeled import (
     apply_candidate_filter_from_config,
 )
 
-LABEL_COLUMNS = tuple(
-    "label_short_1m label_short_3m label_short_5m label_next_close label_mixed".split()
+KEY_COLUMNS = ("date", "symbol", "decision_target_timestamp")
+LABEL_COLUMNS = (
+    "label_short_1m",
+    "label_short_3m",
+    "label_short_5m",
+    "label_next_close",
+    "label_mixed",
 )
-VALID_LABEL_COLUMNS = tuple(
-    "valid_short_1m valid_short_3m valid_short_5m valid_next_close valid_mixed".split()
+VALID_LABEL_COLUMNS = (
+    "valid_short_1m",
+    "valid_short_3m",
+    "valid_short_5m",
+    "valid_next_close",
+    "valid_mixed",
+)
+RAW_LABEL_TICK_COLUMNS = (
+    "Symbol",
+    "ExchTimeOffsetUs",
+    "Volume",
+    "Turnover",
+    "AskPrice1",
+    "Status",
 )
 _FEATURE_WORKER_CONFIG: tuple[dict, dict] | None = None
 _FEATURE_WORKER_DAILY_CACHE: dict[Path, pd.DataFrame] = {}
+
+
+def _initialize_feature_worker(feature_config: dict, dataset_config: dict) -> None:
+    global _FEATURE_WORKER_CONFIG, _FEATURE_WORKER_DAILY_CACHE
+    _FEATURE_WORKER_CONFIG = (feature_config, dataset_config)
+    _FEATURE_WORKER_DAILY_CACHE = {}
+
+
+def _build_feature_worker(item: tuple[str, Path]) -> pd.DataFrame:
+    if _FEATURE_WORKER_CONFIG is None:
+        raise RuntimeError("feature worker was not initialized")
+    trading_day, raw_path = item
+    feature_config, dataset_config = _FEATURE_WORKER_CONFIG
+    return build_raw_feature_day(
+        raw_path,
+        trading_day,
+        feature_config,
+        dataset_config,
+        _FEATURE_WORKER_DAILY_CACHE,
+    )
 
 
 def _config_fingerprint(path: Path) -> str:
@@ -86,6 +121,25 @@ def _output_root(config: dict, kind: str, override: str) -> Path:
     return Path(value)
 
 
+def _normalize_keys(frame: pd.DataFrame) -> pd.DataFrame:
+    out = frame.copy()
+    out["date"] = pd.to_datetime(out["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+    out["symbol"] = out["symbol"].astype(str)
+    out["decision_target_timestamp"] = pd.to_datetime(
+        out["decision_target_timestamp"], errors="coerce"
+    ).dt.tz_localize(None)
+    missing = out[list(KEY_COLUMNS)].isna().any(axis=1)
+    if missing.any():
+        raise SystemExit(f"dataset has {int(missing.sum())} rows with missing keys")
+    return out
+
+
+def _filter_decision_clocks(frame: pd.DataFrame, clocks: tuple[str, ...]) -> pd.DataFrame:
+    out = _normalize_keys(frame)
+    observed = out["decision_target_timestamp"].dt.strftime("%H:%M:%S")
+    return out.loc[observed.isin(set(clocks))].copy()
+
+
 def _date_bounds(year: int, start: str, end: str) -> tuple[str, str]:
     resolved_start = start or f"{year}-01-01"
     resolved_end = end or f"{year}-12-31"
@@ -109,24 +163,170 @@ def _raw_tick_dates(config: dict, *, start_date: str, end_date: str) -> list[tup
     return sorted(dates)
 
 
-def _initialize_feature_worker(feature_config: dict, dataset_config: dict) -> None:
-    global _FEATURE_WORKER_CONFIG, _FEATURE_WORKER_DAILY_CACHE
-    _FEATURE_WORKER_CONFIG = (feature_config, dataset_config)
-    _FEATURE_WORKER_DAILY_CACHE = {}
+def _validate_output_keys(frame: pd.DataFrame, clocks: tuple[str, ...]) -> None:
+    duplicate = frame.duplicated(list(KEY_COLUMNS), keep=False)
+    if duplicate.any():
+        raise SystemExit(f"output has {int(duplicate.sum())} duplicate key rows")
+    observed = set(frame["decision_target_timestamp"].dt.strftime("%H:%M:%S").unique())
+    missing_clocks = sorted(set(clocks).difference(observed))
+    if missing_clocks:
+        raise SystemExit(f"output is missing decision clocks: {missing_clocks}")
 
 
-def _build_feature_worker(item: tuple[str, Path]) -> pd.DataFrame:
-    if _FEATURE_WORKER_CONFIG is None:
-        raise RuntimeError("feature worker was not initialized")
-    trading_day, raw_path = item
-    feature_config, dataset_config = _FEATURE_WORKER_CONFIG
-    return build_raw_feature_day(
-        raw_path,
-        trading_day,
-        feature_config,
-        dataset_config,
-        _FEATURE_WORKER_DAILY_CACHE,
+def _load_canonical_feature_config(config: dict) -> tuple[Path, dict, bool]:
+    canonical_path = Path(config_str(config, "dataset", "canonical_feature_config", ""))
+    if not canonical_path.exists():
+        raise SystemExit(f"canonical feature config does not exist: {canonical_path}")
+    feature_config = load_toml(canonical_path)
+    raw_feature_values = config_bool(config, "dataset", "raw_feature_values", False)
+    if raw_feature_values:
+        feature_config = {
+            section: dict(values) if isinstance(values, dict) else values
+            for section, values in feature_config.items()
+        }
+        features_section = dict(feature_config.get("features", {}))
+        features_section["feature_value_transform"] = "none"
+        feature_config["features"] = features_section
+    return canonical_path, feature_config, raw_feature_values
+
+
+def _sort_feature_source(frame: pd.DataFrame) -> pd.DataFrame:
+    normalized = _normalize_keys(frame)
+    return normalized.sort_values(list(KEY_COLUMNS), kind="mergesort").reset_index(drop=True)
+
+
+def _clock_partition(clock: str) -> str:
+    parsed = pd.Timestamp(f"2000-01-01 {clock}")
+    return parsed.strftime("%H%M%S")
+
+
+def _feature_base_shard_root(output_root: Path, year: int, clock: str) -> Path:
+    return output_root / f"year={year}" / f"clock={_clock_partition(clock)}"
+
+
+def build_feature_base_shard(
+    config: dict,
+    config_path: Path,
+    *,
+    year: int,
+    output_root: Path,
+    output_decision_time: str,
+    start_date: str,
+    end_date: str,
+    context_days: int,
+    overwrite: bool,
+) -> dict[str, object]:
+    """Build one physical-cutoff clock shard before cross-day transforms."""
+
+    canonical_path, feature_config, _ = _load_canonical_feature_config(config)
+    clocks = tuple(config_list(config, "dataset", "decision_times", []))
+    if output_decision_time not in clocks:
+        raise SystemExit(
+            f"feature base clock {output_decision_time!r} is not configured: {list(clocks)}"
+        )
+    physical_cutoff_seconds = config_int(config, "dataset", "physical_tick_cutoff_seconds", -1)
+    if physical_cutoff_seconds < 0:
+        raise SystemExit("feature base shards require --physical-tick-cutoff-seconds >= 0")
+
+    shard_root = _feature_base_shard_root(output_root, year, output_decision_time)
+    output_path = shard_root / "features_base.parquet"
+    success_path = shard_root / "_SUCCESS"
+    if output_path.exists() and not overwrite:
+        raise SystemExit(f"feature base output exists, pass --overwrite: {output_path}")
+    if overwrite and success_path.exists():
+        success_path.unlink()
+
+    context_start = str((pd.Timestamp(start_date) - pd.Timedelta(days=int(context_days))).date())
+    raw_dates = _raw_tick_dates(config, start_date=context_start, end_date=end_date)
+    if not raw_dates:
+        raise SystemExit(f"no raw tick days in {context_start}..{end_date}")
+    daily_cache: dict[Path, pd.DataFrame] = {}
+    parts: list[pd.DataFrame] = []
+    for index, (trading_day, raw_path) in enumerate(raw_dates, start=1):
+        part = build_raw_feature_day(
+            raw_path,
+            trading_day,
+            feature_config,
+            config,
+            daily_cache,
+            output_decision_time=output_decision_time,
+            source_cutoff_seconds=physical_cutoff_seconds,
+        )
+        if not part.empty:
+            floats = part.select_dtypes(include=["float64"]).columns
+            if len(floats):
+                part[floats] = part[floats].astype("float32")
+            parts.append(part)
+        print(
+            f"feature base year={year} clock={output_decision_time} "
+            f"day={index}/{len(raw_dates)} date={trading_day} rows={len(part)}",
+            flush=True,
+        )
+    if not parts:
+        raise SystemExit("raw source produced no feature base rows")
+    source = _sort_feature_source(pd.concat(parts, ignore_index=True))
+    _validate_output_keys(source, (output_decision_time,))
+    write_frame_atomic(source, output_path)
+    parquet = pq.ParquetFile(output_path)
+    manifest = {
+        "schema_version": "opening_feature_base_clock_v1",
+        "run_id": run_id(config, config_path),
+        "kind": "feature_base_clock",
+        "year": year,
+        "output_decision_time": output_decision_time,
+        "date_start": start_date,
+        "date_end": end_date,
+        "context_start": context_start,
+        "context_days": context_days,
+        "physical_tick_cutoff_seconds": physical_cutoff_seconds,
+        "physical_per_decision_parquet_filter": True,
+        "canonical_feature_config": str(canonical_path),
+        "canonical_feature_config_fingerprint": _config_fingerprint(canonical_path),
+        "source_raw_root": str(_raw_root(config)),
+        "source_tick_files": len(raw_dates),
+        "rows": int(len(source)),
+        "columns": int(len(source.columns)),
+        "contains_post_sample_transforms": False,
+        "file": {"path": str(output_path), "bytes": output_path.stat().st_size},
+        "parquet_rows": int(parquet.metadata.num_rows),
+    }
+    write_json(shard_root / "manifest.json", manifest, sort_keys=True, atomic=True)
+    success_path.touch()
+    print(
+        f"feature base complete year={year} clock={output_decision_time} "
+        f"rows={len(source)} output={output_path}",
+        flush=True,
     )
+    return manifest
+
+
+def _load_feature_base_source(
+    input_root: Path,
+    *,
+    year: int,
+    clocks: tuple[str, ...],
+    physical_cutoff_seconds: int,
+) -> pd.DataFrame:
+    parts: list[pd.DataFrame] = []
+    for clock in clocks:
+        shard_root = _feature_base_shard_root(input_root, year, clock)
+        success_path = shard_root / "_SUCCESS"
+        manifest_path = shard_root / "manifest.json"
+        output_path = shard_root / "features_base.parquet"
+        if not success_path.exists() or not manifest_path.exists() or not output_path.exists():
+            raise SystemExit(f"incomplete feature base shard: {shard_root}")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if manifest.get("output_decision_time") != clock:
+            raise SystemExit(f"feature base clock mismatch: {manifest_path}")
+        if manifest.get("physical_tick_cutoff_seconds") != physical_cutoff_seconds:
+            raise SystemExit(f"feature base cutoff mismatch: {manifest_path}")
+        parts.append(read_frame(output_path))
+    source = _sort_feature_source(pd.concat(parts, ignore_index=True))
+    duplicate = source.duplicated(list(KEY_COLUMNS), keep=False)
+    if duplicate.any():
+        raise SystemExit(f"feature base source has {int(duplicate.sum())} duplicate key rows")
+    _validate_output_keys(source, clocks)
+    return source
 
 
 def build_feature_dataset(
@@ -139,12 +339,10 @@ def build_feature_dataset(
     end_date: str,
     context_days: int,
     overwrite: bool,
+    feature_base_input_root: Path | None = None,
     workers: int = 1,
 ) -> dict[str, object]:
-    canonical_path = Path(config_str(config, "dataset", "canonical_feature_config", ""))
-    if not canonical_path.exists():
-        raise SystemExit(f"canonical feature config does not exist: {canonical_path}")
-    feature_config = load_toml(canonical_path)
+    canonical_path, feature_config, raw_feature_values = _load_canonical_feature_config(config)
     clocks = tuple(config_list(config, "dataset", "decision_times", []))
     expected_features = config_int(config, "dataset", "expected_feature_count", 350)
     year_root = output_root / f"year={year}"
@@ -155,61 +353,88 @@ def build_feature_dataset(
     if overwrite and success_path.exists():
         success_path.unlink()
 
+    physical_cutoff_seconds = config_int(config, "dataset", "physical_tick_cutoff_seconds", -1)
+    if physical_cutoff_seconds < -1:
+        raise SystemExit("[dataset].physical_tick_cutoff_seconds must be >= 0 when configured")
     context_start = str((pd.Timestamp(start_date) - pd.Timedelta(days=int(context_days))).date())
-    raw_dates = _raw_tick_dates(config, start_date=context_start, end_date=end_date)
-    if not raw_dates:
-        raise SystemExit(f"no raw tick days in {context_start}..{end_date}")
-    parts = []
-    if workers < 1:
-        raise SystemExit("feature workers must be >= 1")
-    if workers == 1:
-        daily_cache: dict[Path, pd.DataFrame] = {}
-        built_parts = (
-            build_raw_feature_day(
-                raw_path,
-                trading_day,
-                feature_config,
-                config,
-                daily_cache,
-            )
-            for trading_day, raw_path in raw_dates
+    raw_dates: list[tuple[str, Path]] = []
+    if feature_base_input_root is not None:
+        if physical_cutoff_seconds < 0:
+            raise SystemExit("feature base reduction requires a physical tick cutoff")
+        source = _load_feature_base_source(
+            feature_base_input_root,
+            year=year,
+            clocks=clocks,
+            physical_cutoff_seconds=physical_cutoff_seconds,
         )
     else:
-        executor = ProcessPoolExecutor(
-            max_workers=workers,
-            initializer=_initialize_feature_worker,
-            initargs=(feature_config, config),
-        )
-        built_parts = executor.map(_build_feature_worker, raw_dates, chunksize=1)
-    try:
-        for index, ((trading_day, _raw_path), part) in enumerate(
-            zip(raw_dates, built_parts, strict=True), start=1
-        ):
-            if not part.empty:
-                floats = part.select_dtypes(include=["float64"]).columns
-                if len(floats):
-                    part[floats] = part[floats].astype("float32")
-                parts.append(part)
-            print(
-                f"features year={year} day={index}/{len(raw_dates)} date={trading_day} "
-                f"rows={len(part)} workers={workers}",
-                flush=True,
+        raw_dates = _raw_tick_dates(config, start_date=context_start, end_date=end_date)
+        if not raw_dates:
+            raise SystemExit(f"no raw tick days in {context_start}..{end_date}")
+        if workers < 1:
+            raise SystemExit("feature workers must be >= 1")
+        daily_cache: dict[Path, pd.DataFrame] = {}
+        parts: list[pd.DataFrame] = []
+        executor: ProcessPoolExecutor | None = None
+        if workers > 1 and physical_cutoff_seconds < 0:
+            executor = ProcessPoolExecutor(
+                max_workers=workers,
+                initializer=_initialize_feature_worker,
+                initargs=(feature_config, config),
             )
-    finally:
-        if workers > 1:
-            executor.shutdown(wait=True, cancel_futures=True)
-    if not parts:
-        raise SystemExit("raw source produced no sampled feature rows")
-    source = pd.concat(parts, ignore_index=True)
+            built_parts = executor.map(_build_feature_worker, raw_dates, chunksize=1)
+        else:
+            built_parts = (
+                pd.concat(
+                    [
+                        build_raw_feature_day(
+                            raw_path,
+                            trading_day,
+                            feature_config,
+                            config,
+                            daily_cache,
+                            output_decision_time=clock,
+                            source_cutoff_seconds=physical_cutoff_seconds,
+                        )
+                        for clock in clocks
+                    ],
+                    ignore_index=True,
+                )
+                if physical_cutoff_seconds >= 0
+                else build_raw_feature_day(
+                    raw_path, trading_day, feature_config, config, daily_cache
+                )
+                for trading_day, raw_path in raw_dates
+            )
+        try:
+            for index, ((trading_day, _), part) in enumerate(
+                zip(raw_dates, built_parts, strict=True), start=1
+            ):
+                if not part.empty:
+                    floats = part.select_dtypes(include=["float64"]).columns
+                    if len(floats):
+                        part[floats] = part[floats].astype("float32")
+                    parts.append(part)
+                print(
+                    f"features year={year} day={index}/{len(raw_dates)} "
+                    f"date={trading_day} rows={len(part)} workers={workers}",
+                    flush=True,
+                )
+        finally:
+            if executor is not None:
+                executor.shutdown(wait=True, cancel_futures=True)
+        if not parts:
+            raise SystemExit("raw source produced no sampled feature rows")
+        source = _sort_feature_source(pd.concat(parts, ignore_index=True))
     transformed = _apply_post_sample_feature_transforms_from_config(source, feature_config)
     if config_bool(feature_config, "features", "include_cross_sectional_relative", False):
         transformed = _apply_cross_sectional_relative_from_config(transformed, feature_config)
     transformed = _drop_features_from_config(transformed, feature_config)
     transformed = apply_candidate_filter_from_config(transformed, feature_config)
-    transformed = normalize_dataset_keys(transformed)
+    transformed = _normalize_keys(transformed)
     target_dates = transformed["date"].between(start_date, end_date)
     transformed = transformed.loc[target_dates].copy()
-    transformed = filter_decision_clocks(transformed, clocks)
+    transformed = _filter_decision_clocks(transformed, clocks)
     filters = feature_filters_from_config(feature_config)
     selected = feature_columns(transformed, None, **filters)
     if len(selected) != expected_features:
@@ -240,8 +465,8 @@ def build_feature_dataset(
     )
     if output_features != selected:
         raise SystemExit("feature value transform changed the canonical feature names")
-    output = output[[*KEY_COLUMNS, *selected]].copy()
-    validate_dataset_keys(output, clocks)
+    output = _sort_feature_source(output[[*KEY_COLUMNS, *selected]].copy())
+    _validate_output_keys(output, clocks)
     float_columns = output.select_dtypes(include=["float64"]).columns
     if len(float_columns):
         output[float_columns] = output[float_columns].astype("float32")
@@ -261,7 +486,11 @@ def build_feature_dataset(
         "feature_columns": selected,
         "decision_times": list(clocks),
         "source_raw_root": str(_raw_root(config)),
-        "source_tick_files": len(raw_dates),
+        "source_tick_files": len(raw_dates) if raw_dates else None,
+        "source_feature_base_root": (
+            str(feature_base_input_root) if feature_base_input_root is not None else None
+        ),
+        "source_feature_base_shards": len(clocks) if feature_base_input_root is not None else None,
         "source_rows_with_context": int(len(source)),
         "context_days": context_days,
         "build_workers": int(workers),
@@ -270,6 +499,11 @@ def build_feature_dataset(
         "feature_values": "model_ready",
         "feature_value_transform": value_transform,
         "training_feature_value_transform": "none",
+        "raw_feature_values": raw_feature_values,
+        "physical_tick_cutoff_seconds": (
+            physical_cutoff_seconds if physical_cutoff_seconds >= 0 else None
+        ),
+        "physical_per_decision_parquet_filter": physical_cutoff_seconds >= 0,
         "file": {"path": str(output_path), "bytes": output_path.stat().st_size},
         "parquet_rows": int(parquet.metadata.num_rows),
         "contains_labels": False,
@@ -311,7 +545,7 @@ def build_label_dataset(
     parts = []
     for index, (trading_day, tick_path) in enumerate(raw_dates, start=1):
         ticks = read_frame(tick_path, columns=list(RAW_LABEL_TICK_COLUMNS))
-        day_base = build_label_base(
+        day_base = _build_label_base(
             ticks,
             trading_day=trading_day,
             decision_times=clocks,
@@ -320,7 +554,7 @@ def build_label_dataset(
             ),
             entry_delay_seconds=config_int(config, "dataset", "entry_delay_seconds", 6),
         )
-        labels = compute_clock_vwap_label_set(
+        labels = compute_short_label_set(
             day_base,
             ticks,
             horizons=(60, 180, 300),
@@ -350,12 +584,12 @@ def build_label_dataset(
             "entry_after_cross_section_ready",
         ]
     ].copy()
-    validate_dataset_keys(base, clocks)
+    _validate_output_keys(base, clocks)
     output = base_and_short[[*KEY_COLUMNS, *LABEL_COLUMNS[:3], *VALID_LABEL_COLUMNS[:3]]]
-    next_close = next_close_label(base, raw_year_root)
+    next_close = _next_close_label(base, raw_year_root)
     output = output.merge(next_close, on=list(KEY_COLUMNS), how="left", validate="one_to_one")
     output["valid_next_close"] = output["valid_next_close"].fillna(False).astype(bool)
-    mixed, mixed_valid = mixed_target_label(
+    mixed, mixed_valid = _mixed_label(
         output,
         weight=config_float(config, "dataset", "mixed_next_close_weight", 0.30),
         min_group_size=config_int(config, "dataset", "mixed_min_group_size", 50),
@@ -363,7 +597,7 @@ def build_label_dataset(
     output["label_mixed"] = mixed
     output["valid_mixed"] = mixed_valid
     output = output[[*KEY_COLUMNS, *LABEL_COLUMNS, *VALID_LABEL_COLUMNS]]
-    validate_dataset_keys(output, clocks)
+    _validate_output_keys(output, clocks)
     output[list(LABEL_COLUMNS)] = output[list(LABEL_COLUMNS)].astype("float32")
 
     year_root = output_root / f"year={year}"
@@ -422,9 +656,40 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", required=True)
     parser.add_argument("--kind", choices=("features", "labels"), required=True)
     parser.add_argument("--year", type=int, required=True)
-    add_arguments(parser, "output-root date-start date-end", default="")
+    parser.add_argument("--output-root", default="")
+    parser.add_argument("--date-start", default="")
+    parser.add_argument("--date-end", default="")
     parser.add_argument("--context-days", type=int)
     parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument(
+        "--physical-tick-cutoff-seconds",
+        type=int,
+        help=(
+            "Leakage kill-test mode: read each decision clock separately with a Parquet "
+            "filter ending this many seconds before the logical clock."
+        ),
+    )
+    parser.add_argument(
+        "--raw-feature-values",
+        action="store_true",
+        help="Leakage baseline mode: disable mechanismized/cross-sectional value transforms.",
+    )
+    parser.add_argument(
+        "--feature-base-clock",
+        default="",
+        help=(
+            "Map stage for leakage kill tests: build one physical-cutoff decision-clock "
+            "feature shard before cross-day transforms."
+        ),
+    )
+    parser.add_argument(
+        "--feature-base-input-root",
+        default="",
+        help=(
+            "Reduce stage for leakage kill tests: read all configured clock shards from "
+            "this root, then compute history/cross-sectional/final feature transforms."
+        ),
+    )
     parser.add_argument("--overwrite", action="store_true")
     return parser
 
@@ -433,27 +698,64 @@ def main() -> None:
     args = build_parser().parse_args()
     config_path = Path(args.config)
     config = load_toml(config_path)
+    if args.physical_tick_cutoff_seconds is not None:
+        config = {
+            section: dict(values) if isinstance(values, dict) else values
+            for section, values in config.items()
+        }
+        dataset = dict(config.get("dataset", {}))
+        dataset["physical_tick_cutoff_seconds"] = args.physical_tick_cutoff_seconds
+        config["dataset"] = dataset
+    if args.raw_feature_values:
+        config = {
+            section: dict(values) if isinstance(values, dict) else values
+            for section, values in config.items()
+        }
+        dataset = dict(config.get("dataset", {}))
+        dataset["raw_feature_values"] = True
+        config["dataset"] = dataset
     years = _years(config)
     if args.year not in years:
         raise SystemExit(f"year {args.year} is not configured: {list(years)}")
     start_date, end_date = _date_bounds(args.year, args.date_start, args.date_end)
     output_root = _output_root(config, args.kind, args.output_root)
     if args.kind == "features":
-        build_feature_dataset(
-            config,
-            config_path,
-            year=args.year,
-            output_root=output_root,
-            start_date=start_date,
-            end_date=end_date,
-            context_days=(
-                args.context_days
-                if args.context_days is not None
-                else config_int(config, "dataset", "feature_context_days", 120)
-            ),
-            overwrite=args.overwrite,
-            workers=args.workers,
+        if args.feature_base_clock and args.feature_base_input_root:
+            raise SystemExit(
+                "--feature-base-clock and --feature-base-input-root are mutually exclusive"
+            )
+        context_days = (
+            args.context_days
+            if args.context_days is not None
+            else config_int(config, "dataset", "feature_context_days", 120)
         )
+        if args.feature_base_clock:
+            build_feature_base_shard(
+                config,
+                config_path,
+                year=args.year,
+                output_root=output_root,
+                output_decision_time=args.feature_base_clock,
+                start_date=start_date,
+                end_date=end_date,
+                context_days=context_days,
+                overwrite=args.overwrite,
+            )
+        else:
+            build_feature_dataset(
+                config,
+                config_path,
+                year=args.year,
+                output_root=output_root,
+                start_date=start_date,
+                end_date=end_date,
+                context_days=context_days,
+                overwrite=args.overwrite,
+                feature_base_input_root=(
+                    Path(args.feature_base_input_root) if args.feature_base_input_root else None
+                ),
+                workers=args.workers,
+            )
     else:
         build_label_dataset(
             config,
