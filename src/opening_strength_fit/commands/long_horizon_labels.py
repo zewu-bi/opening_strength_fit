@@ -68,9 +68,7 @@ def _state_ticks(base_ticks: pd.DataFrame, paths: list[Path]) -> pd.DataFrame:
     parts.extend(read_frame(path, columns=list(STATE_TICK_COLUMNS)) for path in paths)
     state = pd.concat(parts, ignore_index=True)
     state["Symbol"] = decode_clickhouse_text(state["Symbol"])
-    state["ExchTimeOffsetUs"] = pd.to_numeric(
-        state["ExchTimeOffsetUs"], errors="coerce"
-    )
+    state["ExchTimeOffsetUs"] = pd.to_numeric(state["ExchTimeOffsetUs"], errors="coerce")
     state = state.dropna(subset=["Symbol", "ExchTimeOffsetUs"])
     return (
         state.sort_values(["Symbol", "ExchTimeOffsetUs"], kind="mergesort")
@@ -119,12 +117,12 @@ def same_day_close_label(
 
 
 def _reuse_next_close(base: pd.DataFrame, source_path: Path) -> pd.DataFrame:
-    source = _normalize_keys(
-        read_frame(source_path, columns=[*KEY_COLUMNS, "label_next_close"])
-    )
+    source = _normalize_keys(read_frame(source_path, columns=[*KEY_COLUMNS, "label_next_close"]))
     duplicate = source.duplicated(list(KEY_COLUMNS), keep=False)
     if duplicate.any():
-        raise SystemExit(f"next-close source has {int(duplicate.sum())} duplicate keys: {source_path}")
+        raise SystemExit(
+            f"next-close source has {int(duplicate.sum())} duplicate keys: {source_path}"
+        )
     merged = base[list(KEY_COLUMNS)].merge(
         source,
         on=list(KEY_COLUMNS),
@@ -153,9 +151,7 @@ def build_label_year(
 ) -> dict[str, object]:
     base_root_value = config_str(config, "dataset", "raw_source_root", "").strip()
     output_root_value = config_str(config, "dataset", "label_output_root", "").strip()
-    next_close_root_value = config_str(
-        config, "dataset", "next_close_label_root", ""
-    ).strip()
+    next_close_root_value = config_str(config, "dataset", "next_close_label_root", "").strip()
     if not base_root_value or not output_root_value or not next_close_root_value:
         raise SystemExit(
             "[dataset] requires raw_source_root, label_output_root, and next_close_label_root"
@@ -175,9 +171,7 @@ def build_label_year(
     horizons = tuple(int(value) for value in config_list(config, "dataset", "horizons_seconds", []))
     if horizons != (600, 3600):
         raise SystemExit("long label horizons must be [600, 3600]")
-    tradable = tuple(
-        config_list(config, "dataset", "tradable_statuses", ["T0", "20", "TRADE"])
-    )
+    tradable = tuple(config_list(config, "dataset", "tradable_statuses", ["T0", "20", "TRADE"]))
     fee_bps = config_float(config, "dataset", "fee_bps", 0.0)
     days = _trading_days(base_year_root, start_date, end_date)
     if not days:
@@ -207,9 +201,7 @@ def build_label_year(
             state,
             horizons=horizons,
             sell_window_seconds=config_int(config, "dataset", "sell_window_seconds", 60),
-            volume_unit_multiplier=config_float(
-                config, "dataset", "volume_unit_multiplier", 1.0
-            ),
+            volume_unit_multiplier=config_float(config, "dataset", "volume_unit_multiplier", 1.0),
             fee_bps=fee_bps,
             tradable_statuses=tradable,
         ).rename(
@@ -229,8 +221,7 @@ def build_label_year(
         part = timed.merge(same_close, on=list(KEY_COLUMNS), validate="one_to_one")
         parts.append(part)
         print(
-            f"long labels year={year} day={index}/{len(days)} date={trading_day} "
-            f"rows={len(part)}",
+            f"long labels year={year} day={index}/{len(days)} date={trading_day} rows={len(part)}",
             flush=True,
         )
 

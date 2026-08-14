@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pandas as pd
 
-
 WINDOWS = (
     ("09:31-09:40", "0931_0940"),
     ("10:01-10:10", "1001_1010"),
@@ -103,8 +102,7 @@ def build_summary(backtests_root: Path, output_dir: Path) -> None:
                         "slice": f"{later_window} @ {horizon_label}",
                         "metric": metric,
                         "delta": float(
-                            windowed.loc[later_window, metric]
-                            - windowed.loc["09:31-09:40", metric]
+                            windowed.loc[later_window, metric] - windowed.loc["09:31-09:40", metric]
                         ),
                     }
                 )
@@ -136,8 +134,7 @@ def build_summary(backtests_root: Path, output_dir: Path) -> None:
     body = [
         "| "
         + " | ".join(
-            [str(row.iloc[0]), str(row.iloc[1])]
-            + [f"{float(value):.6f}" for value in row.iloc[2:]]
+            [str(row.iloc[0]), str(row.iloc[1])] + [f"{float(value):.6f}" for value in row.iloc[2:]]
         )
         + " |"
         for _, row in markdown.iterrows()

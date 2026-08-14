@@ -33,10 +33,12 @@ status = "queued"
 状态只允许：
 
 ```text
-queued -> running -> completed
-                 \-> canceled
+prepared -> queued -> running -> completed
+                            \-> canceled
 queued/completed -> superseded
 ```
+
+`prepared` 表示配置和 supporting manifests 已归档但尚未提交；该状态不要求正式 Job 或 metrics。
 
 历史 run id、Job、trace 和 PVC lineage 不改名。新任务使用
 `opening_<window>_<semantic_change>`；语义变化创建新 run，不覆盖历史配置。完整命名规则见

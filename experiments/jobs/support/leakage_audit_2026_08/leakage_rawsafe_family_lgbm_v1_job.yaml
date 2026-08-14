@@ -1,0 +1,132 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-leak-rawsafe-family-v1
+  namespace: bizewu
+  labels: {app: os-leak-rawsafe-family-v1}
+spec:
+  activeDeadlineSeconds: 1209600
+  backoffLimit: 3
+  completionMode: Indexed
+  completions: 8
+  parallelism: 2
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels: {app: os-leak-rawsafe-family-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+        - name: audit-code
+          configMap: {name: os-leakage-audit-code-v1}
+      containers:
+        - name: trainer
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260804-training-datasets-v2
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          env:
+            - name: JOB_COMPLETION_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.annotations['batch.kubernetes.io/job-completion-index']"
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              NAMES=(
+                raw_orderbook
+                plus_trade
+                plus_auction
+                plus_momentum
+                plus_mechanism_v3
+                plus_hist_surprise
+                plus_path_shape
+                full_other
+              )
+              INDEX="${JOB_COMPLETION_INDEX:?missing completion index}"
+              NAME="${NAMES[${INDEX}]}"
+              RAW_ROOT=/mnt/output/opening_strength_fit/leakage_audit/features_raw_cutoff_2s
+              XS_ROOT=/mnt/output/opening_strength_fit/leakage_audit/features_cutoff_2s
+              FEATURE_ROOT="${RAW_ROOT}"
+              if (( INDEX >= 4 )); then FEATURE_ROOT="${XS_ROOT}"; fi
+              LABEL_ROOT=/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_h1m_v2
+              OUTPUT_ROOT="/mnt/output/opening_strength_fit/leakage_audit/lgbm/${NAME}"
+
+              ARGS=(
+                --include-feature-column exch_time_offset_us
+                --include-feature-column trade_num
+                --include-feature-column avg_ask_price
+                --include-feature-column avg_bid_price
+                --include-feature-column total_ask_volume
+                --include-feature-column total_bid_volume
+                --include-feature-column total_ask_count
+                --include-feature-column total_bid_count
+                --include-feature-column mid_price
+                --include-feature-column spread_bps
+                --include-feature-prefix ask_volume_
+                --include-feature-prefix bid_volume_
+                --include-feature-prefix ask_count_
+                --include-feature-prefix bid_count_
+                --include-feature-prefix ask_depth_
+                --include-feature-prefix bid_depth_
+                --include-feature-prefix depth_imbalance_
+                --include-feature-prefix ask_gap_
+                --include-feature-prefix bid_gap_
+              )
+              if (( INDEX >= 1 )); then
+                ARGS+=(
+                  --include-feature-prefix volume_diff_
+                  --include-feature-prefix turnover_diff_
+                  --include-feature-prefix trade_vwap_
+                  --include-feature-prefix return_
+                )
+              fi
+              if (( INDEX >= 2 )); then
+                ARGS+=(
+                  --include-feature-prefix preopen_
+                  --include-feature-prefix auction_
+                )
+              fi
+              if (( INDEX >= 3 )); then
+                ARGS+=(
+                  --include-feature-prefix postopen_mid_price_
+                  --include-feature-prefix postopen_v2_mid_price_from_open_
+                  --include-feature-prefix postopen_v2_ask_price_1_from_open_
+                  --include-feature-prefix postopen_v2_bid_price_1_from_open_
+                )
+              fi
+              if (( INDEX >= 5 )); then ARGS+=(--include-feature-prefix hist_surprise_); fi
+              if (( INDEX >= 6 )); then ARGS+=(--include-feature-prefix path_shape_); fi
+              if (( INDEX >= 7 )); then
+                ARGS+=(
+                  --include-feature-prefix postopen_
+                  --include-feature-prefix multi_den_ratio_
+                  --include-feature-column auction_price_range_bps
+                  --include-feature-column auction_last_position_in_range
+                )
+              fi
+
+              exec osf-train \
+                --config /audit/leakage_kill_lgbm_36m_v1.toml \
+                --feature-input "${FEATURE_ROOT}" \
+                --label-input "${LABEL_ROOT}" \
+                --run-id "leakage_${NAME}_lgbm_v1" \
+                --output-dir "${OUTPUT_ROOT}" \
+                "${ARGS[@]}"
+          volumeMounts:
+            - {name: output, mountPath: /mnt/output}
+            - name: audit-code
+              mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/training.py
+              subPath: training.py
+            - name: audit-code
+              mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/training_args.py
+              subPath: training_args.py
+            - name: audit-code
+              mountPath: /audit/leakage_kill_lgbm_36m_v1.toml
+              subPath: leakage_kill_lgbm_36m_v1.toml
+          resources:
+            requests: {cpu: "16", memory: 256Gi}
+            limits: {cpu: "32", memory: 384Gi}

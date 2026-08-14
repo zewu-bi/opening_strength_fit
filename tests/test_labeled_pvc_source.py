@@ -18,7 +18,7 @@ from opening_strength_fit.training_data import (
 
 
 class LabeledPvcSourceTest(unittest.TestCase):
-    def test_model_ready_split_uses_sampled_alignment_without_generic_cleaning(self) -> None:
+    def test_model_ready_split_uses_full_key_alignment_without_generic_cleaning(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             feature_root = root / "features"
@@ -74,7 +74,7 @@ class LabeledPvcSourceTest(unittest.TestCase):
         self.assertNotIn("decision_time", labeled.columns)
         self.assertEqual(str(labeled["feature_a"].dtype), "float32")
 
-    def test_model_ready_split_rejects_sampled_key_mismatch(self) -> None:
+    def test_model_ready_split_rejects_full_key_mismatch(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             feature_root = root / "features"
@@ -110,7 +110,7 @@ class LabeledPvcSourceTest(unittest.TestCase):
                 "model": {"target_col": "target_label"},
             }
 
-            with self.assertRaisesRegex(SystemExit, "sampled key mismatch"):
+            with self.assertRaisesRegex(SystemExit, "full key mismatch"):
                 load_labeled_pvc_frame(argparse.Namespace(labeled_input=None), config)
 
     def test_labeled_pvc_joins_separate_feature_and_label_datasets(self) -> None:

@@ -1,0 +1,55 @@
+[run]
+id = "leakage_kill_lgbm_36m_v1"
+kind = "leakage_audit"
+description = "Simple LightGBM control for physical-cutoff, raw-safe, and cumulative feature-family kill tests."
+status = "prepared"
+
+[data]
+source = "labeled_pvc"
+input_kind = "labeled"
+trusted_model_ready_split = true
+downcast_float32 = true
+label_columns = ["label_short", "label_next_close", "target_label"]
+short_label_column = "label_short"
+
+[universe]
+enabled = false
+
+[features]
+feature_value_transform = "none"
+
+[window]
+mode = "rolling_monthly"
+train_months = 36
+test_months = 6
+test_stride_months = 6
+test_start_month = "2022-01"
+test_end_month = "2025-12"
+
+[model]
+name = "lightgbm"
+target_col = "target_label"
+device_type = "cpu"
+n_estimators = 360
+learning_rate = 0.03
+num_leaves = 63
+max_depth = -1
+min_child_samples = 200
+subsample = 0.80
+subsample_freq = 1
+colsample_bytree = 0.80
+reg_alpha = 0.10
+reg_lambda = 1.00
+n_jobs = 16
+random_state = 31
+
+[evaluation]
+score_bins = 10
+bucket_mode = "cross_section"
+selection_mode = "cross_section"
+ic_mode = "cross_section"
+top_n = 100
+
+[output]
+local_dir = "output/artifacts/leakage_kill_lgbm_36m_v1"
+write_split_artifacts = true

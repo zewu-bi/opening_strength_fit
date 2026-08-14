@@ -16,7 +16,8 @@ tick / labeled input
 当前信号基准为 `opening_model`；当前结论、数据合同和下一步见
 [project brief](docs/project_brief.md)，不可变来源见
 [canonical registry](experiments/canonical/opening.toml)，历史事实见
-[experiment log](docs/experiment_log.md)。
+[experiment log](docs/experiment_log.md)，未来信息边界见
+[leakage audit](docs/leakage_audit.md)。
 
 ## 可复现范围
 
@@ -56,6 +57,7 @@ docs/                      研究口径、操作和代码地图
 继续阅读：
 
 - [项目目标与当前结论](docs/project_brief.md)
+- [未来信息专项审计](docs/leakage_audit.md)
 - [复现和集群操作](docs/runbook.md)
 - [代码与数据流](docs/project_map.md)
 - [实验目录契约](experiments/README.md)

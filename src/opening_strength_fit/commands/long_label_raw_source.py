@@ -109,9 +109,7 @@ def build_year(
     overwrite: bool,
 ) -> dict[str, object]:
     table = config_str(config, "raw_source", "tick_table", DEFAULT_CLICKHOUSE_TICK_TABLE)
-    symbol_regex = config_str(
-        config, "raw_source", "symbol_regex", DEFAULT_A_SHARE_SYMBOL_REGEX
-    )
+    symbol_regex = config_str(config, "raw_source", "symbol_regex", DEFAULT_A_SHARE_SYMBOL_REGEX)
     windows = _parse_windows(config)
     year_root = output_root / f"year={year}"
     success_path = year_root / "_SUCCESS"

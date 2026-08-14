@@ -9,6 +9,7 @@ from opening_strength_fit.config import load_toml
 ROOT = Path(__file__).resolve().parents[3]
 MAX_COMMAND_MODULE_LINES = 800
 MAX_EVIDENCE_FILE_BYTES = 1_000_000
+MOUNTED_SCRIPT_JOB_MARKER = "osf-contract: mounted-script-entrypoint"
 CANONICAL_EVIDENCE_RUN_ID = (
     "nn_delay6_clock_state_36m_2022_2025_auction_pruned_multi_denominator_"
     "grouped_gated_v2_mech_v3_gelu_mse_v1"
@@ -262,6 +263,8 @@ def check_k8s_jobs(files: list[str], errors: list[str]) -> None:
         text = read(job)
         if "scripts/" in text:
             errors.append(f"{job}: k8s job uses legacy scripts/ entrypoint")
+        if MOUNTED_SCRIPT_JOB_MARKER in text:
+            continue
         if not any(entrypoint in text for entrypoint in K8S_JOB_ENTRYPOINTS):
             allowed = ", ".join(K8S_JOB_ENTRYPOINTS)
             errors.append(f"{job}: k8s job does not use one of: {allowed}")

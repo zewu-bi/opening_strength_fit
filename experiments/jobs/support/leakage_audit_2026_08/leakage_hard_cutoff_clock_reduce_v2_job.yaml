@@ -1,0 +1,76 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-leak-cutoff-clock-reduce-v2
+  namespace: bizewu
+  labels: {app: os-leak-cutoff-clock-reduce-v2}
+spec:
+  activeDeadlineSeconds: 604800
+  backoffLimit: 2
+  completionMode: Indexed
+  completions: 35
+  parallelism: 8
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels: {app: os-leak-cutoff-clock-reduce-v2}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+        - name: audit-code
+          configMap: {name: os-leakage-audit-code-v1}
+      containers:
+        - name: reducer
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260804-training-datasets-v2
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          env:
+            - name: JOB_COMPLETION_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.annotations['batch.kubernetes.io/job-completion-index']"
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              YEARS=(2019 2020 2021 2022 2023 2024 2025)
+              CUTOFFS=(0 2 10 30 60)
+              INDEX="${JOB_COMPLETION_INDEX:?missing completion index}"
+              YEAR_INDEX=$((INDEX % 7))
+              CUTOFF_INDEX=$((INDEX / 7))
+              YEAR="${YEARS[${YEAR_INDEX}]}"
+              CUTOFF="${CUTOFFS[${CUTOFF_INDEX}]}"
+              BASE_ROOT="/mnt/output/opening_strength_fit/leakage_audit/feature_base_cutoff_${CUTOFF}s_v2"
+              OUTPUT_ROOT="/mnt/output/opening_strength_fit/leakage_audit/features_cutoff_${CUTOFF}s"
+              for CLOCK in 093100 093200 093300 093400 093500 093600 093700 093800 093900 094000; do
+                SUCCESS="${BASE_ROOT}/year=${YEAR}/clock=${CLOCK}/_SUCCESS"
+                until [[ -f "${SUCCESS}" ]]; do
+                  printf 'waiting for feature base %s\n' "${SUCCESS}"
+                  sleep 60
+                done
+              done
+              exec osf-build-training-datasets \
+                --config experiments/runs/opening_0931_0940_features_350.toml \
+                --kind features \
+                --year "${YEAR}" \
+                --output-root "${OUTPUT_ROOT}" \
+                --feature-base-input-root "${BASE_ROOT}" \
+                --physical-tick-cutoff-seconds "${CUTOFF}" \
+                --overwrite
+          volumeMounts:
+            - {name: output, mountPath: /mnt/output}
+            - name: audit-code
+              mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/sampling.py
+              subPath: sampling.py
+            - name: audit-code
+              mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/training_dataset_features.py
+              subPath: training_dataset_features.py
+            - name: audit-code
+              mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/commands/training_dataset_build.py
+              subPath: training_dataset_build.py
+          resources:
+            requests: {cpu: "8", memory: 128Gi}
+            limits: {cpu: "24", memory: 384Gi}

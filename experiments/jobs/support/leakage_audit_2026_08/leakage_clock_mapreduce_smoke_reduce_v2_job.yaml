@@ -1,0 +1,55 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-leak-clock-reduce-smoke-v2
+  namespace: bizewu
+  labels: {app: os-leak-clock-reduce-smoke-v2}
+spec:
+  activeDeadlineSeconds: 21600
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels: {app: os-leak-clock-reduce-smoke-v2}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+        - name: audit-code
+          configMap: {name: os-leakage-audit-code-v1}
+      containers:
+        - name: reducer
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260804-training-datasets-v2
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              exec osf-build-training-datasets \
+                --config experiments/runs/opening_0931_0940_features_350.toml \
+                --kind features \
+                --year 2025 \
+                --date-start 2025-01-02 \
+                --date-end 2025-01-02 \
+                --context-days 0 \
+                --output-root /mnt/output/opening_strength_fit/leakage_audit/smoke_features_cutoff_2s_mapreduce_v2 \
+                --feature-base-input-root /mnt/output/opening_strength_fit/leakage_audit/smoke_feature_base_cutoff_2s_v2 \
+                --physical-tick-cutoff-seconds 2 \
+                --overwrite
+          volumeMounts:
+            - {name: output, mountPath: /mnt/output}
+            - name: audit-code
+              mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/sampling.py
+              subPath: sampling.py
+            - name: audit-code
+              mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/training_dataset_features.py
+              subPath: training_dataset_features.py
+            - name: audit-code
+              mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/commands/training_dataset_build.py
+              subPath: training_dataset_build.py
+          resources:
+            requests: {cpu: "8", memory: 64Gi}
+            limits: {cpu: "16", memory: 128Gi}

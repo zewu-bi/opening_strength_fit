@@ -1,0 +1,72 @@
+# osf-contract: mounted-script-entrypoint
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-leak-summary-v1
+  namespace: bizewu
+  labels: {app: os-leak-summary-v1}
+spec:
+  activeDeadlineSeconds: 172800
+  backoffLimit: 2
+  completionMode: Indexed
+  completions: 13
+  parallelism: 2
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels: {app: os-leak-summary-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+        - name: audit-code
+          configMap: {name: os-leakage-audit-code-v1}
+      containers:
+        - name: summary
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260804-training-datasets-v2
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          env:
+            - name: JOB_COMPLETION_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.annotations['batch.kubernetes.io/job-completion-index']"
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              INDEX="${JOB_COMPLETION_INDEX:?missing completion index}"
+              CLOSE_LABEL_ROOT=/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_hclose_v1
+              RAW_ROOT=/mnt/output/opening_strength_fit/cache/opening_0931_0940_raw_source
+              OUTPUT_ROOT=/mnt/output/opening_strength_fit/leakage_audit/summaries
+              if (( INDEX < 5 )); then
+                CUTOFFS=(0 2 10 30 60)
+                CUTOFF="${CUTOFFS[${INDEX}]}"
+                RUN_ID="leak_cutoff_${CUTOFF}s_1m_nn_v1"
+                PREDICTIONS="/mnt/output/opening_strength_fit/leakage_audit/nn/${RUN_ID}"
+                OUTPUT="${OUTPUT_ROOT}/hard_cutoff_${CUTOFF}s_pool_L.json"
+                POOL_ARGS=(--pool L --pool-date-lag-sessions 0)
+              else
+                NAMES=(raw_orderbook plus_trade plus_auction plus_momentum plus_mechanism_v3 plus_hist_surprise plus_path_shape full_other)
+                NAME="${NAMES[$((INDEX - 5))]}"
+                PREDICTIONS="/mnt/output/opening_strength_fit/leakage_audit/lgbm/${NAME}"
+                OUTPUT="${OUTPUT_ROOT}/family_${NAME}_all_stocks.json"
+                POOL_ARGS=(--pool none)
+              fi
+              exec python /audit/summarize_leakage_kill_run.py \
+                --predictions "${PREDICTIONS}" \
+                --close-label-root "${CLOSE_LABEL_ROOT}" \
+                --raw-root "${RAW_ROOT}" \
+                --output "${OUTPUT}" \
+                --top-n 100 \
+                "${POOL_ARGS[@]}"
+          volumeMounts:
+            - {name: output, mountPath: /mnt/output}
+            - name: audit-code
+              mountPath: /audit/summarize_leakage_kill_run.py
+              subPath: summarize_leakage_kill_run.py
+          resources:
+            requests: {cpu: "8", memory: 128Gi}
+            limits: {cpu: "16", memory: 256Gi}

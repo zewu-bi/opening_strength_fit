@@ -17,10 +17,11 @@ JOB_SUFFIXES = (
     ("_sharded_job.yaml", "sharded_training"),
     ("_job.yaml", "training"),
 )
+PREPARED_STATUS = "prepared"
 ACTIVE_STATUSES = {"queued", "running"}
 COMPLETED_STATUS = "completed"
 INACTIVE_STATUSES = {"canceled", "superseded"}
-KNOWN_STATUSES = {*ACTIVE_STATUSES, COMPLETED_STATUS, *INACTIVE_STATUSES}
+KNOWN_STATUSES = {PREPARED_STATUS, *ACTIVE_STATUSES, COMPLETED_STATUS, *INACTIVE_STATUSES}
 LOCAL_ONLY_RUN_KINDS = {"comparison_analysis", "opening_limit_audit", "realistic_acceptance"}
 METRICS_SUFFIX = "_metrics_by_year.csv"
 REQUIRED_RUN_FIELDS = ("id", "kind", "description", "status")
@@ -165,7 +166,7 @@ def is_pool_internal_analysis_run(record: RunRecord, kinds: set[str]) -> bool:
 
 
 def requires_job(record: RunRecord) -> bool:
-    return record.kind not in LOCAL_ONLY_RUN_KINDS
+    return record.status != PREPARED_STATUS and record.kind not in LOCAL_ONLY_RUN_KINDS
 
 
 def jobs_status(record: RunRecord, kinds: set[str]) -> str:
@@ -222,7 +223,7 @@ def print_summary(records: list[dict[str, str]], *, require_metrics: bool) -> No
         + summarize_values(
             records,
             "status",
-            ("queued", "running", "completed", "canceled", "superseded"),
+            ("prepared", "queued", "running", "completed", "canceled", "superseded"),
         )
     )
     print(
@@ -279,7 +280,7 @@ def main() -> None:
         if record.status not in KNOWN_STATUSES:
             errors.append(
                 f"{run_id}: unknown status={record.status!r}; use queued, running, "
-                "completed, canceled, or superseded"
+                "completed, canceled, superseded, or prepared"
             )
 
         if has_jobs and not has_metrics and is_running and not is_artifact:

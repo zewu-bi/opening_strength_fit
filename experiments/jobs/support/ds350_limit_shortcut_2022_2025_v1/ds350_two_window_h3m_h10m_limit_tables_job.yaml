@@ -1,0 +1,57 @@
+# osf-contract: mounted-script-entrypoint
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-ds350-2w-h3m-h10m-limit-tables-v1
+  namespace: bizewu
+  labels: {app: os-ds350-2w-h3m-h10m-limit-tables-v1}
+spec:
+  activeDeadlineSeconds: 172800
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 172800
+  template:
+    metadata:
+      labels: {app: os-ds350-2w-h3m-h10m-limit-tables-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      nodeSelector: {has_gpu: "true"}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values: [node6, node7, node8, node12, node16, node17, node19, node20, node22, node24, node25, node26, node27, node28]
+      tolerations:
+        - {key: has_gpu, operator: Equal, value: "true", effect: NoSchedule}
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+        - name: script
+          configMap: {name: os-ds350-2w-h3m-h10m-tables-code-v1}
+      containers:
+        - name: analyzer
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:8eb66ef731709af980fa7e047ccb59748c0ed8f4ed36aa3460ee9b1f4a9fe0b6
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          envFrom:
+            - secretRef: {name: xy-fit-ceph-credentials}
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              exec python /opt/analysis/build_ds350_two_window_horizon_limit_tables.py \
+                --baseline-root /mnt/output/opening_strength_fit/nn/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1 \
+                --no-limit-root /mnt/output/opening_strength_fit/nn/nn_ds350_two_window_h3m_h10m_train_ordinary_36m_grouped_gated_v2_mse_max30_v1 \
+                --dataset-root /mnt/output/opening_strength_fit/datasets \
+                --cache-root /mnt/output/opening_strength_fit/cache \
+                --output-dir /mnt/output/opening_strength_fit/analysis/ds350_two_window_h3m_h10m_limit_tables_v1
+          volumeMounts:
+            - {name: output, mountPath: /mnt/output}
+            - {name: script, mountPath: /opt/analysis/build_ds350_clip_tables.py, subPath: build_ds350_clip_tables.py}
+            - {name: script, mountPath: /opt/analysis/build_ds350_two_window_horizon_limit_tables.py, subPath: build_ds350_two_window_horizon_limit_tables.py}
+          resources:
+            requests: {cpu: "8", memory: 192Gi}
+            limits: {cpu: "16", memory: 384Gi}

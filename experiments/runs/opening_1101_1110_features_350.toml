@@ -1,0 +1,18 @@
+[run]
+id = "opening_1101_1110_features_350"
+kind = "training_feature_dataset"
+description = "Build the model-ready canonical 350-feature annual dataset for 11:01-11:10 from raw PVC data."
+status = "completed"
+
+[dataset]
+years = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+raw_source_root = "/mnt/output/opening_strength_fit/cache/opening_1101_1110_raw_source"
+canonical_feature_config = "experiments/runs/nn_v6_w1001_1010_short3m_corrected_nextclose_36m_grouped_gated_v2_mse.toml"
+feature_output_root = "/mnt/output/opening_strength_fit/datasets/opening_1101_1110_features_350"
+context_decision_times = ["11:00:00", "11:01:00", "11:02:00", "11:03:00", "11:04:00", "11:05:00", "11:06:00", "11:07:00", "11:08:00", "11:09:00", "11:10:00"]
+decision_times = ["11:01:00", "11:02:00", "11:03:00", "11:04:00", "11:05:00", "11:06:00", "11:07:00", "11:08:00", "11:09:00", "11:10:00"]
+feature_tick_start_offset_us = 39000000000
+feature_context_days = 120
+expected_feature_count = 350
+market_cap_unit_multiplier = 10000.0
+share_unit_multiplier = 10000.0

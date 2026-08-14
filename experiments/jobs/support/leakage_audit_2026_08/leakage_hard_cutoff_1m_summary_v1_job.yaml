@@ -1,0 +1,68 @@
+# osf-contract: mounted-script-entrypoint
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-leak-cutoff-1m-summary-v1
+  namespace: bizewu
+  labels: {app: os-leak-cutoff-1m-summary-v1}
+spec:
+  activeDeadlineSeconds: 172800
+  backoffLimit: 2
+  completionMode: Indexed
+  completions: 15
+  parallelism: 3
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels: {app: os-leak-cutoff-1m-summary-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+        - name: audit-code
+          configMap: {name: os-leakage-audit-code-v1}
+      containers:
+        - name: summary
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260804-training-datasets-v2
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          env:
+            - name: JOB_COMPLETION_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.annotations['batch.kubernetes.io/job-completion-index']"
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              CUTOFFS=(0 2 10 30 60)
+              SCOPES=(all_stocks pool_L_t0 pool_L_t1)
+              INDEX="${JOB_COMPLETION_INDEX:?missing completion index}"
+              CUTOFF_INDEX=$((INDEX / 3))
+              SCOPE_INDEX=$((INDEX % 3))
+              CUTOFF="${CUTOFFS[${CUTOFF_INDEX}]}"
+              SCOPE="${SCOPES[${SCOPE_INDEX}]}"
+              POOL_ARGS=(--pool none)
+              if [[ "${SCOPE}" == pool_L_t0 ]]; then
+                POOL_ARGS=(--pool L --pool-date-lag-sessions 0)
+              elif [[ "${SCOPE}" == pool_L_t1 ]]; then
+                POOL_ARGS=(--pool L --pool-date-lag-sessions 1)
+              fi
+              RUN_ID="leak_cutoff_${CUTOFF}s_1m_nn_v1"
+              exec python /audit/summarize_leakage_kill_run.py \
+                --predictions "/mnt/output/opening_strength_fit/leakage_audit/nn/${RUN_ID}" \
+                --close-label-root /mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_hclose_v1 \
+                --raw-root /mnt/output/opening_strength_fit/cache/opening_0931_0940_raw_source \
+                --output "/mnt/output/opening_strength_fit/leakage_audit/summaries/hard_cutoff_${CUTOFF}s_${SCOPE}.json" \
+                --top-n 100 \
+                "${POOL_ARGS[@]}"
+          volumeMounts:
+            - {name: output, mountPath: /mnt/output}
+            - name: audit-code
+              mountPath: /audit/summarize_leakage_kill_run.py
+              subPath: summarize_leakage_kill_run.py
+          resources:
+            requests: {cpu: "8", memory: 128Gi}
+            limits: {cpu: "16", memory: 256Gi}

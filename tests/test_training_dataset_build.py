@@ -16,9 +16,12 @@ from opening_strength_fit.commands.training_dataset_build import (
     KEY_COLUMNS,
     _apply_post_sample_feature_transforms_from_config,
     _build_label_base,
+    _clock_partition,
     _drop_features_from_config,
+    _feature_base_shard_root,
     _filter_decision_clocks,
     _mixed_label,
+    _sort_feature_source,
     compute_short_label_set,
 )
 from opening_strength_fit.config import load_toml
@@ -97,6 +100,32 @@ def _daily_row(date: str, symbol: str, scale: float) -> dict[str, object]:
 
 
 class TrainingDatasetBuildTest(unittest.TestCase):
+    def test_feature_base_clock_layout_and_reduce_order_are_stable(self) -> None:
+        root = Path("/tmp/feature-base")
+        self.assertEqual(_clock_partition("09:31:00"), "093100")
+        self.assertEqual(
+            _feature_base_shard_root(root, 2025, "09:31:00"),
+            root / "year=2025" / "clock=093100",
+        )
+        frame = pd.DataFrame(
+            {
+                "date": ["2025-01-03", "2025-01-02", "2025-01-02"],
+                "symbol": ["000002.SZ", "000002.SZ", "000001.SZ"],
+                "decision_target_timestamp": pd.to_datetime(
+                    [
+                        "2025-01-03 09:31:00",
+                        "2025-01-02 09:32:00",
+                        "2025-01-02 09:31:00",
+                    ]
+                ),
+                "value": [3.0, 2.0, 1.0],
+            }
+        )
+
+        sorted_frame = _sort_feature_source(frame)
+
+        self.assertEqual(sorted_frame["value"].tolist(), [1.0, 2.0, 3.0])
+
     def test_clickhouse_parquet_date_and_binary_text_are_decoded(self) -> None:
         dates = normalize_clickhouse_date(pd.Series([20090], dtype="uint16"))
         symbols = decode_clickhouse_text(pd.Series([b"000001.SZ"]))

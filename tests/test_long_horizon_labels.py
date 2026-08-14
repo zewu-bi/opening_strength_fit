@@ -82,9 +82,7 @@ def test_timed_vwap_and_same_day_close_labels_use_clock6_buy_price() -> None:
         tradable_statuses=("T0", "20", "TRADE"),
         fee_bps=0.0,
     )
-    np.testing.assert_allclose(
-        same_close.loc[0, "label_same_day_close"], 0.03, rtol=0, atol=1e-12
-    )
+    np.testing.assert_allclose(same_close.loc[0, "label_same_day_close"], 0.03, rtol=0, atol=1e-12)
 
 
 def test_long_label_split_reuses_next_close_for_three_mixed_roots(tmp_path: Path) -> None:

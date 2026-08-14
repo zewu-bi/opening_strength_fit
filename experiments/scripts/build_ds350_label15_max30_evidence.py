@@ -59,13 +59,11 @@ COPY_SPECS = (
         "03_top1000_bucket_curve.csv",
     ),
     (
-        TOP1000_DIR
-        / "top1000_distribution/top1000_score_bucket_return_100bps_counts.svg",
+        TOP1000_DIR / "top1000_distribution/top1000_score_bucket_return_100bps_counts.svg",
         "04_top1000_return_distribution.svg",
     ),
     (
-        TOP1000_DIR
-        / "top1000_distribution/top1000_score_bucket_return_100bps_counts.csv",
+        TOP1000_DIR / "top1000_distribution/top1000_score_bucket_return_100bps_counts.csv",
         "04_top1000_return_distribution.csv",
     ),
     (
@@ -147,9 +145,7 @@ def _training_fold_summary(source_root: Path) -> pd.DataFrame:
                     "gpu": stats["torch_device_name"],
                     "training_tensor_storage": stats["training_tensor_storage"],
                     "training_preparation_seconds": stats["training_preparation_seconds"],
-                    "training_storage_transfer_seconds": stats[
-                        "training_storage_transfer_seconds"
-                    ],
+                    "training_storage_transfer_seconds": stats["training_storage_transfer_seconds"],
                     "mean_epoch_seconds": (
                         sum(epoch_seconds) / len(epoch_seconds) if epoch_seconds else None
                     ),
@@ -173,12 +169,7 @@ def _combined_case_csv(source_root: Path, filename: str) -> pd.DataFrame:
         if filename == "metrics_by_year.csv":
             paths = sorted((source_root / case).glob(f"month_*/{filename}"))
         else:
-            paths = [
-                source_root
-                / case
-                / "analysis/pool_internal_top100_horizon_v1"
-                / filename
-            ]
+            paths = [source_root / case / "analysis/pool_internal_top100_horizon_v1" / filename]
         for path in paths:
             _require(path)
             frame = pd.read_csv(path)

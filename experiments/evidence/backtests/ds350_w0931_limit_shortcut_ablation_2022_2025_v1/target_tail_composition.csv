@@ -1,0 +1,7 @@
+horizon,target_variant,final_limit_row_pct,final_limit_target_squared_mass_pct,target_top1pct_final_limit_pct,target_top100_final_limit_pct
+1m,pure_short,1.067,8.202,13.763,9.704
+1m,mixed,1.064,9.139,18.582,13.637
+1m,clip3_mixed,1.064,4.534,17.693,12.095
+close,pure_short,1.064,16.650,45.208,31.028
+close,mixed,1.061,17.070,46.166,31.472
+close,clip3_mixed,1.061,8.926,43.426,30.983

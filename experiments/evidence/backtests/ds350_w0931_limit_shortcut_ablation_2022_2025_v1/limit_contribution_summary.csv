@@ -1,0 +1,7 @@
+experiment,label,label_excess_bps,label_final_limit_contribution_bps,label_non_final_limit_contribution_bps,close_excess_bps,close_final_limit_contribution_bps,close_non_final_limit_contribution_bps
+clip3,1m,12.02,1.89,10.13,18.02,16.82,1.19
+clip3,close,18.97,19.87,-0.90,18.97,19.87,-0.90
+no_limit_training,1m,11.34,1.30,10.05,19.33,12.98,6.35
+no_limit_training,close,22.18,5.97,16.20,22.18,5.97,16.20
+pure_short,1m,12.09,2.78,9.32,17.56,23.53,-5.97
+pure_short,close,22.84,22.61,0.24,22.84,22.61,0.24

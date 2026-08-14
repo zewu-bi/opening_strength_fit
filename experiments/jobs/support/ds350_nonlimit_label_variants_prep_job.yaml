@@ -1,0 +1,43 @@
+# osf-contract: mounted-script-entrypoint
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-prep-ds350-nonlimit-labels-v1
+  namespace: bizewu
+  labels: {app: os-prep-ds350-nonlimit-labels-v1}
+spec:
+  activeDeadlineSeconds: 86400
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 172800
+  template:
+    metadata:
+      labels: {app: os-prep-ds350-nonlimit-labels-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      nodeSelector: {kubernetes.io/hostname: node9}
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+        - name: script
+          configMap: {name: os-prep-ds350-nonlimit-labels-v1}
+      containers:
+        - name: prepare
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:8eb66ef731709af980fa7e047ccb59748c0ed8f4ed36aa3460ee9b1f4a9fe0b6
+          imagePullPolicy: Always
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              python /work/prepare.py \
+                --source-root /mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_hclose_v1 \
+                --raw-source-root /mnt/output/opening_strength_fit/cache/opening_0931_0940_raw_source \
+                --output-root /mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_hclose_train_variants_v1 \
+                --train-end-year 2025 \
+                --years 2023 2024 2025 2026
+          volumeMounts:
+            - {name: output, mountPath: /mnt/output}
+            - {name: script, mountPath: /work, readOnly: true}
+          resources:
+            requests: {cpu: "8", memory: 64Gi}
+            limits: {cpu: "16", memory: 96Gi}

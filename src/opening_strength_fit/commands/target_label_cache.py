@@ -79,14 +79,11 @@ def _normalize_sidecar_keys(frame: pd.DataFrame, *, source_name: str) -> pd.Data
     ).dt.tz_localize(None)
     missing_keys = out[list(KEY_COLUMNS)].isna().any(axis=1)
     if missing_keys.any():
-        raise SystemExit(
-            f"{source_name} has {int(missing_keys.sum())} rows with missing keys"
-        )
+        raise SystemExit(f"{source_name} has {int(missing_keys.sum())} rows with missing keys")
     duplicate_keys = out.duplicated(list(KEY_COLUMNS), keep=False)
     if duplicate_keys.any():
         raise SystemExit(
-            f"{source_name} keys are not unique: "
-            f"{int(duplicate_keys.sum())} duplicate rows"
+            f"{source_name} keys are not unique: {int(duplicate_keys.sum())} duplicate rows"
         )
     return out
 
@@ -116,8 +113,7 @@ def _merge_short_label_input(
         errors="coerce",
     ).replace([np.inf, -np.inf], np.nan)
     labels[source_valid_col] = (
-        labels[source_valid_col].fillna(False).astype(bool)
-        & labels[source_label_col].notna()
+        labels[source_valid_col].fillna(False).astype(bool) & labels[source_label_col].notna()
     )
 
     source_to_destination = {
@@ -126,8 +122,7 @@ def _merge_short_label_input(
         **{column: column for column in optional},
     }
     renamed = {
-        source: f"__short_{destination}"
-        for source, destination in source_to_destination.items()
+        source: f"__short_{destination}" for source, destination in source_to_destination.items()
     }
     labels = labels.rename(columns=renamed)
     labels["__short_sidecar_matched"] = True

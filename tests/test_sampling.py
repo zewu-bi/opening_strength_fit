@@ -46,6 +46,28 @@ def test_clock_state_decisions_carry_forward_without_looking_ahead() -> None:
     assert sampled["decision_lag_seconds"].tolist() == [0.0, 0.0]
 
 
+def test_clock_state_source_cutoff_keeps_logical_decision_clock() -> None:
+    sampled = select_decision_points(
+        _state_ticks(),
+        decision_times=("09:31:00", "09:32:00"),
+        alignment="clock_state",
+        source_cutoff_seconds=2,
+    )
+
+    assert (
+        sampled["decision_target_timestamp"].tolist()
+        == pd.to_datetime(["2025-01-02 09:31:00", "2025-01-02 09:32:00"]).tolist()
+    )
+    assert (
+        sampled["decision_source_cutoff_timestamp"].tolist()
+        == pd.to_datetime(["2025-01-02 09:30:58", "2025-01-02 09:31:58"]).tolist()
+    )
+    assert (
+        sampled["decision_source_timestamp"].tolist()
+        == pd.to_datetime(["2025-01-02 09:30:57", "2025-01-02 09:31:12"]).tolist()
+    )
+
+
 def test_next_tick_decisions_keep_historical_forward_sampling() -> None:
     sampled = select_decision_points(
         _state_ticks(),

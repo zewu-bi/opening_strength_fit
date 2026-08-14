@@ -1,0 +1,70 @@
+# osf-contract: mounted-script-entrypoint
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-leak-clock-compare-smoke-v2
+  namespace: bizewu
+  labels: {app: os-leak-clock-compare-smoke-v2}
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels: {app: os-leak-clock-compare-smoke-v2}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+      containers:
+        - name: compare
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260804-training-datasets-v2
+          imagePullPolicy: Always
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              python - <<'PY'
+              import json
+              from pathlib import Path
+              import numpy as np
+              import pandas as pd
+
+              root = Path('/mnt/output/opening_strength_fit/leakage_audit')
+              old_path = root / 'smoke_features_cutoff_2s/year=2025/features.parquet'
+              new_path = root / 'smoke_features_cutoff_2s_mapreduce_v2/year=2025/features.parquet'
+              keys = ['date', 'symbol', 'decision_target_timestamp']
+              old = pd.read_parquet(old_path).sort_values(keys, kind='mergesort').reset_index(drop=True)
+              new = pd.read_parquet(new_path).sort_values(keys, kind='mergesort').reset_index(drop=True)
+              if list(old.columns) != list(new.columns):
+                  raise SystemExit('map/reduce columns differ from monolithic smoke')
+              keys_equal = old[keys].equals(new[keys])
+              features = [column for column in old if column not in keys]
+              left = old[features].to_numpy(dtype='float64', copy=False)
+              right = new[features].to_numpy(dtype='float64', copy=False)
+              exactly_equal = np.array_equal(left, right, equal_nan=True)
+              close = np.isclose(left, right, rtol=1e-7, atol=1e-9, equal_nan=True)
+              finite = np.isfinite(left) & np.isfinite(right)
+              report = {
+                  'old': str(old_path),
+                  'new': str(new_path),
+                  'rows': len(old),
+                  'features': len(features),
+                  'keys_equal_after_canonical_sort': keys_equal,
+                  'values_bitwise_equal': exactly_equal,
+                  'cells_not_close': int((~close).sum()),
+                  'max_abs_diff_finite': (
+                      float(np.abs(left[finite] - right[finite]).max()) if finite.any() else None
+                  ),
+              }
+              output = root / 'smoke_mapreduce_equivalence_v2.json'
+              output.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+              print(json.dumps(report, indent=2), flush=True)
+              if not keys_equal or not exactly_equal:
+                  raise SystemExit('map/reduce smoke is not exactly equivalent')
+              PY
+          volumeMounts: [{name: output, mountPath: /mnt/output}]
+          resources:
+            requests: {cpu: "4", memory: 16Gi}
+            limits: {cpu: "8", memory: 32Gi}

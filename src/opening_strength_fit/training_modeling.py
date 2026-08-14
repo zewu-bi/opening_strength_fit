@@ -25,7 +25,7 @@ from opening_strength_fit.feature_config import (
     feature_filters_from_config,
     feature_limit,
 )
-from opening_strength_fit.io import write_frame
+from opening_strength_fit.io import read_frame, write_frame
 from opening_strength_fit.model import (
     ClockSegmentPredictionModel,
     EnsemblePredictionModel,
@@ -44,6 +44,137 @@ from opening_strength_fit.stock_pool import (
     filter_configured_stock_pool_train,
     stock_pool_config_from_mapping,
 )
+
+TRAINING_FILTER_KEY_COLUMNS = ("date", "symbol")
+
+
+def _normalized_date_key(values: pd.Series) -> pd.Series:
+    if pd.api.types.is_numeric_dtype(values):
+        finite = pd.to_numeric(values, errors="coerce").dropna()
+        median = float(finite.median()) if not finite.empty else np.nan
+        if np.isfinite(median) and median >= 10_000_000:
+            parsed = pd.to_datetime(
+                values.astype("Int64").astype(str),
+                format="%Y%m%d",
+                errors="coerce",
+            )
+        else:
+            parsed = pd.to_datetime(values, unit="D", origin="unix", errors="coerce")
+    else:
+        parsed = pd.to_datetime(values, errors="coerce")
+    return parsed.dt.strftime("%Y-%m-%d")
+
+
+def _normalized_symbol_key(values: pd.Series) -> pd.Series:
+    return values.map(
+        lambda value: (
+            value.decode("utf-8", errors="replace") if isinstance(value, bytes) else str(value)
+        )
+    )
+
+
+def _daily_reference_root_for_training_filter(config: dict) -> str:
+    raw = config_str(config, "training_filter", "daily_reference_root", "")
+    if raw:
+        return raw
+    feature_root = config_str(config, "data", "feature_path", "")
+    if feature_root:
+        feature_path = Path(feature_root)
+        return str(
+            feature_path.with_name(feature_path.name.replace("_features_350", "_raw_source"))
+        )
+    return ""
+
+
+def _read_daily_limit_status(root: Path, years: list[int]) -> pd.DataFrame:
+    parts = []
+    for year in sorted(set(int(year) for year in years)):
+        path = root / f"year={year}" / "daily_reference.parquet"
+        if not path.exists():
+            raise SystemExit(f"training_filter daily reference missing: {path}")
+        daily = read_frame(
+            path,
+            columns=["TradingDay", "Symbol", "UpdownLimitStatus"],
+        )
+        item = pd.DataFrame(
+            {
+                "date": _normalized_date_key(daily["TradingDay"]),
+                "symbol": _normalized_symbol_key(daily["Symbol"]),
+                "_training_filter_updown_limit_status": pd.to_numeric(
+                    daily["UpdownLimitStatus"],
+                    errors="coerce",
+                ),
+            }
+        ).dropna(subset=["date", "symbol", "_training_filter_updown_limit_status"])
+        parts.append(item)
+    if not parts:
+        return pd.DataFrame(
+            columns=[*TRAINING_FILTER_KEY_COLUMNS, "_training_filter_updown_limit_status"]
+        )
+    status = pd.concat(parts, ignore_index=True)
+    duplicate = status.duplicated(list(TRAINING_FILTER_KEY_COLUMNS), keep=False)
+    if duplicate.any():
+        conflicts = (
+            status.loc[duplicate]
+            .groupby(
+                list(TRAINING_FILTER_KEY_COLUMNS),
+                sort=False,
+            )["_training_filter_updown_limit_status"]
+            .nunique()
+        )
+        if conflicts.gt(1).any():
+            raise SystemExit("training_filter daily reference has conflicting limit states")
+        status = status.drop_duplicates(list(TRAINING_FILTER_KEY_COLUMNS), keep="last")
+    return status
+
+
+def filter_configured_training_rows(
+    train: pd.DataFrame,
+    config: dict,
+) -> tuple[pd.DataFrame, dict[str, object]]:
+    if not config_bool(config, "training_filter", "enabled", False):
+        return train, {"training_filter_enabled": False}
+    mode = config_str(config, "training_filter", "mode", "ordinary_daily_limit")
+    mode = mode.strip().lower().replace("-", "_")
+    if mode not in {"ordinary_daily_limit", "no_daily_limit"}:
+        raise SystemExit("training_filter.mode must be ordinary_daily_limit")
+    root_raw = _daily_reference_root_for_training_filter(config)
+    if not root_raw:
+        raise SystemExit("training_filter.daily_reference_root is required")
+    root = Path(root_raw)
+    years = sorted(
+        pd.to_datetime(train["date"], errors="coerce").dt.year.dropna().astype(int).unique()
+    )
+    status = _read_daily_limit_status(root, years)
+    keys = pd.MultiIndex.from_arrays(
+        [
+            _normalized_date_key(train["date"]),
+            _normalized_symbol_key(train["symbol"]),
+        ],
+        names=list(TRAINING_FILTER_KEY_COLUMNS),
+    )
+    status_map = status.set_index(list(TRAINING_FILTER_KEY_COLUMNS))[
+        "_training_filter_updown_limit_status"
+    ]
+    limit_status = pd.Series(status_map.reindex(keys).to_numpy(), index=train.index)
+    keep = limit_status.eq(0)
+    missing = limit_status.isna()
+    filtered = train.loc[keep].copy()
+    if filtered.empty:
+        raise SystemExit("empty train frame after training_filter ordinary_daily_limit")
+    stats = {
+        "training_filter_enabled": True,
+        "training_filter_mode": mode,
+        "training_filter_daily_reference_root": str(root),
+        "training_filter_input_rows": int(len(train)),
+        "training_filter_output_rows": int(len(filtered)),
+        "training_filter_dropped_rows": int(len(train) - len(filtered)),
+        "training_filter_limit_up_rows": int(limit_status.eq(1).sum()),
+        "training_filter_limit_down_rows": int(limit_status.eq(-1).sum()),
+        "training_filter_unknown_rows": int(missing.sum()),
+    }
+    print_mapping("training_filter", stats)
+    return filtered, stats
 
 
 def test_period_year(value: str) -> int:
@@ -779,12 +910,14 @@ def fit_predict_partition(
     test = partition.pop(0)
     stock_pool_settings = stock_pool_settings or stock_pool_config_from_mapping(config)
     train = filter_configured_stock_pool_train(train, stock_pool_settings, stock_pool)
+    train, training_filter_stats = filter_configured_training_rows(train, config)
     model, train_stats = fit_prediction_model(
         train,
         args=args,
         config=config,
         alpha=alpha,
     )
+    train_stats = {**train_stats, **training_filter_stats}
     train_stats = {**train_stats, "feature_names": list(model.features)}
     # The fitted Torch model owns no reference to the host training frame. Release
     # it before allocating prediction/evaluation buffers for the test period.

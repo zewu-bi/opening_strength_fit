@@ -1,20 +1,24 @@
 from __future__ import annotations
 
 import json
+from itertools import product
 from pathlib import Path
-
 
 WINDOWS = ("0931_0940", "1001_1010", "1401_1410")
 HORIZONS = ("short1m", "short3m")
 RUN_TEMPLATE = "nn_v6_w{window}_{horizon}_corrected_nextclose_36m_grouped_gated_v2_mse"
-IMAGE = "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260731-corrected-label-matrix"
+IMAGE = (
+    "registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260731-corrected-label-matrix"
+)
 
 
 def _job(*, run_id: str, window: str, horizon: str, mode: str, node: str) -> dict:
     short_window = window.replace("_", "-")
     short_horizon = horizon.removeprefix("short")
     job_name = f"os-top1000-corrected-{short_window}-{short_horizon}-{mode}"
-    output_root = f"/mnt/output/opening_strength_fit/nn/{run_id}/analysis/top1000_corrected_acceptance"
+    output_root = (
+        f"/mnt/output/opening_strength_fit/nn/{run_id}/analysis/top1000_corrected_acceptance"
+    )
     label_root = f"/mnt/output/opening_strength_fit/cache/opening_2019_2025_next_close_decision_clock_state_clock6_{window}"
     compat_root = f"/tmp/{window}-{horizon}-next-label-compat"
     source_pattern = f"opening_${{YEAR}}_next_close_decision_clock_state_clock6_{window}.parquet"
@@ -38,7 +42,7 @@ def _job(*, run_id: str, window: str, horizon: str, mode: str, node: str) -> dic
         args += ["--top1000-bucket-return-histogram-only", "--histogram-bin-width-bps 100"]
     command.append(" ".join(args))
     command.append(f"touch {output_root}/_{mode.upper()}_SUCCESS")
-    memory_request, memory_limit = (("256Gi", "384Gi") if mode == "rank" else ("192Gi", "320Gi"))
+    memory_request, memory_limit = ("256Gi", "384Gi") if mode == "rank" else ("192Gi", "320Gi")
     return {
         "apiVersion": "batch/v1",
         "kind": "Job",
@@ -104,9 +108,7 @@ def main() -> None:
     output_dir = Path("experiments/jobs/support/corrected_label_3x2_grid_2022_2025_v1")
     output_dir.mkdir(parents=True, exist_ok=True)
     rank_nodes = ("node13", "node16")
-    for index, (window, horizon) in enumerate(
-        (item for window in WINDOWS for item in ((window, "short1m"), (window, "short3m")))
-    ):
+    for index, (window, horizon) in enumerate(product(WINDOWS, ("short1m", "short3m"))):
         run_id = RUN_TEMPLATE.format(window=window, horizon=horizon)
         for mode, node in (("rank", rank_nodes[index % 2]), ("hist", "node14")):
             path = output_dir / f"{run_id}_top1000_{mode}_job.yaml"

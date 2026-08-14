@@ -28,9 +28,7 @@ def test_required_gpu_models_render_into_the_same_node_affinity_term() -> None:
         {
             "k8s": {
                 "avoid_nodes": ["node22"],
-                "required_node_label_values": {
-                    "gpu_model": ["A100-80", "H100-80", "H20"]
-                },
+                "required_node_label_values": {"gpu_model": ["A100-80", "H100-80", "H20"]},
             }
         },
         indent=6,
@@ -176,9 +174,7 @@ def test_dataset350_h5m_jobs_cover_all_three_windows() -> None:
 def test_dataset350_label15_queue_appends_three_h5m_jobs() -> None:
     text = LABEL15_QUEUE.read_text()
     assert text.count("  os-nn-ds350-w") == 15
-    assert text.index("os-nn-ds350-w1401-h3m-v2") < text.index(
-        "os-nn-ds350-w0931-h5m-v2"
-    )
+    assert text.index("os-nn-ds350-w1401-h3m-v2") < text.index("os-nn-ds350-w0931-h5m-v2")
     assert "os-nn-ds350-w1001-h5m-v2" in text
     assert "os-nn-ds350-w1401-h5m-v2" in text
     assert "all 15 ds350 label jobs completed" in text

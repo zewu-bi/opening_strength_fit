@@ -1,0 +1,117 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-analyze-ds350-w0931-h1m-hclose-v1
+  namespace: bizewu
+  labels: {app: os-analyze-ds350-w0931-h1m-hclose-v1}
+spec:
+  activeDeadlineSeconds: 86400
+  backoffLimit: 1
+  completionMode: Indexed
+  completions: 4
+  parallelism: 4
+  suspend: true
+  ttlSecondsAfterFinished: 172800
+  template:
+    metadata:
+      labels: {app: os-analyze-ds350-w0931-h1m-hclose-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+      containers:
+        - name: analyzer
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:8eb66ef731709af980fa7e047ccb59748c0ed8f4ed36aa3460ee9b1f4a9fe0b6
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          envFrom:
+            - secretRef: {name: xy-fit-ceph-credentials}
+          env:
+            - name: JOB_COMPLETION_INDEX
+              valueFrom:
+                fieldRef: {fieldPath: "metadata.annotations['batch.kubernetes.io/job-completion-index']"}
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              CASES=(w0931_0940_h1m w0931_0940_h1m w0931_0940_hclose w0931_0940_hclose)
+              EXP_NAMES=(
+                ds350-w0931-h1m-label-clip3-v1
+                ds350-w0931-h1m-train-ordinary-v1
+                ds350-w0931-hclose-label-clip3-v1
+                ds350-w0931-hclose-train-ordinary-v1
+              )
+              EXP_ROOTS=(
+                nn_ds350_1m_label_clip3_36m_grouped_gated_v2_mse_max30_v1
+                nn_ds350_1m_train_ordinary_36m_grouped_gated_v2_mse_max30_v1
+                nn_ds350_w0931_hclose_label_clip3_36m_grouped_gated_v2_mse_max30_v1
+                nn_ds350_w0931_hclose_train_ordinary_36m_grouped_gated_v2_mse_max30_v1
+              )
+              INDEX="${JOB_COMPLETION_INDEX:?missing JOB_COMPLETION_INDEX}"
+              CASE="${CASES[${INDEX}]}"
+              EXP_NAME="${EXP_NAMES[${INDEX}]}"
+              EXP_ROOT="${EXP_ROOTS[${INDEX}]}"
+
+              ROOT="/mnt/output/opening_strength_fit/nn/${EXP_ROOT}"
+              PREDICTIONS="${ROOT}/${CASE}"
+              NEXT_LABELS="/mnt/output/opening_strength_fit/cache/opening_2019_2025_next_close_decision_clock_state_clock6_0931_0940"
+              OUT="${PREDICTIONS}/analysis/pool_internal_top100_horizon_v1"
+              RUN_ID="${EXP_NAME}_${CASE}"
+
+              for TEST_START in 2022-01 2022-07 2023-01 2023-07 2024-01 2024-07 2025-01 2025-07; do
+                test -f "${PREDICTIONS}/month_${TEST_START}/predictions.parquet"
+              done
+
+              mkdir -p "${OUT}"
+              if [ ! -f "${OUT}/_SUCCESS" ]; then
+                osf-analyze-pool-internal-top100 \
+                  --predictions "${PREDICTIONS}" \
+                  --next-close-label-input "${NEXT_LABELS}" \
+                  --run-id "${RUN_ID}" \
+                  --variant "${CASE}" \
+                  --output-dir "${OUT}" \
+                  --top-n 100 \
+                  --pool-date-lag-sessions 0 \
+                  --pool universe \
+                  --pool L
+                touch "${OUT}/_SUCCESS"
+              else
+                echo "analysis output already complete, reusing ${OUT}"
+              fi
+
+              python - "${EXP_NAME}" "${CASE}" "${OUT}" <<'PY'
+              import sys
+              from pathlib import Path
+
+              import pandas as pd
+
+              exp_name = sys.argv[1]
+              case = sys.argv[2]
+              output_dir = Path(sys.argv[3])
+              overall = pd.read_csv(output_dir / "pool_internal_summary.csv")
+              quarterly = pd.read_csv(output_dir / "pool_internal_quarter_summary.csv")
+              metrics = [
+                  "pool_short_mean_bps",
+                  "selected_short_mean_bps",
+                  "short_internal_excess_bps",
+                  "short_rank_ic",
+                  "pool_next_mean_bps",
+                  "selected_next_mean_bps",
+                  "next_internal_excess_bps",
+                  "next_rank_ic",
+              ]
+              quarter_mean = quarterly.groupby("pool", as_index=False)[metrics].mean()
+              print(f"CASE_SUMMARY_BEGIN={exp_name}:{case}")
+              print("QUARTER_MEAN_CSV")
+              print(quarter_mean.to_csv(index=False).strip())
+              print("OVERALL_CSV")
+              print(overall.to_csv(index=False).strip())
+              print(f"CASE_SUMMARY_END={exp_name}:{case}")
+              PY
+          volumeMounts:
+            - {name: output, mountPath: /mnt/output}
+          resources:
+            requests: {cpu: "8", memory: 256Gi}
+            limits: {cpu: "16", memory: 384Gi}

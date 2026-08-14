@@ -66,9 +66,7 @@ def test_corrected_later_window_caches_use_decision_clock_state() -> None:
         "1401_1410": ("14:00:00", "14:10:00", 49_800_000_000, 51_140_000_000),
     }
     for window, (start, end, start_offset, end_offset) in expected.items():
-        corrected = _load(
-            RUNS / f"build_delay6_decision_clock_state_{window}_cache_v1.toml"
-        )
+        corrected = _load(RUNS / f"build_delay6_decision_clock_state_{window}_cache_v1.toml")
         assert corrected["cache"]["schema_version"].startswith(
             f"label_v6_decision_clock_state_clock6_{window}"
         )

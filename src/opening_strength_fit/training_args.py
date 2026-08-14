@@ -71,6 +71,18 @@ def build_training_parser(description: str) -> argparse.ArgumentParser:
         help="Override [window].mode.",
     )
     parser.add_argument("--feature-limit", type=int, default=None)
+    parser.add_argument(
+        "--include-feature-column",
+        action="append",
+        default=None,
+        help="Repeatable exact feature allow-list override for leakage ablations.",
+    )
+    parser.add_argument(
+        "--include-feature-prefix",
+        action="append",
+        default=None,
+        help="Repeatable feature-prefix allow-list override for leakage ablations.",
+    )
     parser.add_argument("--alpha", type=float, default=None)
     parser.add_argument(
         "--top-n",

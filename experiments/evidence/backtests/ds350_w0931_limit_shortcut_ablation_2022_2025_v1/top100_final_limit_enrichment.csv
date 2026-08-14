@@ -1,0 +1,7 @@
+experiment,label,pool_L_final_limit_pct,top100_final_limit_pct,enrichment_multiple
+clip3,1m,0.961149,3.4585,3.5983
+clip3,close,0.961149,3.6900,3.8392
+no_limit_training,1m,0.961149,2.4896,2.5902
+no_limit_training,close,0.961149,1.1512,1.1977
+pure_short,1m,0.961149,4.5335,4.7167
+pure_short,close,0.961149,3.7961,3.9496

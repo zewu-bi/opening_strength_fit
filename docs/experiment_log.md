@@ -1,8 +1,8 @@
 # Experiment Log
 
-> Last reconciled: 2026-08-06
+> Last reconciled: 2026-08-14
 >
-> Coverage: 2026-05-20 through 2026-08-06
+> Coverage: 2026-05-20 through 2026-08-14
 
 本文件是实验事实账本，按时间记录假设、结果、状态和决策。当前研究口径见
 [project_brief.md](project_brief.md)，执行命令见 [runbook.md](runbook.md)，历史长记录见
@@ -28,6 +28,11 @@ run 状态由 `osf-audit-experiments` 从 TOML 审计，不在文档中复制完
 | 2026-08-05 | 前两窗口 10m/1h/当日收盘 label | `completed`; 6 labels × 7 years | 10m/1h 用持有期后 60 秒 VWAP，收盘 label 用当日收盘价；next-close 逐 key 复用既有数据 |
 | 2026-08-05 | 新分层数据 15-label max-10 NN 矩阵 | `superseded`; 15 runs × 8 shards | 只保留为 v6 同预算复现与 epoch 敏感性对照，不再作为当前结果口径 |
 | 2026-08-06 | 15-label max-30 NN 矩阵 | `completed`; 15 runs × 8 shards；当前权威结果 | case 排序与正负方向稳健；1h/close 的较低 Top100 excess 是最终结果的一部分，不回退到 max-10 |
+| 2026-08-12 | 未来信息专项审计与 hard-cutoff smoke | 审计 `completed`；完整 kill tests `prepared/not run` | 确认 exchange time 与 receipt time 边界不一致；是否晚于真实生产截止时点尚未确认 |
+| 2026-08-13 | 09:31 1m/close label 捷径诊断 | `completed`; 3 variants × 2 labels × 8 shards | 1m label 基本连续；原 close label + MSE 明显学习涨停状态，无涨跌停训练基本消除 close Top100 涨停富集 |
+| 2026-08-14 | 11:01 raw/features/1m/3m/5m/close 数据 | `completed`; 5 datasets × 7 years，逐年配对验证通过 | PVC 已形成可直接训练的 350-feature 与 horizon-label 数据 |
+| 2026-08-14 | 11:01 1m/3m 涨停依赖与四窗口归因 | `completed`; 4 runs × 8 shards | 11:01 无涨跌停 1m/3m 富集降至 `1.19x/1.05x`，短期超额保持 `7.82/8.01 bps` |
+| 2026-08-14 | close 目标后续：2026H1 non-limit/rank 网格 | `prepared/not run` | 配置、support Jobs 和分析脚本已归档；没有训练结果，不进入当前结论 |
 
 ## 决策时间线
 
@@ -143,6 +148,89 @@ Rank IC 的 Spearman 分别为 `0.9964/0.9393`，short/next excess 的 Spearman 
 max-30 的较低绝对 Top100 收益。Decision：max-30 是当前权威训练结果；max-10 降为历史对照。
 后续可以把 early stopping validation 改为训练窗口尾部的时间块，但这属于下一版方法改进，不改变
 本批结果以 max-30 为准。
+
+### 未来信息专项审计（2026-08-12，审计已归档）
+
+代码、PVC 与 ClickHouse 重放未发现 feature/label 的交易所时间直接重叠，但确认 raw cache 使用
+`LocalTimeStamp` 去重后未将其保留到 Parquet。2025 每月首个交易日的 615,810 个决策状态中，
+`68.4791%` 在标记决策时点后到达，延迟 p95 `1.6620s`、最大 `1.8567s`；全部早于当前 `t+6s`
+买入点。`-2s` 单日 hard-cutoff 重建使 99.963% 样本至少一个特征变化，但只证明时钟边界重要，
+不证明生产流程存在未来信息泄露。2022-2024 缺少有效 receipt timestamp，同日 Pool-L 的生成时点也
+没有仓库内血缘。
+
+Decision：审计状态固定为“未发现明确泄露，但仍存在未排除风险”。完整 hard-cutoff、raw-safe 与
+feature-family kill tests 仅准备了配置和 Job，尚未执行，不能填报 IC 或涨停富集结果。完整证据、风险
+清单和可运行入口见 [leakage audit](leakage_audit.md)。
+
+### 09:31 1m/close label 捷径诊断（2026-08-13，已完成）
+
+固定 `09:31-09:40`、DS350 grouped-gated NN、36m rolling / 6m OOS、max 30 epochs 和
+`pool_L` Top100，只比较 1m 与 close 两个 horizon 的三组变体：每日截面 3σ target 截断、训练时
+删除 `UpdownLimitStatus != 0` 的约 `2.7%` 样本、以及去除 next-close 分量的纯短label。验证集始终
+保留完整 `pool_L`。完整表、原始汇报截图与机器可读数据见
+[compact evidence](../experiments/evidence/backtests/ds350_w0931_limit_shortcut_ablation_2022_2025_v1/)。
+
+| 实验 | Label | IC | Label超额 | 收盘超额 | 次日收盘超额 |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 3σ截断 | 1m | 0.15219 | 12.02 | 18.02 | 17.63 |
+| 3σ截断 | close | 0.02806 | 18.97 | 18.97 | 18.16 |
+| 无涨跌停训练 | 1m | 0.15122 | 11.34 | 19.33 | 14.35 |
+| 无涨跌停训练 | close | **0.03606** | 22.18 | 22.18 | 14.33 |
+| 纯短label | 1m | 0.14923 | 12.09 | 17.56 | 15.05 |
+| 纯短label | close | 0.02276 | **22.84** | **22.84** | **19.88** |
+
+3σ截断和纯短 close 模型的 Top100 最终涨停率为 `3.6900%/3.7961%`，相对完整 `pool_L`
+的 `0.9611%` 基准富集 `3.84x/3.95x`；无涨跌停 close 模型降至 `1.1512%`、即 `1.20x`。
+后者的 `22.18 bps` 收盘超额中，`16.20 bps` 来自非最终涨停股，说明删除少量涨跌停训练样本
+确实改变了 close 模型的优化方向；次日收盘超额同步回落到 `14.33 bps`。
+
+纯短label仍富集涨停，排除了 next-close/隔夜分量单独造成偏好的解释。label 分布审计进一步显示：
+1m 中普通股与最终涨停股高度重叠，三组 1m Label 超额均以非涨停贡献为主；close 中最终涨停股均值
+约 `739.47 bps`，普通股约 `-5.75 bps`，约 `1.06%` 的最终涨停样本占 mixed close target
+平方量的 `17.07%`。这里的平方量对应零预测基准 MSE，不是每个 epoch 的 residual loss 实测占比。
+3σ虽将该占比降至 `8.93%`，但 target Top100 涨停占比仍约 `30.98%`，所以单纯压幅度没有改变
+涨停状态位于 label 顶部的排序结构。
+
+无涨跌停 1m 模型持有到收盘的 `19.33 bps` 中仍有 `12.98 bps` 来自最终涨停，说明短期强势与
+后来收盘涨停存在真实相关性；但其 1m Label 超额的 `10.05 / 11.34 bps` 来自非涨停股，不能据此
+否定 1m label 的连续排序能力。Top100 只是尾部评估，会放大全样本 MSE 已学到的方向，不参与训练
+loss。因此本轮支持的是 close label/loss 捷径，并非未来特征泄漏的直接证据。
+
+Decision：本轮归档完成；1m label 维持可用，收盘持有收益需同时报告涨停归因。现有 mixed-MSE
+close 模型不再单独作为连续 close alpha 证据；后续以无涨跌停 close 为基线，对照 robust loss 与
+有界 rank/percentile close target，不再只调整标准差截断倍数。
+
+### 四窗口 1m/3m 涨停依赖衰减（2026-08-14，已完成）
+
+补齐 `11:01-11:10` DS350 1m/3m 的 Baseline 与无涨跌停训练，共 4 组 36m rolling / 6m OOS、
+max 30 NN，每组 8/8 fold 完成。训练过滤仅作用于训练 frame：首个 36m fold 从 `28,971,750`
+行降至 `28,190,820` 行，删除 `780,930` 行（约 `2.70%`）；验证和 `pool_L` Top100 仍使用完整样本。
+四窗口富集统一除以 2022-2025 日度 `pool_L` 最终涨停率 `0.961149%`，避免不同模型分母漂移。
+探索阶段已经完成的 09:31/10:01 10m support runs 按后续口径排除，不进入本节结果或当前候选集合。
+
+| 窗口 | Baseline 1m/3m 富集 | 无涨跌停 1m/3m 富集 | 无涨跌停 Label 超额 |
+| --- | ---: | ---: | ---: |
+| 09:31-09:40 | `4.80x / 4.85x` | `2.59x / 2.12x` | `11.34 / 11.94 bps` |
+| 10:01-10:10 | `2.68x / 2.93x` | `1.82x / 1.69x` | `8.48 / 8.41 bps` |
+| 11:01-11:10 | `1.67x / 1.70x` | `1.19x / 1.05x` | `7.82 / 8.01 bps` |
+| 14:01-14:10 | `0.71x / 0.74x` | `0.54x / 0.46x` | `7.75 / 8.17 bps` |
+
+11:01 Baseline 1m/3m 的短期涨停贡献仅为 `0.33/7.77` 与 `0.50/7.92`；无涨跌停进一步降至
+`0.24/7.82` 与 `0.32/8.01`。持有到收盘时，Baseline 涨停贡献占比约 `70%/64%`，无涨跌停为
+`43%/34%`。因此窗口后移后，涨停依赖不只是绝对 bps 下降，其占总超额比例也下降；11:01 无涨跌停
+3m 已几乎消除数量富集，同时保留全部短期排序收益。14:01 的 `<1x` 表示 Top100 低配最终涨停股，
+不能单独解释为负 alpha。
+
+1m 的排序主体对训练过滤不敏感：09:31/10:01/14:01 的全截面 Rank IC 分别从
+`0.1475/0.2512/0.3739` 变为 `0.1512/0.2555/0.3778`；四窗口 1m 总超额变化分别为
+`11.96→11.34`、`8.52→8.48`、`7.77→7.82`、`7.63→7.75 bps`。非最终涨停贡献在四个窗口均
+略有上升，说明过滤主要移除了 Top100 尾部的涨停偏好，没有移除普通股票上的主要短期收益来源。
+这一证据足以支持“存在非涨停排序能力”，但尚未直接验证非涨停股票各预测分位严格平滑单调。
+
+Decision：近开盘窗口存在最强的涨停状态捷径，但 1m/3m 的主要短期收益并不依赖该捷径；后续短周期
+实验默认保留完整训练集并继续报告涨停归因，只有 close 路线将无涨跌停训练作为方法基线。完整两表、
+机器可读 CSV 和运行指标见
+[compact evidence](../experiments/evidence/backtests/ds350_four_window_limit_tables_v1/)。
 
 ### Ordinary 328 mech v3 cap-cache（2026-07-21，已完成）
 

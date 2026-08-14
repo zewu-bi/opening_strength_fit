@@ -74,9 +74,7 @@ def _resolve_training_tensor_storage(
     cuda_device = str(device).startswith("cuda")
     if not cuda_device:
         if mode == "cuda_resident":
-            raise SystemExit(
-                "model.training_tensor_storage='cuda_resident' requires a CUDA device"
-            )
+            raise SystemExit("model.training_tensor_storage='cuda_resident' requires a CUDA device")
         return "host_vectorized"
     if mode == "host_vectorized":
         return mode
@@ -399,8 +397,7 @@ def fit_torch_mlp_frame(
     cuda_total_bytes = 0
     if str(resolved_device).startswith("cuda"):
         cuda_free_bytes, cuda_total_bytes = (
-            int(value)
-            for value in torch.cuda.mem_get_info(torch.device(resolved_device))
+            int(value) for value in torch.cuda.mem_get_info(torch.device(resolved_device))
         )
     resolved_storage = _resolve_training_tensor_storage(
         training_tensor_storage,
@@ -516,9 +513,7 @@ def fit_torch_mlp_frame(
                         denom = raw_loss.new_tensor(float(batch_y.numel()))
                     total_loss_tensor += raw_loss.sum().to(dtype=torch.float64)
                     total_weight_tensor += denom.to(dtype=torch.float64)
-            validation_totals = torch.stack(
-                (total_loss_tensor, total_weight_tensor)
-            ).cpu().tolist()
+            validation_totals = torch.stack((total_loss_tensor, total_weight_tensor)).cpu().tolist()
             final_validation_loss = (
                 float(validation_totals[0] / validation_totals[1])
                 if validation_totals[1]
@@ -610,9 +605,8 @@ def fit_torch_mlp_frame(
         max_rows=len(diagnostic_values),
         batch_size=min(int(predict_batch_size or batch_size), 32768),
     )
-    del x_tensor, y_tensor, train_indices_tensor, validation_indices_tensor
-    if weight_tensor is not None:
-        del weight_tensor
+    x_tensor = y_tensor = train_indices_tensor = validation_indices_tensor = None
+    weight_tensor = None
     if str(resolved_device).startswith("cuda"):
         torch.cuda.empty_cache()
     stats.update(diagnostics)

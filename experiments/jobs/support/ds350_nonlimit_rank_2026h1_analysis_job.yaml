@@ -1,0 +1,68 @@
+# osf-contract: mounted-script-entrypoint
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-audit-ds350-nonlimit-rank-2026h1-v1
+  namespace: bizewu
+  labels: {app: os-audit-ds350-nonlimit-rank-2026h1-v1}
+spec:
+  activeDeadlineSeconds: 43200
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels: {app: os-audit-ds350-nonlimit-rank-2026h1-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      nodeSelector: {kubernetes.io/hostname: node9}
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+        - name: evaluator
+          configMap: {name: os-audit-ds350-nonlimit-rank-2026h1-v1}
+        - name: common
+          configMap: {name: os-ds350-2026h1-loss-compare-code-v1}
+      containers:
+        - name: evaluator
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:8eb66ef731709af980fa7e047ccb59748c0ed8f4ed36aa3460ee9b1f4a9fe0b6
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          envFrom:
+            - secretRef: {name: xy-fit-ceph-credentials}
+          env:
+            - {name: PYTHONPATH, value: /work/common}
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              ROOT=/mnt/output/opening_strength_fit/nn/holdout
+              RUNS=(
+                nn_ds350_w0931_hclose_closez_mse_train2023_2025_test2026h1_purge1_v1
+                nn_ds350_w0931_hclose_mixed_nonup_mse_train2023_2025_test2026h1_purge1_v1
+                nn_ds350_w0931_hclose_mixed_ordinary_mse_train2023_2025_test2026h1_purge1_v1
+                nn_ds350_w0931_hclose_rankmixed_mse_train2023_2025_test2026h1_purge1_v1
+                nn_ds350_w0931_hclose_rankclose_mse_train2023_2025_test2026h1_purge1_v1
+                nn_ds350_w0931_hclose_rankclose_nonup_mse_train2023_2025_test2026h1_purge1_v1
+                nn_ds350_w0931_hclose_rankclose_ordinary_mse_train2023_2025_test2026h1_purge1_v1
+              )
+              for attempt in $(seq 1 720); do
+                missing=0
+                for run in "${RUNS[@]}"; do
+                  test -f "${ROOT}/${run}/predictions_unfiltered.parquet" || missing=$((missing + 1))
+                done
+                if [ "${missing}" -eq 0 ]; then
+                  exec python /work/evaluator/evaluate.py
+                fi
+                echo "waiting for ${missing} training runs; attempt=${attempt}/720"
+                sleep 30
+              done
+              echo "timed out waiting for training outputs" >&2
+              exit 1
+          volumeMounts:
+            - {name: output, mountPath: /mnt/output}
+            - {name: evaluator, mountPath: /work/evaluator, readOnly: true}
+            - {name: common, mountPath: /work/common, readOnly: true}
+          resources:
+            requests: {cpu: "4", memory: 32Gi}
+            limits: {cpu: "12", memory: 96Gi}

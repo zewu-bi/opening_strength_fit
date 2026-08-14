@@ -135,6 +135,24 @@ status = "submitted"
     assert "unknown status='submitted'" in result.stdout
 
 
+def test_experiment_audit_allows_prepared_run_without_job(tmp_path: Path) -> None:
+    result = _run_audit_fixture(
+        tmp_path,
+        run_id="prepared_target",
+        run_toml="""\
+[run]
+id = "prepared_target"
+kind = "target_ablation"
+description = "prepared target fixture"
+status = "prepared"
+""",
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "prepared_target" in result.stdout
+    assert "local" in result.stdout.split("prepared_target", 1)[1].splitlines()[0]
+
+
 def test_experiment_audit_allows_local_realistic_acceptance_run(tmp_path: Path) -> None:
     result = _run_audit_fixture(
         tmp_path,

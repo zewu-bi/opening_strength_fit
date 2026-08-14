@@ -1,0 +1,56 @@
+# osf-contract: mounted-script-entrypoint
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-ds-labelclose-w1101-1110-v1
+  namespace: bizewu
+  labels: {app: os-ds-labelclose-w1101-1110-v1}
+spec:
+  activeDeadlineSeconds: 259200
+  backoffLimit: 2
+  completionMode: Indexed
+  completions: 7
+  parallelism: 4
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: {app: os-ds-labelclose-w1101-1110-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+        - name: config
+          configMap: {name: os-ds350-w1101-config-v1}
+        - name: code
+          configMap: {name: os-ds350-w1101-close-code-v1}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: kubernetes.io/hostname, operator: NotIn, values: [node7, node8]}
+      containers:
+        - name: builder
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:f04ef3ab7372000162e1b92bf86e96f5f6e0e36f15c163d75c9a3c1cc554ab09
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          env:
+            - name: JOB_COMPLETION_INDEX
+              valueFrom:
+                fieldRef: {fieldPath: "metadata.annotations['batch.kubernetes.io/job-completion-index']"}
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              YEARS=(2019 2020 2021 2022 2023 2024 2025)
+              YEAR="${YEARS[${JOB_COMPLETION_INDEX}]}"
+              exec python /mnt/window-code/close_label_build.py --config /mnt/window-config/opening_1101_1110_labels_close.toml --year "${YEAR}" --overwrite
+          volumeMounts:
+            - {name: output, mountPath: /mnt/output}
+            - {name: config, mountPath: /mnt/window-config, readOnly: true}
+            - {name: code, mountPath: /mnt/window-code, readOnly: true}
+          resources:
+            requests: {cpu: "4", memory: 16Gi}
+            limits: {cpu: "12", memory: 64Gi}

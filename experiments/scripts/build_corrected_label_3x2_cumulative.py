@@ -21,7 +21,6 @@ from opening_strength_fit.optimization_direction_data import (
 )
 from opening_strength_fit.pool_internal_plot_svg import write_two_panel_line_svg
 
-
 DIRECTIONS = tuple(
     DirectionSpec(
         key=f"w{window}_{horizon}",

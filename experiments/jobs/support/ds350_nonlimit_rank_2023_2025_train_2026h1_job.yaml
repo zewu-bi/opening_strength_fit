@@ -1,0 +1,113 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-nn-ds350-nonlimit-rank-2026h1-v1
+  namespace: bizewu
+  labels: {app: os-nn-ds350-nonlimit-rank-2026h1-v1}
+spec:
+  activeDeadlineSeconds: 604800
+  backoffLimit: 4
+  completionMode: Indexed
+  completions: 7
+  parallelism: 7
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels: {app: os-nn-ds350-nonlimit-rank-2026h1-v1}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      nodeSelector:
+        has_gpu: "true"
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - {key: kubernetes.io/hostname, operator: NotIn, values: [node6, node7, node8, node12, node16, node17, node18, node19, node20, node22, node24, node25, node26, node27, node28, node29, node30]}
+                  - {key: gpu_model, operator: In, values: [A100-80, H100-80, H20]}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels: {app: os-nn-ds350-nonlimit-rank-2026h1-v1}
+      tolerations:
+        - key: has_gpu
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+        - name: training-code
+          configMap: {name: os-ds350-hclose-2026h1-training-code-v1}
+      containers:
+        - name: trainer
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit@sha256:8eb66ef731709af980fa7e047ccb59748c0ed8f4ed36aa3460ee9b1f4a9fe0b6
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          env:
+            - name: JOB_COMPLETION_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.annotations['batch.kubernetes.io/job-completion-index']"
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              VARIANTS=(
+                close_z_all
+                mixed_nonup
+                mixed_ordinary
+                rank_mixed_all
+                rank_close_all
+                rank_close_nonup
+                rank_close_ordinary
+              )
+              RUN_IDS=(
+                nn_ds350_w0931_hclose_closez_mse_train2023_2025_test2026h1_purge1_v1
+                nn_ds350_w0931_hclose_mixed_nonup_mse_train2023_2025_test2026h1_purge1_v1
+                nn_ds350_w0931_hclose_mixed_ordinary_mse_train2023_2025_test2026h1_purge1_v1
+                nn_ds350_w0931_hclose_rankmixed_mse_train2023_2025_test2026h1_purge1_v1
+                nn_ds350_w0931_hclose_rankclose_mse_train2023_2025_test2026h1_purge1_v1
+                nn_ds350_w0931_hclose_rankclose_nonup_mse_train2023_2025_test2026h1_purge1_v1
+                nn_ds350_w0931_hclose_rankclose_ordinary_mse_train2023_2025_test2026h1_purge1_v1
+              )
+              INDEX="${JOB_COMPLETION_INDEX:?missing completion index}"
+              VARIANT="${VARIANTS[${INDEX}]}"
+              RUN_ID="${RUN_IDS[${INDEX}]}"
+              FEATURE_ROOT=/mnt/output/opening_strength_fit/datasets/opening_0931_0940_features_350
+              LABEL_BASE=/mnt/output/opening_strength_fit/datasets/opening_0931_0940_labels_hclose_train_variants_v1
+              LABEL_ROOT="${LABEL_BASE}/${VARIANT}"
+              OUT="/mnt/output/opening_strength_fit/nn/holdout/${RUN_ID}"
+              CONFIG="/tmp/${RUN_ID}.toml"
+
+              test -f "${LABEL_BASE}/_READY"
+              test -f "${LABEL_ROOT}/year=2026/labels.parquet"
+              cp experiments/runs/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1.toml "${CONFIG}"
+              sed -i '/^\[window\]$/a purge_train_sessions = 1' "${CONFIG}"
+              sed -i '/^\[output\]$/a write_unfiltered_predictions = true' "${CONFIG}"
+              echo "variant=${VARIANT} run_id=${RUN_ID} label_root=${LABEL_ROOT}"
+
+              exec osf-train \
+                --config "${CONFIG}" \
+                --feature-input "${FEATURE_ROOT}" \
+                --label-input "${LABEL_ROOT}" \
+                --run-id "${RUN_ID}" \
+                --rolling-monthly \
+                --train-months 36 \
+                --test-months 6 \
+                --test-stride-months 6 \
+                --test-start-month 2026-01 \
+                --test-end-month 2026-06 \
+                --output-dir "${OUT}"
+          volumeMounts:
+            - {name: output, mountPath: /mnt/output}
+            - name: training-code
+              mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/training_modeling.py
+              subPath: training_modeling.py
+          resources:
+            requests: {cpu: "8", memory: 256Gi, nvidia.com/gpu: "1"}
+            limits: {cpu: "16", memory: 384Gi, nvidia.com/gpu: "1"}

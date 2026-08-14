@@ -1,0 +1,23 @@
+{
+  "schema_version": "ds350_label_shortcut_evidence_v1",
+  "original_screenshots": [
+    {
+      "source_path": "/home/hefu/.codex/attachments/5171fcf8-6430-4ba9-89e3-afa38a5ca866/企业微信截图_17865898491793.png",
+      "archived_file": "企业微信截图_17865898491793.png",
+      "sha256": "66d3e0fd16bbdbea3df35fbffa8c9da18c80e6f726793e9e1d9a848cc6c68bec"
+    },
+    {
+      "source_path": "/home/hefu/.codex/attachments/991dc392-14cf-4806-a890-cd2ac10576aa/企业微信截图_17865898257957.png",
+      "archived_file": "企业微信截图_17865898257957.png",
+      "sha256": "1509b06bd9755bc3e4525e403fe001deb186353a9db6a8a2608a4ec59f457012"
+    }
+  ],
+  "analysis_outputs": {
+    "comparison": "/mnt/output/opening_strength_fit/analysis/ds350_w0931_three_experiment_tables_v1",
+    "label_distribution": "/mnt/output/opening_strength_fit/analysis/ds350_w0931_label_extremes_v1"
+  },
+  "kubernetes_jobs": [
+    "os-ds350-three-exp-tables-w0931-v1",
+    "os-ds350-label-extremes-w0931-v1"
+  ]
+}

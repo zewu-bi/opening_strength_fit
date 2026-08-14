@@ -29,11 +29,33 @@ def mixed_target(
     short_column: str,
     weight: float,
     min_group_size: int,
+    clip_std_multiple: float = 0.0,
 ) -> pd.Series:
     short = pd.to_numeric(frame[short_column], errors="coerce")
+    keys = [frame["date"], frame["decision_target_timestamp"]]
+    weight = float(weight)
+    clip_std_multiple = float(clip_std_multiple)
+
+    if weight == 0.0:
+        usable = short.notna()
+        short_group = short.where(usable).groupby(keys, sort=False)
+        count = short_group.transform("count")
+        short_mean = short_group.transform("mean")
+        short_std = short_group.transform(lambda values: values.std(ddof=0))
+        usable &= count.ge(int(min_group_size)) & short_std.gt(1e-12)
+        if clip_std_multiple > 0.0:
+            short = short.clip(
+                lower=short_mean - clip_std_multiple * short_std,
+                upper=short_mean + clip_std_multiple * short_std,
+            )
+            short_group = short.where(usable).groupby(keys, sort=False)
+            short_mean = short_group.transform("mean")
+            short_std = short_group.transform(lambda values: values.std(ddof=0))
+            usable &= short_std.gt(1e-12)
+        return ((short - short_mean) / short_std).where(usable)
+
     long = pd.to_numeric(frame["label_next_close"], errors="coerce")
     usable = short.notna() & long.notna()
-    keys = [frame["date"], frame["decision_target_timestamp"]]
     short_valid = short.where(usable)
     long_valid = long.where(usable)
     short_group = short_valid.groupby(keys, sort=False)
@@ -42,9 +64,29 @@ def mixed_target(
     short_std = short_group.transform(lambda values: values.std(ddof=0))
     long_std = long_group.transform(lambda values: values.std(ddof=0))
     usable &= count.ge(int(min_group_size)) & short_std.gt(1e-12) & long_std.gt(1e-12)
-    short_z = (short - short_group.transform("mean")) / short_std
-    long_z = (long - long_group.transform("mean")) / long_std
-    return (short_z + float(weight) * long_z).where(usable)
+    short_mean = short_group.transform("mean")
+    long_mean = long_group.transform("mean")
+    if clip_std_multiple > 0.0:
+        short = short.clip(
+            lower=short_mean - clip_std_multiple * short_std,
+            upper=short_mean + clip_std_multiple * short_std,
+        )
+        long = long.clip(
+            lower=long_mean - clip_std_multiple * long_std,
+            upper=long_mean + clip_std_multiple * long_std,
+        )
+        short_valid = short.where(usable)
+        long_valid = long.where(usable)
+        short_group = short_valid.groupby(keys, sort=False)
+        long_group = long_valid.groupby(keys, sort=False)
+        short_mean = short_group.transform("mean")
+        long_mean = long_group.transform("mean")
+        short_std = short_group.transform(lambda values: values.std(ddof=0))
+        long_std = long_group.transform(lambda values: values.std(ddof=0))
+        usable &= short_std.gt(1e-12) & long_std.gt(1e-12)
+    short_z = (short - short_mean) / short_std
+    long_z = (long - long_mean) / long_std
+    return (short_z + weight * long_z).where(usable)
 
 
 def _output_root(config: dict, horizon_minutes: int) -> Path:
@@ -76,6 +118,7 @@ def split_label_year(
     source = read_frame(source_path, columns=source_columns)
     weight = config_float(config, "dataset", "mixed_next_close_weight", 0.30)
     min_group_size = config_int(config, "dataset", "mixed_min_group_size", 50)
+    clip_std_multiple = config_float(config, "dataset", "mixed_clip_std_multiple", 0.0)
     manifests = []
 
     for horizon_minutes, short_column in HORIZON_COLUMNS.items():
@@ -96,6 +139,7 @@ def split_label_year(
             short_column=short_column,
             weight=weight,
             min_group_size=min_group_size,
+            clip_std_multiple=clip_std_multiple,
         )
         output[["label_short", "label_next_close", "target_label"]] = output[
             ["label_short", "label_next_close", "target_label"]
@@ -103,6 +147,11 @@ def split_label_year(
         output = output.loc[:, list(OUTPUT_COLUMNS)]
         write_frame_atomic(output, output_path)
 
+        target_definition = (
+            f"xs_zscore({short_column})"
+            if weight == 0.0
+            else f"xs_zscore({short_column}) + {weight:g} * xs_zscore(label_next_close)"
+        )
         manifest = {
             "schema_version": "opening_horizon_labels_v2",
             "run_id": run_id(config, config_path),
@@ -113,10 +162,9 @@ def split_label_year(
             "columns": list(output.columns),
             "key_columns": list(KEY_COLUMNS),
             "label_columns": ["label_short", "label_next_close", "target_label"],
-            "target_definition": (
-                f"xs_zscore({short_column}) + {weight:g} * xs_zscore(label_next_close)"
-            ),
+            "target_definition": target_definition,
             "mixed_min_group_size": int(min_group_size),
+            "mixed_clip_std_multiple": float(clip_std_multiple),
             "source": str(source_path),
             "non_null_rows": {
                 column: int(output[column].notna().sum())

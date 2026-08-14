@@ -1,0 +1,65 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: os-leak-clock-base-smoke-v2
+  namespace: bizewu
+  labels: {app: os-leak-clock-base-smoke-v2}
+spec:
+  activeDeadlineSeconds: 21600
+  backoffLimit: 1
+  completionMode: Indexed
+  completions: 10
+  parallelism: 10
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels: {app: os-leak-clock-base-smoke-v2}
+    spec:
+      restartPolicy: Never
+      imagePullSecrets: [{name: highfort}]
+      volumes:
+        - name: output
+          persistentVolumeClaim: {claimName: bizewu-private-data}
+        - name: audit-code
+          configMap: {name: os-leakage-audit-code-v1}
+      containers:
+        - name: builder
+          image: registry.corp.highfortfunds.com/bizewu/opening-strength-fit:20260804-training-datasets-v2
+          imagePullPolicy: Always
+          workingDir: /app/opening_strength_fit
+          env:
+            - name: JOB_COMPLETION_INDEX
+              valueFrom:
+                fieldRef:
+                  fieldPath: "metadata.annotations['batch.kubernetes.io/job-completion-index']"
+          command: [/bin/bash, -lc]
+          args:
+            - |
+              set -euo pipefail
+              CLOCKS=(09:31:00 09:32:00 09:33:00 09:34:00 09:35:00 09:36:00 09:37:00 09:38:00 09:39:00 09:40:00)
+              CLOCK="${CLOCKS[${JOB_COMPLETION_INDEX:?missing completion index}]}"
+              exec osf-build-training-datasets \
+                --config experiments/runs/opening_0931_0940_features_350.toml \
+                --kind features \
+                --year 2025 \
+                --date-start 2025-01-02 \
+                --date-end 2025-01-02 \
+                --context-days 0 \
+                --output-root /mnt/output/opening_strength_fit/leakage_audit/smoke_feature_base_cutoff_2s_v2 \
+                --physical-tick-cutoff-seconds 2 \
+                --feature-base-clock "${CLOCK}" \
+                --overwrite
+          volumeMounts:
+            - {name: output, mountPath: /mnt/output}
+            - name: audit-code
+              mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/sampling.py
+              subPath: sampling.py
+            - name: audit-code
+              mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/training_dataset_features.py
+              subPath: training_dataset_features.py
+            - name: audit-code
+              mountPath: /usr/local/lib/python3.12/site-packages/opening_strength_fit/commands/training_dataset_build.py
+              subPath: training_dataset_build.py
+          resources:
+            requests: {cpu: "4", memory: 32Gi}
+            limits: {cpu: "8", memory: 64Gi}

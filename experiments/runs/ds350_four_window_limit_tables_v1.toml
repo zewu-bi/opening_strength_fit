@@ -1,0 +1,35 @@
+[run]
+id = "ds350_four_window_limit_tables_v1"
+kind = "comparison_analysis"
+description = "Compare final-limit enrichment and own-label/close contribution for baseline and no-limit DS350 1m/3m models across four intraday windows."
+status = "completed"
+
+[grid]
+windows = ["09:31-09:40", "10:01-10:10", "11:01-11:10", "14:01-14:10"]
+label_horizons = ["1m", "3m"]
+training_variants = ["baseline", "no_limit_training"]
+train_months = 36
+test_months = 6
+max_epochs = 30
+test_start_month = "2022-01"
+test_end_month = "2025-12"
+
+[evaluation]
+pool = "L"
+top_n = 100
+common_pool_final_limit_rate = 0.009611492930833764
+metrics = [
+  "own_label_rank_ic",
+  "pool_L_top100_own_label_excess_bps",
+  "pool_L_top100_close_excess_bps",
+  "final_limit_contribution_bps",
+  "selected_final_limit_rate",
+]
+
+[analysis]
+training_job = "experiments/jobs/support/opening_1101_1110_limit_dependence_v1/nn_ds350_w1101_h1m_h3m_limit_train_max30_v1_jobs.yaml"
+comparison_job = "experiments/jobs/support/opening_1101_1110_limit_dependence_v1/ds350_four_window_limit_tables_job.yaml"
+comparison_output = "/mnt/output/opening_strength_fit/analysis/ds350_four_window_limit_tables_v1"
+
+[output]
+evidence_dir = "experiments/evidence/backtests/ds350_four_window_limit_tables_v1"

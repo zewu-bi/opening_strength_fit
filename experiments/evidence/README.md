@@ -12,6 +12,8 @@ Current canonical evidence:
 
 Current diagnostic evidence:
 
+- [future-information leakage audit](../../docs/leakage_audit.md) — receipt-time, Pool-L lineage,
+  hard-cutoff smoke results, unresolved risks, and prepared kill-test entry points
 - [ds350 max-30 15-label matrix](backtests/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1/) —
   authoritative 15-label result archive; includes all 120 rolling folds plus the standard four-figure
   acceptance bundle for `09:31-09:40 / 1m`
@@ -27,6 +29,12 @@ Current diagnostic evidence:
   first same-model, same-target rolling-OOS measurement after moving the ten-minute window later
 - [corrected-label 3×2 window/horizon grid](backtests/corrected_label_3x2_grid_2022_2025_v1/) —
   six-run closeout table and controlled window/horizon effects
+- [DS350 09:31 label-shortcut ablation](backtests/ds350_w0931_limit_shortcut_ablation_2022_2025_v1/) —
+  3σ clipping, no-limit training, and pure-short 1m/close comparison with final-limit attribution
+  and label-distribution diagnostics
+- [DS350 four-window 1m/3m limit attribution](backtests/ds350_four_window_limit_tables_v1/) —
+  baseline/no-limit comparison across 09:31, 10:01, 11:01, and 14:01 with a common daily Pool L
+  final-limit denominator
 
 The tracked tail, bootstrap, overlap, and concentration outputs are diagnostics. In particular,
 the one-sided P95/P99 upper-tail cap is not an automatic promotion gate.

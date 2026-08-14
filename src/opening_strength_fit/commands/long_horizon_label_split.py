@@ -26,9 +26,7 @@ def _specs(config: dict) -> list[dict[str, str]]:
         output_root = str(item.get("output_root", "")).strip()
         if not name or not source_column or not output_root:
             raise SystemExit("each mixed_labels entry needs name, source_column, output_root")
-        specs.append(
-            {"name": name, "source_column": source_column, "output_root": output_root}
-        )
+        specs.append({"name": name, "source_column": source_column, "output_root": output_root})
     if not specs or len({item["name"] for item in specs}) != len(specs):
         raise SystemExit("[dataset].mixed_labels must contain unique named entries")
     return specs
@@ -58,6 +56,7 @@ def split_label_year(
         raise SystemExit(f"source has {int(duplicate.sum())} duplicate key rows: {source_path}")
     weight = config_float(config, "dataset", "mixed_next_close_weight", 0.30)
     min_group_size = config_int(config, "dataset", "mixed_min_group_size", 50)
+    clip_std_multiple = config_float(config, "dataset", "mixed_clip_std_multiple", 0.0)
     manifests = []
 
     for spec in specs:
@@ -71,17 +70,14 @@ def split_label_year(
             success_path.unlink()
 
         output = source.loc[:, list(KEY_COLUMNS)].copy()
-        output["label_short"] = pd.to_numeric(
-            source[spec["source_column"]], errors="coerce"
-        )
-        output["label_next_close"] = pd.to_numeric(
-            source["label_next_close"], errors="coerce"
-        )
+        output["label_short"] = pd.to_numeric(source[spec["source_column"]], errors="coerce")
+        output["label_next_close"] = pd.to_numeric(source["label_next_close"], errors="coerce")
         output["target_label"] = mixed_target(
             source,
             short_column=spec["source_column"],
             weight=weight,
             min_group_size=min_group_size,
+            clip_std_multiple=clip_std_multiple,
         )
         output[["label_short", "label_next_close", "target_label"]] = output[
             ["label_short", "label_next_close", "target_label"]
@@ -89,6 +85,14 @@ def split_label_year(
         output = output[list(OUTPUT_COLUMNS)]
         write_frame_atomic(output, output_path)
 
+        target_definition = (
+            f"xs_zscore({spec['source_column']})"
+            if weight == 0.0
+            else (
+                f"xs_zscore({spec['source_column']}) + {weight:g} "
+                "* xs_zscore(reused label_next_close)"
+            )
+        )
         manifest = {
             "schema_version": "opening_long_horizon_mixed_labels_v1",
             "run_id": run_id(config, config_path),
@@ -100,11 +104,9 @@ def split_label_year(
             "columns": list(output.columns),
             "key_columns": list(KEY_COLUMNS),
             "label_columns": ["label_short", "label_next_close", "target_label"],
-            "target_definition": (
-                f"xs_zscore({spec['source_column']}) + {weight:g} "
-                "* xs_zscore(reused label_next_close)"
-            ),
+            "target_definition": target_definition,
             "mixed_min_group_size": int(min_group_size),
+            "mixed_clip_std_multiple": float(clip_std_multiple),
             "source": str(source_path),
             "non_null_rows": {
                 column: int(output[column].notna().sum())

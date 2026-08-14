@@ -8,8 +8,7 @@ import pandas as pd
 
 ROOT = Path(__file__).parents[1]
 EVIDENCE = (
-    ROOT
-    / "experiments/evidence/backtests/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1"
+    ROOT / "experiments/evidence/backtests/nn_ds350_label15_36m_grouped_gated_v2_mse_max30_v1"
 )
 
 

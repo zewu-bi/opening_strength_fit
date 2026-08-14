@@ -68,6 +68,7 @@ def select_decision_points(
     max_lag_seconds: int | None = 5,
     alignment: str = "next_tick",
     max_state_age_seconds: int | None = None,
+    source_cutoff_seconds: float = 0.0,
 ) -> pd.DataFrame:
     """Select one auditable market state for every configured decision clock.
 
@@ -83,6 +84,11 @@ def select_decision_points(
         raise SystemExit("decision point sampling needs at least one decision time")
 
     normalized_alignment = normalize_decision_alignment(alignment)
+    source_cutoff_seconds = float(source_cutoff_seconds)
+    if source_cutoff_seconds < 0:
+        raise ValueError("source cutoff seconds must be >= 0")
+    if source_cutoff_seconds and normalized_alignment != "clock_state":
+        raise ValueError("source cutoff seconds are only supported for clock_state sampling")
 
     work = ensure_timestamp_columns(frame)
     if work.empty:
@@ -106,6 +112,9 @@ def select_decision_points(
                 "_target_ts": pd.to_datetime([f"{trading_day} {clock}" for clock in times]),
             }
         ).sort_values("_target_ts")
+        date_targets["_source_cutoff_ts"] = date_targets["_target_ts"] - pd.Timedelta(
+            seconds=source_cutoff_seconds
+        )
 
         day = work.loc[work["date"] == trading_day]
         for symbol, group in day.groupby("symbol", sort=False, observed=True):
@@ -119,7 +128,7 @@ def select_decision_points(
             merged = pd.merge_asof(
                 date_targets,
                 right,
-                left_on="_target_ts",
+                left_on="_source_cutoff_ts",
                 right_on="timestamp",
                 direction=direction,
                 tolerance=tolerance,
@@ -131,11 +140,22 @@ def select_decision_points(
             chosen["decision_target_timestamp"] = merged["_target_ts"].to_numpy()
             if normalized_alignment == "clock_state":
                 chosen["decision_source_timestamp"] = chosen["timestamp"].to_numpy()
+                if source_cutoff_seconds:
+                    chosen["decision_source_cutoff_timestamp"] = merged[
+                        "_source_cutoff_ts"
+                    ].to_numpy()
                 chosen["decision_state_age_seconds"] = (
                     chosen["decision_target_timestamp"].to_numpy()
                     - chosen["decision_source_timestamp"].to_numpy()
                 ) / pd.Timedelta(seconds=1)
                 chosen["decision_lag_seconds"] = 0.0
+                matched_after_cutoff = chosen["decision_source_timestamp"].gt(
+                    merged["_source_cutoff_ts"].to_numpy()
+                )
+                if matched_after_cutoff.any():
+                    raise AssertionError(
+                        "clock-state sampling selected a source after its causal cutoff"
+                    )
             else:
                 chosen["decision_lag_seconds"] = (
                     chosen["timestamp"].to_numpy() - chosen["decision_target_timestamp"]
@@ -161,6 +181,7 @@ def sample_labeled_frame(
     max_lag_seconds: int | None = 5,
     alignment: str = "next_tick",
     max_state_age_seconds: int | None = None,
+    source_cutoff_seconds: float = 0.0,
 ) -> pd.DataFrame:
     normalized_mode = str(mode).strip().lower()
     if normalized_mode in {"", "all", "all_ticks", "tick"}:
@@ -172,6 +193,7 @@ def sample_labeled_frame(
             max_lag_seconds=max_lag_seconds,
             alignment=alignment,
             max_state_age_seconds=max_state_age_seconds,
+            source_cutoff_seconds=source_cutoff_seconds,
         )
     valid = "all_ticks, decision_points"
     raise SystemExit(f"unknown sample mode {mode!r}; expected one of: {valid}")

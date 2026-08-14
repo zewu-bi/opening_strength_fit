@@ -1,0 +1,5 @@
+horizon,state,row_pct,mean_bps,std_bps,median_bps,p95_bps,p99_bps,raw_label_squared_mass_pct,pct_above_ordinary_p99
+1m,ordinary,98.3625,-8.805,45.677,-9.278,59.433,122.915,90.558,
+1m,final_limit_up,1.0668,26.918,122.098,7.382,240.123,472.711,7.095,14.03
+close,ordinary,98.3565,-5.746,230.978,-13.514,364.706,680.187,85.109,
+close,final_limit_up,1.0641,739.465,437.450,733.945,1584.158,2073.708,12.732,54.23
